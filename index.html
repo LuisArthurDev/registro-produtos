@@ -189,7 +189,7 @@
 
 <body>
 <header class="topbar">
-  <h1>Registro de Mapa de Validade<sup>v.0.0.5</sup></h1>
+  <h1>Registro de Mapa de Validade<sup>v0.0.5</sup></h1>
   <p>Leia o código, informe lote, validade e quantidade.</p>
 </header>
 
@@ -252,7 +252,7 @@
           <label for="validade">Validade</label>
           <input id="validade" name="validade" type="text" inputmode="numeric"
                  maxlength="10" autocomplete="off"
-                 placeholder="MM/AAAA ou DD/MM/AAAA" required>
+                 placeholder="Ex.: 05/27" required>
         </div>
         <div class="field">
           <label for="quantidade">Quantidade</label>
@@ -260,6 +260,8 @@
                  inputmode="numeric" placeholder="Ex.: 12" required>
         </div>
       </div>
+
+      <p class="hint" style="margin:-4px 0 14px">Validade aceita 05/27, 05/2027, 15/05/27 ou 15/05/2027. Só mês e ano vale o último dia do mês.</p>
 
       <button type="submit" id="btnSalvar" class="submit-button">Salvar lançamento</button>
     </section>
@@ -606,41 +608,57 @@ btnPararCamera.addEventListener("click", () => pararCamera());
    Aceita MM/AAAA ou DD/MM/AAAA
    ========================= */
 
-validadeEl.addEventListener("input", () => {
-  const d = validadeEl.value.replace(/\D/g, "").slice(0, 8);
+/*
+ * Máscara automática. Anos válidos começam em 19–22 (maiores que 12),
+ * então o segundo grupo mostra se é mês (DD/MM/...) ou ano (MM/AAAA).
+ */
+function mascaraValidade(bruto) {
+  const d = bruto.replace(/\D/g, "").slice(0, 8);
 
-  if (d.length <= 2) {
-    validadeEl.value = d;
-  } else if (d.length <= 4) {
-    validadeEl.value = d.slice(0, 2) + "/" + d.slice(2);
-  } else {
-    validadeEl.value = d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return d.slice(0, 2) + "/" + d.slice(2);
+
+  const meio = Number(d.slice(2, 4));
+
+  if (meio >= 1 && meio <= 12) {
+    return d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
   }
+
+  return d.slice(0, 2) + "/" + d.slice(2, 6);
+}
+
+validadeEl.addEventListener("input", () => {
+  validadeEl.value = mascaraValidade(validadeEl.value);
 });
 
 function validadeParaISO(valor) {
   const texto = String(valor || "").trim();
   let dia, mes, ano;
 
-  let partes = texto.match(/^(\d{2})\/(\d{4})$/);
+  /* Ano com 2 dígitos vira 20AA (27 → 2027). */
+  const anoCompleto = a => (a.length === 2 ? 2000 + Number(a) : Number(a));
+
+  let partes = texto.match(/^(\d{2})\/(\d{2}|\d{4})$/);
 
   if (partes) {
     mes = Number(partes[1]);
-    ano = Number(partes[2]);
+    ano = anoCompleto(partes[2]);
 
     if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
-      throw new Error("Informe uma validade válida no formato MM/AAAA.");
+      throw new Error("Informe uma validade válida, como 05/27 ou 05/2027.");
     }
 
     dia = new Date(ano, mes, 0).getDate();
   } else {
-    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
 
-    if (!partes) throw new Error("Use MM/AAAA ou DD/MM/AAAA na validade.");
+    if (!partes) {
+      throw new Error("Use MM/AA, MM/AAAA, DD/MM/AA ou DD/MM/AAAA na validade.");
+    }
 
     dia = Number(partes[1]);
     mes = Number(partes[2]);
-    ano = Number(partes[3]);
+    ano = anoCompleto(partes[3]);
 
     const teste = new Date(ano, mes - 1, dia);
 
