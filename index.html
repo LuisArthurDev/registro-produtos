@@ -338,10 +338,11 @@
   ></iframe>
 
   <form
-    id="formEnvio"
-    method="POST"
-    target="respostaAppsScript"
-    style="display:none"
+  id="formEnvio"
+  method="POST"
+  target="respostaAppsScript"
+  action="https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec"
+  style="display:none"
   >
     <input type="hidden" name="token" id="postToken">
     <input type="hidden" name="payload" id="postPayload">
@@ -915,19 +916,23 @@
           requestId: ids.requestId
         });
 
-        formEnvio.setAttribute("action", APPS_SCRIPT_URL);
-        formEnvio.setAttribute("method", "POST");
-        formEnvio.setAttribute("target", "respostaAppsScript");
-
-        // Consulta o resultado e envia o formulário sem sair da página.
-        agendarConsulta(0);
-
+        formEnvio.action = APPS_SCRIPT_URL;
+        formEnvio.method = "POST";
+        formEnvio.target = "respostaAppsScript";
+        
         timeoutTimer = setTimeout(
           finalizarSemConfirmacao,
           TEMPO_MAXIMO_ESPERA_MS
         );
-
+        
+        console.log("[Lançamento] Enviando para:", formEnvio.action);
+        console.log("[Lançamento] Request ID:", lancamentoAtual.requestId);
+        
         formEnvio.submit();
+        
+        console.log("[Lançamento] formEnvio.submit() executado.");
+        
+        agendarConsulta(0);
 
       } catch (erro) {
         encerrarConsulta();
