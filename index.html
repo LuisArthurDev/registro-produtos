@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -21,9 +22,7 @@
       --border: #d9e0e8;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -67,9 +66,7 @@
       white-space: nowrap;
     }
 
-    .faturado sup {
-      font-size: 9px;
-    }
+    .faturado sup { font-size: 9px; }
 
     .versao {
       margin-top: 7px;
@@ -91,9 +88,7 @@
       font-size: 18px;
     }
 
-    .field {
-      margin-bottom: 13px;
-    }
+    .field { margin-bottom: 13px; }
 
     label {
       display: block;
@@ -238,21 +233,10 @@
     }
 
     @media (max-width: 420px) {
-      body {
-        padding: 8px;
-      }
-
-      .card {
-        padding: 13px;
-      }
-
-      header h1 {
-        font-size: 22px;
-      }
-
-      .faturado {
-        font-size: 12px;
-      }
+      body { padding: 8px; }
+      .card { padding: 13px; }
+      header h1 { font-size: 22px; }
+      .faturado { font-size: 12px; }
     }
   </style>
 </head>
@@ -268,10 +252,8 @@
       <p>Leitura e lançamento de produtos no mapa</p>
     </header>
 
-    <div id="status" class="status"
-         role="status" aria-live="polite"></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
 
-    <!-- 1. CÂMERA: colocada no início para facilitar o acesso -->
     <section class="card">
       <h2>1. Código de barras</h2>
 
@@ -289,14 +271,8 @@
       </div>
 
       <div class="button-row">
-        <button type="button" id="btnCamera" class="primary">
-          Abrir câmera
-        </button>
-
-        <button type="button" id="btnPararCamera"
-                class="secondary" disabled>
-          Parar câmera
-        </button>
+        <button type="button" id="btnCamera" class="primary">Abrir câmera</button>
+        <button type="button" id="btnPararCamera" class="secondary" disabled>Parar câmera</button>
       </div>
 
       <div id="reader"></div>
@@ -306,7 +282,6 @@
       </p>
     </section>
 
-    <!-- 2. IDENTIFICAÇÃO -->
     <section class="card">
       <h2>2. Identificação</h2>
 
@@ -332,7 +307,6 @@
       </div>
     </section>
 
-    <!-- 3. DADOS DO PRODUTO -->
     <section class="card">
       <h2>3. Dados do produto</h2>
 
@@ -349,17 +323,19 @@
       </div>
 
       <div class="field">
-        <label for="validade">Validade (DD/MM/AAAA)</label>
+        <label for="validade">Validade (MM/AAAA ou DD/MM/AAAA)</label>
         <input
           id="validade"
           type="text"
           inputmode="numeric"
           autocomplete="off"
-          placeholder="DD/MM/AAAA"
+          placeholder="MM/AAAA ou DD/MM/AAAA"
           maxlength="10"
-          pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}"
           required
         >
+        <p class="small-note">
+          Digite mês e ano para usar o último dia do mês, ou informe também o dia.
+        </p>
       </div>
 
       <div class="field">
@@ -376,15 +352,11 @@
       </div>
 
       <div class="button-row">
-        <button type="button" id="btnSalvar" class="save">
-          Salvar lançamento
-        </button>
+        <button type="button" id="btnSalvar" class="save">Salvar lançamento</button>
       </div>
 
       <div class="button-row" style="margin-top: 10px;">
-        <button type="button" id="btnLimpar" class="danger">
-          Limpar formulário
-        </button>
+        <button type="button" id="btnLimpar" class="danger">Limpar formulário</button>
       </div>
     </section>
 
@@ -410,10 +382,6 @@
 
   <script>
     "use strict";
-
-    // =========================================================
-    // CONFIGURAÇÃO
-    // =========================================================
 
     const APPS_SCRIPT_URL =
       "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
@@ -460,10 +428,6 @@
     let ultimaLeitura = "";
     let ultimaLeituraEm = 0;
 
-    // =========================================================
-    // MENSAGENS
-    // =========================================================
-
     function mostrarStatus(mensagem, tipo = "info") {
       statusEl.textContent = mensagem;
       statusEl.className = "status " + tipo;
@@ -480,35 +444,87 @@
       btnLimpar.disabled = bloquear;
     }
 
-    // =========================================================
-    // VALIDADE: MÁSCARA DD/MM/AAAA
-    // =========================================================
-
+    // Máscara automática para MM/AAAA ou DD/MM/AAAA.
+    // Com 6 dígitos: MM/AAAA.
+    // Com 8 dígitos: DD/MM/AAAA.
     validadeEl.addEventListener("input", function() {
-      const numeros = this.value
-        .replace(/\D/g, "")
-        .slice(0, 8);
+      const numeros = this.value.replace(/\D/g, "").slice(0, 8);
 
-      let formatado = numeros;
-
-      if (numeros.length > 4) {
-        formatado =
+      if (numeros.length <= 2) {
+        this.value = numeros;
+      } else if (numeros.length <= 6) {
+        this.value = numeros.slice(0, 2) + "/" + numeros.slice(2);
+      } else {
+        this.value =
           numeros.slice(0, 2) + "/" +
           numeros.slice(2, 4) + "/" +
           numeros.slice(4);
-      } else if (numeros.length > 2) {
-        formatado =
-          numeros.slice(0, 2) + "/" +
-          numeros.slice(2);
       }
-
-      this.value = formatado;
     });
 
-    // =========================================================
-    // CÂMERA E LEITURA
-    // =========================================================
+    // Converte a validade digitada em AAAA-MM-DD.
+    // MM/AAAA será convertido para o último dia daquele mês.
+    function converterValidade(valor) {
+      const texto = valor.trim();
 
+      let dia;
+      let mes;
+      let ano;
+
+      let resultado = texto.match(/^(\d{2})\/(\d{4})$/);
+
+      if (resultado) {
+        mes = Number(resultado[1]);
+        ano = Number(resultado[2]);
+
+        if (mes < 1 || mes > 12 || ano < 1 || ano > 9999) {
+          return {
+            erro: "Mês ou ano inválido. Informe a validade como MM/AAAA."
+          };
+        }
+
+        // Dia zero do mês seguinte = último dia do mês informado.
+        dia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+
+      } else {
+        resultado = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+        if (!resultado) {
+          return {
+            erro: "Informe a validade como MM/AAAA ou DD/MM/AAAA."
+          };
+        }
+
+        dia = Number(resultado[1]);
+        mes = Number(resultado[2]);
+        ano = Number(resultado[3]);
+
+        if (mes < 1 || mes > 12 || ano < 1 || ano > 9999) {
+          return { erro: "A data informada não é válida." };
+        }
+
+        const dataTeste = new Date(Date.UTC(ano, mes - 1, dia));
+
+        if (
+          dataTeste.getUTCFullYear() !== ano ||
+          dataTeste.getUTCMonth() !== mes - 1 ||
+          dataTeste.getUTCDate() !== dia
+        ) {
+          return {
+            erro: "A data informada não existe. Verifique dia, mês e ano."
+          };
+        }
+      }
+
+      const iso =
+        String(ano).padStart(4, "0") + "-" +
+        String(mes).padStart(2, "0") + "-" +
+        String(dia).padStart(2, "0");
+
+      return { iso, dia, mes, ano };
+    }
+
+    // CÂMERA
     async function abrirCamera() {
       if (cameraAtiva || iniciandoCamera) return;
 
@@ -520,11 +536,9 @@
         return;
       }
 
-      if (!navigator.mediaDevices ||
-          !navigator.mediaDevices.getUserMedia) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         mostrarStatus(
-          "Este navegador não disponibiliza acesso à câmera. " +
-          "Abra o site no Google Chrome atualizado.",
+          "Este navegador não disponibiliza acesso à câmera. Abra o Google Chrome atualizado.",
           "error"
         );
         return;
@@ -532,8 +546,7 @@
 
       if (typeof Html5Qrcode === "undefined") {
         mostrarStatus(
-          "A biblioteca de leitura não carregou. Verifique a internet " +
-          "e recarregue a página.",
+          "A biblioteca de leitura não carregou. Verifique a internet e recarregue a página.",
           "error"
         );
         return;
@@ -557,14 +570,8 @@
             const disponiveis = Html5QrcodeSupportedFormats;
 
             [
-              "EAN_13",
-              "EAN_8",
-              "UPC_A",
-              "UPC_E",
-              "CODE_128",
-              "CODE_39",
-              "ITF",
-              "CODABAR"
+              "EAN_13", "EAN_8", "UPC_A", "UPC_E",
+              "CODE_128", "CODE_39", "ITF", "CODABAR"
             ].forEach(nome => {
               if (disponiveis[nome] !== undefined) {
                 formatos.push(disponiveis[nome]);
@@ -572,11 +579,12 @@
             });
           }
 
-          const opcoesScanner = formatos.length
-            ? { formatsToSupport: formatos, verbose: false }
-            : { verbose: false };
-
-          scanner = new Html5Qrcode("reader", opcoesScanner);
+          scanner = new Html5Qrcode(
+            "reader",
+            formatos.length
+              ? { formatsToSupport: formatos, verbose: false }
+              : { verbose: false }
+          );
         }
 
         await scanner.start(
@@ -584,15 +592,8 @@
           {
             fps: 10,
             qrbox: function(largura, altura) {
-              const w = Math.max(
-                180,
-                Math.min(Math.floor(largura * 0.90), 420)
-              );
-
-              const h = Math.max(
-                90,
-                Math.min(Math.floor(altura * 0.35), 180)
-              );
+              const w = Math.max(180, Math.min(Math.floor(largura * 0.90), 420));
+              const h = Math.max(90, Math.min(Math.floor(altura * 0.35), 180));
 
               return {
                 width: Math.min(w, largura),
@@ -604,9 +605,7 @@
           function(textoLido) {
             processarLeitura(textoLido);
           },
-          function() {
-            // Falhas individuais de leitura são normais.
-          }
+          function() {}
         );
 
         cameraAtiva = true;
@@ -617,10 +616,7 @@
           "success"
         );
 
-        readerEl.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest"
-        });
+        readerEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
       } catch (erro) {
         cameraAtiva = false;
@@ -631,32 +627,22 @@
           : String(erro || "Erro desconhecido");
 
         if (erro && erro.name === "NotAllowedError") {
-          mensagem =
-            "A permissão da câmera foi negada. Permita o acesso à câmera " +
-            "nas configurações do navegador.";
+          mensagem = "A permissão da câmera foi negada. Permita o acesso nas configurações do navegador.";
         } else if (erro && erro.name === "NotFoundError") {
           mensagem = "Nenhuma câmera compatível foi encontrada.";
         } else if (erro && erro.name === "NotReadableError") {
-          mensagem =
-            "A câmera está sendo usada por outro aplicativo ou não pôde " +
-            "ser iniciada.";
+          mensagem = "A câmera está sendo usada por outro aplicativo ou não pôde ser iniciada.";
         } else if (erro && erro.name === "OverconstrainedError") {
-          mensagem =
-            "Não foi possível usar a câmera traseira. Tente novamente.";
+          mensagem = "Não foi possível usar a câmera traseira. Tente novamente.";
         }
 
-        mostrarStatus(
-          "Não foi possível abrir a câmera: " + mensagem,
-          "error"
-        );
+        mostrarStatus("Não foi possível abrir a câmera: " + mensagem, "error");
 
         try {
           if (scanner && typeof scanner.clear === "function") {
             await scanner.clear();
           }
-        } catch (_) {
-          // Ignora falhas de limpeza após erro.
-        }
+        } catch (_) {}
 
         scanner = null;
 
@@ -680,9 +666,7 @@
         if (scanner) {
           try {
             await scanner.clear();
-          } catch (_) {
-            // Ignora falhas de limpeza visual.
-          }
+          } catch (_) {}
         }
 
         scanner = null;
@@ -714,8 +698,7 @@
       const codigo = String(texto || "").trim();
       const agora = Date.now();
 
-      if (codigo === ultimaLeitura &&
-          agora - ultimaLeituraEm < 2500) {
+      if (codigo === ultimaLeitura && agora - ultimaLeituraEm < 2500) {
         return;
       }
 
@@ -724,8 +707,7 @@
 
       if (!/^\d{8,14}$/.test(codigo)) {
         mostrarStatus(
-          "O código lido deve conter de 8 a 14 dígitos numéricos. " +
-          "Tente enquadrar o código novamente.",
+          "O código lido deve conter de 8 a 14 dígitos numéricos. Tente enquadrar o código novamente.",
           "warning"
         );
         return;
@@ -739,50 +721,30 @@
           ". Preencha o funcionário, o lote, a validade e a quantidade.",
           "success"
         );
-
         funcionarioEl.focus();
       });
     }
 
-    // =========================================================
-    // CONFIGURAÇÃO DO APPS SCRIPT
-    // =========================================================
-
+    // CONFIGURAÇÃO
     function validarConfiguracao() {
-      if (
-        !APPS_SCRIPT_URL ||
-        APPS_SCRIPT_URL.includes("COLE_A_URL")
-      ) {
-        mostrarStatus(
-          "Configure a URL do aplicativo da web do Apps Script.",
-          "error"
-        );
+      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("COLE_A_URL")) {
+        mostrarStatus("Configure a URL do aplicativo da web do Apps Script.", "error");
         return false;
       }
 
-      if (
-        !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/
-          .test(APPS_SCRIPT_URL)
-      ) {
-        mostrarStatus(
-          "A URL deve ser a URL /exec do Web App do Apps Script.",
-          "error"
-        );
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(APPS_SCRIPT_URL)) {
+        mostrarStatus("A URL deve ser a URL /exec do Web App do Apps Script.", "error");
         return false;
       }
 
       return true;
     }
 
-    // =========================================================
-    // VALIDAÇÃO DO FORMULÁRIO
-    // =========================================================
-
+    // VALIDAÇÃO
     function validarFormulario() {
       const funcionario = funcionarioEl.value;
       const codigo = codigoEl.value.trim();
       const lote = loteEl.value.trim();
-      const validade = validadeEl.value.trim();
       const quantidadeTexto = quantidadeEl.value.trim();
       const quantidade = Number(quantidadeTexto);
 
@@ -793,61 +755,31 @@
       }
 
       if (!/^\d{8,14}$/.test(codigo)) {
-        mostrarStatus(
-          "O código deve conter de 8 a 14 dígitos numéricos.",
-          "error"
-        );
+        mostrarStatus("O código deve conter de 8 a 14 dígitos numéricos.", "error");
         codigoEl.focus();
         return null;
       }
 
       if (!lote || lote.length > 100) {
-        mostrarStatus(
-          "Informe um lote com no máximo 100 caracteres.",
-          "error"
-        );
+        mostrarStatus("Informe um lote com no máximo 100 caracteres.", "error");
         loteEl.focus();
         return null;
       }
 
-      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(validade)) {
-        mostrarStatus(
-          "Informe a validade no formato DD/MM/AAAA.",
-          "error"
-        );
+      const validadeConvertida = converterValidade(validadeEl.value);
+
+      if (validadeConvertida.erro) {
+        mostrarStatus(validadeConvertida.erro, "error");
         validadeEl.focus();
         return null;
       }
-
-      const partes = validade.split("/").map(Number);
-      const [dia, mes, ano] = partes;
-      const data = new Date(ano, mes - 1, dia);
-
-      if (
-        data.getFullYear() !== ano ||
-        data.getMonth() !== mes - 1 ||
-        data.getDate() !== dia
-      ) {
-        mostrarStatus("A data de validade não existe.", "error");
-        validadeEl.focus();
-        return null;
-      }
-
-      // Mantém o formato ISO esperado pelo backend.
-      const validadeISO =
-        String(ano).padStart(4, "0") + "-" +
-        String(mes).padStart(2, "0") + "-" +
-        String(dia).padStart(2, "0");
 
       if (
         !quantidadeTexto ||
         !Number.isSafeInteger(quantidade) ||
         quantidade < 1
       ) {
-        mostrarStatus(
-          "A quantidade deve ser um inteiro maior que zero.",
-          "error"
-        );
+        mostrarStatus("A quantidade deve ser um inteiro maior que zero.", "error");
         quantidadeEl.focus();
         return null;
       }
@@ -856,20 +788,16 @@
         funcionario,
         codigo,
         lote,
-        validade: validadeISO,
+        validade: validadeConvertida.iso,
         quantidade
       };
     }
 
-    // =========================================================
-    // IDENTIFICADORES DA SOLICITAÇÃO
-    // =========================================================
-
+    // IDENTIFICADORES
     function criarIdentificadores() {
       if (!window.crypto || !window.crypto.getRandomValues) {
         throw new Error(
-          "O navegador não oferece geração segura de identificadores. " +
-          "Atualize o navegador e tente novamente."
+          "O navegador não oferece geração segura de identificadores. Atualize o navegador e tente novamente."
         );
       }
 
@@ -886,9 +814,7 @@
         requestId = window.crypto.randomUUID();
       } else {
         requestId =
-          "req-" +
-          Date.now().toString(36) +
-          "-" +
+          "req-" + Date.now().toString(36) + "-" +
           Array.from(bytes.slice(0, 12))
             .map(byte => byte.toString(16).padStart(2, "0"))
             .join("");
@@ -897,10 +823,7 @@
       return { requestId, token };
     }
 
-    // =========================================================
-    // FINALIZAÇÃO DO LANÇAMENTO
-    // =========================================================
-
+    // FINALIZAÇÃO
     function encerrarConsulta() {
       if (consultaTimer) {
         clearTimeout(consultaTimer);
@@ -965,17 +888,12 @@
       bloquearFormulario(false);
 
       mostrarStatus(
-        "Não foi possível confirmar o resultado. O lançamento pode ter " +
-        "sido gravado mesmo sem confirmação. Confira a planilha antes " +
-        "de tentar novamente para evitar duplicidade.",
+        "Não foi possível confirmar o resultado. O lançamento pode ter sido gravado mesmo sem confirmação. Confira a planilha antes de tentar novamente para evitar duplicidade.",
         "warning"
       );
     }
 
-    // =========================================================
-    // SALVAR NA PLANILHA
-    // =========================================================
-
+    // SALVAR
     function salvarLancamento() {
       if (salvando) return;
 
@@ -1023,18 +941,10 @@
           TEMPO_MAXIMO_ESPERA_MS
         );
 
-        console.log(
-          "[Lançamento] Enviando para:",
-          formEnvio.action
-        );
-
-        console.log(
-          "[Lançamento] Request ID:",
-          lancamentoAtual.requestId
-        );
+        console.log("[Lançamento] Enviando para:", formEnvio.action);
+        console.log("[Lançamento] Request ID:", lancamentoAtual.requestId);
 
         formEnvio.submit();
-
         agendarConsulta(0);
 
       } catch (erro) {
@@ -1048,18 +958,11 @@
       }
     }
 
-    // =========================================================
-    // CONSULTA DO RESULTADO PELO APPS SCRIPT (JSONP)
-    // =========================================================
-
-    function agendarConsulta(
-      atraso = INTERVALO_CONSULTA_MS
-    ) {
+    // CONSULTA DO RESULTADO (JSONP)
+    function agendarConsulta(atraso = INTERVALO_CONSULTA_MS) {
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
-      if (consultaTimer) {
-        clearTimeout(consultaTimer);
-      }
+      if (consultaTimer) clearTimeout(consultaTimer);
 
       consultaTimer = setTimeout(consultarStatus, atraso);
     }
@@ -1087,10 +990,7 @@
 
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
-      if (
-        !resultado ||
-        resultado.requestId !== lancamentoAtual.requestId
-      ) {
+      if (!resultado || resultado.requestId !== lancamentoAtual.requestId) {
         agendarConsulta();
         return;
       }
@@ -1099,13 +999,9 @@
       const mensagem = String(resultado.message || "");
 
       if (estado === "saved") {
-        finalizarSucesso(
-          mensagem || "Lançamento salvo com sucesso na planilha."
-        );
+        finalizarSucesso(mensagem || "Lançamento salvo com sucesso na planilha.");
       } else if (estado === "error") {
-        finalizarErro(
-          mensagem || "O servidor não conseguiu salvar o lançamento."
-        );
+        finalizarErro(mensagem || "O servidor não conseguiu salvar o lançamento.");
       } else {
         agendarConsulta();
       }
@@ -1114,10 +1010,7 @@
     function consultarStatus() {
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
-      if (
-        Date.now() - lancamentoAtual.iniciadoEm >=
-        TEMPO_MAXIMO_ESPERA_MS
-      ) {
+      if (Date.now() - lancamentoAtual.iniciadoEm >= TEMPO_MAXIMO_ESPERA_MS) {
         finalizarSemConfirmacao();
         return;
       }
@@ -1144,17 +1037,13 @@
       script.onerror = function() {
         if (scriptConsulta !== script) return;
 
-        if (timeoutConsulta) {
-          clearTimeout(timeoutConsulta);
-        }
+        if (timeoutConsulta) clearTimeout(timeoutConsulta);
 
         timeoutConsulta = null;
         scriptConsulta = null;
         consultaEmAndamento = false;
 
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
+        if (script.parentNode) script.parentNode.removeChild(script);
 
         agendarConsulta(2500);
       };
@@ -1166,9 +1055,7 @@
         consultaEmAndamento = false;
         script.onerror = null;
 
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
+        if (script.parentNode) script.parentNode.removeChild(script);
 
         agendarConsulta(2500);
       }, 10000);
@@ -1176,10 +1063,7 @@
       document.head.appendChild(script);
     }
 
-    // =========================================================
-    // LIMPAR FORMULÁRIO
-    // =========================================================
-
+    // LIMPAR
     function limparFormulario() {
       if (salvando) return;
 
@@ -1192,10 +1076,7 @@
       codigoEl.focus();
     }
 
-    // =========================================================
     // EVENTOS
-    // =========================================================
-
     btnCamera.addEventListener("click", abrirCamera);
 
     btnPararCamera.addEventListener("click", function() {
@@ -1205,11 +1086,9 @@
     btnSalvar.addEventListener("click", salvarLancamento);
     btnLimpar.addEventListener("click", limparFormulario);
 
-    // Mensagem inicial
     if (typeof Html5Qrcode === "undefined") {
       mostrarStatus(
-        "A biblioteca de leitura não carregou. Verifique a internet " +
-        "e recarregue a página.",
+        "A biblioteca de leitura não carregou. Verifique a internet e recarregue a página.",
         "error"
       );
     } else {
@@ -1221,3 +1100,4 @@
   </script>
 </body>
 </html>
+```
