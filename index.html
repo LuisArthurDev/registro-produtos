@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -6,8 +7,8 @@
   <meta name="theme-color" content="#1565c0">
   <title>Conferência de Produtos</title>
 
-  
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Biblioteca de leitura de códigos de barras -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     :root {
@@ -15,7 +16,6 @@
       --primary-dark: #0d47a1;
       --success: #2e7d32;
       --danger: #c62828;
-      --warning: #ef6c00;
       --background: #f3f6fa;
       --surface: #fff;
       --text: #202124;
@@ -23,9 +23,7 @@
       --border: #d9e0e8;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -71,9 +69,7 @@
       font-size: 18px;
     }
 
-    .field {
-      margin-bottom: 15px;
-    }
+    .field { margin-bottom: 15px; }
 
     label {
       display: block;
@@ -82,8 +78,7 @@
       font-weight: 700;
     }
 
-    input,
-    select {
+    input, select {
       display: block;
       width: 100%;
       min-height: 46px;
@@ -95,8 +90,7 @@
       font-size: 16px;
     }
 
-    input:focus,
-    select:focus {
+    input:focus, select:focus {
       outline: 2px solid rgba(21, 101, 192, .25);
       border-color: var(--primary);
     }
@@ -155,8 +149,11 @@
       background: #111;
     }
 
-    .help,
-    .small-note {
+    #reader video {
+      max-width: 100%;
+    }
+
+    .help, .small-note {
       color: var(--muted);
       font-size: 12px;
       line-height: 1.5;
@@ -170,6 +167,7 @@
       font-size: 14px;
       line-height: 1.5;
       overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     .status.info {
@@ -203,18 +201,18 @@
       font-size: 12px;
     }
 
+    /* O iframe recebe a resposta do POST sem sair da página. */
+    #respostaAppsScript {
+      display: none;
+      width: 0;
+      height: 0;
+      border: 0;
+    }
+
     @media (max-width: 420px) {
-      body {
-        padding: 10px;
-      }
-
-      .card {
-        padding: 15px;
-      }
-
-      header h1 {
-        font-size: 22px;
-      }
+      body { padding: 10px; }
+      .card { padding: 15px; }
+      header h1 { font-size: 22px; }
     }
   </style>
 </head>
@@ -284,8 +282,8 @@
       <div id="reader"></div>
 
       <p class="help">
-        Permita o acesso à câmera quando solicitado. A câmera
-        requer uma página HTTPS, como a publicada no GitHub Pages.
+        Permita o acesso à câmera quando solicitado.
+        Use o site HTTPS publicado no GitHub Pages.
       </p>
     </section>
 
@@ -338,11 +336,10 @@
     <footer>Conferência de estoque</footer>
   </main>
 
-  <!-- Envio ao Apps Script sem navegar para fora da página. -->
   <iframe
+    id="respostaAppsScript"
     name="respostaAppsScript"
     title="Resposta do servidor"
-    style="display:none"
   ></iframe>
 
   <form
@@ -369,20 +366,10 @@
     const INTERVALO_CONSULTA_MS = 1800;
 
     const FUNCIONARIOS = [
-      "Alice",
-      "Altino",
-      "Ana Carolina",
-      "Anielle",
-      "Gabriela",
-      "Gabriele",
-      "Isabela",
-      "Livia",
-      "Paola",
-      "Rafaela",
-      "Ramon",
-      "Rillary",
-      "Sulaima",
-      "Thomaz"
+      "Alice", "Altino", "Ana Carolina", "Anielle",
+      "Gabriela", "Gabriele", "Isabela", "Livia",
+      "Paola", "Rafaela", "Ramon", "Rillary",
+      "Sulaima", "Thomaz"
     ];
 
     const $ = id => document.getElementById(id);
@@ -400,10 +387,13 @@
     const btnLimpar = $("btnLimpar");
 
     const formEnvio = $("formEnvio");
+    const readerEl = $("reader");
 
     let scanner = null;
     let cameraAtiva = false;
+    let iniciandoCamera = false;
     let salvando = false;
+
     let consultaTimer = null;
     let timeoutTimer = null;
     let consultaEmAndamento = false;
@@ -415,7 +405,7 @@
     let ultimaLeituraEm = 0;
 
     // =========================================================
-    // MENSAGENS E ESTADO
+    // MENSAGENS
     // =========================================================
 
     function mostrarStatus(mensagem, tipo = "info") {
@@ -434,85 +424,249 @@
       btnLimpar.disabled = bloquear;
     }
 
-    function encerrarConsulta() {
-      if (consultaTimer) {
-        clearTimeout(consultaTimer);
-        consultaTimer = null;
+    // =========================================================
+    // CÂMERA E LEITURA
+    // =========================================================
+
+    async function abrirCamera() {
+      if (cameraAtiva || iniciandoCamera) return;
+
+      if (!window.isSecureContext) {
+        mostrarStatus(
+          "A câmera exige HTTPS. Abra a versão publicada no GitHub Pages.",
+          "error"
+        );
+        return;
       }
 
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-        timeoutTimer = null;
+      if (!navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia) {
+        mostrarStatus(
+          "Este navegador não disponibiliza acesso à câmera. " +
+          "Abra o site no Google Chrome atualizado.",
+          "error"
+        );
+        return;
       }
 
-      if (timeoutConsulta) {
-        clearTimeout(timeoutConsulta);
-        timeoutConsulta = null;
+      if (typeof Html5Qrcode === "undefined") {
+        mostrarStatus(
+          "A biblioteca de leitura não carregou. Verifique a conexão " +
+          "com a internet e recarregue a página.",
+          "error"
+        );
+        return;
       }
 
-      if (scriptConsulta) {
-        scriptConsulta.onerror = null;
-        scriptConsulta.onload = null;
-
-        if (scriptConsulta.parentNode) {
-          scriptConsulta.parentNode.removeChild(scriptConsulta);
-        }
-
-        scriptConsulta = null;
-      }
-
-      consultaEmAndamento = false;
-    }
-
-    function finalizarSucesso(mensagem) {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
-
-      codigoEl.value = "";
-      loteEl.value = "";
-      validadeEl.value = "";
-      quantidadeEl.value = "1";
-
-      mostrarStatus(mensagem, "success");
-      codigoEl.focus();
-    }
-
-    function finalizarErro(mensagem) {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
-
-      mostrarStatus(mensagem, "error");
-    }
-
-    function finalizarSemConfirmacao() {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
+      iniciandoCamera = true;
+      btnCamera.disabled = true;
+      btnPararCamera.disabled = true;
+      readerEl.style.display = "block";
 
       mostrarStatus(
-        "Não foi possível confirmar o resultado. O lançamento pode " +
-        "ter sido gravado mesmo sem a confirmação. Confira a planilha " +
-        "antes de tentar novamente para evitar duplicidade.",
-        "warning"
+        "Iniciando câmera. Se o navegador pedir permissão, toque em Permitir.",
+        "info"
       );
+
+      try {
+        if (!scanner) {
+          const formatos = [];
+
+          if (typeof Html5QrcodeSupportedFormats !== "undefined") {
+            const disponiveis = Html5QrcodeSupportedFormats;
+
+            [
+              "EAN_13",
+              "EAN_8",
+              "UPC_A",
+              "UPC_E",
+              "CODE_128",
+              "CODE_39",
+              "ITF",
+              "CODABAR"
+            ].forEach(nome => {
+              if (disponiveis[nome] !== undefined) {
+                formatos.push(disponiveis[nome]);
+              }
+            });
+          }
+
+          const opcoesScanner = formatos.length
+            ? { formatsToSupport: formatos, verbose: false }
+            : { verbose: false };
+
+          scanner = new Html5Qrcode("reader", opcoesScanner);
+        }
+
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: function(largura, altura) {
+              const w = Math.max(
+                180,
+                Math.min(Math.floor(largura * 0.90), 420)
+              );
+
+              const h = Math.max(
+                90,
+                Math.min(Math.floor(altura * 0.35), 180)
+              );
+
+              return {
+                width: Math.min(w, largura),
+                height: Math.min(h, altura)
+              };
+            },
+            aspectRatio: 1.777
+          },
+          function(textoLido) {
+            processarLeitura(textoLido);
+          },
+          function() {
+            // Falhas individuais de leitura são normais enquanto
+            // a câmera procura um código de barras.
+          }
+        );
+
+        cameraAtiva = true;
+        btnPararCamera.disabled = false;
+
+        mostrarStatus(
+          "Câmera ativa. Posicione o código de barras dentro da área de leitura.",
+          "success"
+        );
+
+      } catch (erro) {
+        cameraAtiva = false;
+        readerEl.style.display = "none";
+
+        let mensagem = erro && erro.message
+          ? erro.message
+          : String(erro || "Erro desconhecido");
+
+        if (erro && erro.name === "NotAllowedError") {
+          mensagem =
+            "A permissão da câmera foi negada. Nas configurações do Chrome, " +
+            "permita o acesso à câmera para este site e tente novamente.";
+        } else if (erro && erro.name === "NotFoundError") {
+          mensagem = "Nenhuma câmera compatível foi encontrada.";
+        } else if (erro && erro.name === "NotReadableError") {
+          mensagem =
+            "A câmera está sendo usada por outro aplicativo ou não pôde " +
+            "ser iniciada. Feche outros aplicativos que usam a câmera.";
+        } else if (erro && erro.name === "OverconstrainedError") {
+          mensagem =
+            "Não foi possível usar a câmera traseira. Verifique a câmera " +
+            "do celular e tente novamente.";
+        }
+
+        mostrarStatus("Não foi possível abrir a câmera: " + mensagem, "error");
+
+        // Permite tentar novamente depois de uma falha de inicialização.
+        try {
+          if (scanner && typeof scanner.clear === "function") {
+            await scanner.clear();
+          }
+        } catch (_) {
+          // Ignora falhas de limpeza após erro.
+        }
+
+        scanner = null;
+
+      } finally {
+        iniciandoCamera = false;
+        btnCamera.disabled = false;
+        btnPararCamera.disabled = !cameraAtiva;
+      }
+    }
+
+    async function pararCamera(silencioso = false) {
+      btnPararCamera.disabled = true;
+
+      try {
+        if (scanner && cameraAtiva) {
+          await scanner.stop();
+        }
+
+        cameraAtiva = false;
+
+        if (scanner) {
+          try {
+            await scanner.clear();
+          } catch (_) {
+            // A limpeza visual pode falhar se o scanner já estiver parado.
+          }
+        }
+
+        scanner = null;
+        readerEl.style.display = "none";
+
+        if (!silencioso) {
+          mostrarStatus("Câmera desligada.", "info");
+        }
+      } catch (erro) {
+        cameraAtiva = false;
+        scanner = null;
+        readerEl.style.display = "none";
+
+        if (!silencioso) {
+          mostrarStatus(
+            "A câmera foi interrompida. Se necessário, recarregue a página.",
+            "warning"
+          );
+        }
+      } finally {
+        btnCamera.disabled = false;
+        btnPararCamera.disabled = true;
+      }
+    }
+
+    function processarLeitura(texto) {
+      const codigo = String(texto || "").trim();
+
+      // Evita processar várias vezes a mesma leitura em sequência.
+      const agora = Date.now();
+
+      if (codigo === ultimaLeitura && agora - ultimaLeituraEm < 2500) {
+        return;
+      }
+
+      ultimaLeitura = codigo;
+      ultimaLeituraEm = agora;
+
+      // A validação final ocorre ao salvar, mas só aceitamos aqui
+      // códigos numéricos de 8 a 14 dígitos.
+      if (!/^\d{8,14}$/.test(codigo)) {
+        mostrarStatus(
+          "O código lido não contém de 8 a 14 dígitos numéricos. " +
+          "Tente enquadrar o código de barras novamente.",
+          "warning"
+        );
+        return;
+      }
+
+      codigoEl.value = codigo;
+
+      pararCamera(true).then(function() {
+        mostrarStatus(
+          "Código lido: " + codigo + ". Preencha o lote, a validade " +
+          "e a quantidade antes de salvar.",
+          "success"
+        );
+
+        loteEl.focus();
+      });
     }
 
     // =========================================================
-    // CONFIGURAÇÃO DO ENDPOINT
+    // CONFIGURAÇÃO DO APPS SCRIPT
     // =========================================================
 
     function validarConfiguracao() {
       if (
         !APPS_SCRIPT_URL ||
-        APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbzf413mNHUCYVfsngZIF7JUHyQlXvXFu_-pSEAHa-rlWelMSni5nV81iHULH1O46M34Mg/exec"
+        APPS_SCRIPT_URL.includes("COLE_A_URL")
       ) {
         mostrarStatus(
           "Configure a URL do aplicativo da web do Apps Script no código.",
@@ -526,7 +680,7 @@
           .test(APPS_SCRIPT_URL)
       ) {
         mostrarStatus(
-          "A URL deve ser a URL /exec do seu Web App do Apps Script.",
+          "A URL deve ser a URL /exec do Web App do Apps Script.",
           "error"
         );
         return false;
@@ -617,10 +771,7 @@
     // =========================================================
 
     function criarIdentificadores() {
-      if (
-        !window.crypto ||
-        !window.crypto.getRandomValues
-      ) {
+      if (!window.crypto || !window.crypto.getRandomValues) {
         throw new Error(
           "O navegador não oferece geração segura de identificadores. " +
           "Atualize o navegador e tente novamente."
@@ -652,7 +803,82 @@
     }
 
     // =========================================================
-    // SALVAR
+    // FINALIZAÇÃO DO LANÇAMENTO
+    // =========================================================
+
+    function encerrarConsulta() {
+      if (consultaTimer) {
+        clearTimeout(consultaTimer);
+        consultaTimer = null;
+      }
+
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+
+      if (timeoutConsulta) {
+        clearTimeout(timeoutConsulta);
+        timeoutConsulta = null;
+      }
+
+      if (scriptConsulta) {
+        scriptConsulta.onerror = null;
+        scriptConsulta.onload = null;
+
+        if (scriptConsulta.parentNode) {
+          scriptConsulta.parentNode.removeChild(scriptConsulta);
+        }
+
+        scriptConsulta = null;
+      }
+
+      consultaEmAndamento = false;
+    }
+
+    function finalizarSucesso(mensagem) {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      codigoEl.value = "";
+      loteEl.value = "";
+      validadeEl.value = "";
+      quantidadeEl.value = "1";
+
+      mostrarStatus(mensagem, "success");
+      codigoEl.focus();
+    }
+
+    function finalizarErro(mensagem) {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      mostrarStatus(mensagem, "error");
+    }
+
+    function finalizarSemConfirmacao() {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      mostrarStatus(
+        "Não foi possível confirmar o resultado. O lançamento pode ter " +
+        "sido gravado mesmo sem confirmação. Confira a planilha antes " +
+        "de tentar novamente para evitar duplicidade.",
+        "warning"
+      );
+    }
+
+    // =========================================================
+    // SALVAR NA PLANILHA
     // =========================================================
 
     function salvarLancamento() {
@@ -695,8 +921,9 @@
 
         formEnvio.action = APPS_SCRIPT_URL;
 
-        // Começa a consultar o status e envia os dados ao servidor.
+        // Consulta o resultado e envia o formulário sem sair da página.
         agendarConsulta(0);
+
         timeoutTimer = setTimeout(
           finalizarSemConfirmacao,
           TEMPO_MAXIMO_ESPERA_MS
@@ -716,7 +943,7 @@
     }
 
     // =========================================================
-    // CONSULTA JSONP DO RESULTADO NO APPS SCRIPT
+    // CONSULTA DO RESULTADO PELO APPS SCRIPT (JSONP)
     // =========================================================
 
     function agendarConsulta(atraso = INTERVALO_CONSULTA_MS) {
@@ -727,7 +954,6 @@
       consultaTimer = setTimeout(consultarStatus, atraso);
     }
 
-    // O Apps Script chama esta função por meio do JSONP.
     window.__statusCb = function(resultado) {
       if (!consultaEmAndamento) return;
 
@@ -751,10 +977,7 @@
 
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
-      if (
-        !resultado ||
-        resultado.requestId !== lancamentoAtual.requestId
-      ) {
+      if (!resultado || resultado.requestId !== lancamentoAtual.requestId) {
         agendarConsulta();
         return;
       }
@@ -771,7 +994,6 @@
           mensagem || "O servidor não conseguiu salvar o lançamento."
         );
       } else {
-        // O servidor ainda está processando ou não recebeu o envio.
         agendarConsulta();
       }
     };
@@ -827,7 +1049,6 @@
 
         scriptConsulta = null;
         consultaEmAndamento = false;
-
         script.onerror = null;
 
         if (script.parentNode) {
@@ -841,7 +1062,47 @@
     }
 
     // =========================================================
-    // CÂMERA E LEITURA DO CÓDIGO DE BARRAS
+    // LIMPAR FORMULÁRIO
     // =========================================================
 
-    
+    function limparFormulario() {
+      if (salvando) return;
+
+      codigoEl.value = "";
+      loteEl.value = "";
+      validadeEl.value = "";
+      quantidadeEl.value = "1";
+
+      esconderStatus();
+      codigoEl.focus();
+    }
+
+    // =========================================================
+    // EVENTOS
+    // =========================================================
+
+    btnCamera.addEventListener("click", abrirCamera);
+
+    btnPararCamera.addEventListener("click", function() {
+      pararCamera(false);
+    });
+
+    btnSalvar.addEventListener("click", salvarLancamento);
+    btnLimpar.addEventListener("click", limparFormulario);
+
+    // Mensagem inicial para confirmar que o JavaScript foi executado.
+    if (typeof Html5Qrcode === "undefined") {
+      mostrarStatus(
+        "A biblioteca de leitura não carregou. Verifique a internet " +
+        "e recarregue a página.",
+        "error"
+      );
+    } else {
+      mostrarStatus(
+        "Sistema pronto. Selecione o funcionário e abra a câmera para ler o código.",
+        "info"
+      );
+    }
+  </script>
+</body>
+</html>
