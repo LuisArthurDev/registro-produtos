@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1565c0">
+  <title>Conferência de Produtos</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    :root {
+      --primary: #1565c0;
+      --primary-dark: #0d47a1;
+      --success: #2e7d32;
+      --danger: #c62828;
+      --warning: #ef6c00;
+      --background: #f3f6fa;
+      --surface: #fff;
+      --text: #202124;
+      --muted: #606770;
+      --border: #d9e0e8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--background);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .container {
+      max-width: 620px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 18px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      color: var(--primary-dark);
+      font-size: 25px;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .card {
+      margin-bottom: 16px;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 3px 12px rgba(0, 0, 0, .05);
+    }
+
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 18px;
+    }
+
+    .field {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      display: block;
+      width: 100%;
+      min-height: 46px;
+      padding: 11px 12px;
+      border: 1px solid #b9c3cf;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      font-size: 16px;
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid rgba(21, 101, 192, .25);
+      border-color: var(--primary);
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      min-height: 46px;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    .primary {
+      flex: 1;
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .secondary {
+      flex: 1;
+      background: #e8eef5;
+      color: #243447;
+    }
+
+    .danger {
+      flex: 1;
+      background: #ffebee;
+      color: var(--danger);
+    }
+
+    .save {
+      width: 100%;
+      background: var(--success);
+      color: #fff;
+    }
+
+    #reader {
+      display: none;
+      width: 100%;
+      margin-top: 14px;
+      overflow: hidden;
+      border-radius: 10px;
+      background: #111;
+    }
+
+    .help,
+    .small-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .status {
+      display: none;
+      margin-bottom: 16px;
+      padding: 13px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .status.info {
+      display: block;
+      background: #e3f2fd;
+      color: #0d47a1;
+    }
+
+    .status.success {
+      display: block;
+      background: #e8f5e9;
+      color: #1b5e20;
+    }
+
+    .status.error {
+      display: block;
+      background: #ffebee;
+      color: #b71c1c;
+    }
+
+    .status.warning {
+      display: block;
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    footer {
+      padding: 5px 0 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 420px) {
+      body {
+        padding: 10px;
+      }
+
+      .card {
+        padding: 15px;
+      }
+
+      header h1 {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <header>
+      <h1>Conferência de Produtos</h1>
+      <p>Leitura e lançamento de produtos no estoque</p>
+    </header>
+
+    <div id="status" class="status" role="status"
+         aria-live="polite"></div>
+
+    <section class="card">
+      <h2>1. Identificação</h2>
+
+      <div class="field">
+        <label for="funcionario">Funcionário responsável</label>
+        <select id="funcionario" required>
+          <option value="">Selecione seu nome</option>
+          <option>Alice</option>
+          <option>Altino</option>
+          <option>Ana Carolina</option>
+          <option>Anielle</option>
+          <option>Gabriela</option>
+          <option>Gabriele</option>
+          <option>Isabela</option>
+          <option>Livia</option>
+          <option>Paola</option>
+          <option>Rafaela</option>
+          <option>Ramon</option>
+          <option>Rillary</option>
+          <option>Sulaima</option>
+          <option>Thomaz</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. Código de barras</h2>
+
+      <div class="field">
+        <label for="codigo">Código de barras</label>
+        <input
+          id="codigo"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="Leia ou digite o código"
+          maxlength="14"
+          required
+        >
+      </div>
+
+      <div class="button-row">
+        <button type="button" id="btnCamera" class="primary">
+          Abrir câmera
+        </button>
+
+        <button type="button" id="btnPararCamera"
+                class="secondary" disabled>
+          Parar câmera
+        </button>
+      </div>
+
+      <div id="reader"></div>
+
+      <p class="help">
+        Permita o acesso à câmera quando solicitado. A câmera
+        requer uma página HTTPS, como a publicada no GitHub Pages.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>3. Dados do produto</h2>
+
+      <div class="field">
+        <label for="lote">Lote</label>
+        <input
+          id="lote"
+          type="text"
+          maxlength="100"
+          autocomplete="off"
+          placeholder="Digite o lote"
+          required
+        >
+      </div>
+
+      <div class="field">
+        <label for="validade">Validade</label>
+        <input id="validade" type="date" required>
+      </div>
+
+      <div class="field">
+        <label for="quantidade">Quantidade</label>
+        <input
+          id="quantidade"
+          type="number"
+          inputmode="numeric"
+          min="1"
+          step="1"
+          value="1"
+          required
+        >
+      </div>
+
+      <div class="button-row">
+        <button type="button" id="btnSalvar" class="save">
+          Salvar lançamento
+        </button>
+      </div>
+
+      <div class="button-row" style="margin-top: 10px;">
+        <button type="button" id="btnLimpar" class="danger">
+          Limpar formulário
+        </button>
+      </div>
+    </section>
+
+    <footer>Conferência de estoque</footer>
+  </main>
+
+  <!-- Envio ao Apps Script sem navegar para fora da página. -->
+  <iframe
+    name="respostaAppsScript"
+    title="Resposta do servidor"
+    style="display:none"
+  ></iframe>
+
+  <form
+    id="formEnvio"
+    method="POST"
+    target="respostaAppsScript"
+    style="display:none"
+  >
+    <input type="hidden" name="token" id="postToken">
+    <input type="hidden" name="payload" id="postPayload">
+  </form>
+
+  <script>
+    "use strict";
+
+    // =========================================================
+    // CONFIGURAÇÃO
+    // =========================================================
+
+    const APPS_SCRIPT_URL =
+      "COLE_A_URL_DO_SEU_WEB_APP_AQUI";
+
+    const TEMPO_MAXIMO_ESPERA_MS = 90000;
+    const INTERVALO_CONSULTA_MS = 1800;
+
+    const FUNCIONARIOS = [
+      "Alice",
+      "Altino",
+      "Ana Carolina",
+      "Anielle",
+      "Gabriela",
+      "Gabriele",
+      "Isabela",
+      "Livia",
+      "Paola",
+      "Rafaela",
+      "Ramon",
+      "Rillary",
+      "Sulaima",
+      "Thomaz"
+    ];
+
+    const $ = id => document.getElementById(id);
+
+    const statusEl = $("status");
+    const funcionarioEl = $("funcionario");
+    const codigoEl = $("codigo");
+    const loteEl = $("lote");
+    const validadeEl = $("validade");
+    const quantidadeEl = $("quantidade");
+
+    const btnCamera = $("btnCamera");
+    const btnPararCamera = $("btnPararCamera");
+    const btnSalvar = $("btnSalvar");
+    const btnLimpar = $("btnLimpar");
+
+    const formEnvio = $("formEnvio");
+
+    let scanner = null;
+    let cameraAtiva = false;
+    let salvando = false;
+    let consultaTimer = null;
+    let timeoutTimer = null;
+    let consultaEmAndamento = false;
+    let scriptConsulta = null;
+    let timeoutConsulta = null;
+    let lancamentoAtual = null;
+
+    let ultimaLeitura = "";
+    let ultimaLeituraEm = 0;
+
+    // =========================================================
+    // MENSAGENS E ESTADO
+    // =========================================================
+
+    function mostrarStatus(mensagem, tipo = "info") {
+      statusEl.textContent = mensagem;
+      statusEl.className = "status " + tipo;
+    }
+
+    function esconderStatus() {
+      statusEl.textContent = "";
+      statusEl.className = "status";
+    }
+
+    function bloquearFormulario(bloquear) {
+      salvando = bloquear;
+      btnSalvar.disabled = bloquear;
+      btnLimpar.disabled = bloquear;
+    }
+
+    function encerrarConsulta() {
+      if (consultaTimer) {
+        clearTimeout(consultaTimer);
+        consultaTimer = null;
+      }
+
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+
+      if (timeoutConsulta) {
+        clearTimeout(timeoutConsulta);
+        timeoutConsulta = null;
+      }
+
+      if (scriptConsulta) {
+        scriptConsulta.onerror = null;
+        scriptConsulta.onload = null;
+
+        if (scriptConsulta.parentNode) {
+          scriptConsulta.parentNode.removeChild(scriptConsulta);
+        }
+
+        scriptConsulta = null;
+      }
+
+      consultaEmAndamento = false;
+    }
+
+    function finalizarSucesso(mensagem) {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      codigoEl.value = "";
+      loteEl.value = "";
+      validadeEl.value = "";
+      quantidadeEl.value = "1";
+
+      mostrarStatus(mensagem, "success");
+      codigoEl.focus();
+    }
+
+    function finalizarErro(mensagem) {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      mostrarStatus(mensagem, "error");
+    }
+
+    function finalizarSemConfirmacao() {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      lancamentoAtual.finalizado = true;
+      encerrarConsulta();
+      bloquearFormulario(false);
+
+      mostrarStatus(
+        "Não foi possível confirmar o resultado. O lançamento pode " +
+        "ter sido gravado mesmo sem a confirmação. Confira a planilha " +
+        "antes de tentar novamente para evitar duplicidade.",
+        "warning"
+      );
+    }
+
+    // =========================================================
+    // CONFIGURAÇÃO DO ENDPOINT
+    // =========================================================
+
+    function validarConfiguracao() {
+      if (
+        !APPS_SCRIPT_URL ||
+        APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbzf413mNHUCYVfsngZIF7JUHyQlXvXFu_-pSEAHa-rlWelMSni5nV81iHULH1O46M34Mg/exec"
+      ) {
+        mostrarStatus(
+          "Configure a URL do aplicativo da web do Apps Script no código.",
+          "error"
+        );
+        return false;
+      }
+
+      if (
+        !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/
+          .test(APPS_SCRIPT_URL)
+      ) {
+        mostrarStatus(
+          "A URL deve ser a URL /exec do seu Web App do Apps Script.",
+          "error"
+        );
+        return false;
+      }
+
+      return true;
+    }
+
+    // =========================================================
+    // VALIDAÇÃO DO FORMULÁRIO
+    // =========================================================
+
+    function validarFormulario() {
+      const funcionario = funcionarioEl.value;
+      const codigo = codigoEl.value.trim();
+      const lote = loteEl.value.trim();
+      const validade = validadeEl.value;
+      const quantidadeTexto = quantidadeEl.value.trim();
+      const quantidade = Number(quantidadeTexto);
+
+      if (!FUNCIONARIOS.includes(funcionario)) {
+        mostrarStatus("Selecione o funcionário responsável.", "error");
+        funcionarioEl.focus();
+        return null;
+      }
+
+      if (!/^\d{8,14}$/.test(codigo)) {
+        mostrarStatus(
+          "O código deve conter de 8 a 14 dígitos numéricos.",
+          "error"
+        );
+        codigoEl.focus();
+        return null;
+      }
+
+      if (!lote || lote.length > 100) {
+        mostrarStatus(
+          "Informe um lote com no máximo 100 caracteres.",
+          "error"
+        );
+        loteEl.focus();
+        return null;
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(validade)) {
+        mostrarStatus("Informe uma validade válida.", "error");
+        validadeEl.focus();
+        return null;
+      }
+
+      const partes = validade.split("-").map(Number);
+      const data = new Date(partes[0], partes[1] - 1, partes[2]);
+
+      if (
+        data.getFullYear() !== partes[0] ||
+        data.getMonth() !== partes[1] - 1 ||
+        data.getDate() !== partes[2]
+      ) {
+        mostrarStatus("A data de validade não existe.", "error");
+        validadeEl.focus();
+        return null;
+      }
+
+      if (
+        !quantidadeTexto ||
+        !Number.isSafeInteger(quantidade) ||
+        quantidade < 1
+      ) {
+        mostrarStatus(
+          "A quantidade deve ser um inteiro maior que zero.",
+          "error"
+        );
+        quantidadeEl.focus();
+        return null;
+      }
+
+      return {
+        funcionario,
+        codigo,
+        lote,
+        validade,
+        quantidade
+      };
+    }
+
+    // =========================================================
+    // IDENTIFICADORES DA SOLICITAÇÃO
+    // =========================================================
+
+    function criarIdentificadores() {
+      if (
+        !window.crypto ||
+        !window.crypto.getRandomValues
+      ) {
+        throw new Error(
+          "O navegador não oferece geração segura de identificadores. " +
+          "Atualize o navegador e tente novamente."
+        );
+      }
+
+      const bytes = new Uint8Array(32);
+      window.crypto.getRandomValues(bytes);
+
+      const token = Array.from(bytes)
+        .map(byte => byte.toString(16).padStart(2, "0"))
+        .join("");
+
+      let requestId;
+
+      if (typeof window.crypto.randomUUID === "function") {
+        requestId = window.crypto.randomUUID();
+      } else {
+        requestId =
+          "req-" +
+          Date.now().toString(36) +
+          "-" +
+          Array.from(bytes.slice(0, 12))
+            .map(byte => byte.toString(16).padStart(2, "0"))
+            .join("");
+      }
+
+      return { requestId, token };
+    }
+
+    // =========================================================
+    // SALVAR
+    // =========================================================
+
+    function salvarLancamento() {
+      if (salvando) return;
+
+      esconderStatus();
+
+      if (!validarConfiguracao()) return;
+
+      const dados = validarFormulario();
+      if (!dados) return;
+
+      try {
+        const ids = criarIdentificadores();
+
+        lancamentoAtual = {
+          requestId: ids.requestId,
+          token: ids.token,
+          iniciadoEm: Date.now(),
+          finalizado: false
+        };
+
+        bloquearFormulario(true);
+
+        mostrarStatus(
+          "Enviando lançamento. Aguarde a confirmação do servidor.",
+          "info"
+        );
+
+        $("postToken").value = ids.token;
+
+        $("postPayload").value = JSON.stringify({
+          funcionario: dados.funcionario,
+          codigo: dados.codigo,
+          lote: dados.lote,
+          validade: dados.validade,
+          quantidade: dados.quantidade,
+          requestId: ids.requestId
+        });
+
+        formEnvio.action = APPS_SCRIPT_URL;
+
+        // Começa a consultar o status e envia os dados ao servidor.
+        agendarConsulta(0);
+        timeoutTimer = setTimeout(
+          finalizarSemConfirmacao,
+          TEMPO_MAXIMO_ESPERA_MS
+        );
+
+        formEnvio.submit();
+
+      } catch (erro) {
+        encerrarConsulta();
+        bloquearFormulario(false);
+
+        mostrarStatus(
+          erro.message || "Não foi possível iniciar o envio.",
+          "error"
+        );
+      }
+    }
+
+    // =========================================================
+    // CONSULTA JSONP DO RESULTADO NO APPS SCRIPT
+    // =========================================================
+
+    function agendarConsulta(atraso = INTERVALO_CONSULTA_MS) {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      if (consultaTimer) clearTimeout(consultaTimer);
+
+      consultaTimer = setTimeout(consultarStatus, atraso);
+    }
+
+    // O Apps Script chama esta função por meio do JSONP.
+    window.__statusCb = function(resultado) {
+      if (!consultaEmAndamento) return;
+
+      if (timeoutConsulta) {
+        clearTimeout(timeoutConsulta);
+        timeoutConsulta = null;
+      }
+
+      if (scriptConsulta) {
+        scriptConsulta.onerror = null;
+        scriptConsulta.onload = null;
+
+        if (scriptConsulta.parentNode) {
+          scriptConsulta.parentNode.removeChild(scriptConsulta);
+        }
+
+        scriptConsulta = null;
+      }
+
+      consultaEmAndamento = false;
+
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      if (
+        !resultado ||
+        resultado.requestId !== lancamentoAtual.requestId
+      ) {
+        agendarConsulta();
+        return;
+      }
+
+      const estado = String(resultado.status || "").toLowerCase();
+      const mensagem = String(resultado.message || "");
+
+      if (estado === "saved") {
+        finalizarSucesso(
+          mensagem || "Lançamento salvo com sucesso na planilha."
+        );
+      } else if (estado === "error") {
+        finalizarErro(
+          mensagem || "O servidor não conseguiu salvar o lançamento."
+        );
+      } else {
+        // O servidor ainda está processando ou não recebeu o envio.
+        agendarConsulta();
+      }
+    };
+
+    function consultarStatus() {
+      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+
+      if (
+        Date.now() - lancamentoAtual.iniciadoEm >=
+        TEMPO_MAXIMO_ESPERA_MS
+      ) {
+        finalizarSemConfirmacao();
+        return;
+      }
+
+      if (consultaEmAndamento) {
+        agendarConsulta(500);
+        return;
+      }
+
+      consultaEmAndamento = true;
+
+      const url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.set("action", "status");
+      url.searchParams.set("callback", "__statusCb");
+      url.searchParams.set("requestId", lancamentoAtual.requestId);
+      url.searchParams.set("token", lancamentoAtual.token);
+      url.searchParams.set("_", String(Date.now()));
+
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = url.toString();
+      scriptConsulta = script;
+
+      script.onerror = function() {
+        if (scriptConsulta !== script) return;
+
+        if (timeoutConsulta) clearTimeout(timeoutConsulta);
+        timeoutConsulta = null;
+
+        scriptConsulta = null;
+        consultaEmAndamento = false;
+
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+
+        agendarConsulta(2500);
+      };
+
+      timeoutConsulta = setTimeout(function() {
+        if (scriptConsulta !== script) return;
+
+        scriptConsulta = null;
+        consultaEmAndamento = false;
+
+        script.onerror = null;
+
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+
+        agendarConsulta(2500);
+      }, 10000);
+
+      document.head.appendChild(script);
+    }
+
+    // =========================================================
+    // CÂMERA E LEITURA DO CÓDIGO DE BARRAS
+    // =========================================================
+
+    
