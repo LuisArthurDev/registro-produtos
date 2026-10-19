@@ -360,7 +360,7 @@
     // =========================================================
 
     const APPS_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbzf413mNHUCYVfsngZIF7JUHyQlXvXFu_-pSEAHa-rlWelMSni5nV81iHULH1O46M34Mg/exec";
+      "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
     const TEMPO_MAXIMO_ESPERA_MS = 90000;
     const INTERVALO_CONSULTA_MS = 1800;
@@ -666,7 +666,7 @@
     function validarConfiguracao() {
       if (
         !APPS_SCRIPT_URL ||
-        APPS_SCRIPT_URL.includes("COLE_A_URL")
+        APPS_SCRIPT_URL.includes("https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec")
       ) {
         mostrarStatus(
           "Configure a URL do aplicativo da web do Apps Script no código.",
