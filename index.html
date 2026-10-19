@@ -42,17 +42,31 @@
       text-align: center;
     }
 
+    
     header h1 {
-      margin: 0 0 8px;
-      color: var(--primary-dark);
-      font-size: 25px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .faturado {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--success);
+      white-space: nowrap;
+    }
+    
+    .faturado sup {
+      font-size: 9px;
+    }
+    
+    .versao {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
     }
 
-    header p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
 
     .card {
       margin-bottom: 16px;
@@ -219,8 +233,12 @@
 <body>
   <main class="container">
     <header>
-      <h1>Registro Mapa de Validade</h1> v0.0.1
+      <h1>
+        Registro Mapa de Validade
+        <span class="faturado"><sup>2</sup></span>
+      </h1>
       <p>Leitura e lançamento de produtos no mapa</p>
+      <p class="versao">v0.0.1</p>
     </header>
 
     <div id="status" class="status" role="status"
