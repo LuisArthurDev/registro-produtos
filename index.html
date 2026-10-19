@@ -1,341 +1,229 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1565c0">
-  <title>Registro Mapa de Validade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f2a3d">
+  <title>Registro de Mapa de Validade²</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Abre a conexão com o Google antes da primeira consulta -->
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
 
   <style>
     :root {
-      --primary: #1565c0;
-      --primary-dark: #0d47a1;
-      --success: #2e7d32;
-      --danger: #c62828;
-      --background: #f3f6fa;
-      --surface: #fff;
-      --text: #202124;
-      --muted: #606770;
-      --border: #d9e0e8;
+      --bg: #eaeff3;
+      --surface: #ffffff;
+      --ink: #0f1b2d;
+      --muted: #5a6877;
+      --line: #d3dce5;
+      --brand: #0f2a3d;
+      --accent: #0a7c86;
+      --accent-dark: #075e66;
+      --ok: #17803d;
+      --ok-bg: #e4f5ea;
+      --err: #b3261e;
+      --err-bg: #fdeceb;
+      --warn: #a15c07;
+      --warn-bg: #fff3df;
+      --info-bg: #e2f1f3;
+      --shadow: 0 1px 2px rgba(15, 27, 45, .06);
+      color-scheme: light;
     }
 
-    * { box-sizing: border-box; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b141c;
+        --surface: #142230;
+        --ink: #e8eef4;
+        --muted: #9aa9b8;
+        --line: #284054;
+        --brand: #0b1a26;
+        --accent: #31b3bf;
+        --accent-dark: #4cc6d1;
+        --ok: #5fd08a;
+        --ok-bg: #12301f;
+        --err: #ff8a80;
+        --err-bg: #3a1714;
+        --warn: #f0b45a;
+        --warn-bg: #36270f;
+        --info-bg: #10323a;
+        --shadow: none;
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html { scroll-padding-top: 90px; }
 
     body {
       margin: 0;
-      padding: 12px;
-      background: var(--background);
-      color: var(--text);
-      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      padding-bottom: env(safe-area-inset-bottom, 0);
     }
 
-    .container {
-      max-width: 620px;
-      margin: 0 auto;
+    .topbar {
+      background: var(--brand);
+      color: #fff;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 14px;
     }
+    .topbar h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: .2px; }
+    .topbar p { margin: 2px 0 0; font-size: 13px; color: #b9cad8; }
 
-    header {
-      margin-bottom: 14px;
-      text-align: center;
-    }
+    main { max-width: 640px; margin: 0 auto; padding: 14px 14px 28px; }
 
-    header h1 {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin: 0 0 7px;
-      color: var(--primary-dark);
-      font-size: 25px;
-    }
-
-    header p {
-      margin: 0;
-      color: var(--muted);
+    /* Mensagem de status fixa no topo, sempre visível ao enviar */
+    #status {
+      display: none;
+      position: sticky;
+      top: 8px;
+      z-index: 20;
+      margin: 0 0 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid transparent;
       font-size: 14px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
     }
-
-    .faturado {
-      color: var(--success);
-      font-size: 13px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .faturado sup { font-size: 9px; }
-
-    .versao {
-      margin-top: 7px;
-      font-size: 12px;
-      color: var(--muted);
-    }
+    #status.info    { display: block; background: var(--info-bg); color: var(--accent-dark); border-color: var(--accent); }
+    #status.success { display: block; background: var(--ok-bg);   color: var(--ok);          border-color: var(--ok); }
+    #status.error   { display: block; background: var(--err-bg);  color: var(--err);         border-color: var(--err); }
 
     .card {
-      margin-bottom: 12px;
-      padding: 16px;
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      box-shadow: 0 3px 12px rgba(0, 0, 0, .05);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
     }
+    h2 { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
 
-    .card h2 {
-      margin: 0 0 13px;
-      font-size: 18px;
-    }
-
-    .field { margin-bottom: 13px; }
-
-    label {
-      display: block;
-      margin-bottom: 7px;
-      font-size: 14px;
-      font-weight: 700;
-    }
+    .field { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
     input, select {
-      display: block;
       width: 100%;
-      min-height: 46px;
-      padding: 11px 12px;
-      border: 1px solid #b9c3cf;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1.5px solid var(--line);
       border-radius: 8px;
-      background: #fff;
-      color: var(--text);
-      font-size: 16px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 17px;
     }
+    input:focus-visible, select:focus-visible, button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+    #codigo { font-size: 20px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 
-    input:focus, select:focus {
-      outline: 2px solid rgba(21, 101, 192, .25);
-      border-color: var(--primary);
+    /* Descrição do produto */
+    .description-box {
+      display: none;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border-left: 5px solid var(--accent);
+      background: var(--info-bg);
     }
-
-    .button-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
+    .description-box.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+    .description-box.ok   { border-left-color: var(--ok);   background: var(--ok-bg); }
+    #descricaoTexto { display: block; font-size: 17px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+    #descricaoTexto:empty { display: none; }
+    #descricaoStatus { display: block; font-size: 13px; color: var(--muted); }
+    #descricaoTexto + #descricaoStatus { margin-top: 3px; }
 
     button {
-      min-height: 46px;
-      padding: 12px 16px;
+      min-height: 48px;
+      padding: 10px 16px;
       border: 0;
       border-radius: 8px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 700;
-    }
-
-    button:disabled {
-      cursor: not-allowed;
-      opacity: .55;
-    }
-
-    .primary {
-      flex: 1;
-      background: var(--primary);
-      color: #fff;
-    }
-
-    .secondary {
-      flex: 1;
-      background: #e8eef5;
-      color: #243447;
-    }
-
-    .danger {
-      flex: 1;
-      background: #ffebee;
-      color: var(--danger);
-    }
-
-    .save {
-      width: 100%;
-      background: var(--success);
-      color: #fff;
-    }
-
-    /* DESCRIÇÃO DO PRODUTO */
-    .descricao-produto {
-      margin-bottom: 13px;
-      padding: 12px;
-      border: 1px solid var(--border);
-      border-left: 4px solid var(--primary);
-      border-radius: 8px;
-      background: #eef5ff;
-    }
-
-    .descricao-produto[hidden] {
-      display: none;
-    }
-
-    .descricao-produto-titulo {
-      display: block;
-      margin-bottom: 5px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .3px;
-    }
-
-    #descricaoProduto {
-      color: var(--primary-dark);
+      font: inherit;
       font-size: 16px;
       font-weight: 700;
-      line-height: 1.4;
-      overflow-wrap: anywhere;
+      cursor: pointer;
+      transition: transform .08s, background .15s;
     }
+    button:active:not(:disabled) { transform: scale(.98); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
 
-    .descricao-produto.erro {
-      border-left-color: #f59e0b;
-      background: #fff8e8;
-    }
+    .btn-camera { width: 100%; background: var(--accent); color: #fff; }
+    .btn-camera:hover:not(:disabled) { background: var(--accent-dark); }
+    .btn-stop { width: 100%; background: var(--err-bg); color: var(--err); margin-top: 10px; display: none; }
 
-    .descricao-produto.erro #descricaoProduto {
-      color: #8a4b08;
-    }
+    #reader { display: none; margin-top: 12px; border-radius: 10px; overflow: hidden; background: #000; }
+    #reader video { width: 100% !important; display: block; }
+    #reader.ativo { display: block; }
 
-    #reader {
-      display: none;
+    .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+
+    .submit-button {
       width: 100%;
-      margin-top: 12px;
-      overflow: hidden;
-      border-radius: 10px;
-      background: #111;
-      scroll-margin-top: 10px;
+      min-height: 54px;
+      background: var(--ok);
+      color: #fff;
+      font-size: 17px;
     }
+    @media (prefers-color-scheme: dark) { .submit-button { color: #07210f; } }
 
-    #reader video {
-      display: block;
-      width: 100%;
-      max-height: 230px;
-      object-fit: contain;
+    .hidden-frame { display: none; width: 0; height: 0; border: 0; }
+
+    @media (max-width: 480px) {
+      .grid { grid-template-columns: 1fr; }
     }
-
-    .small-note {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .status {
-      display: none;
-      margin-bottom: 12px;
-      padding: 13px 14px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.5;
-      overflow-wrap: anywhere;
-      white-space: pre-wrap;
-    }
-
-    .status.info {
-      display: block;
-      background: #e3f2fd;
-      color: #0d47a1;
-    }
-
-    .status.success {
-      display: block;
-      background: #e8f5e9;
-      color: #1b5e20;
-    }
-
-    .status.error {
-      display: block;
-      background: #ffebee;
-      color: #b71c1c;
-    }
-
-    .status.warning {
-      display: block;
-      background: #fff3e0;
-      color: #e65100;
-    }
-
-    footer {
-      padding: 5px 0 18px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    #respostaAppsScript {
-      display: none;
-      width: 0;
-      height: 0;
-      border: 0;
-    }
-
-    @media (max-width: 420px) {
-      body { padding: 8px; }
-      .card { padding: 13px; }
-      header h1 { font-size: 22px; }
-      .faturado { font-size: 12px; }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
     }
   </style>
 </head>
 
 <body>
-  <main class="container">
+<header class="topbar">
+  <h1>Registro de Mapa de Validade<sup>v.0.0.5</sup></h1>
+  <p>Leia o código, informe lote, validade e quantidade.</p>
+</header>
 
-    <header>
-      <h1>
-        Registro Mapa de Validade
-        <span class="faturado"><sup>v0.0.2</sup></span>
-      </h1>
-      <p>Leitura e lançamento de produtos no mapa</p>
-    </header>
+<main>
+  <div id="status" role="status" aria-live="polite"></div>
 
-    <div id="status" class="status" role="status" aria-live="polite"></div>
-
+  <form id="formulario" novalidate>
     <section class="card">
-      <h2>1. Código de barras</h2>
+      <h2>Produto</h2>
 
-      <!-- A descrição aparece acima do campo do código -->
-      <div id="descricaoProdutoBox" class="descricao-produto" hidden>
-        <span class="descricao-produto-titulo">Descrição do produto</span>
-        <div id="descricaoProduto" aria-live="polite"></div>
+      <div id="descricaoProduto" class="description-box" aria-live="polite">
+        <span id="descricaoTexto"></span>
+        <span id="descricaoStatus"></span>
       </div>
 
       <div class="field">
         <label for="codigo">Código de barras</label>
-        <input
-          id="codigo"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          placeholder="Leia ou digite o código"
-          maxlength="14"
-          required
-        >
+        <input id="codigo" name="codigo" type="text" inputmode="numeric"
+               autocomplete="off" placeholder="Leia ou digite o código"
+               maxlength="14" required>
       </div>
 
-      <div class="button-row">
-        <button type="button" id="btnCamera" class="primary">Abrir câmera</button>
-        <button type="button" id="btnPararCamera" class="secondary" disabled>Parar câmera</button>
-      </div>
-
+      <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
+      <button type="button" id="btnPararCamera" class="btn-stop">Parar câmera</button>
       <div id="reader"></div>
-
-      <p class="small-note">
-        Você também pode digitar o código de barras manualmente.
-      </p>
     </section>
 
     <section class="card">
-      <h2>2. Identificação</h2>
+      <h2>Lançamento</h2>
 
       <div class="field">
-        <label for="funcionario">Funcionário responsável</label>
-        <select id="funcionario" required>
-          <option value="">Selecione seu nome</option>
+        <label for="funcionario">Funcionário</label>
+        <select id="funcionario" name="funcionario" required>
+          <option value="">Selecione o funcionário</option>
           <option>Alice</option>
           <option>Altino</option>
           <option>Ana Carolina</option>
@@ -352,1012 +240,677 @@
           <option>Thomaz</option>
         </select>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>3. Dados do produto</h2>
 
       <div class="field">
         <label for="lote">Lote</label>
-        <input
-          id="lote"
-          type="text"
-          maxlength="100"
-          autocomplete="off"
-          placeholder="Digite o lote"
-          required
-        >
+        <input id="lote" name="lote" type="text" maxlength="100"
+               autocomplete="off" placeholder="Digite o lote" required>
       </div>
 
-      <div class="field">
-        <label for="validade">Validade (MM/AAAA ou DD/MM/AAAA)</label>
-        <input
-          id="validade"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          placeholder="MM/AAAA ou DD/MM/AAAA"
-          maxlength="10"
-          required
-        >
-        <p class="small-note">
-          Digite mês e ano para usar o último dia do mês, ou informe também o dia.
-        </p>
+      <div class="grid">
+        <div class="field">
+          <label for="validade">Validade</label>
+          <input id="validade" name="validade" type="text" inputmode="numeric"
+                 maxlength="10" autocomplete="off"
+                 placeholder="MM/AAAA ou DD/MM/AAAA" required>
+        </div>
+        <div class="field">
+          <label for="quantidade">Quantidade</label>
+          <input id="quantidade" name="quantidade" type="number" min="1" step="1"
+                 inputmode="numeric" placeholder="Ex.: 12" required>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="quantidade">Quantidade</label>
-        <input
-          id="quantidade"
-          type="number"
-          inputmode="numeric"
-          min="1"
-          step="1"
-          value="1"
-          required
-        >
-      </div>
-
-      <div class="button-row">
-        <button type="button" id="btnSalvar" class="save">Salvar lançamento</button>
-      </div>
-
-      <div class="button-row" style="margin-top: 10px;">
-        <button type="button" id="btnLimpar" class="danger">Limpar formulário</button>
-      </div>
+      <button type="submit" id="btnSalvar" class="submit-button">Salvar lançamento</button>
     </section>
-
-    <footer>Conferência de estoque</footer>
-  </main>
-
-  <iframe
-    id="respostaAppsScript"
-    name="respostaAppsScript"
-    title="Resposta do servidor"
-  ></iframe>
-
-  <form
-    id="formEnvio"
-    method="POST"
-    target="respostaAppsScript"
-    action="https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec"
-    style="display:none"
-  >
-    <input type="hidden" name="token" id="postToken">
-    <input type="hidden" name="payload" id="postPayload">
   </form>
 
-  <script>
-    "use strict";
+  <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
+</main>
 
-    const APPS_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+<script>
+"use strict";
 
-    const TEMPO_MAXIMO_ESPERA_MS = 90000;
-    const INTERVALO_CONSULTA_MS = 400;
+/* URL do Web App (Apps Script) — não alterada */
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
-    const FUNCIONARIOS = [
-      "Alice", "Altino", "Ana Carolina", "Anielle",
-      "Gabriela", "Gabriele", "Isabela", "Livia",
-      "Paola", "Rafaela", "Ramon", "Rillary",
-      "Sulaima", "Thomaz"
-    ];
+const $ = id => document.getElementById(id);
 
-    const $ = id => document.getElementById(id);
+const formulario = $("formulario");
+const codigoEl = $("codigo");
+const validadeEl = $("validade");
+const funcionarioEl = $("funcionario");
+const statusEl = $("status");
+const btnSalvar = $("btnSalvar");
+const btnCamera = $("btnCamera");
+const btnPararCamera = $("btnPararCamera");
+const readerEl = $("reader");
 
-    const statusEl = $("status");
-    const funcionarioEl = $("funcionario");
-    const codigoEl = $("codigo");
-    const loteEl = $("lote");
-    const validadeEl = $("validade");
-    const quantidadeEl = $("quantidade");
+let scanner = null;
+let cameraAtiva = false;
+let enviando = false;
+let consultaSequencia = 0;
+let temporizadorDigitacao = null;
+let temporizadorPolling = null;
+let consultaScriptAtual = null;
+let scriptStatusAtual = null;
+let envioAtual = null;
 
-    const btnCamera = $("btnCamera");
-    const btnPararCamera = $("btnPararCamera");
-    const btnSalvar = $("btnSalvar");
-    const btnLimpar = $("btnLimpar");
+/* =========================
+   CACHE DE DESCRIÇÕES
+   Memória (sessão) + localStorage (12 h) só para produtos encontrados.
+   ========================= */
 
-    const formEnvio = $("formEnvio");
-    const readerEl = $("reader");
+const TTL_CACHE = 12 * 60 * 60 * 1000;
+const cacheDescricoes = new Map();
 
-    const descricaoProdutoBox = $("descricaoProdutoBox");
-    const descricaoProdutoEl = $("descricaoProduto");
+function lerCache(codigo) {
+  const memoria = cacheDescricoes.get(codigo);
+  if (memoria) return memoria;
 
-    let scanner = null;
-    let cameraAtiva = false;
-    let iniciandoCamera = false;
-    let salvando = false;
-
-    let consultaTimer = null;
-    let timeoutTimer = null;
-    let consultaEmAndamento = false;
-    let scriptConsulta = null;
-    let timeoutConsulta = null;
-    let lancamentoAtual = null;
-
-    let ultimaLeitura = "";
-    let ultimaLeituraEm = 0;
-
-    // Controle separado para a consulta da descrição.
-    let temporizadorProduto = null;
-    let scriptProduto = null;
-    let numeroConsultaProduto = 0;
-
-    function mostrarStatus(mensagem, tipo = "info") {
-      statusEl.textContent = mensagem;
-      statusEl.className = "status " + tipo;
+  try {
+    const bruto = localStorage.getItem("desc:" + codigo);
+    if (!bruto) return null;
+    const item = JSON.parse(bruto);
+    if (Date.now() - item.t > TTL_CACHE) {
+      localStorage.removeItem("desc:" + codigo);
+      return null;
     }
+    const valor = { status: "found", descricao: item.d };
+    cacheDescricoes.set(codigo, valor);
+    return valor;
+  } catch (e) {
+    return null;
+  }
+}
 
-    function esconderStatus() {
-      statusEl.textContent = "";
-      statusEl.className = "status";
+function gravarCache(codigo, valor) {
+  cacheDescricoes.set(codigo, valor);
+  if (valor.status !== "found") return;
+  try {
+    localStorage.setItem("desc:" + codigo,
+      JSON.stringify({ d: valor.descricao, t: Date.now() }));
+  } catch (e) { /* armazenamento cheio ou bloqueado: segue sem cache */ }
+}
+
+/* =========================
+   MENSAGENS
+   ========================= */
+
+function mostrarStatus(mensagem, tipo = "info") {
+  statusEl.textContent = mensagem;
+  statusEl.className = tipo;
+}
+
+function ocultarStatus() {
+  statusEl.textContent = "";
+  statusEl.className = "";
+}
+
+function mostrarDescricao(mensagem, estado = "info", descricao = "") {
+  const caixa = $("descricaoProduto");
+  caixa.style.display = "block";
+  caixa.className = "description-box" +
+    (estado === "error" ? " warn" : estado === "success" ? " ok" : "");
+  $("descricaoTexto").textContent = descricao;
+  $("descricaoStatus").textContent = mensagem;
+}
+
+function removerScriptConsulta() {
+  if (consultaScriptAtual) {
+    clearTimeout(Number(consultaScriptAtual.dataset.timer));
+    consultaScriptAtual.remove();
+    consultaScriptAtual = null;
+  }
+}
+
+function limparDescricao() {
+  consultaSequencia++;
+
+  if (temporizadorDigitacao) {
+    clearTimeout(temporizadorDigitacao);
+    temporizadorDigitacao = null;
+  }
+
+  removerScriptConsulta();
+
+  const caixa = $("descricaoProduto");
+  caixa.style.display = "none";
+  $("descricaoTexto").textContent = "";
+  $("descricaoStatus").textContent = "";
+}
+
+/* =========================
+   BUSCA DA DESCRIÇÃO (JSONP)
+   ========================= */
+
+function buscarDescricaoProduto(codigoInformado) {
+  const codigo = String(codigoInformado || "").trim();
+  const sequencia = ++consultaSequencia;
+
+  removerScriptConsulta();
+
+  if (!/^\d{8,14}$/.test(codigo)) {
+    $("descricaoProduto").style.display = "none";
+    return;
+  }
+
+  const emCache = lerCache(codigo);
+
+  if (emCache) {
+    if (emCache.status === "found") {
+      mostrarDescricao("Produto encontrado.", "success", emCache.descricao);
+    } else {
+      mostrarDescricao("EAN não encontrado na aba Produtos.", "error");
     }
+    return;
+  }
 
-    function bloquearFormulario(bloquear) {
-      salvando = bloquear;
-      btnSalvar.disabled = bloquear;
-      btnLimpar.disabled = bloquear;
+  mostrarDescricao("Buscando descrição do produto...");
+
+  const script = document.createElement("script");
+  const parametros = new URLSearchParams({
+    action: "produto",
+    callback: "__produtoCb",
+    codigo: codigo,
+    consulta: String(sequencia)
+  });
+
+  const falhar = mensagem => {
+    if (consultaScriptAtual === script) consultaScriptAtual = null;
+    script.remove();
+    if (sequencia === consultaSequencia && codigoEl.value.trim() === codigo) {
+      mostrarDescricao(mensagem, "error");
     }
+  };
 
-    // ========================================================
-    // CONSULTA DA DESCRIÇÃO DO PRODUTO PELO EAN
-    // ========================================================
+  script.dataset.codigo = codigo;
+  script.dataset.timer = String(setTimeout(
+    () => falhar("A consulta demorou demais. Você ainda pode salvar o lançamento."),
+    12000
+  ));
+  script.onerror = () => {
+    clearTimeout(Number(script.dataset.timer));
+    falhar("Falha na consulta. Você ainda pode salvar o lançamento.");
+  };
 
-    function limparConsultaProduto() {
-      numeroConsultaProduto++;
+  script.async = true;
+  script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+  consultaScriptAtual = script;
+  document.head.appendChild(script);
+}
 
-      if (temporizadorProduto) {
-        clearTimeout(temporizadorProduto);
-        temporizadorProduto = null;
-      }
+window.__produtoCb = function (resposta) {
+  if (!resposta || typeof resposta !== "object") return;
 
-      if (scriptProduto) {
-        scriptProduto.onerror = null;
+  const codigo = String(resposta.codigo || "").trim();
+  if (!/^\d{8,14}$/.test(codigo)) return;
 
-        if (scriptProduto.parentNode) {
-          scriptProduto.parentNode.removeChild(scriptProduto);
-        }
+  if (resposta.status === "found" && resposta.descricao) {
+    gravarCache(codigo, { status: "found", descricao: String(resposta.descricao) });
+  } else if (resposta.status === "not_found") {
+    gravarCache(codigo, { status: "not_found" });
+  }
 
-        scriptProduto = null;
-      }
+  /* Callback compartilhado: ignora respostas de um EAN que já foi trocado. */
+  if (codigoEl.value.trim() === codigo) {
+    if (resposta.status === "found" && resposta.descricao) {
+      mostrarDescricao("Produto encontrado.", "success", String(resposta.descricao));
+    } else if (resposta.status === "not_found") {
+      mostrarDescricao("Produto não cadastrado. O lançamento continua permitido.", "error");
+    } else {
+      mostrarDescricao(resposta.message || "Não foi possível consultar a descrição.", "error");
     }
+  }
 
-    function consultarDescricaoProduto(codigo) {
-      limparConsultaProduto();
-
-      const numeroAtual = numeroConsultaProduto;
-
-      codigo = String(codigo || "").trim();
-
-      if (!codigo) {
-        descricaoProdutoBox.hidden = true;
-        descricaoProdutoEl.textContent = "";
-        descricaoProdutoBox.classList.remove("erro");
-        return;
-      }
-
-      descricaoProdutoBox.hidden = false;
-      descricaoProdutoBox.classList.remove("erro");
-      descricaoProdutoEl.textContent = "Consultando produto...";
-
-      const url = new URL(APPS_SCRIPT_URL);
-      url.searchParams.set("action", "produto");
-      url.searchParams.set("callback", "__produtoCb");
-      url.searchParams.set("codigo", codigo);
-      url.searchParams.set("_", String(Date.now()));
-
-      // Cada consulta recebe um identificador para ignorar
-      // respostas antigas caso outro código seja lido.
-      window.__produtoCb = function(resposta) {
-        if (numeroAtual !== numeroConsultaProduto) return;
-        if (codigo !== codigoEl.value.trim()) return;
-
-        if (resposta && resposta.encontrado) {
-          if (resposta.descricao) {
-            descricaoProdutoEl.textContent = resposta.descricao;
-            descricaoProdutoBox.classList.remove("erro");
-          } else {
-            descricaoProdutoEl.textContent =
-              "EAN encontrado, mas sem descrição cadastrada.";
-            descricaoProdutoBox.classList.add("erro");
-          }
-        } else {
-          descricaoProdutoEl.textContent =
-            resposta && resposta.erro
-              ? resposta.erro
-              : "Produto não encontrado na aba Produtos.";
-
-          descricaoProdutoBox.classList.add("erro");
-        }
-
-        if (scriptProduto) {
-          scriptProduto.onerror = null;
-
-          if (scriptProduto.parentNode) {
-            scriptProduto.parentNode.removeChild(scriptProduto);
-          }
-
-          scriptProduto = null;
-        }
-      };
-
-      const script = document.createElement("script");
-      script.async = true;
-      script.src = url.toString();
-      scriptProduto = script;
-
-      script.onerror = function() {
-        if (numeroAtual !== numeroConsultaProduto) return;
-        if (codigo !== codigoEl.value.trim()) return;
-
-        descricaoProdutoEl.textContent =
-          "Não foi possível consultar a descrição. Verifique a conexão e tente novamente.";
-
-        descricaoProdutoBox.classList.add("erro");
-        scriptProduto = null;
-
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-      };
-
-      document.head.appendChild(script);
+  document.querySelectorAll("script[data-codigo]").forEach(s => {
+    if (s.dataset.codigo === codigo) {
+      clearTimeout(Number(s.dataset.timer));
+      s.remove();
+      if (consultaScriptAtual === s) consultaScriptAtual = null;
     }
+  });
+};
 
-    function agendarBuscaProduto(codigo) {
-      limparConsultaProduto();
+/* =========================
+   DIGITAÇÃO MANUAL
+   Consulta quase imediata quando o tamanho já é de um EAN completo.
+   ========================= */
 
-      codigo = String(codigo || "").trim();
+codigoEl.addEventListener("input", () => {
+  codigoEl.value = codigoEl.value.replace(/\D/g, "").slice(0, 14);
 
-      if (!codigo) {
-        descricaoProdutoBox.hidden = true;
-        descricaoProdutoEl.textContent = "";
-        descricaoProdutoBox.classList.remove("erro");
-        return;
-      }
+  limparDescricao();
 
-      // Evita consultas a cada tecla enquanto a pessoa digita.
-      temporizadorProduto = setTimeout(function() {
-        consultarDescricaoProduto(codigo);
-      }, 300);
-    }
+  const codigo = codigoEl.value;
+  if (codigo.length < 8) return;
 
-    // Busca também quando o código é digitado manualmente.
-    codigoEl.addEventListener("input", function() {
-      agendarBuscaProduto(this.value);
-    });
+  const completo = codigo.length === 12 || codigo.length === 13 || codigo.length === 14;
 
-    // Máscara automática para MM/AAAA ou DD/MM/AAAA.
-    validadeEl.addEventListener("input", function() {
-      const numeros = this.value.replace(/\D/g, "").slice(0, 8);
+  temporizadorDigitacao = setTimeout(() => {
+    if (codigoEl.value === codigo) buscarDescricaoProduto(codigo);
+  }, completo ? 80 : 350);
+});
 
-      if (numeros.length <= 2) {
-        this.value = numeros;
-      } else if (numeros.length <= 6) {
-        this.value = numeros.slice(0, 2) + "/" + numeros.slice(2);
-      } else {
-        this.value =
-          numeros.slice(0, 2) + "/" +
-          numeros.slice(2, 4) + "/" +
-          numeros.slice(4);
-      }
-    });
+/* =========================
+   CÂMERA
+   A biblioteca só é baixada em segundo plano, depois que a página carrega.
+   ========================= */
 
-    // Converte a validade para AAAA-MM-DD.
-    // MM/AAAA utiliza o último dia do mês informado.
-    function converterValidade(valor) {
-      const texto = valor.trim();
+let bibliotecaPromessa = null;
 
-      let dia;
-      let mes;
-      let ano;
+function carregarBiblioteca() {
+  if (typeof Html5Qrcode !== "undefined") return Promise.resolve();
+  if (bibliotecaPromessa) return bibliotecaPromessa;
 
-      let resultado = texto.match(/^(\d{2})\/(\d{4})$/);
+  bibliotecaPromessa = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => { bibliotecaPromessa = null; reject(new Error("lib")); };
+    document.head.appendChild(s);
+  });
 
-      if (resultado) {
-        mes = Number(resultado[1]);
-        ano = Number(resultado[2]);
+  return bibliotecaPromessa;
+}
 
-        if (mes < 1 || mes > 12 || ano < 1 || ano > 9999) {
-          return {
-            erro: "Mês ou ano inválido. Informe a validade como MM/AAAA."
-          };
-        }
+window.addEventListener("load", () => {
+  setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
+});
 
-        dia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+async function iniciarCamera() {
+  if (cameraAtiva) return;
 
-      } else {
-        resultado = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  btnCamera.disabled = true;
+  mostrarStatus("Abrindo a câmera...");
 
-        if (!resultado) {
-          return {
-            erro: "Informe a validade como MM/AAAA ou DD/MM/AAAA."
-          };
-        }
+  try {
+    await carregarBiblioteca();
 
-        dia = Number(resultado[1]);
-        mes = Number(resultado[2]);
-        ano = Number(resultado[3]);
-
-        if (mes < 1 || mes > 12 || ano < 1 || ano > 9999) {
-          return { erro: "A data informada não é válida." };
-        }
-
-        const dataTeste = new Date(Date.UTC(ano, mes - 1, dia));
-
-        if (
-          dataTeste.getUTCFullYear() !== ano ||
-          dataTeste.getUTCMonth() !== mes - 1 ||
-          dataTeste.getUTCDate() !== dia
-        ) {
-          return {
-            erro: "A data informada não existe. Verifique dia, mês e ano."
-          };
-        }
-      }
-
-      const iso =
-        String(ano).padStart(4, "0") + "-" +
-        String(mes).padStart(2, "0") + "-" +
-        String(dia).padStart(2, "0");
-
-      return { iso, dia, mes, ano };
-    }
-
-    // ========================================================
-    // CÂMERA
-    // ========================================================
-
-    async function abrirCamera() {
-      if (cameraAtiva || iniciandoCamera) return;
-
-      if (!window.isSecureContext) {
-        mostrarStatus(
-          "A câmera exige HTTPS. Abra a versão publicada no GitHub Pages.",
-          "error"
-        );
-        return;
-      }
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        mostrarStatus(
-          "Este navegador não disponibiliza acesso à câmera. Abra o Google Chrome atualizado.",
-          "error"
-        );
-        return;
-      }
-
-      if (typeof Html5Qrcode === "undefined") {
-        mostrarStatus(
-          "A biblioteca de leitura não carregou. Verifique a internet e recarregue a página.",
-          "error"
-        );
-        return;
-      }
-
-      iniciandoCamera = true;
-      btnCamera.disabled = true;
-      btnPararCamera.disabled = true;
-      readerEl.style.display = "block";
-
-      mostrarStatus(
-        "Iniciando câmera. Se o navegador pedir permissão, toque em Permitir.",
-        "info"
-      );
-
-      try {
-        if (!scanner) {
-          const formatos = [];
-
-          if (typeof Html5QrcodeSupportedFormats !== "undefined") {
-            const disponiveis = Html5QrcodeSupportedFormats;
-
-            [
-              "EAN_13", "EAN_8", "UPC_A", "UPC_E",
-              "CODE_128", "CODE_39", "ITF", "CODABAR"
-            ].forEach(nome => {
-              if (disponiveis[nome] !== undefined) {
-                formatos.push(disponiveis[nome]);
-              }
-            });
-          }
-
-          scanner = new Html5Qrcode(
-            "reader",
-            formatos.length
-              ? { formatsToSupport: formatos, verbose: false }
-              : { verbose: false }
-          );
-        }
-
-        await scanner.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: function(largura, altura) {
-              const w = Math.max(
-                180,
-                Math.min(Math.floor(largura * 0.90), 420)
-              );
-
-              const h = Math.max(
-                90,
-                Math.min(Math.floor(altura * 0.35), 180)
-              );
-
-              return {
-                width: Math.min(w, largura),
-                height: Math.min(h, altura)
-              };
-            },
-            aspectRatio: 1.777
-          },
-          function(textoLido) {
-            processarLeitura(textoLido);
-          },
-          function() {}
-        );
-
-        cameraAtiva = true;
-        btnPararCamera.disabled = false;
-
-        mostrarStatus(
-          "Câmera ativa. Posicione o código de barras na área de leitura.",
-          "success"
-        );
-
-        readerEl.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest"
-        });
-
-      } catch (erro) {
-        cameraAtiva = false;
-        readerEl.style.display = "none";
-
-        let mensagem = erro && erro.message
-          ? erro.message
-          : String(erro || "Erro desconhecido");
-
-        if (erro && erro.name === "NotAllowedError") {
-          mensagem = "A permissão da câmera foi negada. Permita o acesso nas configurações do navegador.";
-        } else if (erro && erro.name === "NotFoundError") {
-          mensagem = "Nenhuma câmera compatível foi encontrada.";
-        } else if (erro && erro.name === "NotReadableError") {
-          mensagem = "A câmera está sendo usada por outro aplicativo ou não pôde ser iniciada.";
-        } else if (erro && erro.name === "OverconstrainedError") {
-          mensagem = "Não foi possível usar a câmera traseira. Tente novamente.";
-        }
-
-        mostrarStatus(
-          "Não foi possível abrir a câmera: " + mensagem,
-          "error"
-        );
-
-        try {
-          if (scanner && typeof scanner.clear === "function") {
-            await scanner.clear();
-          }
-        } catch (_) {}
-
-        scanner = null;
-
-      } finally {
-        iniciandoCamera = false;
-        btnCamera.disabled = false;
-        btnPararCamera.disabled = !cameraAtiva;
-      }
-    }
-
-    async function pararCamera(silencioso = false) {
-      btnPararCamera.disabled = true;
-
-      try {
-        if (scanner && cameraAtiva) {
-          await scanner.stop();
-        }
-
-        cameraAtiva = false;
-
-        if (scanner) {
-          try {
-            await scanner.clear();
-          } catch (_) {}
-        }
-
-        scanner = null;
-        readerEl.style.display = "none";
-
-        if (!silencioso) {
-          mostrarStatus("Câmera desligada.", "info");
-        }
-
-      } catch (_) {
-        cameraAtiva = false;
-        scanner = null;
-        readerEl.style.display = "none";
-
-        if (!silencioso) {
-          mostrarStatus(
-            "A câmera foi interrompida. Se necessário, recarregue a página.",
-            "warning"
-          );
-        }
-
-      } finally {
-        btnCamera.disabled = false;
-        btnPararCamera.disabled = true;
-      }
-    }
-
-    function processarLeitura(texto) {
-      const codigo = String(texto || "").trim();
-      const agora = Date.now();
-
-      if (codigo === ultimaLeitura && agora - ultimaLeituraEm < 2500) {
-        return;
-      }
-
-      ultimaLeitura = codigo;
-      ultimaLeituraEm = agora;
-
-      if (!/^\d{8,14}$/.test(codigo)) {
-        mostrarStatus(
-          "O código lido deve conter de 8 a 14 dígitos numéricos. Tente enquadrar o código novamente.",
-          "warning"
-        );
-        return;
-      }
-
-      codigoEl.value = codigo;
-
-      // Campo preenchido por JavaScript não dispara o evento input.
-      // Por isso, a busca da descrição é chamada explicitamente.
-      agendarBuscaProduto(codigo);
-
-      pararCamera(true).then(function() {
-        mostrarStatus(
-          "Código lido: " + codigo +
-          ". Preencha o funcionário, o lote, a validade e a quantidade.",
-          "success"
-        );
-        funcionarioEl.focus();
+    if (!scanner) {
+      const F = Html5QrcodeSupportedFormats;
+      scanner = new Html5Qrcode("reader", {
+        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF],
+        useBarCodeDetectorIfSupported: true,
+        verbose: false
       });
     }
 
-    // ========================================================
-    // CONFIGURAÇÃO
-    // ========================================================
+    readerEl.classList.add("ativo");
 
-    function validarConfiguracao() {
-      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("COLE_A_URL")) {
-        mostrarStatus(
-          "Configure a URL do aplicativo da web do Apps Script.",
-          "error"
-        );
-        return false;
-      }
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777 },
+      processarLeitura,
+      () => { /* erros normais entre quadros */ }
+    );
 
-      if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(APPS_SCRIPT_URL)) {
-        mostrarStatus(
-          "A URL deve ser a URL /exec do Web App do Apps Script.",
-          "error"
-        );
-        return false;
-      }
+    cameraAtiva = true;
+    btnPararCamera.style.display = "block";
+    btnCamera.style.display = "none";
+    mostrarStatus("Câmera ativa. Aponte para o código de barras.");
+  } catch (erro) {
+    console.error(erro);
+    readerEl.classList.remove("ativo");
+    btnCamera.disabled = false;
+    mostrarStatus(
+      "Não foi possível abrir a câmera. Verifique a permissão do navegador e a conexão.",
+      "error"
+    );
+  }
+}
 
-      return true;
+async function pararCamera(silencioso = false) {
+  if (scanner && cameraAtiva) {
+    try {
+      await scanner.stop();
+      scanner.clear();
+    } catch (erro) {
+      console.warn("Não foi possível encerrar a câmera normalmente.", erro);
+    }
+  }
+
+  cameraAtiva = false;
+  readerEl.classList.remove("ativo");
+  btnCamera.disabled = false;
+  btnCamera.style.display = "block";
+  btnPararCamera.style.display = "none";
+
+  if (!silencioso) mostrarStatus("Câmera parada.");
+}
+
+function processarLeitura(texto) {
+  const codigo = String(texto || "").replace(/\D/g, "");
+
+  if (!/^\d{8,14}$/.test(codigo)) return;
+
+  /* Consulta antes de fechar a câmera: a busca já corre em paralelo. */
+  codigoEl.value = codigo;
+  buscarDescricaoProduto(codigo);
+
+  if (navigator.vibrate) navigator.vibrate(60);
+
+  pararCamera(true).then(() => {
+    mostrarStatus("Código lido: " + codigo, "success");
+    $("lote").focus();
+  });
+}
+
+btnCamera.addEventListener("click", iniciarCamera);
+btnPararCamera.addEventListener("click", () => pararCamera());
+
+/* =========================
+   VALIDADE
+   Aceita MM/AAAA ou DD/MM/AAAA
+   ========================= */
+
+validadeEl.addEventListener("input", () => {
+  const d = validadeEl.value.replace(/\D/g, "").slice(0, 8);
+
+  if (d.length <= 2) {
+    validadeEl.value = d;
+  } else if (d.length <= 4) {
+    validadeEl.value = d.slice(0, 2) + "/" + d.slice(2);
+  } else {
+    validadeEl.value = d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
+  }
+});
+
+function validadeParaISO(valor) {
+  const texto = String(valor || "").trim();
+  let dia, mes, ano;
+
+  let partes = texto.match(/^(\d{2})\/(\d{4})$/);
+
+  if (partes) {
+    mes = Number(partes[1]);
+    ano = Number(partes[2]);
+
+    if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
+      throw new Error("Informe uma validade válida no formato MM/AAAA.");
     }
 
-    // ========================================================
-    // VALIDAÇÃO DO FORMULÁRIO
-    // ========================================================
+    dia = new Date(ano, mes, 0).getDate();
+  } else {
+    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
-    function validarFormulario() {
-      const funcionario = funcionarioEl.value;
-      const codigo = codigoEl.value.trim();
-      const lote = loteEl.value.trim();
-      const quantidadeTexto = quantidadeEl.value.trim();
-      const quantidade = Number(quantidadeTexto);
+    if (!partes) throw new Error("Use MM/AAAA ou DD/MM/AAAA na validade.");
 
-      if (!FUNCIONARIOS.includes(funcionario)) {
-        mostrarStatus("Selecione o funcionário responsável.", "error");
-        funcionarioEl.focus();
-        return null;
-      }
+    dia = Number(partes[1]);
+    mes = Number(partes[2]);
+    ano = Number(partes[3]);
 
-      if (!/^\d{8,14}$/.test(codigo)) {
-        mostrarStatus(
-          "O código deve conter de 8 a 14 dígitos numéricos.",
-          "error"
-        );
-        codigoEl.focus();
-        return null;
-      }
+    const teste = new Date(ano, mes - 1, dia);
 
-      if (!lote || lote.length > 100) {
-        mostrarStatus(
-          "Informe um lote com no máximo 100 caracteres.",
-          "error"
-        );
-        loteEl.focus();
-        return null;
-      }
-
-      const validadeConvertida = converterValidade(validadeEl.value);
-
-      if (validadeConvertida.erro) {
-        mostrarStatus(validadeConvertida.erro, "error");
-        validadeEl.focus();
-        return null;
-      }
-
-      if (
-        !quantidadeTexto ||
-        !Number.isSafeInteger(quantidade) ||
-        quantidade < 1
-      ) {
-        mostrarStatus(
-          "A quantidade deve ser um inteiro maior que zero.",
-          "error"
-        );
-        quantidadeEl.focus();
-        return null;
-      }
-
-      return {
-        funcionario,
-        codigo,
-        lote,
-        validade: validadeConvertida.iso,
-        quantidade
-      };
+    if (
+      ano < 1900 || ano > 2200 ||
+      teste.getFullYear() !== ano ||
+      teste.getMonth() !== mes - 1 ||
+      teste.getDate() !== dia
+    ) {
+      throw new Error("A data de validade informada não existe.");
     }
+  }
 
-    // ========================================================
-    // IDENTIFICADORES
-    // ========================================================
+  return ano + "-" + String(mes).padStart(2, "0") + "-" + String(dia).padStart(2, "0");
+}
 
-    function criarIdentificadores() {
-      if (!window.crypto || !window.crypto.getRandomValues) {
-        throw new Error(
-          "O navegador não oferece geração segura de identificadores. Atualize o navegador e tente novamente."
-        );
-      }
+/* =========================
+   FUNCIONÁRIO LEMBRADO
+   Evita selecionar de novo a cada lançamento.
+   ========================= */
 
-      const bytes = new Uint8Array(32);
-      window.crypto.getRandomValues(bytes);
+try {
+  const salvo = localStorage.getItem("funcionario");
+  if (salvo && Array.from(funcionarioEl.options).some(o => o.value === salvo)) {
+    funcionarioEl.value = salvo;
+  }
+} catch (e) {}
 
-      const token = Array.from(bytes)
-        .map(byte => byte.toString(16).padStart(2, "0"))
-        .join("");
+funcionarioEl.addEventListener("change", () => {
+  try { localStorage.setItem("funcionario", funcionarioEl.value); } catch (e) {}
+});
 
-      let requestId;
+/* =========================
+   IDENTIFICADORES SEGUROS
+   ========================= */
 
-      if (typeof window.crypto.randomUUID === "function") {
-        requestId = window.crypto.randomUUID();
-      } else {
-        requestId =
-          "req-" + Date.now().toString(36) + "-" +
-          Array.from(bytes.slice(0, 12))
-            .map(byte => byte.toString(16).padStart(2, "0"))
-            .join("");
-      }
+function aleatorioHex(bytes) {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
 
-      return { requestId, token };
-    }
+/* =========================
+   ENVIO DO FORMULÁRIO
+   ========================= */
 
-    // ========================================================
-    // FINALIZAÇÃO DO LANÇAMENTO
-    // ========================================================
+formulario.addEventListener("submit", evento => {
+  evento.preventDefault();
 
-    function encerrarConsulta() {
-      if (consultaTimer) {
-        clearTimeout(consultaTimer);
-        consultaTimer = null;
-      }
+  if (enviando) return;
 
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-        timeoutTimer = null;
-      }
+  ocultarStatus();
 
-      if (timeoutConsulta) {
-        clearTimeout(timeoutConsulta);
-        timeoutConsulta = null;
-      }
+  const codigo = codigoEl.value.trim();
+  const funcionario = funcionarioEl.value.trim();
+  const lote = $("lote").value.trim();
+  const validadeTexto = validadeEl.value.trim();
+  const quantidadeTexto = $("quantidade").value.trim();
 
-      if (scriptConsulta) {
-        scriptConsulta.onerror = null;
-        scriptConsulta.onload = null;
+  if (!/^\d{8,14}$/.test(codigo)) {
+    mostrarStatus("Informe um código de barras válido, com 8 a 14 dígitos.", "error");
+    codigoEl.focus();
+    return;
+  }
 
-        if (scriptConsulta.parentNode) {
-          scriptConsulta.parentNode.removeChild(scriptConsulta);
-        }
+  if (!funcionario) {
+    mostrarStatus("Selecione o funcionário.", "error");
+    funcionarioEl.focus();
+    return;
+  }
 
-        scriptConsulta = null;
-      }
+  if (!lote || lote.length > 100) {
+    mostrarStatus("Informe o lote, com no máximo 100 caracteres.", "error");
+    $("lote").focus();
+    return;
+  }
 
-      consultaEmAndamento = false;
-    }
+  let validadeISO;
 
-    function finalizarSucesso(mensagem) {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+  try {
+    validadeISO = validadeParaISO(validadeTexto);
+  } catch (erro) {
+    mostrarStatus(erro.message, "error");
+    validadeEl.focus();
+    return;
+  }
 
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
+  if (!/^\d+$/.test(quantidadeTexto) ||
+      !Number.isSafeInteger(Number(quantidadeTexto)) ||
+      Number(quantidadeTexto) < 1) {
+    mostrarStatus("Informe uma quantidade inteira maior que zero.", "error");
+    $("quantidade").focus();
+    return;
+  }
 
-      codigoEl.value = "";
-      limparConsultaProduto();
-      descricaoProdutoBox.hidden = true;
-      descricaoProdutoEl.textContent = "";
-      descricaoProdutoBox.classList.remove("erro");
+  const payload = {
+    requestId: aleatorioHex(16),
+    funcionario: funcionario,
+    codigo: codigo,
+    lote: lote,
+    validade: validadeISO,
+    quantidade: Number(quantidadeTexto)
+  };
 
-      loteEl.value = "";
-      validadeEl.value = "";
-      quantidadeEl.value = "1";
+  const token = aleatorioHex(32);
 
-      mostrarStatus(mensagem, "success");
-      codigoEl.focus();
-    }
+  enviando = true;
+  btnSalvar.disabled = true;
+  btnSalvar.textContent = "Enviando...";
+  mostrarStatus("Enviando lançamento para a planilha...");
 
-    function finalizarErro(mensagem) {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+  envioAtual = { requestId: payload.requestId, token: token, iniciadoEm: Date.now() };
 
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
+  try {
+    enviarPost(payload, token);
+    iniciarPolling(payload.requestId, token);
+  } catch (erro) {
+    finalizarErro("Não foi possível iniciar o envio: " + erro.message);
+  }
+});
 
-      mostrarStatus(mensagem, "error");
-    }
+function enviarPost(payload, token) {
+  const f = document.createElement("form");
 
-    function finalizarSemConfirmacao() {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
+  f.method = "POST";
+  f.action = APPS_SCRIPT_URL;
+  f.target = "respostaPost";
+  f.style.display = "none";
 
-      lancamentoAtual.finalizado = true;
-      encerrarConsulta();
-      bloquearFormulario(false);
+  const campoPayload = document.createElement("input");
+  campoPayload.type = "hidden";
+  campoPayload.name = "payload";
+  campoPayload.value = JSON.stringify(payload);
 
-      mostrarStatus(
-        "Não foi possível confirmar o resultado. O lançamento pode ter sido gravado mesmo sem confirmação. Confira a planilha antes de tentar novamente para evitar duplicidade.",
-        "warning"
+  const campoToken = document.createElement("input");
+  campoToken.type = "hidden";
+  campoToken.name = "token";
+  campoToken.value = token;
+
+  f.append(campoPayload, campoToken);
+  document.body.appendChild(f);
+  f.submit();
+  f.remove();
+}
+
+/* =========================
+   POLLING DO STATUS
+   Começa rápido (300 ms) e aumenta aos poucos até 1,2 s.
+   ========================= */
+
+window.__statusCb = function (resposta) {
+  if (!resposta || !envioAtual) return;
+  if (resposta.requestId !== envioAtual.requestId) return;
+
+  if (resposta.status === "saved") {
+    finalizarSucesso(resposta.message || "Lançamento salvo com sucesso.");
+  } else if (resposta.status === "error") {
+    finalizarErro(resposta.message || "Não foi possível salvar o lançamento.");
+  } else {
+    mostrarStatus(resposta.message || "Processando lançamento...");
+  }
+};
+
+function iniciarPolling(requestId, token) {
+  const inicio = Date.now();
+  let tentativa = 0;
+
+  if (temporizadorPolling) clearTimeout(temporizadorPolling);
+
+  const proximo = () => {
+    if (!envioAtual || envioAtual.requestId !== requestId) return;
+    const espera = Math.min(300 + tentativa * 150, 1200);
+    tentativa++;
+    temporizadorPolling = setTimeout(consultar, espera);
+  };
+
+  function consultar() {
+    if (!envioAtual || envioAtual.requestId !== requestId) return;
+
+    if (Date.now() - inicio > 90000) {
+      finalizarErro(
+        "O sistema não confirmou o lançamento em 90 segundos. " +
+        "Verifique a planilha antes de tentar enviar novamente."
       );
+      return;
     }
 
-    // ========================================================
-    // SALVAR LANÇAMENTO
-    // ========================================================
-
-    function salvarLancamento() {
-      if (salvando) return;
-
-      esconderStatus();
-
-      if (!validarConfiguracao()) return;
-
-      const dados = validarFormulario();
-      if (!dados) return;
-
-      try {
-        const ids = criarIdentificadores();
-
-        lancamentoAtual = {
-          requestId: ids.requestId,
-          token: ids.token,
-          iniciadoEm: Date.now(),
-          finalizado: false
-        };
-
-        bloquearFormulario(true);
-
-        mostrarStatus(
-          "Enviando lançamento. Aguarde a confirmação do servidor.",
-          "info"
-        );
-
-        $("postToken").value = ids.token;
-
-        $("postPayload").value = JSON.stringify({
-          funcionario: dados.funcionario,
-          codigo: dados.codigo,
-          lote: dados.lote,
-          validade: dados.validade,
-          quantidade: dados.quantidade,
-          requestId: ids.requestId
-        });
-
-        formEnvio.action = APPS_SCRIPT_URL;
-        formEnvio.method = "POST";
-        formEnvio.target = "respostaAppsScript";
-
-        timeoutTimer = setTimeout(
-          finalizarSemConfirmacao,
-          TEMPO_MAXIMO_ESPERA_MS
-        );
-
-        console.log("[Lançamento] Enviando para:", formEnvio.action);
-        console.log("[Lançamento] Request ID:", lancamentoAtual.requestId);
-
-        formEnvio.submit();
-        agendarConsulta(0);
-
-      } catch (erro) {
-        encerrarConsulta();
-        bloquearFormulario(false);
-
-        mostrarStatus(
-          erro.message || "Não foi possível iniciar o envio.",
-          "error"
-        );
-      }
+    if (scriptStatusAtual) {
+      scriptStatusAtual.remove();
+      scriptStatusAtual = null;
     }
 
-    // ========================================================
-    // CONSULTA DO RESULTADO DO LANÇAMENTO (JSONP)
-    // ========================================================
-
-    function agendarConsulta(atraso = INTERVALO_CONSULTA_MS) {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      if (consultaTimer) clearTimeout(consultaTimer);
-
-      consultaTimer = setTimeout(consultarStatus, atraso);
-    }
-
-    window.__statusCb = function(resultado) {
-      if (!consultaEmAndamento) return;
-
-      if (timeoutConsulta) {
-        clearTimeout(timeoutConsulta);
-        timeoutConsulta = null;
-      }
-
-      if (scriptConsulta) {
-        scriptConsulta.onerror = null;
-        scriptConsulta.onload = null;
-
-        if (scriptConsulta.parentNode) {
-          scriptConsulta.parentNode.removeChild(scriptConsulta);
-        }
-
-        scriptConsulta = null;
-      }
-
-      consultaEmAndamento = false;
-
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      if (!resultado || resultado.requestId !== lancamentoAtual.requestId) {
-        agendarConsulta();
-        return;
-      }
-
-      const estado = String(resultado.status || "").toLowerCase();
-      const mensagem = String(resultado.message || "");
-
-      if (estado === "saved") {
-        finalizarSucesso(
-          mensagem || "Lançamento salvo com sucesso na planilha."
-        );
-      } else if (estado === "error") {
-        finalizarErro(
-          mensagem || "O servidor não conseguiu salvar o lançamento."
-        );
-      } else {
-        agendarConsulta();
-      }
-    };
-
-    function consultarStatus() {
-      if (!lancamentoAtual || lancamentoAtual.finalizado) return;
-
-      if (
-        Date.now() - lancamentoAtual.iniciadoEm >=
-        TEMPO_MAXIMO_ESPERA_MS
-      ) {
-        finalizarSemConfirmacao();
-        return;
-      }
-
-      if (consultaEmAndamento) {
-        agendarConsulta(500);
-        return;
-      }
-
-      consultaEmAndamento = true;
-
-      const url = new URL(APPS_SCRIPT_URL);
-      url.searchParams.set("action", "status");
-      url.searchParams.set("callback", "__statusCb");
-      url.searchParams.set("requestId", lancamentoAtual.requestId);
-      url.searchParams.set("token", lancamentoAtual.token);
-      url.searchParams.set("_", String(Date.now()));
-
-      const script = document.createElement("script");
-      script.async = true;
-      script.src = url.toString();
-      scriptConsulta = script;
-
-      script.onerror = function() {
-        if (scriptConsulta !== script) return;
-
-        if (timeoutConsulta) clearTimeout(timeoutConsulta);
-
-        timeoutConsulta = null;
-        scriptConsulta = null;
-        consultaEmAndamento = false;
-
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-
-        agendarConsulta(2500);
-      };
-
-      timeoutConsulta = setTimeout(function() {
-        if (scriptConsulta !== script) return;
-
-        scriptConsulta = null;
-        consultaEmAndamento = false;
-        script.onerror = null;
-
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-
-        agendarConsulta(2500);
-      }, 10000);
-
-      document.head.appendChild(script);
-    }
-
-    // ========================================================
-    // LIMPAR FORMULÁRIO
-    // ========================================================
-
-    function limparFormulario() {
-      if (salvando) return;
-
-      codigoEl.value = "";
-      limparConsultaProduto();
-
-      descricaoProdutoBox.hidden = true;
-      descricaoProdutoEl.textContent = "";
-      descricaoProdutoBox.classList.remove("erro");
-
-      loteEl.value = "";
-      validadeEl.value = "";
-      quantidadeEl.value = "1";
-
-      esconderStatus();
-      codigoEl.focus();
-    }
-
-    // ========================================================
-    // EVENTOS
-    // ========================================================
-
-    btnCamera.addEventListener("click", abrirCamera);
-
-    btnPararCamera.addEventListener("click", function() {
-      pararCamera(false);
+    const script = document.createElement("script");
+    const parametros = new URLSearchParams({
+      action: "status",
+      callback: "__statusCb",
+      requestId: requestId,
+      token: token
     });
 
-    btnSalvar.addEventListener("click", salvarLancamento);
-    btnLimpar.addEventListener("click", limparFormulario);
+    const terminar = () => {
+      script.remove();
+      if (scriptStatusAtual === script) scriptStatusAtual = null;
+      proximo();
+    };
 
-    if (typeof Html5Qrcode === "undefined") {
-      mostrarStatus(
-        "A biblioteca de leitura não carregou. Verifique a internet e recarregue a página.",
-        "error"
-      );
-    } else {
-      mostrarStatus(
-        "Sistema pronto. Leia o código de barras e preencha os dados.",
-        "info"
-      );
-    }
-  </script>
+    script.async = true;
+    script.onerror = terminar;
+    script.onload = terminar;
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+
+    scriptStatusAtual = script;
+    document.head.appendChild(script);
+  }
+
+  /* Primeira checagem logo após o envio, sem esperar. */
+  temporizadorPolling = setTimeout(consultar, 250);
+}
+
+function finalizarSucesso(mensagem) {
+  encerrarPolling();
+  enviando = false;
+  envioAtual = null;
+  btnSalvar.disabled = false;
+  btnSalvar.textContent = "Salvar lançamento";
+
+  mostrarStatus(mensagem, "success");
+  limparCamposLancamento();
+}
+
+function finalizarErro(mensagem) {
+  encerrarPolling();
+  enviando = false;
+  envioAtual = null;
+  btnSalvar.disabled = false;
+  btnSalvar.textContent = "Salvar lançamento";
+
+  mostrarStatus(mensagem, "error");
+}
+
+function encerrarPolling() {
+  if (temporizadorPolling) {
+    clearTimeout(temporizadorPolling);
+    temporizadorPolling = null;
+  }
+
+  if (scriptStatusAtual) {
+    scriptStatusAtual.remove();
+    scriptStatusAtual = null;
+  }
+}
+
+/* =========================
+   LIMPEZA DO FORMULÁRIO
+   ========================= */
+
+function limparCamposLancamento() {
+  codigoEl.value = "";
+  $("lote").value = "";
+  validadeEl.value = "";
+  $("quantidade").value = "";
+
+  limparDescricao();
+  codigoEl.focus();
+}
+
+window.addEventListener("beforeunload", () => {
+  if (temporizadorDigitacao) clearTimeout(temporizadorDigitacao);
+  if (temporizadorPolling) clearTimeout(temporizadorPolling);
+});
+</script>
 </body>
 </html>
