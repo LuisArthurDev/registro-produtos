@@ -662,10 +662,11 @@
     // CONFIGURAÇÃO DO APPS SCRIPT
     // =========================================================
 
+    
     function validarConfiguracao() {
       if (
         !APPS_SCRIPT_URL ||
-        APPS_SCRIPT_URL.includes("https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec")
+        APPS_SCRIPT_URL.includes("COLE_A_URL")
       ) {
         mostrarStatus(
           "Configure a URL do aplicativo da web do Apps Script no código.",
@@ -673,6 +674,9 @@
         );
         return false;
       }
+    
+      return true;
+    }
 
       if (
         !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/
