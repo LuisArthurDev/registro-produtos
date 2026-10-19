@@ -663,6 +663,7 @@
     // =========================================================
 
     
+    
     function validarConfiguracao() {
       if (
         !APPS_SCRIPT_URL ||
@@ -675,9 +676,6 @@
         return false;
       }
     
-      return true;
-    }
-
       if (
         !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/
           .test(APPS_SCRIPT_URL)
@@ -688,7 +686,7 @@
         );
         return false;
       }
-
+    
       return true;
     }
 
