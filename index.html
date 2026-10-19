@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -158,6 +159,47 @@
       color: #fff;
     }
 
+    /* DESCRIÇÃO DO PRODUTO */
+    .descricao-produto {
+      margin-bottom: 13px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--primary);
+      border-radius: 8px;
+      background: #eef5ff;
+    }
+
+    .descricao-produto[hidden] {
+      display: none;
+    }
+
+    .descricao-produto-titulo {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+
+    #descricaoProduto {
+      color: var(--primary-dark);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .descricao-produto.erro {
+      border-left-color: #f59e0b;
+      background: #fff8e8;
+    }
+
+    .descricao-produto.erro #descricaoProduto {
+      color: #8a4b08;
+    }
+
     #reader {
       display: none;
       width: 100%;
@@ -255,6 +297,12 @@
 
     <section class="card">
       <h2>1. Código de barras</h2>
+
+      <!-- A descrição aparece acima do campo do código -->
+      <div id="descricaoProdutoBox" class="descricao-produto" hidden>
+        <span class="descricao-produto-titulo">Descrição do produto</span>
+        <div id="descricaoProduto" aria-live="polite"></div>
+      </div>
 
       <div class="field">
         <label for="codigo">Código de barras</label>
@@ -412,6 +460,9 @@
     const formEnvio = $("formEnvio");
     const readerEl = $("reader");
 
+    const descricaoProdutoBox = $("descricaoProdutoBox");
+    const descricaoProdutoEl = $("descricaoProduto");
+
     let scanner = null;
     let cameraAtiva = false;
     let iniciandoCamera = false;
@@ -426,6 +477,11 @@
 
     let ultimaLeitura = "";
     let ultimaLeituraEm = 0;
+
+    // Controle separado para a consulta da descrição.
+    let temporizadorProduto = null;
+    let scriptProduto = null;
+    let numeroConsultaProduto = 0;
 
     function mostrarStatus(mensagem, tipo = "info") {
       statusEl.textContent = mensagem;
@@ -443,9 +499,135 @@
       btnLimpar.disabled = bloquear;
     }
 
+    // ========================================================
+    // CONSULTA DA DESCRIÇÃO DO PRODUTO PELO EAN
+    // ========================================================
+
+    function limparConsultaProduto() {
+      numeroConsultaProduto++;
+
+      if (temporizadorProduto) {
+        clearTimeout(temporizadorProduto);
+        temporizadorProduto = null;
+      }
+
+      if (scriptProduto) {
+        scriptProduto.onerror = null;
+
+        if (scriptProduto.parentNode) {
+          scriptProduto.parentNode.removeChild(scriptProduto);
+        }
+
+        scriptProduto = null;
+      }
+    }
+
+    function consultarDescricaoProduto(codigo) {
+      limparConsultaProduto();
+
+      const numeroAtual = numeroConsultaProduto;
+
+      codigo = String(codigo || "").trim();
+
+      if (!codigo) {
+        descricaoProdutoBox.hidden = true;
+        descricaoProdutoEl.textContent = "";
+        descricaoProdutoBox.classList.remove("erro");
+        return;
+      }
+
+      descricaoProdutoBox.hidden = false;
+      descricaoProdutoBox.classList.remove("erro");
+      descricaoProdutoEl.textContent = "Consultando produto...";
+
+      const url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.set("action", "produto");
+      url.searchParams.set("callback", "__produtoCb");
+      url.searchParams.set("codigo", codigo);
+      url.searchParams.set("_", String(Date.now()));
+
+      // Cada consulta recebe um identificador para ignorar
+      // respostas antigas caso outro código seja lido.
+      window.__produtoCb = function(resposta) {
+        if (numeroAtual !== numeroConsultaProduto) return;
+        if (codigo !== codigoEl.value.trim()) return;
+
+        if (resposta && resposta.encontrado) {
+          if (resposta.descricao) {
+            descricaoProdutoEl.textContent = resposta.descricao;
+            descricaoProdutoBox.classList.remove("erro");
+          } else {
+            descricaoProdutoEl.textContent =
+              "EAN encontrado, mas sem descrição cadastrada.";
+            descricaoProdutoBox.classList.add("erro");
+          }
+        } else {
+          descricaoProdutoEl.textContent =
+            resposta && resposta.erro
+              ? resposta.erro
+              : "Produto não encontrado na aba Produtos.";
+
+          descricaoProdutoBox.classList.add("erro");
+        }
+
+        if (scriptProduto) {
+          scriptProduto.onerror = null;
+
+          if (scriptProduto.parentNode) {
+            scriptProduto.parentNode.removeChild(scriptProduto);
+          }
+
+          scriptProduto = null;
+        }
+      };
+
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = url.toString();
+      scriptProduto = script;
+
+      script.onerror = function() {
+        if (numeroAtual !== numeroConsultaProduto) return;
+        if (codigo !== codigoEl.value.trim()) return;
+
+        descricaoProdutoEl.textContent =
+          "Não foi possível consultar a descrição. Verifique a conexão e tente novamente.";
+
+        descricaoProdutoBox.classList.add("erro");
+        scriptProduto = null;
+
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      };
+
+      document.head.appendChild(script);
+    }
+
+    function agendarBuscaProduto(codigo) {
+      limparConsultaProduto();
+
+      codigo = String(codigo || "").trim();
+
+      if (!codigo) {
+        descricaoProdutoBox.hidden = true;
+        descricaoProdutoEl.textContent = "";
+        descricaoProdutoBox.classList.remove("erro");
+        return;
+      }
+
+      // Evita consultas a cada tecla enquanto a pessoa digita.
+      temporizadorProduto = setTimeout(function() {
+        consultarDescricaoProduto(codigo);
+      }, 300);
+    }
+
+    // Busca também quando o código é digitado manualmente.
+    codigoEl.addEventListener("input", function() {
+      agendarBuscaProduto(this.value);
+    });
+
     // Máscara automática para MM/AAAA ou DD/MM/AAAA.
-    // Com 6 dígitos: MM/AAAA.
-    // Com 8 dígitos: DD/MM/AAAA.
     validadeEl.addEventListener("input", function() {
       const numeros = this.value.replace(/\D/g, "").slice(0, 8);
 
@@ -461,8 +643,8 @@
       }
     });
 
-    // Converte a validade digitada em AAAA-MM-DD.
-    // MM/AAAA será convertido para o último dia daquele mês.
+    // Converte a validade para AAAA-MM-DD.
+    // MM/AAAA utiliza o último dia do mês informado.
     function converterValidade(valor) {
       const texto = valor.trim();
 
@@ -482,7 +664,6 @@
           };
         }
 
-        // Dia zero do mês seguinte = último dia do mês informado.
         dia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
 
       } else {
@@ -523,7 +704,10 @@
       return { iso, dia, mes, ano };
     }
 
+    // ========================================================
     // CÂMERA
+    // ========================================================
+
     async function abrirCamera() {
       if (cameraAtiva || iniciandoCamera) return;
 
@@ -591,8 +775,15 @@
           {
             fps: 10,
             qrbox: function(largura, altura) {
-              const w = Math.max(180, Math.min(Math.floor(largura * 0.90), 420));
-              const h = Math.max(90, Math.min(Math.floor(altura * 0.35), 180));
+              const w = Math.max(
+                180,
+                Math.min(Math.floor(largura * 0.90), 420)
+              );
+
+              const h = Math.max(
+                90,
+                Math.min(Math.floor(altura * 0.35), 180)
+              );
 
               return {
                 width: Math.min(w, largura),
@@ -615,7 +806,10 @@
           "success"
         );
 
-        readerEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        readerEl.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest"
+        });
 
       } catch (erro) {
         cameraAtiva = false;
@@ -635,7 +829,10 @@
           mensagem = "Não foi possível usar a câmera traseira. Tente novamente.";
         }
 
-        mostrarStatus("Não foi possível abrir a câmera: " + mensagem, "error");
+        mostrarStatus(
+          "Não foi possível abrir a câmera: " + mensagem,
+          "error"
+        );
 
         try {
           if (scanner && typeof scanner.clear === "function") {
@@ -714,6 +911,10 @@
 
       codigoEl.value = codigo;
 
+      // Campo preenchido por JavaScript não dispara o evento input.
+      // Por isso, a busca da descrição é chamada explicitamente.
+      agendarBuscaProduto(codigo);
+
       pararCamera(true).then(function() {
         mostrarStatus(
           "Código lido: " + codigo +
@@ -724,22 +925,34 @@
       });
     }
 
+    // ========================================================
     // CONFIGURAÇÃO
+    // ========================================================
+
     function validarConfiguracao() {
       if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("COLE_A_URL")) {
-        mostrarStatus("Configure a URL do aplicativo da web do Apps Script.", "error");
+        mostrarStatus(
+          "Configure a URL do aplicativo da web do Apps Script.",
+          "error"
+        );
         return false;
       }
 
       if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(APPS_SCRIPT_URL)) {
-        mostrarStatus("A URL deve ser a URL /exec do Web App do Apps Script.", "error");
+        mostrarStatus(
+          "A URL deve ser a URL /exec do Web App do Apps Script.",
+          "error"
+        );
         return false;
       }
 
       return true;
     }
 
-    // VALIDAÇÃO
+    // ========================================================
+    // VALIDAÇÃO DO FORMULÁRIO
+    // ========================================================
+
     function validarFormulario() {
       const funcionario = funcionarioEl.value;
       const codigo = codigoEl.value.trim();
@@ -754,13 +967,19 @@
       }
 
       if (!/^\d{8,14}$/.test(codigo)) {
-        mostrarStatus("O código deve conter de 8 a 14 dígitos numéricos.", "error");
+        mostrarStatus(
+          "O código deve conter de 8 a 14 dígitos numéricos.",
+          "error"
+        );
         codigoEl.focus();
         return null;
       }
 
       if (!lote || lote.length > 100) {
-        mostrarStatus("Informe um lote com no máximo 100 caracteres.", "error");
+        mostrarStatus(
+          "Informe um lote com no máximo 100 caracteres.",
+          "error"
+        );
         loteEl.focus();
         return null;
       }
@@ -778,7 +997,10 @@
         !Number.isSafeInteger(quantidade) ||
         quantidade < 1
       ) {
-        mostrarStatus("A quantidade deve ser um inteiro maior que zero.", "error");
+        mostrarStatus(
+          "A quantidade deve ser um inteiro maior que zero.",
+          "error"
+        );
         quantidadeEl.focus();
         return null;
       }
@@ -792,7 +1014,10 @@
       };
     }
 
+    // ========================================================
     // IDENTIFICADORES
+    // ========================================================
+
     function criarIdentificadores() {
       if (!window.crypto || !window.crypto.getRandomValues) {
         throw new Error(
@@ -822,7 +1047,10 @@
       return { requestId, token };
     }
 
-    // FINALIZAÇÃO
+    // ========================================================
+    // FINALIZAÇÃO DO LANÇAMENTO
+    // ========================================================
+
     function encerrarConsulta() {
       if (consultaTimer) {
         clearTimeout(consultaTimer);
@@ -861,6 +1089,11 @@
       bloquearFormulario(false);
 
       codigoEl.value = "";
+      limparConsultaProduto();
+      descricaoProdutoBox.hidden = true;
+      descricaoProdutoEl.textContent = "";
+      descricaoProdutoBox.classList.remove("erro");
+
       loteEl.value = "";
       validadeEl.value = "";
       quantidadeEl.value = "1";
@@ -892,7 +1125,10 @@
       );
     }
 
-    // SALVAR
+    // ========================================================
+    // SALVAR LANÇAMENTO
+    // ========================================================
+
     function salvarLancamento() {
       if (salvando) return;
 
@@ -957,7 +1193,10 @@
       }
     }
 
-    // CONSULTA DO RESULTADO (JSONP)
+    // ========================================================
+    // CONSULTA DO RESULTADO DO LANÇAMENTO (JSONP)
+    // ========================================================
+
     function agendarConsulta(atraso = INTERVALO_CONSULTA_MS) {
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
@@ -998,9 +1237,13 @@
       const mensagem = String(resultado.message || "");
 
       if (estado === "saved") {
-        finalizarSucesso(mensagem || "Lançamento salvo com sucesso na planilha.");
+        finalizarSucesso(
+          mensagem || "Lançamento salvo com sucesso na planilha."
+        );
       } else if (estado === "error") {
-        finalizarErro(mensagem || "O servidor não conseguiu salvar o lançamento.");
+        finalizarErro(
+          mensagem || "O servidor não conseguiu salvar o lançamento."
+        );
       } else {
         agendarConsulta();
       }
@@ -1009,7 +1252,10 @@
     function consultarStatus() {
       if (!lancamentoAtual || lancamentoAtual.finalizado) return;
 
-      if (Date.now() - lancamentoAtual.iniciadoEm >= TEMPO_MAXIMO_ESPERA_MS) {
+      if (
+        Date.now() - lancamentoAtual.iniciadoEm >=
+        TEMPO_MAXIMO_ESPERA_MS
+      ) {
         finalizarSemConfirmacao();
         return;
       }
@@ -1042,7 +1288,9 @@
         scriptConsulta = null;
         consultaEmAndamento = false;
 
-        if (script.parentNode) script.parentNode.removeChild(script);
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
 
         agendarConsulta(2500);
       };
@@ -1054,7 +1302,9 @@
         consultaEmAndamento = false;
         script.onerror = null;
 
-        if (script.parentNode) script.parentNode.removeChild(script);
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
 
         agendarConsulta(2500);
       }, 10000);
@@ -1062,11 +1312,20 @@
       document.head.appendChild(script);
     }
 
-    // LIMPAR
+    // ========================================================
+    // LIMPAR FORMULÁRIO
+    // ========================================================
+
     function limparFormulario() {
       if (salvando) return;
 
       codigoEl.value = "";
+      limparConsultaProduto();
+
+      descricaoProdutoBox.hidden = true;
+      descricaoProdutoEl.textContent = "";
+      descricaoProdutoBox.classList.remove("erro");
+
       loteEl.value = "";
       validadeEl.value = "";
       quantidadeEl.value = "1";
@@ -1075,7 +1334,10 @@
       codigoEl.focus();
     }
 
+    // ========================================================
     // EVENTOS
+    // ========================================================
+
     btnCamera.addEventListener("click", abrirCamera);
 
     btnPararCamera.addEventListener("click", function() {
