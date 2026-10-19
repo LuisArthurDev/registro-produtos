@@ -219,7 +219,7 @@
 <body>
   <main class="container">
     <header>
-      <h1>Registro Mapa de Validade</h1>
+      <h1>Registro Mapa de Validade</h1> v0.0.1
       <p>Leitura e lançamento de produtos no mapa</p>
     </header>
 
@@ -280,10 +280,6 @@
 
       <div id="reader"></div>
 
-      <p class="help">
-        Permita o acesso à câmera quando solicitado.
-        Use o site HTTPS publicado no GitHub Pages.
-      </p>
     </section>
 
     <section class="card">
@@ -919,7 +915,9 @@
           requestId: ids.requestId
         });
 
-        formEnvio.action = APPS_SCRIPT_URL;
+        formEnvio.setAttribute("action", APPS_SCRIPT_URL);
+        formEnvio.setAttribute("method", "POST");
+        formEnvio.setAttribute("target", "respostaAppsScript");
 
         // Consulta o resultado e envia o formulário sem sair da página.
         agendarConsulta(0);
