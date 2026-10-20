@@ -14,7 +14,7 @@
       document.documentElement.dataset.theme = t;
     })();
   </script>
-  <title>Registro de Mapa de Validade²</title>
+  <title>Registro de Mapa de Validade</title>
   <link rel="preconnect" href="https://script.google.com">
   <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -309,7 +309,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.0</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.1</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -1128,27 +1128,27 @@ $("modalDuplicado").addEventListener("click", evento => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Seleciona todos os inputs de texto, busca, número, etc.
+  // Seleciona APENAS inputs que NÃO estão dentro da área do leitor de câmera (#reader)
   const inputs = document.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"])');
 
   inputs.forEach((input) => {
-    // 1. Cria o wrapper envolvente
+    // IMPORTANTE: Se o input estiver dentro do reader ou for o próprio campo de código controlado pelo leitor, podemos ignorar se necessário, 
+    // ou garantir que o wrapper não quebre o layout. Mas vamos verificar se ele já tem wrapper:
+    if (input.closest('#reader') || input.closest('.wrapper-input-limpavel')) return;
+
     const wrapper = document.createElement("div");
     wrapper.className = "wrapper-input-limpavel";
 
-    // Insere o wrapper no DOM e move o input para dentro dele
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(input);
 
-    // 2. Cria o botão "X"
     const btnLimpar = document.createElement("button");
     btnLimpar.type = "button";
     btnLimpar.className = "btn-limpar-input";
-    btnLimpar.innerHTML = "&times;"; // Ícone de multiplicação (X)
+    btnLimpar.innerHTML = "&times;";
     btnLimpar.title = "Limpar campo";
     wrapper.appendChild(btnLimpar);
 
-    // 3. Função para checar se deve mostrar o "X"
     const checarEstado = () => {
       if (input.value && input.value.trim().length > 0) {
         wrapper.classList.add("tem-conteudo");
@@ -1157,23 +1157,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    // Eventos do Input
     input.addEventListener("input", checarEstado);
     input.addEventListener("focus", checarEstado);
 
-    // Clique no botão de limpar "X"
     btnLimpar.addEventListener("click", (e) => {
       e.preventDefault();
       input.value = "";
       checarEstado();
       input.focus();
-
-      // Dispara o evento 'input' para atualizar bibliotecas/mÁscaras se houver
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    // Checa o estado inicial (caso o input já venha preenchido do HTML)
     checarEstado();
   });
 });
