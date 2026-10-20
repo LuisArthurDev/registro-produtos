@@ -805,8 +805,8 @@ function processarLeitura(texto, resultado) {
   }
 
   codigoEl.value = codigo;
-  ultimoEscaneado = codigo;
   mostrarUltimo("Buscando nome...");
+  ultimoEscaneado = codigo;
   buscarDescricaoProduto(codigo);
 
   if (navigator.vibrate) navigator.vibrate(60);
