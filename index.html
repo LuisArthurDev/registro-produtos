@@ -15,8 +15,6 @@
     })();
   </script>
   <title>Registro de Mapa de Validade²</title>
-
-  <!-- Abre a conexão com o Google antes da primeira consulta -->
   <link rel="preconnect" href="https://script.google.com">
   <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -42,27 +40,26 @@
     }
 
     :root[data-theme="dark"] {
-        --bg: #0b141c;
-        --surface: #142230;
-        --ink: #e8eef4;
-        --muted: #9aa9b8;
-        --line: #284054;
-        --brand: #0b1a26;
-        --accent: #31b3bf;
-        --accent-dark: #4cc6d1;
-        --ok: #5fd08a;
-        --ok-bg: #12301f;
-        --err: #ff8a80;
-        --err-bg: #3a1714;
-        --warn: #f0b45a;
-        --warn-bg: #36270f;
-        --info-bg: #10323a;
-        --shadow: none;
-        color-scheme: dark;
+      --bg: #0b141c;
+      --surface: #142230;
+      --ink: #e8eef4;
+      --muted: #9aa9b8;
+      --line: #284054;
+      --brand: #0b1a26;
+      --accent: #31b3bf;
+      --accent-dark: #4cc6d1;
+      --ok: #5fd08a;
+      --ok-bg: #12301f;
+      --err: #ff8a80;
+      --err-bg: #3a1714;
+      --warn: #f0b45a;
+      --warn-bg: #36270f;
+      --info-bg: #10323a;
+      --shadow: none;
+      color-scheme: dark;
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
     html { scroll-padding-top: 90px; }
 
     body {
@@ -82,6 +79,7 @@
       color: #fff;
       padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 14px;
     }
+
     .theme-toggle {
       flex-shrink: 0;
       width: 44px;
@@ -93,6 +91,7 @@
       display: grid;
       place-items: center;
     }
+
     .theme-toggle:hover { background: rgba(255, 255, 255, .24); }
     .theme-toggle svg { width: 22px; height: 22px; }
     .icon-sun { display: none; }
@@ -104,7 +103,6 @@
 
     main { max-width: 640px; margin: 0 auto; padding: 14px 14px 28px; }
 
-    /* Mensagem de status fixa no topo, sempre visível ao enviar */
     #status {
       display: none;
       position: sticky;
@@ -119,9 +117,10 @@
       overflow-wrap: anywhere;
       box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
     }
-    #status.info    { display: block; background: var(--info-bg); color: var(--accent-dark); border-color: var(--accent); }
-    #status.success { display: block; background: var(--ok-bg);   color: var(--ok);          border-color: var(--ok); }
-    #status.error   { display: block; background: var(--err-bg);  color: var(--err);         border-color: var(--err); }
+
+    #status.info { display: block; background: var(--info-bg); color: var(--accent-dark); border-color: var(--accent); }
+    #status.success { display: block; background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+    #status.error { display: block; background: var(--err-bg); color: var(--err); border-color: var(--err); }
 
     .card {
       background: var(--surface);
@@ -131,10 +130,17 @@
       margin-bottom: 14px;
       box-shadow: var(--shadow);
     }
-    h2 { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
 
+    h2 { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
     .field { margin-bottom: 14px; }
-    label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
 
     input, select {
       width: 100%;
@@ -147,14 +153,15 @@
       font: inherit;
       font-size: 17px;
     }
+
     input:focus-visible, select:focus-visible, button:focus-visible {
       outline: 3px solid var(--accent);
       outline-offset: 1px;
       border-color: var(--accent);
     }
+
     #codigo { font-size: 20px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 
-    /* Descrição do produto */
     .description-box {
       display: none;
       margin-bottom: 14px;
@@ -163,8 +170,9 @@
       border-left: 5px solid var(--accent);
       background: var(--info-bg);
     }
+
     .description-box.warn { border-left-color: var(--warn); background: var(--warn-bg); }
-    .description-box.ok   { border-left-color: var(--ok);   background: var(--ok-bg); }
+    .description-box.ok { border-left-color: var(--ok); background: var(--ok-bg); }
     #descricaoTexto { display: block; font-size: 17px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
     #descricaoTexto:empty { display: none; }
     #descricaoStatus { display: block; font-size: 13px; color: var(--muted); }
@@ -181,6 +189,7 @@
       cursor: pointer;
       transition: transform .08s, background .15s;
     }
+
     button:active:not(:disabled) { transform: scale(.98); }
     button:disabled { opacity: .55; cursor: not-allowed; }
 
@@ -198,7 +207,6 @@
     #ultimoNome { display: block; margin-top: 2px; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
 
     .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
-
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 
     .submit-button {
@@ -208,9 +216,10 @@
       color: #fff;
       font-size: 17px;
     }
-    :root[data-theme="dark"] .submit-button { color: #07210f; }
 
-    /* Confirmação de lançamento repetido */
+    :root[data-theme="dark"] .submit-button { color: #07210f; }
+    .hidden-frame { display: none; width: 0; height: 0; border: 0; }
+
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -221,7 +230,9 @@
       align-items: center;
       justify-content: center;
     }
+
     .modal-backdrop.aberto { display: flex; }
+
     .modal {
       width: 100%;
       max-width: 440px;
@@ -234,26 +245,24 @@
       color: var(--ink);
       box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
     }
-    .modal h2 { margin: 0 0 8px; font-size: 19px; }
-    .modal p { margin: 8px 0; }
-    .modal-detalhes {
-      margin: 14px 0;
-      padding: 12px;
-      border-radius: 8px;
-      background: var(--warn-bg);
-      overflow-wrap: anywhere;
-    }
-    .modal-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
-    .btn-ignorar { background: var(--line); color: var(--ink); }
-    .btn-adicionar { background: var(--ok); color: #fff; }
-    :root[data-theme="dark"] .btn-adicionar { color: #07210f; }
-    @media (max-width: 380px) { .modal-acoes { grid-template-columns: 1fr; } }
 
-    .hidden-frame { display: none; width: 0; height: 0; border: 0; }
+    .modal h2 { margin: 0 0 8px; font-size: 19px; }
+    .modal p { margin: 8px 0; overflow-wrap: anywhere; }
+    .modal-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    .modal-acoes button { margin: 0; }
+    .btn-modal-secundario { background: var(--line); color: var(--ink); }
+    .btn-modal-perigo { background: var(--err-bg); color: var(--err); }
+    .btn-modal-ok { background: var(--ok); color: #fff; }
+    :root[data-theme="dark"] .btn-modal-ok { color: #07210f; }
+
+    @media (max-width: 380px) {
+      .modal-acoes { grid-template-columns: 1fr; }
+    }
 
     @media (max-width: 480px) {
       .grid { grid-template-columns: 1fr; }
     }
+
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
     }
@@ -263,9 +272,10 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.0.7</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.0</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
+
   <button type="button" id="btnTema" class="theme-toggle"
           aria-label="Alternar entre tema claro e escuro" title="Alternar tema">
     <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -347,6 +357,7 @@
                  maxlength="10" autocomplete="off"
                  placeholder="Ex.: 05/27" required>
         </div>
+
         <div class="field">
           <label for="quantidade">Quantidade</label>
           <input id="quantidade" name="quantidade" type="number" min="1" step="1"
@@ -354,41 +365,52 @@
         </div>
       </div>
 
-      <p class="hint" style="margin:-4px 0 14px">Validade aceita 05/27, 05/2027, 15/05/27 ou 15/05/2027. Só mês e ano vale o último dia do mês.</p>
+      <p class="hint" style="margin:-4px 0 14px">
+        Validade aceita 05/27, 05/2027, 15/05/27 ou 15/05/2027.
+        Só mês e ano vale o último dia do mês.
+      </p>
 
       <button type="submit" id="btnSalvar" class="submit-button">Salvar lançamento</button>
     </section>
   </form>
 
-  <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
-
-  <div id="modalDuplicidade" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="tituloDuplicidade" aria-describedby="textoDuplicidade">
+  <div id="modalHistoricoFuncionario" class="modal-backdrop"
+       role="dialog" aria-modal="true" aria-labelledby="tituloHistoricoFuncionario">
     <div class="modal">
-      <h2 id="tituloDuplicidade">Produto já lançado hoje</h2>
-      <p id="textoDuplicidade">Você já lançou esse produto hoje.</p>
-      <div id="detalhesDuplicidade" class="modal-detalhes"></div>
-      <p>Deseja adicionar esse lançamento mesmo assim ou ignorar?</p>
+      <h2 id="tituloHistoricoFuncionario">Histórico encontrado</h2>
+      <p id="textoHistoricoFuncionario"></p>
+      <p>Deseja continuar com o histórico de hoje deste funcionário ou iniciar novamente?</p>
       <div class="modal-acoes">
-        <button type="button" id="btnIgnorarDuplicidade" class="btn-ignorar">Ignorar lançamento</button>
-        <button type="button" id="btnAdicionarDuplicidade" class="btn-adicionar">Adicionar mesmo assim</button>
+        <button type="button" id="btnContinuarHistorico" class="btn-modal-ok">Continuar</button>
+        <button type="button" id="btnReiniciarHistorico" class="btn-modal-perigo">Iniciar novamente</button>
       </div>
     </div>
   </div>
+
+  <div id="modalDuplicado" class="modal-backdrop"
+       role="dialog" aria-modal="true" aria-labelledby="tituloDuplicado">
+    <div class="modal">
+      <h2 id="tituloDuplicado">Produto já lançado hoje</h2>
+      <p id="detalhesDuplicado"></p>
+      <p>Este funcionário já lançou o mesmo EAN, lote e validade hoje. Deseja adicionar mesmo assim ou ignorar este lançamento?</p>
+      <div class="modal-acoes">
+        <button type="button" id="btnAdicionarDuplicado" class="btn-modal-ok">Adicionar mesmo assim</button>
+        <button type="button" id="btnIgnorarDuplicado" class="btn-modal-secundario">Ignorar lançamento</button>
+      </div>
+    </div>
+  </div>
+
+  <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
 </main>
 
 <script>
 "use strict";
 
-/* URL do Web App (Apps Script) — não alterada */
+/* URL do Web App (Apps Script) */
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
 const $ = id => document.getElementById(id);
-
-/* =========================
-   TEMA CLARO / ESCURO
-   Segue o sistema até você escolher; depois lembra a sua escolha.
-   ========================= */
 
 const metaTema = document.querySelector('meta[name="theme-color"]');
 
@@ -426,10 +448,6 @@ let scriptStatusAtual = null;
 let envioAtual = null;
 let ultimoEscaneado = null;
 
-/* =========================
-   ÚLTIMO ITEM LIDO (guardado no aparelho, só o nome)
-   ========================= */
-
 function mostrarUltimo(nome) {
   $("ultimoNome").textContent = nome;
   $("ultimoItem").hidden = false;
@@ -447,11 +465,7 @@ try {
   if (guardado) mostrarUltimo(guardado);
 } catch (e) {}
 
-/* =========================
-   CACHE DE DESCRIÇÕES
-   Memória (sessão) + localStorage (12 h) só para produtos encontrados.
-   ========================= */
-
+/* CACHE DE DESCRIÇÕES: memória + localStorage por 12 horas */
 const TTL_CACHE = 12 * 60 * 60 * 1000;
 const cacheDescricoes = new Map();
 
@@ -462,11 +476,14 @@ function lerCache(codigo) {
   try {
     const bruto = localStorage.getItem("desc:" + codigo);
     if (!bruto) return null;
+
     const item = JSON.parse(bruto);
+
     if (Date.now() - item.t > TTL_CACHE) {
       localStorage.removeItem("desc:" + codigo);
       return null;
     }
+
     const valor = { status: "found", descricao: item.d };
     cacheDescricoes.set(codigo, valor);
     return valor;
@@ -478,15 +495,12 @@ function lerCache(codigo) {
 function gravarCache(codigo, valor) {
   cacheDescricoes.set(codigo, valor);
   if (valor.status !== "found") return;
+
   try {
     localStorage.setItem("desc:" + codigo,
       JSON.stringify({ d: valor.descricao, t: Date.now() }));
-  } catch (e) { /* armazenamento cheio ou bloqueado: segue sem cache */ }
+  } catch (e) {}
 }
-
-/* =========================
-   MENSAGENS
-   ========================= */
 
 function mostrarStatus(mensagem, tipo = "info") {
   statusEl.textContent = mensagem;
@@ -531,10 +545,7 @@ function limparDescricao() {
   $("descricaoStatus").textContent = "";
 }
 
-/* =========================
-   BUSCA DA DESCRIÇÃO (JSONP)
-   ========================= */
-
+/* CONSULTA DA DESCRIÇÃO VIA JSONP */
 function buscarDescricaoProduto(codigoInformado) {
   const codigo = String(codigoInformado || "").trim();
   const sequencia = ++consultaSequencia;
@@ -573,6 +584,7 @@ function buscarDescricaoProduto(codigoInformado) {
     registrarUltimoSe(codigo, "Sem consulta (" + codigo + ")");
     if (consultaScriptAtual === script) consultaScriptAtual = null;
     script.remove();
+
     if (sequencia === consultaSequencia && codigoEl.value.trim() === codigo) {
       mostrarDescricao(mensagem, "error");
     }
@@ -583,6 +595,7 @@ function buscarDescricaoProduto(codigoInformado) {
     () => falhar("A consulta demorou demais. Você ainda pode salvar o lançamento."),
     12000
   ));
+
   script.onerror = () => {
     clearTimeout(Number(script.dataset.timer));
     falhar("Falha na consulta. Você ainda pode salvar o lançamento.");
@@ -612,658 +625,7 @@ window.__produtoCb = function (resposta) {
     registrarUltimoSe(codigo, "Não cadastrado (" + codigo + ")");
   }
 
-  /* Callback compartilhado: ignora respostas de um EAN que já foi trocado. */
   if (codigoEl.value.trim() === codigo) {
     if (resposta.status === "found" && resposta.descricao) {
       mostrarDescricao("Produto encontrado.", "success", String(resposta.descricao));
-    } else if (resposta.status === "not_found") {
-      mostrarDescricao("Produto não cadastrado. O lançamento continua permitido.", "error");
-    } else {
-      mostrarDescricao(resposta.message || "Não foi possível consultar a descrição.", "error");
-    }
-  }
-
-  document.querySelectorAll("script[data-codigo]").forEach(s => {
-    if (s.dataset.codigo === codigo) {
-      clearTimeout(Number(s.dataset.timer));
-      s.remove();
-      if (consultaScriptAtual === s) consultaScriptAtual = null;
-    }
-  });
-};
-
-/* =========================
-   DIGITAÇÃO MANUAL
-   Consulta quase imediata quando o tamanho já é de um EAN completo.
-   ========================= */
-
-codigoEl.addEventListener("input", () => {
-  const bruto = codigoEl.value;
-  const digitos = bruto.replace(/\D/g, "");
-  const removidos = bruto.length - digitos.length;
-
-  /* Vários caracteres inválidos de uma vez = colagem ou leitor lendo QR Code/texto. */
-  if (removidos >= 2) {
-    codigoEl.value = "";
-    limparDescricao();
-    mostrarStatus(
-      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
-      "error"
-    );
-    return;
-  }
-
-  if (removidos === 1) {
-    mostrarStatus("O código de barras aceita apenas números.", "error");
-  }
-
-  codigoEl.value = digitos.slice(0, 14);
-
-  limparDescricao();
-
-  const codigo = codigoEl.value;
-  if (codigo.length < 8) return;
-
-  const completo = codigo.length === 12 || codigo.length === 13 || codigo.length === 14;
-
-  temporizadorDigitacao = setTimeout(() => {
-    if (codigoEl.value === codigo) buscarDescricaoProduto(codigo);
-  }, completo ? 80 : 350);
-});
-
-/* =========================
-   CÂMERA
-   A biblioteca só é baixada em segundo plano, depois que a página carrega.
-   ========================= */
-
-let bibliotecaPromessa = null;
-
-function carregarBiblioteca() {
-  if (typeof Html5Qrcode !== "undefined") return Promise.resolve();
-  if (bibliotecaPromessa) return bibliotecaPromessa;
-
-  bibliotecaPromessa = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
-    s.async = true;
-    s.onload = resolve;
-    s.onerror = () => { bibliotecaPromessa = null; reject(new Error("lib")); };
-    document.head.appendChild(s);
-  });
-
-  return bibliotecaPromessa;
-}
-
-window.addEventListener("load", () => {
-  setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
-});
-
-async function iniciarCamera() {
-  if (cameraAtiva) return;
-
-  btnCamera.disabled = true;
-  mostrarStatus("Abrindo a câmera...");
-
-  try {
-    await carregarBiblioteca();
-
-    if (!scanner) {
-      const F = Html5QrcodeSupportedFormats;
-      scanner = new Html5Qrcode("reader", {
-        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF, F.QR_CODE],
-        useBarCodeDetectorIfSupported: true,
-        verbose: false
-      });
-    }
-
-    readerEl.classList.add("ativo");
-
-    await scanner.start(
-      { facingMode: "environment" },
-      { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777 },
-      processarLeitura,
-      () => { /* erros normais entre quadros */ }
-    );
-
-    cameraAtiva = true;
-    btnPararCamera.style.display = "block";
-    btnCamera.style.display = "none";
-    mostrarStatus("Câmera ativa. Aponte para o código de barras.");
-  } catch (erro) {
-    console.error(erro);
-    readerEl.classList.remove("ativo");
-    btnCamera.disabled = false;
-    mostrarStatus(
-      "Não foi possível abrir a câmera. Verifique a permissão do navegador e a conexão.",
-      "error"
-    );
-  }
-}
-
-async function pararCamera(silencioso = false) {
-  if (scanner && cameraAtiva) {
-    try {
-      await scanner.stop();
-      scanner.clear();
-    } catch (erro) {
-      console.warn("Não foi possível encerrar a câmera normalmente.", erro);
-    }
-  }
-
-  cameraAtiva = false;
-  readerEl.classList.remove("ativo");
-  btnCamera.disabled = false;
-  btnCamera.style.display = "block";
-  btnPararCamera.style.display = "none";
-
-  if (!silencioso) mostrarStatus("Câmera parada.");
-}
-
-const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
-let ultimoErroLeitura = 0;
-
-/* Mostra o erro sem repetir a cada quadro e mantém a câmera ativa. */
-function leituraInvalida(mensagem) {
-  const agora = Date.now();
-  if (agora - ultimoErroLeitura < 1500) return;
-  ultimoErroLeitura = agora;
-
-  mostrarStatus(mensagem, "error");
-  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
-}
-
-function processarLeitura(texto, resultado) {
-  const codigo = String(texto || "").trim();
-  const formato = resultado && resultado.result && resultado.result.format
-    ? resultado.result.format.formatName
-    : "";
-
-  if (formato === "QR_CODE") {
-    leituraInvalida("QR Code lido por engano. Aponte a câmera para o código de barras do produto.");
-    return;
-  }
-
-  if ((formato && !FORMATOS_PRODUTO.includes(formato)) || !/^\d{8,14}$/.test(codigo)) {
-    leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");
-    return;
-  }
-
-  /* Consulta antes de fechar a câmera: a busca já corre em paralelo. */
-  codigoEl.value = codigo;
-  ultimoEscaneado = codigo;
-  mostrarUltimo("Buscando nome...");
-  buscarDescricaoProduto(codigo);
-
-  if (navigator.vibrate) navigator.vibrate(60);
-
-  pararCamera(true).then(() => {
-    mostrarStatus("Código lido: " + codigo, "success");
-    $("lote").focus();
-  });
-}
-
-btnCamera.addEventListener("click", iniciarCamera);
-btnPararCamera.addEventListener("click", () => pararCamera());
-
-/* =========================
-   VALIDADE
-   Aceita MM/AAAA ou DD/MM/AAAA
-   ========================= */
-
-/*
- * Máscara automática. Anos válidos começam em 19–22 (maiores que 12),
- * então o segundo grupo mostra se é mês (DD/MM/...) ou ano (MM/AAAA).
- */
-function mascaraValidade(bruto) {
-  const d = bruto.replace(/\D/g, "").slice(0, 8);
-
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return d.slice(0, 2) + "/" + d.slice(2);
-
-  const meio = Number(d.slice(2, 4));
-
-  if (meio >= 1 && meio <= 12) {
-    return d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
-  }
-
-  return d.slice(0, 2) + "/" + d.slice(2, 6);
-}
-
-validadeEl.addEventListener("input", () => {
-  validadeEl.value = mascaraValidade(validadeEl.value);
-});
-
-function validadeParaISO(valor) {
-  const texto = String(valor || "").trim();
-  let dia, mes, ano;
-
-  /* Ano com 2 dígitos vira 20AA (27 → 2027). */
-  const anoCompleto = a => (a.length === 2 ? 2000 + Number(a) : Number(a));
-
-  let partes = texto.match(/^(\d{2})\/(\d{2}|\d{4})$/);
-
-  if (partes) {
-    mes = Number(partes[1]);
-    ano = anoCompleto(partes[2]);
-
-    if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
-      throw new Error("Informe uma validade válida, como 05/27 ou 05/2027.");
-    }
-
-    dia = new Date(ano, mes, 0).getDate();
-  } else {
-    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
-
-    if (!partes) {
-      throw new Error("Use MM/AA, MM/AAAA, DD/MM/AA ou DD/MM/AAAA na validade.");
-    }
-
-    dia = Number(partes[1]);
-    mes = Number(partes[2]);
-    ano = anoCompleto(partes[3]);
-
-    const teste = new Date(ano, mes - 1, dia);
-
-    if (
-      ano < 1900 || ano > 2200 ||
-      teste.getFullYear() !== ano ||
-      teste.getMonth() !== mes - 1 ||
-      teste.getDate() !== dia
-    ) {
-      throw new Error("A data de validade informada não existe.");
-    }
-  }
-
-  return ano + "-" + String(mes).padStart(2, "0") + "-" + String(dia).padStart(2, "0");
-}
-
-/* =========================
-   FUNCIONÁRIO LEMBRADO
-   Evita selecionar de novo a cada lançamento.
-   ========================= */
-
-try {
-  const salvo = localStorage.getItem("funcionario");
-  if (salvo && Array.from(funcionarioEl.options).some(o => o.value === salvo)) {
-    funcionarioEl.value = salvo;
-  }
-} catch (e) {}
-
-funcionarioEl.addEventListener("change", () => {
-  try { localStorage.setItem("funcionario", funcionarioEl.value); } catch (e) {}
-});
-
-/* =========================
-   IDENTIFICADORES SEGUROS
-   ========================= */
-
-function aleatorioHex(bytes) {
-  const b = new Uint8Array(bytes);
-  crypto.getRandomValues(b);
-  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
-}
-
-/* =========================
-   HISTÓRICO LOCAL DO DIA + DUPLICIDADE
-   O histórico fica apenas neste navegador/aparelho.
-   Considera repetido o mesmo EAN + lote + validade.
-   ========================= */
-
-const CHAVE_HISTORICO_DIARIO = "registroProdutosHistoricoDiario_v1";
-let payloadPendenteDuplicidade = null;
-
-function dataLocalISO() {
-  const agora = new Date();
-  return agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0") + "-" + String(agora.getDate()).padStart(2, "0");
-}
-
-function lerHistoricoDiario() {
-  const hoje = dataLocalISO();
-  try {
-    const bruto = localStorage.getItem(CHAVE_HISTORICO_DIARIO);
-    if (!bruto) return { data: hoje, itens: [] };
-    const salvo = JSON.parse(bruto);
-    if (!salvo || salvo.data !== hoje || !Array.isArray(salvo.itens)) {
-      const novo = { data: hoje, itens: [] };
-      localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(novo));
-      return novo;
-    }
-    return salvo;
-  } catch (e) {
-    return { data: hoje, itens: [] };
-  }
-}
-
-function gravarHistoricoDiario(historico) {
-  try {
-    localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(historico));
-    return true;
-  } catch (e) {
-    mostrarStatus("O lançamento foi salvo, mas o navegador não conseguiu guardar o histórico local.", "error");
-    return false;
-  }
-}
-
-function encontrarLancamentosIguais(payload) {
-  const historico = lerHistoricoDiario();
-  return historico.itens.filter(item =>
-    String(item.codigo) === String(payload.codigo) &&
-    String(item.lote).trim().toLocaleLowerCase() === String(payload.lote).trim().toLocaleLowerCase() &&
-    String(item.validade) === String(payload.validade)
-  );
-}
-
-function registrarNoHistorico(payload) {
-  const historico = lerHistoricoDiario();
-  if (historico.itens.some(item => item.requestId === payload.requestId)) return;
-  historico.itens.push({
-    requestId: payload.requestId,
-    data: historico.data,
-    codigo: payload.codigo,
-    descricao: payload.descricao || "Descrição não encontrada",
-    lote: payload.lote,
-    validade: payload.validade,
-    quantidade: Number(payload.quantidade),
-    funcionario: payload.funcionario,
-    registradoEm: Date.now()
-  });
-  gravarHistoricoDiario(historico);
-}
-
-function formatarDataISO(iso) {
-  const partes = String(iso || "").split("-");
-  return partes.length === 3 ? partes[2] + "/" + partes[1] + "/" + partes[0] : iso;
-}
-
-function abrirModalDuplicidade(payload, encontrados) {
-  payloadPendenteDuplicidade = payload;
-  const descricao = payload.descricao || "Descrição não encontrada";
-  const quantidadeAnterior = encontrados.reduce((total, item) => total + Number(item.quantidade || 0), 0);
-  const lancamentos = encontrados.length;
-  $("textoDuplicidade").textContent = "Você já lançou esse produto hoje. Confira os dados antes de continuar.";
-  $("detalhesDuplicidade").textContent =
-    "Produto: " + descricao + "\n" +
-    "EAN: " + payload.codigo + "\n" +
-    "Lote: " + payload.lote + "\n" +
-    "Validade: " + formatarDataISO(payload.validade) + "\n" +
-    "Quantidade já lançada: " + quantidadeAnterior + " (" + lancamentos + (lancamentos === 1 ? " lançamento)" : " lançamentos)");
-  $("modalDuplicidade").classList.add("aberto");
-  $("btnAdicionarDuplicidade").focus();
-}
-
-function fecharModalDuplicidade() {
-  $("modalDuplicidade").classList.remove("aberto");
-  payloadPendenteDuplicidade = null;
-}
-
-$("btnIgnorarDuplicidade").addEventListener("click", () => {
-  fecharModalDuplicidade();
-  mostrarStatus("Lançamento ignorado. Os dados continuam no formulário para você conferir ou alterar.", "info");
-});
-
-$("btnAdicionarDuplicidade").addEventListener("click", () => {
-  const payload = payloadPendenteDuplicidade;
-  fecharModalDuplicidade();
-  if (payload && !enviando) iniciarEnvio(payload);
-});
-
-$("modalDuplicidade").addEventListener("click", evento => {
-  if (evento.target === $("modalDuplicidade")) fecharModalDuplicidade();
-});
-
-document.addEventListener("keydown", evento => {
-  if (evento.key === "Escape" && $("modalDuplicidade").classList.contains("aberto")) {
-    fecharModalDuplicidade();
-  }
-});
-
-/* =========================
-   ENVIO DO FORMULÁRIO
-   ========================= */
-
-formulario.addEventListener("submit", evento => {
-  evento.preventDefault();
-
-  if (enviando) return;
-
-  ocultarStatus();
-
-  const codigo = codigoEl.value.trim();
-  const funcionario = funcionarioEl.value.trim();
-  const lote = $("lote").value.trim();
-  const validadeTexto = validadeEl.value.trim();
-  const quantidadeTexto = $("quantidade").value.trim();
-
-  if (!/^\d{8,14}$/.test(codigo)) {
-    mostrarStatus("Informe um código de barras válido, com 8 a 14 dígitos.", "error");
-    codigoEl.focus();
-    return;
-  }
-
-  if (!funcionario) {
-    mostrarStatus("Selecione o funcionário.", "error");
-    funcionarioEl.focus();
-    return;
-  }
-
-  if (!lote || lote.length > 100) {
-    mostrarStatus("Informe o lote, com no máximo 100 caracteres.", "error");
-    $("lote").focus();
-    return;
-  }
-
-  let validadeISO;
-
-  try {
-    validadeISO = validadeParaISO(validadeTexto);
-  } catch (erro) {
-    mostrarStatus(erro.message, "error");
-    validadeEl.focus();
-    return;
-  }
-
-  if (!/^\d+$/.test(quantidadeTexto) ||
-      !Number.isSafeInteger(Number(quantidadeTexto)) ||
-      Number(quantidadeTexto) < 1) {
-    mostrarStatus("Informe uma quantidade inteira maior que zero.", "error");
-    $("quantidade").focus();
-    return;
-  }
-
-  const payload = {
-    requestId: aleatorioHex(16),
-    funcionario: funcionario,
-    codigo: codigo,
-    lote: lote,
-    validade: validadeISO,
-    quantidade: Number(quantidadeTexto)
-  };
-
-  payload.descricao = $("descricaoTexto").textContent.trim() || "Descrição não encontrada";
-
-  const repetidos = encontrarLancamentosIguais(payload);
-  if (repetidos.length > 0) {
-    abrirModalDuplicidade(payload, repetidos);
-    return;
-  }
-
-  iniciarEnvio(payload);
-});
-
-function iniciarEnvio(payload) {
-  if (enviando) return;
-  const token = aleatorioHex(32);
-
-  enviando = true;
-  btnSalvar.disabled = true;
-  btnSalvar.textContent = "Enviando...";
-  mostrarStatus("Enviando lançamento para a planilha...");
-
-  envioAtual = {
-    requestId: payload.requestId,
-    token: token,
-    iniciadoEm: Date.now(),
-    payload: payload
-  };
-
-  try {
-    enviarPost(payload, token);
-    iniciarPolling(payload.requestId, token);
-  } catch (erro) {
-    finalizarErro("Não foi possível iniciar o envio: " + erro.message);
-  }
-}
-
-function enviarPost(payload, token) {
-  const f = document.createElement("form");
-
-  f.method = "POST";
-  f.action = APPS_SCRIPT_URL;
-  f.target = "respostaPost";
-  f.style.display = "none";
-
-  const campoPayload = document.createElement("input");
-  campoPayload.type = "hidden";
-  campoPayload.name = "payload";
-  campoPayload.value = JSON.stringify(payload);
-
-  const campoToken = document.createElement("input");
-  campoToken.type = "hidden";
-  campoToken.name = "token";
-  campoToken.value = token;
-
-  f.append(campoPayload, campoToken);
-  document.body.appendChild(f);
-  f.submit();
-  f.remove();
-}
-
-/* =========================
-   POLLING DO STATUS
-   Começa rápido (300 ms) e aumenta aos poucos até 1,2 s.
-   ========================= */
-
-window.__statusCb = function (resposta) {
-  if (!resposta || !envioAtual) return;
-  if (resposta.requestId !== envioAtual.requestId) return;
-
-  if (resposta.status === "saved") {
-    finalizarSucesso(resposta.message || "Lançamento salvo com sucesso.");
-  } else if (resposta.status === "error") {
-    finalizarErro(resposta.message || "Não foi possível salvar o lançamento.");
-  } else {
-    mostrarStatus(resposta.message || "Processando lançamento...");
-  }
-};
-
-function iniciarPolling(requestId, token) {
-  const inicio = Date.now();
-  let tentativa = 0;
-
-  if (temporizadorPolling) clearTimeout(temporizadorPolling);
-
-  const proximo = () => {
-    if (!envioAtual || envioAtual.requestId !== requestId) return;
-    const espera = Math.min(300 + tentativa * 150, 1200);
-    tentativa++;
-    temporizadorPolling = setTimeout(consultar, espera);
-  };
-
-  function consultar() {
-    if (!envioAtual || envioAtual.requestId !== requestId) return;
-
-    if (Date.now() - inicio > 90000) {
-      finalizarErro(
-        "O sistema não confirmou o lançamento em 90 segundos. " +
-        "Verifique a planilha antes de tentar enviar novamente."
-      );
-      return;
-    }
-
-    if (scriptStatusAtual) {
-      scriptStatusAtual.remove();
-      scriptStatusAtual = null;
-    }
-
-    const script = document.createElement("script");
-    const parametros = new URLSearchParams({
-      action: "status",
-      callback: "__statusCb",
-      requestId: requestId,
-      token: token
-    });
-
-    const terminar = () => {
-      script.remove();
-      if (scriptStatusAtual === script) scriptStatusAtual = null;
-      proximo();
-    };
-
-    script.async = true;
-    script.onerror = terminar;
-    script.onload = terminar;
-    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
-
-    scriptStatusAtual = script;
-    document.head.appendChild(script);
-  }
-
-  /* Primeira checagem logo após o envio, sem esperar. */
-  temporizadorPolling = setTimeout(consultar, 250);
-}
-
-function finalizarSucesso(mensagem) {
-  encerrarPolling();
-  if (envioAtual && envioAtual.payload) registrarNoHistorico(envioAtual.payload);
-  enviando = false;
-  envioAtual = null;
-  btnSalvar.disabled = false;
-  btnSalvar.textContent = "Salvar lançamento";
-
-  mostrarStatus(mensagem, "success");
-  limparCamposLancamento();
-}
-
-function finalizarErro(mensagem) {
-  encerrarPolling();
-  enviando = false;
-  envioAtual = null;
-  btnSalvar.disabled = false;
-  btnSalvar.textContent = "Salvar lançamento";
-
-  mostrarStatus(mensagem, "error");
-}
-
-function encerrarPolling() {
-  if (temporizadorPolling) {
-    clearTimeout(temporizadorPolling);
-    temporizadorPolling = null;
-  }
-
-  if (scriptStatusAtual) {
-    scriptStatusAtual.remove();
-    scriptStatusAtual = null;
-  }
-}
-
-/* =========================
-   LIMPEZA DO FORMULÁRIO
-   ========================= */
-
-function limparCamposLancamento() {
-  codigoEl.value = "";
-  $("lote").value = "";
-  validadeEl.value = "";
-  $("quantidade").value = "";
-
-  limparDescricao();
-  codigoEl.focus();
-}
-
-window.addEventListener("beforeunload", () => {
-  if (temporizadorDigitacao) clearTimeout(temporizadorDigitacao);
-  if (temporizadorPolling) clearTimeout(temporizadorPolling);
-});
-</script>
-</body>
-</html>
+    } else if (resposta.status === "not_fo
