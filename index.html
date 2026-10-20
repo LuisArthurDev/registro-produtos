@@ -291,6 +291,7 @@
           <option>Rillary</option>
           <option>Sulaima</option>
           <option>Thomaz</option>
+          <option>Termolabil</option>
         </select>
       </div>
 
@@ -585,7 +586,26 @@ window.__produtoCb = function (resposta) {
    ========================= */
 
 codigoEl.addEventListener("input", () => {
-  codigoEl.value = codigoEl.value.replace(/\D/g, "").slice(0, 14);
+  const bruto = codigoEl.value;
+  const digitos = bruto.replace(/\D/g, "");
+  const removidos = bruto.length - digitos.length;
+
+  /* Vários caracteres inválidos de uma vez = colagem ou leitor lendo QR Code/texto. */
+  if (removidos >= 2) {
+    codigoEl.value = "";
+    limparDescricao();
+    mostrarStatus(
+      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
+      "error"
+    );
+    return;
+  }
+
+  if (removidos === 1) {
+    mostrarStatus("O código de barras aceita apenas números.", "error");
+  }
+
+  codigoEl.value = digitos.slice(0, 14);
 
   limparDescricao();
 
@@ -638,7 +658,7 @@ async function iniciarCamera() {
     if (!scanner) {
       const F = Html5QrcodeSupportedFormats;
       scanner = new Html5Qrcode("reader", {
-        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF],
+        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF, F.QR_CODE],
         useBarCodeDetectorIfSupported: true,
         verbose: false
       });
@@ -687,10 +707,34 @@ async function pararCamera(silencioso = false) {
   if (!silencioso) mostrarStatus("Câmera parada.");
 }
 
-function processarLeitura(texto) {
-  const codigo = String(texto || "").replace(/\D/g, "");
+const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
+let ultimoErroLeitura = 0;
 
-  if (!/^\d{8,14}$/.test(codigo)) return;
+/* Mostra o erro sem repetir a cada quadro e mantém a câmera ativa. */
+function leituraInvalida(mensagem) {
+  const agora = Date.now();
+  if (agora - ultimoErroLeitura < 1500) return;
+  ultimoErroLeitura = agora;
+
+  mostrarStatus(mensagem, "error");
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+}
+
+function processarLeitura(texto, resultado) {
+  const codigo = String(texto || "").trim();
+  const formato = resultado && resultado.result && resultado.result.format
+    ? resultado.result.format.formatName
+    : "";
+
+  if (formato === "QR_CODE") {
+    leituraInvalida("QR Code lido por engano. Aponte a câmera para o código de barras do produto.");
+    return;
+  }
+
+  if ((formato && !FORMATOS_PRODUTO.includes(formato)) || !/^\d{8,14}$/.test(codigo)) {
+    leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");
+    return;
+  }
 
   /* Consulta antes de fechar a câmera: a busca já corre em paralelo. */
   codigoEl.value = codigo;
