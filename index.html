@@ -723,9 +723,21 @@ async function iniciarCamera() {
 
     readerEl.classList.add("ativo");
 
+    // Configurações otimizadas para EAN (foco contínuo e área de leitura ajustada)
     await scanner.start(
-      { facingMode: "environment" },
-      { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777 },
+      { 
+        facingMode: "environment",
+        advanced: [{ focusMode: "continuous" }] 
+      },
+      { 
+        fps: 25, 
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const width = Math.min(320, viewfinderWidth * 0.85);
+          const height = 100; // Altura menor, ideal para barras horizontais
+          return { width, height };
+        }, 
+        aspectRatio: 1.777 
+      },
       processarLeitura,
       () => {}
     );
