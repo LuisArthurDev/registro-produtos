@@ -254,6 +254,43 @@
     .btn-modal-perigo { background: var(--err-bg); color: var(--err); }
     .btn-modal-ok { background: var(--ok); color: #fff; }
     :root[data-theme="dark"] .btn-modal-ok { color: #07210f; }
+    
+    .wrapper-input-limpavel {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      width: 100%;
+    }
+    
+    .wrapper-input-limpavel > input {
+      width: 100%;
+      padding-right: 30px !important; 
+    }
+    
+    .btn-limpar-input {
+      position: absolute;
+      right: 10px;
+      background: transparent;
+      border: none;
+      font-size: 18px;
+      line-height: 1;
+      color: #888;
+      cursor: pointer;
+      display: none;
+      padding: 2px 6px;
+      border-radius: 50%;
+      z-index: 5;
+      user-select: none;
+    }
+    
+    .btn-limpar-input:hover {
+      color: #333;
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .wrapper-input-limpavel.tem-conteudo > .btn-limpar-input {
+      display: block;
+    }
 
     @media (max-width: 380px) {
       .modal-acoes { grid-template-columns: 1fr; }
@@ -805,8 +842,9 @@ function processarLeitura(texto, resultado) {
   }
 
   codigoEl.value = codigo;
-  ultimoEscaneado = codigo;
+  codigoEl.dispatchEvent(new Event("input")); // <-- Adicione essa linha aqui
   mostrarUltimo("Buscando nome...");
+  ultimoEscaneado = codigo;
   buscarDescricaoProduto(codigo);
 
   if (navigator.vibrate) navigator.vibrate(60);
@@ -1087,6 +1125,57 @@ $("btnIgnorarDuplicado").addEventListener("click", () => {
 
 $("modalDuplicado").addEventListener("click", evento => {
   if (evento.target.id === "modalDuplicado") fecharModalDuplicado();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Seleciona todos os inputs de texto, busca, número, etc.
+  const inputs = document.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"])');
+
+  inputs.forEach((input) => {
+    // 1. Cria o wrapper envolvente
+    const wrapper = document.createElement("div");
+    wrapper.className = "wrapper-input-limpavel";
+
+    // Insere o wrapper no DOM e move o input para dentro dele
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+
+    // 2. Cria o botão "X"
+    const btnLimpar = document.createElement("button");
+    btnLimpar.type = "button";
+    btnLimpar.className = "btn-limpar-input";
+    btnLimpar.innerHTML = "&times;"; // Ícone de multiplicação (X)
+    btnLimpar.title = "Limpar campo";
+    wrapper.appendChild(btnLimpar);
+
+    // 3. Função para checar se deve mostrar o "X"
+    const checarEstado = () => {
+      if (input.value && input.value.trim().length > 0) {
+        wrapper.classList.add("tem-conteudo");
+      } else {
+        wrapper.classList.remove("tem-conteudo");
+      }
+    };
+
+    // Eventos do Input
+    input.addEventListener("input", checarEstado);
+    input.addEventListener("focus", checarEstado);
+
+    // Clique no botão de limpar "X"
+    btnLimpar.addEventListener("click", (e) => {
+      e.preventDefault();
+      input.value = "";
+      checarEstado();
+      input.focus();
+
+      // Dispara o evento 'input' para atualizar bibliotecas/mÁscaras se houver
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Checa o estado inicial (caso o input já venha preenchido do HTML)
+    checarEstado();
+  });
 });
 
 document.addEventListener("keydown", evento => {
