@@ -274,13 +274,39 @@
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
     }
+
+
+    .same-product-option {
+      display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px;
+      padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--bg); cursor: pointer;
+    }
+    .same-product-option input {
+      flex: 0 0 20px; width: 20px; min-height: 20px; height: 20px;
+      margin: 2px 0 0; padding: 0; accent-color: var(--ok);
+    }
+    .same-product-option span { display: block; }
+    .same-product-option strong { display: block; font-size: 14px; color: var(--ink); }
+    .same-product-option small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+    .input-clear-wrap { position: relative; width: 100%; }
+    .input-clear-wrap input { width: 100%; padding-right: 44px; }
+    .btn-limpar-input {
+      position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0;
+      border-radius: 50%; background: transparent; color: var(--muted);
+      font-size: 23px; line-height: 1; display: none; align-items: center;
+      justify-content: center; cursor: pointer;
+    }
+    .btn-limpar-input:hover { background: var(--bg); color: var(--ink); }
+    .input-clear-wrap.has-value .btn-limpar-input { display: flex; }
+
   </style>
 </head>
 
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.6</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.7</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -312,9 +338,9 @@
 
       <div class="field">
         <label for="codigo">Código de barras</label>
-        <input id="codigo" name="codigo" type="text" inputmode="numeric"
+        <div class="input-clear-wrap"><input id="codigo" name="codigo" type="text" inputmode="numeric"
                autocomplete="off" placeholder="Leia ou digite o código"
-               maxlength="14" required>
+               maxlength="14" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
       </div>
 
       <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
@@ -362,22 +388,22 @@
 
       <div class="field">
         <label for="lote">Lote</label>
-        <input id="lote" name="lote" type="text" maxlength="100"
-               autocomplete="off" placeholder="Digite o lote" required>
+        <div class="input-clear-wrap"><input id="lote" name="lote" type="text" maxlength="100"
+               autocomplete="off" placeholder="Digite o lote" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
       </div>
 
       <div class="grid">
         <div class="field">
           <label for="validade">Validade</label>
-          <input id="validade" name="validade" type="text" inputmode="numeric"
+          <div class="input-clear-wrap"><input id="validade" name="validade" type="text" inputmode="numeric"
                  maxlength="10" autocomplete="off"
-                 placeholder="Ex.: 05/27" required>
+                 placeholder="Ex.: 05/27" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
         </div>
 
         <div class="field">
           <label for="quantidade">Quantidade</label>
-          <input id="quantidade" name="quantidade" type="number" min="1" step="1"
-                 inputmode="numeric" placeholder="Ex.: 12" required>
+          <div class="input-clear-wrap"><input id="quantidade" name="quantidade" type="number" min="1" step="1"
+                 inputmode="numeric" placeholder="Ex.: 12" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
         </div>
       </div>
 
@@ -385,6 +411,14 @@
         Validade aceita 05/27, 05/2027, 15/05/27 ou 15/05/2027.
         Só mês e ano vale o último dia do mês.
       </p>
+
+      <label class="same-product-option" for="mesmoProduto">
+        <input type="checkbox" id="mesmoProduto" name="mesmoProduto">
+        <span>
+          <strong>É o mesmo produto</strong>
+          <small>Marque para manter o código de barras após salvar. Se for outro produto, deixe desmarcado e o código será limpo.</small>
+        </span>
+      </label>
 
       <button type="submit" id="btnSalvar" class="submit-button">Salvar lançamento</button>
     </section>
@@ -1549,6 +1583,7 @@ function iniciarPolling(requestId, token) {
 
 function finalizarSucesso(mensagem) {
   encerrarPolling();
+  const manterCodigoBarras = $("mesmoProduto").checked;
 
   if (envioAtual && envioAtual.payload) {
     registrarNoHistorico(envioAtual.payload, envioAtual.descricao);
@@ -1564,7 +1599,7 @@ function finalizarSucesso(mensagem) {
   btnSalvar.textContent = "Salvar lançamento";
 
   mostrarStatus(mensagem, "success");
-  limparCamposLancamento();
+  limparCamposLancamento(manterCodigoBarras);
 }
 
 function finalizarErro(mensagem) {
@@ -1589,15 +1624,21 @@ function encerrarPolling() {
   }
 }
 
-function limparCamposLancamento() {
-  codigoEl.value = "";
+function limparCamposLancamento(manterCodigoBarras = false) {
+  if (!manterCodigoBarras) {
+    codigoEl.value = "";
+    limparDescricao();
+  }
   $("lote").value = "";
   validadeEl.value = "";
   $("quantidade").value = "";
+  $("mesmoProduto").checked = false;
   confirmarNaoCadastradoUmaVez = false;
   confirmarDuplicadoUmaVez = false;
 
-  limparDescricao();
+  // Atualiza o X do campo de código de barras conforme o valor que permaneceu.
+  const codigoWrap = codigoEl.closest(".input-clear-wrap");
+  if (codigoWrap) codigoWrap.classList.toggle("has-value", codigoEl.value.length > 0);
   codigoEl.focus();
 }
 
@@ -1610,6 +1651,24 @@ window.addEventListener("beforeunload", () => {
   if (temporizadorDigitacao) clearTimeout(temporizadorDigitacao);
   if (temporizadorPolling) clearTimeout(temporizadorPolling);
 });
+
+
+// Exibe um X nos campos preenchidos e permite limpá-los individualmente.
+document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
+  const input = wrap.querySelector("input");
+  const clearButton = wrap.querySelector(".btn-limpar-input");
+  const atualizar = () => wrap.classList.toggle("has-value", input.value.length > 0);
+  input.addEventListener("input", atualizar);
+  input.addEventListener("change", atualizar);
+  clearButton.addEventListener("click", () => {
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.focus();
+  });
+  atualizar();
+});
+
 </script>
 </body>
 </html>
