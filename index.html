@@ -280,7 +280,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.4</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.3</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -480,6 +480,19 @@ let scriptStatusAtual = null;
 let envioAtual = null;
 
 let itemAtual = null;
+let produtosJsonCache = null; // Armazenará o JSON carregado localmente
+
+// Carrega o arquivo produtos.json automaticamente ao abrir a página
+async function carregarProdutosJson() {
+  try {
+    const resposta = await fetch("produtos.json");
+    if (resposta.ok) {
+      produtosJsonCache = await resposta.json();
+    }
+  } catch (e) {
+    console.warn("Arquivo produtos.json local não encontrado. Usando fallback via rede/cache.");
+  }
+}
 
 function lerJSON(chave) {
   try {
@@ -630,6 +643,7 @@ function limparDescricao() {
   $("descricaoStatus").textContent = "";
 }
 
+// CONSULTA OTIMIZADA VIA JSON LOCAL + CACHE + PLANILHA SE NECESSÁRIO
 function buscarDescricaoProduto(codigoInformado) {
   const codigo = String(codigoInformado || "").trim();
   const sequencia = ++consultaSequencia;
@@ -641,19 +655,37 @@ function buscarDescricaoProduto(codigoInformado) {
     return;
   }
 
+  // 1. Tenta buscar no cache local do navegador
   const emCache = lerCache(codigo);
-
   if (emCache) {
     if (emCache.status === "found") {
       mostrarDescricao("Produto encontrado.", "success", emCache.descricao);
       registrarNomeAtual(codigo, emCache.descricao);
     } else {
-      mostrarDescricao("EAN não encontrado na aba Produtos.", "error");
+      mostrarDescricao("Produto não cadastrado. O lançamento continua permitido.", "error");
       registrarNomeAtual(codigo, "Não cadastrado (" + codigo + ")");
     }
     return;
   }
 
+  // 2. Tenta buscar no arquivo JSON carregado localmente (INSTANTÂNEO)
+  if (produtosJsonCache) {
+    if (produtosJsonCache[codigo]) {
+      const descricao = produtosJsonCache[codigo];
+      gravarCache(codigo, { status: "found", descricao: descricao });
+      mostrarDescricao("Produto encontrado.", "success", descricao);
+      registrarNomeAtual(codigo, descricao);
+      return;
+    } else {
+      // Se tem o JSON carregado e o código não está nele, já sabemos que não é cadastrado instantaneamente
+      gravarCache(codigo, { status: "not_found" });
+      mostrarDescricao("Produto não cadastrado. O lançamento continua permitido.", "error");
+      registrarNomeAtual(codigo, "Não cadastrado (" + codigo + ")");
+      return;
+    }
+  }
+
+  // 3. Fallback: Caso o arquivo JSON não exista, recorre ao Apps Script original da planilha
   mostrarDescricao("Buscando descrição do produto...");
 
   const script = document.createElement("script");
@@ -782,6 +814,7 @@ function carregarBiblioteca() {
 }
 
 window.addEventListener("load", () => {
+  carregarProdutosJson();
   setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
 });
 
@@ -1412,23 +1445,8 @@ formulario.addEventListener("submit", evento => {
     quantidade: Number(quantidadeTexto)
   };
 
-  // Verifica tanto o cache quanto os textos exibidos na descrição/status.
-  // O aviso de EAN não encontrado fica em descricaoStatus, não necessariamente
-  // em descricaoTexto. Isso garante que o modal apareça antes de salvar.
-  const resultadoEAN = lerCache(codigo);
   const textoDescricao = $("descricaoTexto").textContent || "";
-  const textoStatusDescricao = $("descricaoStatus").textContent || "";
-  const ehProdutoNaoCadastrado =
-    (resultadoEAN && resultadoEAN.status === "not_found") ||
-    /não cadastrado|ean não encontrado/i.test(textoDescricao) ||
-    /não cadastrado|ean não encontrado/i.test(textoStatusDescricao);
-
-  // Se a consulta ainda está em andamento, não deixa salvar antes de saber
-  // se o EAN existe na base de produtos.
-  if (!resultadoEAN && /buscando descrição do produto/i.test(textoStatusDescricao)) {
-    mostrarStatus("Aguarde a consulta do EAN terminar antes de salvar o lançamento.", "info");
-    return;
-  }
+  const ehProdutoNaoCadastrado = textoDescricao.includes("Não cadastrado") || textoDescricao.includes("EAN não encontrado");
 
   if (ehProdutoNaoCadastrado && !confirmarNaoCadastradoUmaVez) {
     abrirModalNaoCadastrado(payload);
