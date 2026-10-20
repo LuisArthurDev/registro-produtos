@@ -197,9 +197,14 @@
     .btn-camera:hover:not(:disabled) { background: var(--accent-dark); }
     .btn-stop { width: 100%; background: var(--err-bg); color: var(--err); margin-top: 10px; display: none; }
 
-    #reader { display: none; margin-top: 12px; border-radius: 10px; overflow: hidden; background: #000; }
-    #reader video { width: 100% !important; display: block; }
+    #reader { display: none; position: relative; margin-top: 12px; border-radius: 10px; overflow: hidden; background: #000; }
     #reader.ativo { display: block; }
+    #video { display: block; width: 100%; background: #000; }
+    .mira {
+      position: absolute; left: 8%; right: 8%; top: 28%; bottom: 28%;
+      border: 2px solid rgba(255, 255, 255, .85); border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, .28); pointer-events: none;
+    }
 
     .camera-controles { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
     .camera-controles[hidden] { display: none; }
@@ -306,7 +311,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.8</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -345,7 +350,7 @@
 
       <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
       <button type="button" id="btnPararCamera" class="btn-stop">Parar câmera</button>
-      <div id="reader"></div>
+      <div id="reader"><video id="video" playsinline muted autoplay></video><div class="mira"></div></div>
 
       <div id="cameraControles" class="camera-controles" hidden>
         <button type="button" id="btnLanterna" class="btn-lanterna" hidden>Lanterna</button>
@@ -503,7 +508,6 @@ const btnCamera = $("btnCamera");
 const btnPararCamera = $("btnPararCamera");
 const readerEl = $("reader");
 
-let scanner = null;
 let cameraAtiva = false;
 let enviando = false;
 let consultaSequencia = 0;
@@ -518,12 +522,19 @@ let produtosJsonCache = null;
 let produtosJsonPromessa = null;
 let produtosJsonErro = null;
 
+/*
+ * VERSÃO DA BASE DE EAN
+ * O navegador guarda o produtos_ean.json e só baixa de novo quando este número mudar.
+ * Sempre que você atualizar o produtos_ean.json, aumente o valor abaixo (ex.: "2", "3"...).
+ */
+const VERSAO_BASE_EAN = "1";
+
 // A base de EAN é consultada exclusivamente no arquivo produtos_ean.json.
 function carregarProdutosJson() {
   if (produtosJsonCache) return Promise.resolve(produtosJsonCache);
   if (produtosJsonPromessa) return produtosJsonPromessa;
 
-  produtosJsonPromessa = fetch("produtos_ean.json", { cache: "no-store" })
+  produtosJsonPromessa = fetch("produtos_ean.json?v=" + encodeURIComponent(VERSAO_BASE_EAN), { cache: "force-cache" })
     .then(resposta => {
       if (!resposta.ok) {
         throw new Error("Não foi possível carregar produtos_ean.json (HTTP " + resposta.status + ").");
@@ -749,17 +760,22 @@ function buscarDescricaoProduto(codigoInformado) {
 }
 
 codigoEl.addEventListener("input", () => {
-  const bruto = codigoEl.value;
-  const digitos = bruto.replace(/\D/g, "");
-  const removidos = bruto.length - digitos.length;
+  // Leitores de mão costumam enviar espaço ou quebra de linha no fim da leitura:
+  // isso é descartado. Qualquer letra ou símbolo (ex.: texto de QR Code ou link)
+  // invalida a leitura inteira e o campo é apagado.
+  const semEspacos = codigoEl.value.replace(/\s+/g, "");
 
-  // Alguns leitores enviam o código inteiro de uma vez e podem incluir
-  // caracteres de finalização. Em vez de apagar a leitura inteira, mantemos os dígitos.
-  if (removidos > 0) {
-    mostrarStatus("Ajustei a leitura para manter somente os números do código de barras.", "info");
+  if (/\D/.test(semEspacos)) {
+    codigoEl.value = "";
+    limparDescricao();
+    mostrarStatus(
+      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
+      "error"
+    );
+    return;
   }
 
-  codigoEl.value = digitos.slice(0, 14);
+  codigoEl.value = semEspacos.slice(0, 14);
   limparDescricao();
 
   const codigo = codigoEl.value;
@@ -772,42 +788,85 @@ codigoEl.addEventListener("input", () => {
   }, completo ? 80 : 350);
 });
 
-let bibliotecaPromessa = null;
+/* =========================
+   CÂMERA: leitor próprio
+   Analisa o quadro INTEIRO da câmera (não só uma caixa) combinando:
+   - o leitor nativo do aparelho, quando existe (rápido);
+   - o ZXing-C++ em WebAssembly (mais robusto em códigos pequenos, riscados ou com pouco contraste).
+   ========================= */
 
-function carregarBiblioteca() {
-  if (typeof Html5Qrcode !== "undefined") return Promise.resolve();
-  if (bibliotecaPromessa) return bibliotecaPromessa;
+const FORMATOS_LEITURA = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf", "qr_code"];
+const URL_LEITOR_WASM = "https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/iife/ponyfill.js";
 
-  bibliotecaPromessa = new Promise((resolve, reject) => {
+let detectorNativo = null;
+let detectorWasm = null;
+let preparandoDetectores = null;
+let fluxoCamera = null;
+let temporizadorLeitura = null;
+let temporizadorDica = null;
+let quadrosSemLeitura = 0;
+let canvasReforco = null;
+
+function carregarLeitorWasm() {
+  if (window.BarcodeDetectionAPI) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    s.src = URL_LEITOR_WASM;
     s.async = true;
     s.onload = resolve;
-    s.onerror = () => {
-      bibliotecaPromessa = null;
-      reject(new Error("lib"));
-    };
+    s.onerror = () => reject(new Error("leitor"));
     document.head.appendChild(s);
   });
+}
 
-  return bibliotecaPromessa;
+function prepararDetectores() {
+  if (preparandoDetectores) return preparandoDetectores;
+
+  preparandoDetectores = (async () => {
+    if ("BarcodeDetector" in window) {
+      try {
+        const suportados = await window.BarcodeDetector.getSupportedFormats();
+        const uteis = FORMATOS_LEITURA.filter(f => suportados.includes(f));
+        if (uteis.includes("ean_13")) {
+          detectorNativo = new window.BarcodeDetector({ formats: uteis });
+        }
+      } catch (e) {
+        detectorNativo = null;
+      }
+    }
+
+    try {
+      await carregarLeitorWasm();
+      const API = window.BarcodeDetectionAPI;
+      detectorWasm = new API.BarcodeDetector({ formats: FORMATOS_LEITURA });
+      try { API.prepareZXingModule({ fireImmediately: true }); } catch (e) {}
+    } catch (e) {
+      detectorWasm = null;
+    }
+
+    if (!detectorNativo && !detectorWasm) {
+      throw new Error("Nenhum leitor de código de barras disponível.");
+    }
+  })();
+
+  preparandoDetectores.catch(() => { preparandoDetectores = null; });
+  return preparandoDetectores;
 }
 
 window.addEventListener("load", () => {
   carregarProdutosJson().catch(() => {
     mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.", "error");
   });
-  setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
+  setTimeout(() => prepararDetectores().catch(() => {}), 800);
 });
 
 let trilhaCamera = null;
 let lanternaLigada = false;
+let focoPontual = false;
 
 function configurarRecursosCamera() {
-  const video = readerEl.querySelector("video");
-  const fluxo = video && video.srcObject;
-  const trilha = fluxo && fluxo.getVideoTracks ? fluxo.getVideoTracks()[0] : null;
-
+  const trilha = fluxoCamera && fluxoCamera.getVideoTracks ? fluxoCamera.getVideoTracks()[0] : null;
   if (!trilha) return;
 
   trilhaCamera = trilha;
@@ -815,9 +874,13 @@ function configurarRecursosCamera() {
   let cap = {};
   try { cap = trilha.getCapabilities ? trilha.getCapabilities() : {}; } catch (e) {}
 
-  if (Array.isArray(cap.focusMode) && cap.focusMode.includes("continuous")) {
+  const focos = Array.isArray(cap.focusMode) ? cap.focusMode : [];
+
+  if (focos.includes("continuous")) {
     trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
   }
+
+  focoPontual = focos.includes("single-shot");
 
   const temZoom = !!(cap.zoom && cap.zoom.max > cap.zoom.min);
 
@@ -842,6 +905,7 @@ function configurarRecursosCamera() {
 function desligarRecursosCamera() {
   trilhaCamera = null;
   lanternaLigada = false;
+  focoPontual = false;
 
   $("cameraControles").hidden = true;
   $("zoomWrap").hidden = true;
@@ -872,8 +936,122 @@ $("btnLanterna").addEventListener("click", () => {
     .catch(() => {});
 });
 
+/* Toque na imagem: pede ao aparelho para focar de novo. */
+$("video").addEventListener("click", () => {
+  if (!trilhaCamera || !focoPontual) return;
+
+  const trilha = trilhaCamera;
+
+  trilha.applyConstraints({ advanced: [{ focusMode: "single-shot" }] })
+    .then(() => {
+      setTimeout(() => {
+        trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+      }, 900);
+    })
+    .catch(() => {});
+});
+
 let leituraAceita = false;
 let leituraPendente = { codigo: "", vezes: 0, t: 0 };
+
+/* Região central em tons de cinza e com mais contraste, para rótulos desbotados ou brilhantes. */
+function prepararQuadroReforcado(video) {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return null;
+
+  const sw = Math.floor(w * 0.8);
+  const sh = Math.floor(h * 0.6);
+  const sx = Math.floor((w - sw) / 2);
+  const sy = Math.floor((h - sh) / 2);
+  const escala = Math.min(1, 1280 / sw);
+  const dw = Math.floor(sw * escala);
+  const dh = Math.floor(sh * escala);
+
+  if (!canvasReforco) canvasReforco = document.createElement("canvas");
+  canvasReforco.width = dw;
+  canvasReforco.height = dh;
+
+  const ctx = canvasReforco.getContext("2d", { willReadFrequently: true });
+  ctx.filter = "grayscale(1) contrast(1.8) brightness(1.05)";
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
+
+  return canvasReforco;
+}
+
+async function detectarQuadro(video) {
+  let lista = [];
+
+  if (detectorNativo) lista = await detectorNativo.detect(video);
+
+  if (!lista.length && detectorWasm && (!detectorNativo || quadrosSemLeitura % 2 === 0)) {
+    lista = await detectorWasm.detect(video);
+  }
+
+  if (!lista.length && quadrosSemLeitura % 4 === 3) {
+    const reforco = prepararQuadroReforcado(video);
+    const detector = detectorWasm || detectorNativo;
+    if (reforco && detector) lista = await detector.detect(reforco);
+  }
+
+  return lista;
+}
+
+function maisCentral(lista, video) {
+  const cx = video.videoWidth / 2;
+  const cy = video.videoHeight / 2;
+
+  const distancia = b => {
+    const r = b.boundingBox;
+    return r ? Math.hypot(r.x + r.width / 2 - cx, r.y + r.height / 2 - cy) : 0;
+  };
+
+  return lista.slice().sort((a, b) => distancia(a) - distancia(b))[0];
+}
+
+function tratarDeteccoes(lista, video) {
+  const formatoDe = b => String(b.format || "").toUpperCase();
+  const produtos = lista.filter(b => FORMATOS_PRODUTO.includes(formatoDe(b)));
+
+  /* Vários códigos no quadro: usa o mais perto do centro; QR Code só gera o aviso de engano. */
+  const escolhida = produtos.length
+    ? maisCentral(produtos, video)
+    : (lista.find(b => formatoDe(b) === "QR_CODE") || lista[0]);
+
+  processarLeitura(escolhida.rawValue, {
+    result: { format: { formatName: formatoDe(escolhida) } }
+  });
+}
+
+async function cicloLeitura() {
+  if (!cameraAtiva) return;
+
+  const video = $("video");
+  let espera = 40;
+
+  if (video.readyState >= 2 && video.videoWidth) {
+    const inicio = performance.now();
+
+    try {
+      const lista = await detectarQuadro(video);
+      if (!cameraAtiva) return;
+
+      if (lista.length) {
+        quadrosSemLeitura = 0;
+        tratarDeteccoes(lista, video);
+      } else {
+        quadrosSemLeitura++;
+      }
+    } catch (erro) {
+      /* quadro ruim: tenta o próximo */
+    }
+
+    espera = Math.max(0, 60 - (performance.now() - inicio));
+  }
+
+  if (!cameraAtiva) return;
+  temporizadorLeitura = setTimeout(cicloLeitura, espera);
+}
 
 async function iniciarCamera() {
   if (cameraAtiva) return;
@@ -882,72 +1060,79 @@ async function iniciarCamera() {
   mostrarStatus("Abrindo a câmera...");
 
   try {
-    await carregarBiblioteca();
-
-    if (!scanner) {
-      const F = Html5QrcodeSupportedFormats;
-      scanner = new Html5Qrcode("reader", {
-        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF, F.QR_CODE],
-        useBarCodeDetectorIfSupported: true,
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-        verbose: false
-      });
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("sem-camera");
     }
 
+    await prepararDetectores();
+
+    fluxoCamera = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 }
+      }
+    });
+
+    const video = $("video");
+    video.srcObject = fluxoCamera;
     readerEl.classList.add("ativo");
+    await video.play();
+
     leituraAceita = false;
     leituraPendente = { codigo: "", vezes: 0, t: 0 };
-
-    const nativo = "BarcodeDetector" in window;
-
-    await scanner.start(
-      { facingMode: "environment" },
-      {
-        fps: 15,
-        qrbox: (largura, altura) => {
-          const l = Math.floor(Math.min(largura * 0.92, 420));
-          return { width: l, height: Math.floor(Math.min(altura * 0.7, l * 0.55)) };
-        },
-        disableFlip: true,
-        videoConstraints: {
-          facingMode: "environment",
-          width: { ideal: nativo ? 1920 : 1280 },
-          height: { ideal: nativo ? 1080 : 720 }
-        }
-      },
-      processarLeitura,
-      () => {}
-    );
-
+    quadrosSemLeitura = 0;
     cameraAtiva = true;
+
     btnPararCamera.style.display = "block";
     btnCamera.style.display = "none";
     configurarRecursosCamera();
-    mostrarStatus("Câmera ativa. Aponte para o código de barras.");
+    mostrarStatus("Câmera ativa. Aponte para o código de barras, a cerca de 15 a 20 cm e sem reflexo.");
+
+    temporizadorDica = setTimeout(() => {
+      if (cameraAtiva && !leituraAceita) {
+        mostrarStatus("Dica: afaste um pouco o celular, ligue a lanterna ou toque na imagem para focar.");
+      }
+    }, 7000);
+
+    cicloLeitura();
   } catch (erro) {
     console.error(erro);
+
+    if (fluxoCamera) {
+      fluxoCamera.getTracks().forEach(t => t.stop());
+      fluxoCamera = null;
+    }
+
     readerEl.classList.remove("ativo");
     btnCamera.disabled = false;
-    mostrarStatus(
-      "Não foi possível abrir a câmera. Verifique a permissão do navegador e a conexão.",
-      "error"
-    );
+
+    const nome = erro && erro.name;
+    const mensagem =
+      nome === "NotAllowedError" ? "Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador." :
+      erro && erro.message === "sem-camera" ? "Este navegador não permite acessar a câmera. A página precisa estar em HTTPS." :
+      "Não foi possível abrir a câmera ou carregar o leitor. Verifique a permissão e a conexão.";
+
+    mostrarStatus(mensagem, "error");
   }
 }
 
 async function pararCamera(silencioso = false) {
   desligarRecursosCamera();
 
-  if (scanner && cameraAtiva) {
-    try {
-      await scanner.stop();
-      scanner.clear();
-    } catch (erro) {
-      console.warn("Não foi possível encerrar a câmera normalmente.", erro);
-    }
+  cameraAtiva = false;
+  clearTimeout(temporizadorLeitura);
+  clearTimeout(temporizadorDica);
+
+  if (fluxoCamera) {
+    fluxoCamera.getTracks().forEach(t => t.stop());
+    fluxoCamera = null;
   }
 
-  cameraAtiva = false;
+  $("video").srcObject = null;
+
   readerEl.classList.remove("ativo");
   btnCamera.disabled = false;
   btnCamera.style.display = "block";
@@ -959,7 +1144,7 @@ async function pararCamera(silencioso = false) {
 const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
 const FORMATOS_GTIN = ["EAN_13", "EAN_8", "UPC_A"];
 const LEITURAS_PARA_CONFIRMAR = 2;
-const JANELA_CONFIRMACAO_MS = 2500;
+const JANELA_CONFIRMACAO_MS = 4000;
 let ultimoErroLeitura = 0;
 
 function leituraInvalida(mensagem) {
@@ -1003,6 +1188,11 @@ function processarLeitura(texto, resultado) {
 
   if (FORMATOS_GTIN.includes(formato) && !gtinValido(codigo)) return;
 
+  /* Código que existe na base de produtos é praticamente impossível de ser leitura errada:
+     aceita na 1ª leitura. Código desconhecido exige confirmação por leituras repetidas. */
+  const conhecido = produtosJsonCache && encontrarProdutoNaBase(produtosJsonCache, codigo);
+  const necessarias = conhecido ? 1 : LEITURAS_PARA_CONFIRMAR;
+
   const agora = Date.now();
 
   if (leituraPendente.codigo === codigo && agora - leituraPendente.t < JANELA_CONFIRMACAO_MS) {
@@ -1012,12 +1202,13 @@ function processarLeitura(texto, resultado) {
     leituraPendente = { codigo: codigo, vezes: 1, t: agora };
   }
 
-  if (leituraPendente.vezes < LEITURAS_PARA_CONFIRMAR) return;
+  if (leituraPendente.vezes < necessarias) return;
 
   leituraAceita = true;
   leituraPendente = { codigo: "", vezes: 0, t: 0 };
 
   codigoEl.value = codigo;
+  atualizarBotoesLimpar();
   iniciarLeituraDe(codigo);
   buscarDescricaoProduto(codigo);
 
@@ -1112,6 +1303,13 @@ let payloadNaoCadastradoPendente = null;
 let confirmarDuplicadoUmaVez = false;
 let confirmarNaoCadastradoUmaVez = false;
 let modalHistoricoAberto = false;
+
+// Zera as confirmações dadas nos avisos (não cadastrado / duplicado).
+// Só deve ser chamado ao enviar ou ao cancelar o lançamento.
+function reiniciarConfirmacoes() {
+  confirmarNaoCadastradoUmaVez = false;
+  confirmarDuplicadoUmaVez = false;
+}
 
 function dataLocalISO() {
   const agora = new Date();
@@ -1315,11 +1513,15 @@ $("btnAdicionarDuplicado").addEventListener("click", () => {
 
 $("btnIgnorarDuplicado").addEventListener("click", () => {
   fecharModalDuplicado();
+  reiniciarConfirmacoes();
   mostrarStatus("Lançamento ignorado. Os dados continuam no formulário caso queira revisá-los.", "info");
 });
 
 $("modalDuplicado").addEventListener("click", evento => {
-  if (evento.target.id === "modalDuplicado") fecharModalDuplicado();
+  if (evento.target.id === "modalDuplicado") {
+    fecharModalDuplicado();
+    reiniciarConfirmacoes();
+  }
 });
 
 /* MODAL DE PRODUTO NÃO CADASTRADO */
@@ -1346,12 +1548,16 @@ $("btnSalvarNaoCadastrado").addEventListener("click", () => {
 
 $("btnRevisarNaoCadastrado").addEventListener("click", () => {
   fecharModalNaoCadastrado();
+  reiniciarConfirmacoes();
   codigoEl.focus();
   mostrarStatus("Por favor, verifique o código de barras digitado ou lido.", "info");
 });
 
 $("modalProdutoNaoCadastrado").addEventListener("click", evento => {
-  if (evento.target.id === "modalProdutoNaoCadastrado") fecharModalNaoCadastrado();
+  if (evento.target.id === "modalProdutoNaoCadastrado") {
+    fecharModalNaoCadastrado();
+    reiniciarConfirmacoes();
+  }
 });
 
 document.addEventListener("keydown", evento => {
@@ -1359,6 +1565,7 @@ document.addEventListener("keydown", evento => {
     if (modalHistoricoAberto) fecharModalHistorico();
     fecharModalDuplicado();
     fecharModalNaoCadastrado();
+    reiniciarConfirmacoes();
   }
 });
 
@@ -1460,8 +1667,6 @@ formulario.addEventListener("submit", evento => {
     return;
   }
 
-  confirmarNaoCadastradoUmaVez = false;
-
   if (!confirmarDuplicadoUmaVez) {
     const duplicados = encontrarDuplicados(payload);
 
@@ -1471,7 +1676,9 @@ formulario.addEventListener("submit", evento => {
     }
   }
 
-  confirmarDuplicadoUmaVez = false;
+  // Todas as confirmações foram dadas: só agora elas são zeradas, para que
+  // um aviso aceito não volte a ser perguntado no mesmo lançamento.
+  reiniciarConfirmacoes();
 
   const token = aleatorioHex(32);
 
@@ -1640,17 +1847,16 @@ function limparCamposLancamento(manterCodigoBarras = false) {
   validadeEl.value = "";
   $("quantidade").value = "";
   $("mesmoProduto").checked = false;
-  confirmarNaoCadastradoUmaVez = false;
-  confirmarDuplicadoUmaVez = false;
+  reiniciarConfirmacoes();
 
-  // Atualiza o X do campo de código de barras conforme o valor que permaneceu.
-  const codigoWrap = codigoEl.closest(".input-clear-wrap");
-  if (codigoWrap) codigoWrap.classList.toggle("has-value", codigoEl.value.length > 0);
+  // Atualiza o X de todos os campos conforme o que ficou preenchido.
+  atualizarBotoesLimpar();
   codigoEl.focus();
 }
 
 window.addEventListener("load", () => {
   restaurarUltimoItem();
+  atualizarBotoesLimpar();
   if (funcionarioEl.value) verificarHistoricoFuncionario(funcionarioEl.value);
 });
 
@@ -1661,20 +1867,27 @@ window.addEventListener("beforeunload", () => {
 
 
 // Exibe um X nos campos preenchidos e permite limpá-los individualmente.
+function atualizarBotoesLimpar() {
+  document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
+    const input = wrap.querySelector("input");
+    wrap.classList.toggle("has-value", input.value.length > 0);
+  });
+}
+
 document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
   const input = wrap.querySelector("input");
   const clearButton = wrap.querySelector(".btn-limpar-input");
-  const atualizar = () => wrap.classList.toggle("has-value", input.value.length > 0);
-  input.addEventListener("input", atualizar);
-  input.addEventListener("change", atualizar);
+  input.addEventListener("input", atualizarBotoesLimpar);
+  input.addEventListener("change", atualizarBotoesLimpar);
   clearButton.addEventListener("click", () => {
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.focus();
   });
-  atualizar();
 });
+
+atualizarBotoesLimpar();
 
 </script>
 </body>
