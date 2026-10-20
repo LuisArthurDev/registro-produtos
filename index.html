@@ -14,7 +14,7 @@
       document.documentElement.dataset.theme = t;
     })();
   </script>
-  <title>Registro de Mapa de Validade²</title>
+  <title>Registro de Mapa de Validade</title>
   <link rel="preconnect" href="https://script.google.com">
   <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -1104,8 +1104,8 @@ formulario.addEventListener("submit", evento => {
   const validadeTexto = validadeEl.value.trim();
   const quantidadeTexto = $("quantidade").value.trim();
 
-  if (!/^\d{8,14}$/.test(codigo)) {
-    mostrarStatus("Informe um código de barras válido, com 8 a 14 dígitos.", "error");
+  if (!/^\d{1,14}$/.test(codigo)) {
+    mostrarStatus("Informe um código de barras válido, com 1 a 18 dígitos.", "error");
     codigoEl.focus();
     return;
   }
