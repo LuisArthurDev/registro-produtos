@@ -280,7 +280,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.2</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.4</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -1412,8 +1412,23 @@ formulario.addEventListener("submit", evento => {
     quantidade: Number(quantidadeTexto)
   };
 
+  // Verifica tanto o cache quanto os textos exibidos na descrição/status.
+  // O aviso de EAN não encontrado fica em descricaoStatus, não necessariamente
+  // em descricaoTexto. Isso garante que o modal apareça antes de salvar.
+  const resultadoEAN = lerCache(codigo);
   const textoDescricao = $("descricaoTexto").textContent || "";
-  const ehProdutoNaoCadastrado = textoDescricao.includes("Não cadastrado") || textoDescricao.includes("EAN não encontrado");
+  const textoStatusDescricao = $("descricaoStatus").textContent || "";
+  const ehProdutoNaoCadastrado =
+    (resultadoEAN && resultadoEAN.status === "not_found") ||
+    /não cadastrado|ean não encontrado/i.test(textoDescricao) ||
+    /não cadastrado|ean não encontrado/i.test(textoStatusDescricao);
+
+  // Se a consulta ainda está em andamento, não deixa salvar antes de saber
+  // se o EAN existe na base de produtos.
+  if (!resultadoEAN && /buscando descrição do produto/i.test(textoStatusDescricao)) {
+    mostrarStatus("Aguarde a consulta do EAN terminar antes de salvar o lançamento.", "info");
+    return;
+  }
 
   if (ehProdutoNaoCadastrado && !confirmarNaoCadastradoUmaVez) {
     abrirModalNaoCadastrado(payload);
