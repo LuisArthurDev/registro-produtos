@@ -272,7 +272,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.0</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.0.5</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -628,4 +628,712 @@ window.__produtoCb = function (resposta) {
   if (codigoEl.value.trim() === codigo) {
     if (resposta.status === "found" && resposta.descricao) {
       mostrarDescricao("Produto encontrado.", "success", String(resposta.descricao));
-    } else if (resposta.status === "not_fo
+    } else if (resposta.status === "not_found") {
+      mostrarDescricao("Produto não cadastrado. O lançamento continua permitido.", "error");
+    } else {
+      mostrarDescricao(resposta.message || "Não foi possível consultar a descrição.", "error");
+    }
+  }
+
+  document.querySelectorAll("script[data-codigo]").forEach(s => {
+    if (s.dataset.codigo === codigo) {
+      clearTimeout(Number(s.dataset.timer));
+      s.remove();
+      if (consultaScriptAtual === s) consultaScriptAtual = null;
+    }
+  });
+};
+
+/* DIGITAÇÃO MANUAL */
+codigoEl.addEventListener("input", () => {
+  const bruto = codigoEl.value;
+  const digitos = bruto.replace(/\D/g, "");
+  const removidos = bruto.length - digitos.length;
+
+  if (removidos >= 2) {
+    codigoEl.value = "";
+    limparDescricao();
+    mostrarStatus(
+      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
+      "error"
+    );
+    return;
+  }
+
+  if (removidos === 1) {
+    mostrarStatus("O código de barras aceita apenas números.", "error");
+  }
+
+  codigoEl.value = digitos.slice(0, 14);
+  limparDescricao();
+
+  const codigo = codigoEl.value;
+  if (codigo.length < 8) return;
+
+  const completo = codigo.length === 12 || codigo.length === 13 || codigo.length === 14;
+
+  temporizadorDigitacao = setTimeout(() => {
+    if (codigoEl.value === codigo) buscarDescricaoProduto(codigo);
+  }, completo ? 80 : 350);
+});
+
+/* CÂMERA */
+let bibliotecaPromessa = null;
+
+function carregarBiblioteca() {
+  if (typeof Html5Qrcode !== "undefined") return Promise.resolve();
+  if (bibliotecaPromessa) return bibliotecaPromessa;
+
+  bibliotecaPromessa = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => {
+      bibliotecaPromessa = null;
+      reject(new Error("lib"));
+    };
+    document.head.appendChild(s);
+  });
+
+  return bibliotecaPromessa;
+}
+
+window.addEventListener("load", () => {
+  setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
+});
+
+async function iniciarCamera() {
+  if (cameraAtiva) return;
+
+  btnCamera.disabled = true;
+  mostrarStatus("Abrindo a câmera...");
+
+  try {
+    await carregarBiblioteca();
+
+    if (!scanner) {
+      const F = Html5QrcodeSupportedFormats;
+      scanner = new Html5Qrcode("reader", {
+        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF, F.QR_CODE],
+        useBarCodeDetectorIfSupported: true,
+        verbose: false
+      });
+    }
+
+    readerEl.classList.add("ativo");
+
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777 },
+      processarLeitura,
+      () => {}
+    );
+
+    cameraAtiva = true;
+    btnPararCamera.style.display = "block";
+    btnCamera.style.display = "none";
+    mostrarStatus("Câmera ativa. Aponte para o código de barras.");
+  } catch (erro) {
+    console.error(erro);
+    readerEl.classList.remove("ativo");
+    btnCamera.disabled = false;
+    mostrarStatus(
+      "Não foi possível abrir a câmera. Verifique a permissão do navegador e a conexão.",
+      "error"
+    );
+  }
+}
+
+async function pararCamera(silencioso = false) {
+  if (scanner && cameraAtiva) {
+    try {
+      await scanner.stop();
+      scanner.clear();
+    } catch (erro) {
+      console.warn("Não foi possível encerrar a câmera normalmente.", erro);
+    }
+  }
+
+  cameraAtiva = false;
+  readerEl.classList.remove("ativo");
+  btnCamera.disabled = false;
+  btnCamera.style.display = "block";
+  btnPararCamera.style.display = "none";
+
+  if (!silencioso) mostrarStatus("Câmera parada.");
+}
+
+const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
+let ultimoErroLeitura = 0;
+
+function leituraInvalida(mensagem) {
+  const agora = Date.now();
+  if (agora - ultimoErroLeitura < 1500) return;
+  ultimoErroLeitura = agora;
+
+  mostrarStatus(mensagem, "error");
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+}
+
+function processarLeitura(texto, resultado) {
+  const codigo = String(texto || "").trim();
+  const formato = resultado && resultado.result && resultado.result.format
+    ? resultado.result.format.formatName
+    : "";
+
+  if (formato === "QR_CODE") {
+    leituraInvalida("QR Code lido por engano. Aponte a câmera para o código de barras do produto.");
+    return;
+  }
+
+  if ((formato && !FORMATOS_PRODUTO.includes(formato)) || !/^\d{8,14}$/.test(codigo)) {
+    leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");
+    return;
+  }
+
+  codigoEl.value = codigo;
+  ultimoEscaneado = codigo;
+  mostrarUltimo("Buscando nome...");
+  buscarDescricaoProduto(codigo);
+
+  if (navigator.vibrate) navigator.vibrate(60);
+
+  pararCamera(true).then(() => {
+    mostrarStatus("Código lido: " + codigo, "success");
+    $("lote").focus();
+  });
+}
+
+btnCamera.addEventListener("click", iniciarCamera);
+btnPararCamera.addEventListener("click", () => pararCamera());
+
+/* VALIDADE */
+function mascaraValidade(bruto) {
+  const d = bruto.replace(/\D/g, "").slice(0, 8);
+
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return d.slice(0, 2) + "/" + d.slice(2);
+
+  const meio = Number(d.slice(2, 4));
+
+  if (meio >= 1 && meio <= 12) {
+    return d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
+  }
+
+  return d.slice(0, 2) + "/" + d.slice(2, 6);
+}
+
+validadeEl.addEventListener("input", () => {
+  validadeEl.value = mascaraValidade(validadeEl.value);
+});
+
+function validadeParaISO(valor) {
+  const texto = String(valor || "").trim();
+  let dia, mes, ano;
+
+  const anoCompleto = a => (a.length === 2 ? 2000 + Number(a) : Number(a));
+
+  let partes = texto.match(/^(\d{2})\/(\d{2}|\d{4})$/);
+
+  if (partes) {
+    mes = Number(partes[1]);
+    ano = anoCompleto(partes[2]);
+
+    if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
+      throw new Error("Informe uma validade válida, como 05/27 ou 05/2027.");
+    }
+
+    dia = new Date(ano, mes, 0).getDate();
+  } else {
+    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
+
+    if (!partes) {
+      throw new Error("Use MM/AA, MM/AAAA, DD/MM/AA ou DD/MM/AAAA na validade.");
+    }
+
+    dia = Number(partes[1]);
+    mes = Number(partes[2]);
+    ano = anoCompleto(partes[3]);
+
+    const teste = new Date(ano, mes - 1, dia);
+
+    if (
+      ano < 1900 || ano > 2200 ||
+      teste.getFullYear() !== ano ||
+      teste.getMonth() !== mes - 1 ||
+      teste.getDate() !== dia
+    ) {
+      throw new Error("A data de validade informada não existe.");
+    }
+  }
+
+  return ano + "-" + String(mes).padStart(2, "0") + "-" + String(dia).padStart(2, "0");
+}
+
+/* FUNCIONÁRIO LEMBRADO */
+try {
+  const salvo = localStorage.getItem("funcionario");
+  if (salvo && Array.from(funcionarioEl.options).some(o => o.value === salvo)) {
+    funcionarioEl.value = salvo;
+  }
+} catch (e) {}
+
+funcionarioEl.addEventListener("change", () => {
+  try { localStorage.setItem("funcionario", funcionarioEl.value); } catch (e) {}
+});
+
+/* HISTÓRICO LOCAL DIÁRIO POR FUNCIONÁRIO */
+const CHAVE_HISTORICO_DIARIO = "registroProdutosHistoricoDiario_v1";
+let funcionarioPendenteHistorico = null;
+let payloadDuplicadoPendente = null;
+let confirmarDuplicadoUmaVez = false;
+let modalHistoricoAberto = false;
+
+function dataLocalISO() {
+  const agora = new Date();
+  return agora.getFullYear() + "-" +
+    String(agora.getMonth() + 1).padStart(2, "0") + "-" +
+    String(agora.getDate()).padStart(2, "0");
+}
+
+function normalizarTexto(valor) {
+  return String(valor || "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function lerHistoricoDiario() {
+  const hoje = dataLocalISO();
+
+  try {
+    const bruto = localStorage.getItem(CHAVE_HISTORICO_DIARIO);
+    if (!bruto) return { data: hoje, itens: [] };
+
+    const historico = JSON.parse(bruto);
+
+    if (!historico || historico.data !== hoje || !Array.isArray(historico.itens)) {
+      const novo = { data: hoje, itens: [] };
+      localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(novo));
+      return novo;
+    }
+
+    return historico;
+  } catch (e) {
+    return { data: hoje, itens: [] };
+  }
+}
+
+function gravarHistoricoDiario(historico) {
+  try {
+    historico.data = dataLocalISO();
+    localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(historico));
+    return true;
+  } catch (e) {
+    mostrarStatus("Não foi possível guardar o histórico local. Verifique o armazenamento do navegador.", "error");
+    return false;
+  }
+}
+
+function obterHistoricoFuncionario(nome) {
+  return lerHistoricoDiario().itens.filter(
+    item => normalizarTexto(item.funcionario) === normalizarTexto(nome)
+  );
+}
+
+function fecharModalHistorico() {
+  $("modalHistoricoFuncionario").classList.remove("aberto");
+  modalHistoricoAberto = false;
+  funcionarioPendenteHistorico = null;
+}
+
+function verificarHistoricoFuncionario(nome) {
+  if (!nome || modalHistoricoAberto) return;
+
+  const itens = obterHistoricoFuncionario(nome);
+  if (!itens.length) return;
+
+  funcionarioPendenteHistorico = nome;
+  modalHistoricoAberto = true;
+
+  const unidades = itens.reduce(
+    (total, item) => total + Number(item.quantidade || 0), 0
+  );
+
+  $("textoHistoricoFuncionario").textContent =
+    nome + " possui " + itens.length +
+    " lançamento(s) no histórico de hoje, totalizando " +
+    unidades + " unidade(s).";
+
+  $("modalHistoricoFuncionario").classList.add("aberto");
+}
+
+$("btnContinuarHistorico").addEventListener("click", () => {
+  const nome = funcionarioPendenteHistorico;
+  fecharModalHistorico();
+  mostrarStatus("Histórico de hoje mantido" + (nome ? " para " + nome : "") + ".", "success");
+});
+
+$("btnReiniciarHistorico").addEventListener("click", () => {
+  if (!funcionarioPendenteHistorico) {
+    fecharModalHistorico();
+    return;
+  }
+
+  const nome = funcionarioPendenteHistorico;
+  const chave = normalizarTexto(nome);
+  const historico = lerHistoricoDiario();
+
+  historico.itens = historico.itens.filter(
+    item => normalizarTexto(item.funcionario) !== chave
+  );
+
+  gravarHistoricoDiario(historico);
+  fecharModalHistorico();
+  mostrarStatus("Histórico local de hoje reiniciado para " + nome + ".", "success");
+});
+
+$("modalHistoricoFuncionario").addEventListener("click", evento => {
+  if (evento.target.id === "modalHistoricoFuncionario") fecharModalHistorico();
+});
+
+funcionarioEl.addEventListener("change", () => {
+  verificarHistoricoFuncionario(funcionarioEl.value);
+});
+
+function mesmosDadosDuplicados(a, b) {
+  return normalizarTexto(a.funcionario) === normalizarTexto(b.funcionario) &&
+    String(a.codigo) === String(b.codigo) &&
+    normalizarTexto(a.lote) === normalizarTexto(b.lote) &&
+    String(a.validade) === String(b.validade);
+}
+
+function encontrarDuplicados(payload) {
+  return lerHistoricoDiario().itens.filter(
+    item => mesmosDadosDuplicados(item, payload)
+  );
+}
+
+function registrarNoHistorico(payload) {
+  if (!payload) return;
+
+  const historico = lerHistoricoDiario();
+
+  if (historico.itens.some(item => item.requestId === payload.requestId)) return;
+
+  historico.itens.push({
+    requestId: payload.requestId,
+    data: historico.data,
+    codigo: payload.codigo,
+    descricao: $("descricaoTexto").textContent || "Descrição não encontrada",
+    lote: payload.lote,
+    validade: payload.validade,
+    quantidade: Number(payload.quantidade),
+    funcionario: payload.funcionario,
+    registradoEm: Date.now()
+  });
+
+  gravarHistoricoDiario(historico);
+}
+
+function abrirModalDuplicado(payload, itens) {
+  payloadDuplicadoPendente = payload;
+
+  const quantidadeAnterior = itens.reduce(
+    (total, item) => total + Number(item.quantidade || 0), 0
+  );
+
+  $("detalhesDuplicado").textContent =
+    "Funcionário: " + payload.funcionario +
+    " | EAN: " + payload.codigo +
+    " | Lote: " + payload.lote +
+    " | Validade: " + payload.validade +
+    " | Quantidade já lançada hoje: " + quantidadeAnterior +
+    " em " + itens.length + " lançamento(s).";
+
+  $("modalDuplicado").classList.add("aberto");
+}
+
+function fecharModalDuplicado() {
+  $("modalDuplicado").classList.remove("aberto");
+  payloadDuplicadoPendente = null;
+}
+
+$("btnAdicionarDuplicado").addEventListener("click", () => {
+  if (!payloadDuplicadoPendente) {
+    fecharModalDuplicado();
+    return;
+  }
+
+  fecharModalDuplicado();
+  confirmarDuplicadoUmaVez = true;
+  formulario.requestSubmit();
+});
+
+$("btnIgnorarDuplicado").addEventListener("click", () => {
+  fecharModalDuplicado();
+  mostrarStatus("Lançamento ignorado. Os dados continuam no formulário caso queira revisá-los.", "info");
+});
+
+$("modalDuplicado").addEventListener("click", evento => {
+  if (evento.target.id === "modalDuplicado") fecharModalDuplicado();
+});
+
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape") {
+    if (modalHistoricoAberto) fecharModalHistorico();
+    fecharModalDuplicado();
+  }
+});
+
+/* IDENTIFICADORES SEGUROS */
+function aleatorioHex(bytes) {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
+
+/* ENVIO DO FORMULÁRIO */
+formulario.addEventListener("submit", evento => {
+  evento.preventDefault();
+
+  if (enviando) return;
+  ocultarStatus();
+
+  const codigo = codigoEl.value.trim();
+  const funcionario = funcionarioEl.value.trim();
+  const lote = $("lote").value.trim();
+  const validadeTexto = validadeEl.value.trim();
+  const quantidadeTexto = $("quantidade").value.trim();
+
+  if (!/^\d{8,14}$/.test(codigo)) {
+    mostrarStatus("Informe um código de barras válido, com 8 a 14 dígitos.", "error");
+    codigoEl.focus();
+    return;
+  }
+
+  if (!funcionario) {
+    mostrarStatus("Selecione o funcionário.", "error");
+    funcionarioEl.focus();
+    return;
+  }
+
+  if (!lote || lote.length > 100) {
+    mostrarStatus("Informe o lote, com no máximo 100 caracteres.", "error");
+    $("lote").focus();
+    return;
+  }
+
+  let validadeISO;
+
+  try {
+    validadeISO = validadeParaISO(validadeTexto);
+  } catch (erro) {
+    mostrarStatus(erro.message, "error");
+    validadeEl.focus();
+    return;
+  }
+
+  if (
+    !/^\d+$/.test(quantidadeTexto) ||
+    !Number.isSafeInteger(Number(quantidadeTexto)) ||
+    Number(quantidadeTexto) < 1
+  ) {
+    mostrarStatus("Informe uma quantidade inteira maior que zero.", "error");
+    $("quantidade").focus();
+    return;
+  }
+
+  const payload = {
+    requestId: aleatorioHex(16),
+    funcionario: funcionario,
+    codigo: codigo,
+    lote: lote,
+    validade: validadeISO,
+    quantidade: Number(quantidadeTexto)
+  };
+
+  if (!confirmarDuplicadoUmaVez) {
+    const duplicados = encontrarDuplicados(payload);
+
+    if (duplicados.length) {
+      abrirModalDuplicado(payload, duplicados);
+      return;
+    }
+  }
+
+  confirmarDuplicadoUmaVez = false;
+
+  const token = aleatorioHex(32);
+
+  enviando = true;
+  btnSalvar.disabled = true;
+  btnSalvar.textContent = "Enviando...";
+  mostrarStatus("Enviando lançamento para a planilha...");
+
+  envioAtual = {
+    requestId: payload.requestId,
+    token: token,
+    iniciadoEm: Date.now(),
+    payload: payload
+  };
+
+  try {
+    enviarPost(payload, token);
+    iniciarPolling(payload.requestId, token);
+  } catch (erro) {
+    finalizarErro("Não foi possível iniciar o envio: " + erro.message);
+  }
+});
+
+function enviarPost(payload, token) {
+  const f = document.createElement("form");
+
+  f.method = "POST";
+  f.action = APPS_SCRIPT_URL;
+  f.target = "respostaPost";
+  f.style.display = "none";
+
+  const campoPayload = document.createElement("input");
+  campoPayload.type = "hidden";
+  campoPayload.name = "payload";
+  campoPayload.value = JSON.stringify(payload);
+
+  const campoToken = document.createElement("input");
+  campoToken.type = "hidden";
+  campoToken.name = "token";
+  campoToken.value = token;
+
+  f.append(campoPayload, campoToken);
+  document.body.appendChild(f);
+  f.submit();
+  f.remove();
+}
+
+/* CONSULTA DO STATUS DO ENVIO */
+window.__statusCb = function (resposta) {
+  if (!resposta || !envioAtual) return;
+  if (resposta.requestId !== envioAtual.requestId) return;
+
+  if (resposta.status === "saved") {
+    finalizarSucesso(resposta.message || "Lançamento salvo com sucesso.");
+  } else if (resposta.status === "error") {
+    finalizarErro(resposta.message || "Não foi possível salvar o lançamento.");
+  } else {
+    mostrarStatus(resposta.message || "Processando lançamento...");
+  }
+};
+
+function iniciarPolling(requestId, token) {
+  const inicio = Date.now();
+  let tentativa = 0;
+
+  if (temporizadorPolling) clearTimeout(temporizadorPolling);
+
+  const proximo = () => {
+    if (!envioAtual || envioAtual.requestId !== requestId) return;
+    const espera = Math.min(300 + tentativa * 150, 1200);
+    tentativa++;
+    temporizadorPolling = setTimeout(consultar, espera);
+  };
+
+  function consultar() {
+    if (!envioAtual || envioAtual.requestId !== requestId) return;
+
+    if (Date.now() - inicio > 90000) {
+      finalizarErro(
+        "O sistema não confirmou o lançamento em 90 segundos. " +
+        "Verifique a planilha antes de tentar enviar novamente."
+      );
+      return;
+    }
+
+    if (scriptStatusAtual) {
+      scriptStatusAtual.remove();
+      scriptStatusAtual = null;
+    }
+
+    const script = document.createElement("script");
+    const parametros = new URLSearchParams({
+      action: "status",
+      callback: "__statusCb",
+      requestId: requestId,
+      token: token
+    });
+
+    const terminar = () => {
+      script.remove();
+      if (scriptStatusAtual === script) scriptStatusAtual = null;
+      proximo();
+    };
+
+    script.async = true;
+    script.onerror = terminar;
+    script.onload = terminar;
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+
+    scriptStatusAtual = script;
+    document.head.appendChild(script);
+  }
+
+  temporizadorPolling = setTimeout(consultar, 250);
+}
+
+function finalizarSucesso(mensagem) {
+  encerrarPolling();
+
+  if (envioAtual && envioAtual.payload) {
+    registrarNoHistorico(envioAtual.payload);
+  }
+
+  enviando = false;
+  envioAtual = null;
+  btnSalvar.disabled = false;
+  btnSalvar.textContent = "Salvar lançamento";
+
+  mostrarStatus(mensagem, "success");
+  limparCamposLancamento();
+}
+
+function finalizarErro(mensagem) {
+  encerrarPolling();
+  enviando = false;
+  envioAtual = null;
+  btnSalvar.disabled = false;
+  btnSalvar.textContent = "Salvar lançamento";
+
+  mostrarStatus(mensagem, "error");
+}
+
+function encerrarPolling() {
+  if (temporizadorPolling) {
+    clearTimeout(temporizadorPolling);
+    temporizadorPolling = null;
+  }
+
+  if (scriptStatusAtual) {
+    scriptStatusAtual.remove();
+    scriptStatusAtual = null;
+  }
+}
+
+/* LIMPEZA DO FORMULÁRIO */
+function limparCamposLancamento() {
+  codigoEl.value = "";
+  $("lote").value = "";
+  validadeEl.value = "";
+  $("quantidade").value = "";
+
+  limparDescricao();
+  codigoEl.focus();
+}
+
+window.addEventListener("load", () => {
+  if (funcionarioEl.value) verificarHistoricoFuncionario(funcionarioEl.value);
+});
+
+window.addEventListener("beforeunload", () => {
+  if (temporizadorDigitacao) clearTimeout(temporizadorDigitacao);
+  if (temporizadorPolling) clearTimeout(temporizadorPolling);
+});
+</script>
+</body>
+</html>
