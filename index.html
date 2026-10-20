@@ -306,7 +306,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.7</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.8</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -588,11 +588,9 @@ function nomeParaExibir(codigo, descricao) {
 }
 
 function iniciarLeituraDe(codigo) {
+  // A leitura inicia/atualiza apenas o item em edição. O bloco "Último item lido"
+  // é reservado ao último lançamento confirmado como salvo na planilha.
   if (itemAtual && itemAtual.codigo === codigo) return;
-
-  if (itemAtual) {
-    definirUltimo(itemAtual.nome || "EAN " + itemAtual.codigo, itemAtual.t);
-  }
 
   itemAtual = { codigo: codigo, nome: "", t: Date.now() };
   guardarItemAtual();
@@ -605,15 +603,13 @@ function registrarNomeAtual(codigo, nome) {
 }
 
 function restaurarUltimoItem() {
-  const pendente = lerJSON("itemAtualLido");
+  // Um itemAtualLido pode ser apenas uma leitura ainda não salva; nunca o trate
+  // como lançamento concluído ao reabrir a página.
+  guardarJSON("itemAtualLido", null);
 
-  if (pendente) {
-    definirUltimo(pendente.n || "EAN " + pendente.c, pendente.t);
-    guardarJSON("itemAtualLido", null);
-  } else {
-    const guardado = lerJSON("ultimoItemV2");
-    if (guardado && guardado.n) mostrarUltimo(guardado.n);
-  }
+  const guardado = lerJSON("ultimoItemV2");
+  if (guardado && guardado.n) mostrarUltimo(guardado.n);
+  else mostrarUltimo("");
 
   if (funcionarioEl.value) atualizarUltimoPorFuncionario(funcionarioEl.value, true);
 }
@@ -697,6 +693,23 @@ function limparDescricao() {
   $("descricaoStatus").textContent = "";
 }
 
+// Procura o código exato e também equivalências comuns entre UPC-A (12 dígitos)
+// e EAN-13 (o mesmo código com zero à esquerda).
+function encontrarProdutoNaBase(base, codigo) {
+  const candidatos = [String(codigo || "").trim()];
+  const original = candidatos[0];
+
+  if (/^\d{12}$/.test(original)) candidatos.push("0" + original);
+  if (/^0\d{12}$/.test(original)) candidatos.push(original.slice(1));
+
+  for (const candidato of candidatos) {
+    if (Object.prototype.hasOwnProperty.call(base, candidato) && base[candidato]) {
+      return { codigoEncontrado: candidato, descricao: String(base[candidato]) };
+    }
+  }
+  return null;
+}
+
 // Consulta EAN exclusivamente no JSON; não consulta a planilha para descobrir descrições.
 function buscarDescricaoProduto(codigoInformado) {
   const codigo = String(codigoInformado || "").trim();
@@ -718,8 +731,9 @@ function buscarDescricaoProduto(codigoInformado) {
   carregarProdutosJson().then(base => {
     if (sequencia !== consultaSequencia) return;
 
-    if (Object.prototype.hasOwnProperty.call(base, codigo) && base[codigo]) {
-      const descricao = String(base[codigo]);
+    const produto = encontrarProdutoNaBase(base, codigo);
+    if (produto) {
+      const descricao = produto.descricao;
       gravarCache(codigo, { status: "found", descricao });
       mostrarDescricao("Produto encontrado na base JSON.", "success", descricao);
       registrarNomeAtual(codigo, descricao);
@@ -739,18 +753,10 @@ codigoEl.addEventListener("input", () => {
   const digitos = bruto.replace(/\D/g, "");
   const removidos = bruto.length - digitos.length;
 
-  if (removidos >= 2) {
-    codigoEl.value = "";
-    limparDescricao();
-    mostrarStatus(
-      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
-      "error"
-    );
-    return;
-  }
-
-  if (removidos === 1) {
-    mostrarStatus("O código de barras aceita apenas números.", "error");
+  // Alguns leitores enviam o código inteiro de uma vez e podem incluir
+  // caracteres de finalização. Em vez de apagar a leitura inteira, mantemos os dígitos.
+  if (removidos > 0) {
+    mostrarStatus("Ajustei a leitura para manter somente os números do código de barras.", "info");
   }
 
   codigoEl.value = digitos.slice(0, 14);
@@ -1432,11 +1438,12 @@ formulario.addEventListener("submit", evento => {
     return;
   }
 
-  const produtoExisteNoJson = Object.prototype.hasOwnProperty.call(produtosJsonCache, codigo) && Boolean(produtosJsonCache[codigo]);
+  const produtoEncontrado = encontrarProdutoNaBase(produtosJsonCache, codigo);
+  const produtoExisteNoJson = Boolean(produtoEncontrado);
   let textoDescricao = "";
 
   if (produtoExisteNoJson) {
-    textoDescricao = String(produtosJsonCache[codigo]);
+    textoDescricao = produtoEncontrado.descricao;
     gravarCache(codigo, { status: "found", descricao: textoDescricao });
     mostrarDescricao("Produto encontrado na base JSON.", "success", textoDescricao);
     registrarNomeAtual(codigo, textoDescricao);
