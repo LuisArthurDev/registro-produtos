@@ -201,6 +201,15 @@
     #reader video { width: 100% !important; display: block; }
     #reader.ativo { display: block; }
 
+    /* Zoom e lanterna: só aparecem se o aparelho oferecer */
+    .camera-controles { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+    .camera-controles[hidden] { display: none; }
+    .btn-lanterna { flex: 0 0 auto; background: var(--bg); color: var(--ink); border: 1.5px solid var(--line); }
+    .btn-lanterna.ligada { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+    .btn-lanterna[hidden], .zoom-wrap[hidden] { display: none; }
+    .zoom-wrap { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+    #zoomRange { min-height: 32px; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+
     .ultimo { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
     .ultimo[hidden] { display: none; }
     .ultimo-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
@@ -272,7 +281,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.1.0</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.1.1</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -312,6 +321,14 @@
       <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
       <button type="button" id="btnPararCamera" class="btn-stop">Parar câmera</button>
       <div id="reader"></div>
+
+      <div id="cameraControles" class="camera-controles" hidden>
+        <button type="button" id="btnLanterna" class="btn-lanterna" hidden>Lanterna</button>
+        <div id="zoomWrap" class="zoom-wrap" hidden>
+          <span>Zoom</span>
+          <input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" aria-label="Zoom da câmera">
+        </div>
+      </div>
 
       <div id="ultimoItem" class="ultimo" hidden>
         <span class="ultimo-label">Último item lido</span>
@@ -446,24 +463,90 @@ let temporizadorPolling = null;
 let consultaScriptAtual = null;
 let scriptStatusAtual = null;
 let envioAtual = null;
-let ultimoEscaneado = null;
+
+/* =========================
+   ÚLTIMO ITEM LIDO
+   Mostra o item ANTERIOR, nunca o que está sendo lido agora.
+   - "itemAtual" é o item que está no formulário (lido pela câmera).
+   - Ao ler um novo item, o atual passa a ser o "último item lido".
+   - Ao salvar, o item salvo vira o "último item lido".
+   - Ao escolher o funcionário, mostra o último item do histórico dele hoje.
+   ========================= */
+
+let itemAtual = null;
+
+function lerJSON(chave) {
+  try {
+    const bruto = localStorage.getItem(chave);
+    return bruto ? JSON.parse(bruto) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function guardarJSON(chave, valor) {
+  try {
+    if (valor === null) localStorage.removeItem(chave);
+    else localStorage.setItem(chave, JSON.stringify(valor));
+  } catch (e) {}
+}
 
 function mostrarUltimo(nome) {
-  $("ultimoNome").textContent = nome;
-  $("ultimoItem").hidden = false;
+  $("ultimoNome").textContent = nome || "";
+  $("ultimoItem").hidden = !nome;
 }
 
-function registrarUltimoSe(codigo, nome) {
-  if (ultimoEscaneado !== codigo) return;
-  ultimoEscaneado = null;
+function definirUltimo(nome, quando) {
   mostrarUltimo(nome);
-  try { localStorage.setItem("ultimoItem", nome); } catch (e) {}
+  guardarJSON("ultimoItemV2", nome ? { n: nome, t: quando || Date.now() } : null);
 }
 
-try {
-  const guardado = localStorage.getItem("ultimoItem");
-  if (guardado) mostrarUltimo(guardado);
-} catch (e) {}
+function guardarItemAtual() {
+  guardarJSON("itemAtualLido", itemAtual
+    ? { c: itemAtual.codigo, n: itemAtual.nome, t: itemAtual.t }
+    : null);
+}
+
+function nomeParaExibir(codigo, descricao) {
+  if (!descricao || descricao === "Descrição não encontrada") {
+    return "EAN " + codigo + " (sem descrição)";
+  }
+  return descricao;
+}
+
+/* Novo item lido pela câmera: o item que estava no formulário vira o "último". */
+function iniciarLeituraDe(codigo) {
+  if (itemAtual && itemAtual.codigo === codigo) return;
+
+  if (itemAtual) {
+    definirUltimo(itemAtual.nome || "EAN " + itemAtual.codigo, itemAtual.t);
+  }
+
+  itemAtual = { codigo: codigo, nome: "", t: Date.now() };
+  guardarItemAtual();
+}
+
+/* Guarda o nome do item atual sem mostrá-lo ainda. */
+function registrarNomeAtual(codigo, nome) {
+  if (!itemAtual || itemAtual.codigo !== codigo) return;
+  itemAtual.nome = nome;
+  guardarItemAtual();
+}
+
+function restaurarUltimoItem() {
+  /* Se havia um item lido e a página foi recarregada, ele passa a ser o último. */
+  const pendente = lerJSON("itemAtualLido");
+
+  if (pendente) {
+    definirUltimo(pendente.n || "EAN " + pendente.c, pendente.t);
+    guardarJSON("itemAtualLido", null);
+  } else {
+    const guardado = lerJSON("ultimoItemV2");
+    if (guardado && guardado.n) mostrarUltimo(guardado.n);
+  }
+
+  if (funcionarioEl.value) atualizarUltimoPorFuncionario(funcionarioEl.value, true);
+}
 
 /* CACHE DE DESCRIÇÕES: memória + localStorage por 12 horas */
 const TTL_CACHE = 12 * 60 * 60 * 1000;
@@ -562,10 +645,10 @@ function buscarDescricaoProduto(codigoInformado) {
   if (emCache) {
     if (emCache.status === "found") {
       mostrarDescricao("Produto encontrado.", "success", emCache.descricao);
-      registrarUltimoSe(codigo, emCache.descricao);
+      registrarNomeAtual(codigo, emCache.descricao);
     } else {
       mostrarDescricao("EAN não encontrado na aba Produtos.", "error");
-      registrarUltimoSe(codigo, "Não cadastrado (" + codigo + ")");
+      registrarNomeAtual(codigo, "Não cadastrado (" + codigo + ")");
     }
     return;
   }
@@ -581,7 +664,7 @@ function buscarDescricaoProduto(codigoInformado) {
   });
 
   const falhar = mensagem => {
-    registrarUltimoSe(codigo, "Sem consulta (" + codigo + ")");
+    registrarNomeAtual(codigo, "Sem consulta (" + codigo + ")");
     if (consultaScriptAtual === script) consultaScriptAtual = null;
     script.remove();
 
@@ -620,9 +703,9 @@ window.__produtoCb = function (resposta) {
   }
 
   if (resposta.status === "found" && resposta.descricao) {
-    registrarUltimoSe(codigo, String(resposta.descricao));
+    registrarNomeAtual(codigo, String(resposta.descricao));
   } else if (resposta.status === "not_found") {
-    registrarUltimoSe(codigo, "Não cadastrado (" + codigo + ")");
+    registrarNomeAtual(codigo, "Não cadastrado (" + codigo + ")");
   }
 
   if (codigoEl.value.trim() === codigo) {
@@ -703,6 +786,82 @@ window.addEventListener("load", () => {
   setTimeout(() => carregarBiblioteca().catch(() => {}), 800);
 });
 
+/* Foco contínuo, zoom e lanterna (apenas onde o aparelho permitir) */
+let trilhaCamera = null;
+let lanternaLigada = false;
+
+function configurarRecursosCamera() {
+  const video = readerEl.querySelector("video");
+  const fluxo = video && video.srcObject;
+  const trilha = fluxo && fluxo.getVideoTracks ? fluxo.getVideoTracks()[0] : null;
+
+  if (!trilha) return;
+
+  trilhaCamera = trilha;
+
+  let cap = {};
+  try { cap = trilha.getCapabilities ? trilha.getCapabilities() : {}; } catch (e) {}
+
+  if (Array.isArray(cap.focusMode) && cap.focusMode.includes("continuous")) {
+    trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+  }
+
+  const temZoom = !!(cap.zoom && cap.zoom.max > cap.zoom.min);
+
+  if (temZoom) {
+    const faixa = $("zoomRange");
+    const inicial = Math.min(cap.zoom.max, Math.max(cap.zoom.min, 1.5));
+
+    faixa.min = String(cap.zoom.min);
+    faixa.max = String(Math.min(cap.zoom.max, 4));
+    faixa.step = String(cap.zoom.step || 0.1);
+    faixa.value = String(inicial);
+
+    trilha.applyConstraints({ advanced: [{ zoom: inicial }] }).catch(() => {});
+    $("zoomWrap").hidden = false;
+  }
+
+  if (cap.torch) $("btnLanterna").hidden = false;
+
+  $("cameraControles").hidden = !(temZoom || cap.torch);
+}
+
+function desligarRecursosCamera() {
+  trilhaCamera = null;
+  lanternaLigada = false;
+
+  $("cameraControles").hidden = true;
+  $("zoomWrap").hidden = true;
+  $("btnLanterna").hidden = true;
+  $("btnLanterna").classList.remove("ligada");
+  $("btnLanterna").textContent = "Lanterna";
+}
+
+$("zoomRange").addEventListener("input", evento => {
+  if (!trilhaCamera) return;
+  trilhaCamera
+    .applyConstraints({ advanced: [{ zoom: Number(evento.target.value) }] })
+    .catch(() => {});
+});
+
+$("btnLanterna").addEventListener("click", () => {
+  if (!trilhaCamera) return;
+
+  const ligar = !lanternaLigada;
+
+  trilhaCamera
+    .applyConstraints({ advanced: [{ torch: ligar }] })
+    .then(() => {
+      lanternaLigada = ligar;
+      $("btnLanterna").classList.toggle("ligada", ligar);
+      $("btnLanterna").textContent = ligar ? "Lanterna ligada" : "Lanterna";
+    })
+    .catch(() => {});
+});
+
+let leituraAceita = false;
+let leituraPendente = { codigo: "", vezes: 0, t: 0 };
+
 async function iniciarCamera() {
   if (cameraAtiva) return;
 
@@ -717,15 +876,34 @@ async function iniciarCamera() {
       scanner = new Html5Qrcode("reader", {
         formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.ITF, F.QR_CODE],
         useBarCodeDetectorIfSupported: true,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         verbose: false
       });
     }
 
     readerEl.classList.add("ativo");
+    leituraAceita = false;
+    leituraPendente = { codigo: "", vezes: 0, t: 0 };
+
+    /* Mais resolução quando o aparelho tem leitor nativo; equilibrada nos demais. */
+    const nativo = "BarcodeDetector" in window;
 
     await scanner.start(
       { facingMode: "environment" },
-      { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777 },
+      {
+        fps: 15,
+        /* Área de leitura larga, proporcional à tela (antes era fixa em 280x120). */
+        qrbox: (largura, altura) => {
+          const l = Math.floor(Math.min(largura * 0.92, 420));
+          return { width: l, height: Math.floor(Math.min(altura * 0.7, l * 0.55)) };
+        },
+        disableFlip: true,
+        videoConstraints: {
+          facingMode: "environment",
+          width: { ideal: nativo ? 1920 : 1280 },
+          height: { ideal: nativo ? 1080 : 720 }
+        }
+      },
       processarLeitura,
       () => {}
     );
@@ -733,6 +911,7 @@ async function iniciarCamera() {
     cameraAtiva = true;
     btnPararCamera.style.display = "block";
     btnCamera.style.display = "none";
+    configurarRecursosCamera();
     mostrarStatus("Câmera ativa. Aponte para o código de barras.");
   } catch (erro) {
     console.error(erro);
@@ -746,6 +925,8 @@ async function iniciarCamera() {
 }
 
 async function pararCamera(silencioso = false) {
+  desligarRecursosCamera();
+
   if (scanner && cameraAtiva) {
     try {
       await scanner.stop();
@@ -765,6 +946,9 @@ async function pararCamera(silencioso = false) {
 }
 
 const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
+const FORMATOS_GTIN = ["EAN_13", "EAN_8", "UPC_A"];
+const LEITURAS_PARA_CONFIRMAR = 2;
+const JANELA_CONFIRMACAO_MS = 2500;
 let ultimoErroLeitura = 0;
 
 function leituraInvalida(mensagem) {
@@ -776,7 +960,22 @@ function leituraInvalida(mensagem) {
   if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
 }
 
+/* Confere o dígito verificador de EAN-13, EAN-8 e UPC-A. */
+function gtinValido(codigo) {
+  const d = codigo.split("").map(Number);
+  const verificador = d.pop();
+  let soma = 0;
+
+  d.reverse().forEach((n, i) => {
+    soma += n * (i % 2 === 0 ? 3 : 1);
+  });
+
+  return (10 - (soma % 10)) % 10 === verificador;
+}
+
 function processarLeitura(texto, resultado) {
+  if (leituraAceita) return;
+
   const codigo = String(texto || "").trim();
   const formato = resultado && resultado.result && resultado.result.format
     ? resultado.result.format.formatName
@@ -792,9 +991,26 @@ function processarLeitura(texto, resultado) {
     return;
   }
 
+  /* Dígito verificador errado = leitura imprecisa: descarta e continua tentando. */
+  if (FORMATOS_GTIN.includes(formato) && !gtinValido(codigo)) return;
+
+  /* Só aceita depois de ler o mesmo código mais de uma vez seguida. */
+  const agora = Date.now();
+
+  if (leituraPendente.codigo === codigo && agora - leituraPendente.t < JANELA_CONFIRMACAO_MS) {
+    leituraPendente.vezes++;
+    leituraPendente.t = agora;
+  } else {
+    leituraPendente = { codigo: codigo, vezes: 1, t: agora };
+  }
+
+  if (leituraPendente.vezes < LEITURAS_PARA_CONFIRMAR) return;
+
+  leituraAceita = true;
+  leituraPendente = { codigo: "", vezes: 0, t: 0 };
+
   codigoEl.value = codigo;
-  mostrarUltimo("Buscando nome...");
-  ultimoEscaneado = codigo;
+  iniciarLeituraDe(codigo);
   buscarDescricaoProduto(codigo);
 
   if (navigator.vibrate) navigator.vibrate(60);
@@ -939,6 +1155,28 @@ function obterHistoricoFuncionario(nome) {
   );
 }
 
+/* Último item do histórico de hoje do funcionário vira o "Último item lido".
+   Com soSeMaisRecente (ao abrir a página), não sobrepõe uma leitura mais nova. */
+function atualizarUltimoPorFuncionario(nome, soSeMaisRecente) {
+  const itens = nome ? obterHistoricoFuncionario(nome) : [];
+  const ultimo = itens.reduce(
+    (a, b) => (!a || (b.registradoEm || 0) >= (a.registradoEm || 0) ? b : a),
+    null
+  );
+
+  if (!ultimo) {
+    if (!soSeMaisRecente) definirUltimo("");
+    return;
+  }
+
+  if (soSeMaisRecente) {
+    const guardado = lerJSON("ultimoItemV2");
+    if (guardado && guardado.t > (ultimo.registradoEm || 0)) return;
+  }
+
+  definirUltimo(nomeParaExibir(ultimo.codigo, ultimo.descricao), ultimo.registradoEm);
+}
+
 function fecharModalHistorico() {
   $("modalHistoricoFuncionario").classList.remove("aberto");
   modalHistoricoAberto = false;
@@ -987,6 +1225,7 @@ $("btnReiniciarHistorico").addEventListener("click", () => {
   );
 
   gravarHistoricoDiario(historico);
+  atualizarUltimoPorFuncionario(nome);
   fecharModalHistorico();
   mostrarStatus("Histórico local de hoje reiniciado para " + nome + ".", "success");
 });
@@ -996,6 +1235,7 @@ $("modalHistoricoFuncionario").addEventListener("click", evento => {
 });
 
 funcionarioEl.addEventListener("change", () => {
+  atualizarUltimoPorFuncionario(funcionarioEl.value);
   verificarHistoricoFuncionario(funcionarioEl.value);
 });
 
@@ -1012,7 +1252,7 @@ function encontrarDuplicados(payload) {
   );
 }
 
-function registrarNoHistorico(payload) {
+function registrarNoHistorico(payload, descricao) {
   if (!payload) return;
 
   const historico = lerHistoricoDiario();
@@ -1023,7 +1263,7 @@ function registrarNoHistorico(payload) {
     requestId: payload.requestId,
     data: historico.data,
     codigo: payload.codigo,
-    descricao: $("descricaoTexto").textContent || "Descrição não encontrada",
+    descricao: descricao || "Descrição não encontrada",
     lote: payload.lote,
     validade: payload.validade,
     quantidade: Number(payload.quantidade),
@@ -1173,7 +1413,8 @@ formulario.addEventListener("submit", evento => {
     requestId: payload.requestId,
     token: token,
     iniciadoEm: Date.now(),
-    payload: payload
+    payload: payload,
+    descricao: $("descricaoTexto").textContent || ""
   };
 
   try {
@@ -1281,7 +1522,12 @@ function finalizarSucesso(mensagem) {
   encerrarPolling();
 
   if (envioAtual && envioAtual.payload) {
-    registrarNoHistorico(envioAtual.payload);
+    registrarNoHistorico(envioAtual.payload, envioAtual.descricao);
+
+    /* O item salvo passa a ser o "último item lido". */
+    definirUltimo(nomeParaExibir(envioAtual.payload.codigo, envioAtual.descricao));
+    itemAtual = null;
+    guardarItemAtual();
   }
 
   enviando = false;
@@ -1327,6 +1573,7 @@ function limparCamposLancamento() {
 }
 
 window.addEventListener("load", () => {
+  restaurarUltimoItem();
   if (funcionarioEl.value) verificarHistoricoFuncionario(funcionarioEl.value);
 });
 
