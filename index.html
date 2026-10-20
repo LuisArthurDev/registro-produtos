@@ -210,6 +210,45 @@
     }
     :root[data-theme="dark"] .submit-button { color: #07210f; }
 
+    /* Confirmação de lançamento repetido */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      padding: 18px;
+      background: rgba(0, 0, 0, .62);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.aberto { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 440px;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
+    }
+    .modal h2 { margin: 0 0 8px; font-size: 19px; }
+    .modal p { margin: 8px 0; }
+    .modal-detalhes {
+      margin: 14px 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--warn-bg);
+      overflow-wrap: anywhere;
+    }
+    .modal-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    .btn-ignorar { background: var(--line); color: var(--ink); }
+    .btn-adicionar { background: var(--ok); color: #fff; }
+    :root[data-theme="dark"] .btn-adicionar { color: #07210f; }
+    @media (max-width: 380px) { .modal-acoes { grid-template-columns: 1fr; } }
+
     .hidden-frame { display: none; width: 0; height: 0; border: 0; }
 
     @media (max-width: 480px) {
@@ -224,7 +263,7 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Registro de Mapa de Validade<sup>v0.0.5</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.0.7</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
   <button type="button" id="btnTema" class="theme-toggle"
@@ -322,6 +361,19 @@
   </form>
 
   <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
+
+  <div id="modalDuplicidade" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="tituloDuplicidade" aria-describedby="textoDuplicidade">
+    <div class="modal">
+      <h2 id="tituloDuplicidade">Produto já lançado hoje</h2>
+      <p id="textoDuplicidade">Você já lançou esse produto hoje.</p>
+      <div id="detalhesDuplicidade" class="modal-detalhes"></div>
+      <p>Deseja adicionar esse lançamento mesmo assim ou ignorar?</p>
+      <div class="modal-acoes">
+        <button type="button" id="btnIgnorarDuplicidade" class="btn-ignorar">Ignorar lançamento</button>
+        <button type="button" id="btnAdicionarDuplicidade" class="btn-adicionar">Adicionar mesmo assim</button>
+      </div>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -852,6 +904,120 @@ function aleatorioHex(bytes) {
 }
 
 /* =========================
+   HISTÓRICO LOCAL DO DIA + DUPLICIDADE
+   O histórico fica apenas neste navegador/aparelho.
+   Considera repetido o mesmo EAN + lote + validade.
+   ========================= */
+
+const CHAVE_HISTORICO_DIARIO = "registroProdutosHistoricoDiario_v1";
+let payloadPendenteDuplicidade = null;
+
+function dataLocalISO() {
+  const agora = new Date();
+  return agora.getFullYear() + "-" + String(agora.getMonth() + 1).padStart(2, "0") + "-" + String(agora.getDate()).padStart(2, "0");
+}
+
+function lerHistoricoDiario() {
+  const hoje = dataLocalISO();
+  try {
+    const bruto = localStorage.getItem(CHAVE_HISTORICO_DIARIO);
+    if (!bruto) return { data: hoje, itens: [] };
+    const salvo = JSON.parse(bruto);
+    if (!salvo || salvo.data !== hoje || !Array.isArray(salvo.itens)) {
+      const novo = { data: hoje, itens: [] };
+      localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(novo));
+      return novo;
+    }
+    return salvo;
+  } catch (e) {
+    return { data: hoje, itens: [] };
+  }
+}
+
+function gravarHistoricoDiario(historico) {
+  try {
+    localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(historico));
+    return true;
+  } catch (e) {
+    mostrarStatus("O lançamento foi salvo, mas o navegador não conseguiu guardar o histórico local.", "error");
+    return false;
+  }
+}
+
+function encontrarLancamentosIguais(payload) {
+  const historico = lerHistoricoDiario();
+  return historico.itens.filter(item =>
+    String(item.codigo) === String(payload.codigo) &&
+    String(item.lote).trim().toLocaleLowerCase() === String(payload.lote).trim().toLocaleLowerCase() &&
+    String(item.validade) === String(payload.validade)
+  );
+}
+
+function registrarNoHistorico(payload) {
+  const historico = lerHistoricoDiario();
+  if (historico.itens.some(item => item.requestId === payload.requestId)) return;
+  historico.itens.push({
+    requestId: payload.requestId,
+    data: historico.data,
+    codigo: payload.codigo,
+    descricao: payload.descricao || "Descrição não encontrada",
+    lote: payload.lote,
+    validade: payload.validade,
+    quantidade: Number(payload.quantidade),
+    funcionario: payload.funcionario,
+    registradoEm: Date.now()
+  });
+  gravarHistoricoDiario(historico);
+}
+
+function formatarDataISO(iso) {
+  const partes = String(iso || "").split("-");
+  return partes.length === 3 ? partes[2] + "/" + partes[1] + "/" + partes[0] : iso;
+}
+
+function abrirModalDuplicidade(payload, encontrados) {
+  payloadPendenteDuplicidade = payload;
+  const descricao = payload.descricao || "Descrição não encontrada";
+  const quantidadeAnterior = encontrados.reduce((total, item) => total + Number(item.quantidade || 0), 0);
+  const lancamentos = encontrados.length;
+  $("textoDuplicidade").textContent = "Você já lançou esse produto hoje. Confira os dados antes de continuar.";
+  $("detalhesDuplicidade").textContent =
+    "Produto: " + descricao + "\n" +
+    "EAN: " + payload.codigo + "\n" +
+    "Lote: " + payload.lote + "\n" +
+    "Validade: " + formatarDataISO(payload.validade) + "\n" +
+    "Quantidade já lançada: " + quantidadeAnterior + " (" + lancamentos + (lancamentos === 1 ? " lançamento)" : " lançamentos)");
+  $("modalDuplicidade").classList.add("aberto");
+  $("btnAdicionarDuplicidade").focus();
+}
+
+function fecharModalDuplicidade() {
+  $("modalDuplicidade").classList.remove("aberto");
+  payloadPendenteDuplicidade = null;
+}
+
+$("btnIgnorarDuplicidade").addEventListener("click", () => {
+  fecharModalDuplicidade();
+  mostrarStatus("Lançamento ignorado. Os dados continuam no formulário para você conferir ou alterar.", "info");
+});
+
+$("btnAdicionarDuplicidade").addEventListener("click", () => {
+  const payload = payloadPendenteDuplicidade;
+  fecharModalDuplicidade();
+  if (payload && !enviando) iniciarEnvio(payload);
+});
+
+$("modalDuplicidade").addEventListener("click", evento => {
+  if (evento.target === $("modalDuplicidade")) fecharModalDuplicidade();
+});
+
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape" && $("modalDuplicidade").classList.contains("aberto")) {
+    fecharModalDuplicidade();
+  }
+});
+
+/* =========================
    ENVIO DO FORMULÁRIO
    ========================= */
 
@@ -913,6 +1079,19 @@ formulario.addEventListener("submit", evento => {
     quantidade: Number(quantidadeTexto)
   };
 
+  payload.descricao = $("descricaoTexto").textContent.trim() || "Descrição não encontrada";
+
+  const repetidos = encontrarLancamentosIguais(payload);
+  if (repetidos.length > 0) {
+    abrirModalDuplicidade(payload, repetidos);
+    return;
+  }
+
+  iniciarEnvio(payload);
+});
+
+function iniciarEnvio(payload) {
+  if (enviando) return;
   const token = aleatorioHex(32);
 
   enviando = true;
@@ -920,7 +1099,12 @@ formulario.addEventListener("submit", evento => {
   btnSalvar.textContent = "Enviando...";
   mostrarStatus("Enviando lançamento para a planilha...");
 
-  envioAtual = { requestId: payload.requestId, token: token, iniciadoEm: Date.now() };
+  envioAtual = {
+    requestId: payload.requestId,
+    token: token,
+    iniciadoEm: Date.now(),
+    payload: payload
+  };
 
   try {
     enviarPost(payload, token);
@@ -928,7 +1112,7 @@ formulario.addEventListener("submit", evento => {
   } catch (erro) {
     finalizarErro("Não foi possível iniciar o envio: " + erro.message);
   }
-});
+}
 
 function enviarPost(payload, token) {
   const f = document.createElement("form");
@@ -1030,6 +1214,7 @@ function iniciarPolling(requestId, token) {
 
 function finalizarSucesso(mensagem) {
   encerrarPolling();
+  if (envioAtual && envioAtual.payload) registrarNoHistorico(envioAtual.payload);
   enviando = false;
   envioAtual = null;
   btnSalvar.disabled = false;
