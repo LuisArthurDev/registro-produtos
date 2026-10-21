@@ -16,6 +16,10 @@
       --brand: #0f2a3d;
       --accent: #0a7c86;
       --ok: #17803d;
+      --ok-bg: #e4f5ea;
+      --err: #b3261e;
+      --err-bg: #fdeceb;
+      --warn: #a15c07;
       --warn-bg: #fff3df;
       --shadow: 0 1px 2px rgba(15,27,45,.06);
     }
@@ -29,11 +33,16 @@
       --brand: #0b1a26;
       --accent: #31b3bf;
       --ok: #5fd08a;
+      --ok-bg: #12301f;
+      --err: #ff8a80;
+      --err-bg: #3a1714;
+      --warn: #f0b45a;
       --warn-bg: #36270f;
       --shadow: none;
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
 
     body {
       margin: 0;
@@ -63,6 +72,25 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       box-shadow: var(--shadow);
+    }
+
+    .modos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .modo {
+      background: var(--bg);
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    .modo[aria-pressed="true"] {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
 
     .filtros {
@@ -143,6 +171,8 @@
       background: var(--surface);
     }
 
+    table.larga { min-width: 780px; }
+
     th, td {
       text-align: left;
       vertical-align: top;
@@ -162,6 +192,19 @@
     .descricao { font-weight: 700; }
     .ean { display: block; color: var(--muted); font-size: 12px; }
     .quantidade { font-weight: 800; white-space: nowrap; }
+
+    .selo {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .selo.vencido { background: var(--err-bg); color: var(--err); }
+    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
+    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
 
     .acoes {
       display: flex;
@@ -194,7 +237,7 @@
 <body>
 <header>
   <h1>Visualização dos Lançamentos</h1>
-  <p>Histórico mensal de produtos por funcionário</p>
+  <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
 </header>
 
 <main>
@@ -203,10 +246,30 @@
   </div>
 
   <section class="card">
+    <div class="modos">
+      <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
+        Por mês de lançamento
+      </button>
+      <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
+        Validade (a vencer)
+      </button>
+    </div>
+
     <div class="filtros">
-      <div>
+      <div id="campoMes">
         <label for="mes">Mês do lançamento</label>
         <input id="mes" type="month">
+      </div>
+
+      <div id="campoStatus" hidden>
+        <label for="statusValidade">Situação da validade</label>
+        <select id="statusValidade">
+          <option value="criticos">Vencidos e à vencer</option>
+          <option value="vencido">Somente vencidos</option>
+          <option value="avencer">Somente à vencer</option>
+          <option value="vendavel">Somente vendáveis</option>
+          <option value="todos">Todos</option>
+        </select>
       </div>
 
       <div>
@@ -267,11 +330,24 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
+/*
+ * REGRA DE VALIDADE (mesma lógica da fórmula da planilha)
+ *  - Produtos:     VENCIDO se faltam até 30 dias
+ *  - Até 160 dias:        À VENCER
+ *  - Acima de 160 dias:   VENDÁVEL
+ */
+const LIMITE_VENCIDO_PADRAO = 30;
+const LIMITE_A_VENCER = 160;
+
 const $ = id => document.getElementById(id);
 
 let todosRegistros = [];
+let registrosValidade = [];
+let mesCarregado = false;
+let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
+let modo = "mes"; // "mes" | "validade"
 
 function mesAtualISO() {
   const agora = new Date();
@@ -320,9 +396,75 @@ function obterDescricao(ean) {
   return "Descrição não encontrada";
 }
 
-function consultarHistorico() {
-  if (consultaEmAndamento) return;
+/* =========================
+   CONSULTA AO APPS SCRIPT
+   ========================= */
 
+function chamarApps(action, callbackName, extra) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const anterior = window[callbackName];
+    let finalizado = false;
+    let limite = null;
+
+    function finalizar() {
+      if (finalizado) return false;
+      finalizado = true;
+      clearTimeout(limite);
+      script.remove();
+
+      if (anterior) {
+        window[callbackName] = anterior;
+      } else {
+        delete window[callbackName];
+      }
+
+      return true;
+    }
+
+    limite = setTimeout(() => {
+      if (finalizar()) reject(new Error("timeout"));
+    }, 20000);
+
+    window[callbackName] = resposta => {
+      if (finalizar()) resolve(resposta);
+    };
+
+    script.onerror = () => {
+      if (finalizar()) reject(new Error("falha"));
+    };
+
+    const parametros = new URLSearchParams(
+      Object.assign({ action: action, callback: callbackName }, extra || {})
+    );
+
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function mensagemDeErroConsulta(erro) {
+  if (erro && erro.message === "timeout") {
+    return "A consulta demorou demais. Verifique a conexão e tente novamente.";
+  }
+
+  return "Falha ao acessar o Apps Script. Confira se a implantação está atualizada e acessível.";
+}
+
+function iniciarConsulta(texto) {
+  if (consultaEmAndamento) return false;
+  consultaEmAndamento = true;
+  $("btnBuscar").disabled = true;
+  definirMensagem(texto);
+  return true;
+}
+
+function encerrarConsulta() {
+  consultaEmAndamento = false;
+  $("btnBuscar").disabled = false;
+}
+
+function consultarHistorico() {
   const mes = $("mes").value;
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
@@ -330,72 +472,98 @@ function consultarHistorico() {
     return;
   }
 
-  consultaEmAndamento = true;
-  $("btnBuscar").disabled = true;
-  definirMensagem("Consultando os lançamentos...");
+  if (!iniciarConsulta("Consultando os lançamentos...")) return;
 
-  const callbackAntigo = window.__historicoCb;
-  const script = document.createElement("script");
-  let finalizado = false;
+  chamarApps("historicoMes", "__historicoCb", { mes: mes })
+    .then(resposta => {
+      encerrarConsulta();
 
-  function finalizar() {
-    if (finalizado) return;
-    finalizado = true;
-    consultaEmAndamento = false;
-    $("btnBuscar").disabled = false;
-    script.remove();
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar o histórico."
+        );
+        return;
+      }
 
-    if (callbackAntigo) {
-      window.__historicoCb = callbackAntigo;
-    } else {
-      delete window.__historicoCb;
-    }
+      todosRegistros = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+      mesCarregado = true;
+
+      if (modo === "mes") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+
+function consultarValidades() {
+  if (!iniciarConsulta("Consultando as validades...")) return;
+
+  chamarApps("validades", "__validadeCb", {})
+    .then(resposta => {
+      encerrarConsulta();
+
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar as validades."
+        );
+        return;
+      }
+
+      registrosValidade = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+      validadeCarregada = true;
+
+      if (modo === "validade") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+
+function consultar() {
+  if (modo === "validade") consultarValidades();
+  else consultarHistorico();
+}
+
+/* =========================
+   CÁLCULO DA VALIDADE
+   ========================= */
+
+function diasAte(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!m) return null;
+
+  const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const agora = new Date();
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+  return Math.round((alvo - hoje) / 86400000);
+}
+
+function situacao(dias) {
+  if (dias <= LIMITE_VENCIDO_PADRAO) {
+    return { chave: "vencido", texto: "VENCIDO" };
   }
 
-  const limite = setTimeout(() => {
-    finalizar();
-    definirMensagem(
-      "A consulta demorou demais. Verifique a conexão e tente novamente."
-    );
-  }, 20000);
+  if (dias <= LIMITE_A_VENCER) {
+    return { chave: "avencer", texto: "À VENCER - " + dias + " dias" };
+  }
 
-  window.__historicoCb = resposta => {
-    clearTimeout(limite);
-    finalizar();
-
-    if (!resposta || !resposta.sucesso) {
-      definirMensagem(
-        resposta && resposta.mensagem
-          ? resposta.mensagem
-          : "Não foi possível consultar o histórico."
-      );
-      return;
-    }
-
-    todosRegistros = Array.isArray(resposta.registros)
-      ? resposta.registros
-      : [];
-
-    renderizar();
-  };
-
-  script.onerror = () => {
-    clearTimeout(limite);
-    finalizar();
-    definirMensagem(
-      "Falha ao acessar o Apps Script. Confira se a implantação está atualizada e acessível."
-    );
-  };
-
-  const parametros = new URLSearchParams({
-    action: "historicoMes",
-    callback: "__historicoCb",
-    mes: mes
-  });
-
-  script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
-  document.head.appendChild(script);
+  return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
 }
+
+/* =========================
+   RENDERIZAÇÃO
+   ========================= */
 
 function criarCelula(texto, classe) {
   const td = document.createElement("td");
@@ -404,14 +572,36 @@ function criarCelula(texto, classe) {
   return td;
 }
 
-function renderizar() {
-  const funcionarioSelecionado = $("funcionario").value;
+function criarCabecalho(colunas) {
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
 
-  const registros = todosRegistros.filter(registro =>
-    !funcionarioSelecionado ||
-    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
-  );
+  colunas.forEach(titulo => {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    tr.appendChild(th);
+  });
 
+  thead.appendChild(tr);
+  return thead;
+}
+
+function criarCelulaProduto(codigo) {
+  const td = document.createElement("td");
+
+  const descricao = document.createElement("span");
+  descricao.className = "descricao";
+  descricao.textContent = obterDescricao(codigo);
+
+  const ean = document.createElement("span");
+  ean.className = "ean";
+  ean.textContent = "EAN: " + codigo;
+
+  td.append(descricao, ean);
+  return td;
+}
+
+function atualizarResumo(registros) {
   $("totalRegistros").textContent = registros.length.toLocaleString("pt-BR");
 
   $("totalUnidades").textContent = registros.reduce(
@@ -422,6 +612,29 @@ function renderizar() {
   $("totalFuncionarios").textContent = new Set(
     registros.map(registro => registro.funcionario)
   ).size.toLocaleString("pt-BR");
+}
+
+function mostrarVazio(texto) {
+  const vazio = document.createElement("div");
+  vazio.className = "card vazio";
+  vazio.textContent = texto;
+  $("resultado").appendChild(vazio);
+}
+
+function renderizar() {
+  if (modo === "validade") renderizarValidade();
+  else renderizarMes();
+}
+
+function renderizarMes() {
+  const funcionarioSelecionado = $("funcionario").value;
+
+  const registros = todosRegistros.filter(registro =>
+    !funcionarioSelecionado ||
+    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
+  );
+
+  atualizarResumo(registros);
 
   const destino = $("resultado");
   destino.replaceChildren();
@@ -430,11 +643,7 @@ function renderizar() {
     definirMensagem(
       "Nenhum lançamento encontrado para o mês e funcionário selecionados."
     );
-
-    const vazio = document.createElement("div");
-    vazio.className = "card vazio";
-    vazio.textContent = "Não há lançamentos para exibir.";
-    destino.appendChild(vazio);
+    mostrarVazio("Não há lançamentos para exibir.");
     return;
   }
 
@@ -468,23 +677,13 @@ function renderizar() {
     wrap.className = "tabela-wrap";
 
     const tabela = document.createElement("table");
-    const thead = document.createElement("thead");
-    const trHead = document.createElement("tr");
-
-    [
+    tabela.appendChild(criarCabecalho([
       "Produto / EAN",
       "Lote",
       "Validade",
       "Quantidade",
       "Data do lançamento"
-    ].forEach(tituloColuna => {
-      const th = document.createElement("th");
-      th.textContent = tituloColuna;
-      trHead.appendChild(th);
-    });
-
-    thead.appendChild(trHead);
-    tabela.appendChild(thead);
+    ]));
 
     const tbody = document.createElement("tbody");
 
@@ -494,18 +693,7 @@ function renderizar() {
       .forEach(registro => {
         const tr = document.createElement("tr");
 
-        const tdProduto = document.createElement("td");
-        const descricao = document.createElement("span");
-        descricao.className = "descricao";
-        descricao.textContent = obterDescricao(registro.codigo);
-
-        const ean = document.createElement("span");
-        ean.className = "ean";
-        ean.textContent = "EAN: " + registro.codigo;
-
-        tdProduto.append(descricao, ean);
-        tr.appendChild(tdProduto);
-
+        tr.appendChild(criarCelulaProduto(registro.codigo));
         tr.appendChild(criarCelula(registro.lote));
         tr.appendChild(criarCelula(registro.validade));
         tr.appendChild(criarCelula(
@@ -524,8 +712,131 @@ function renderizar() {
   });
 }
 
-$("btnBuscar").addEventListener("click", consultarHistorico);
+function renderizarValidade() {
+  const funcionarioSelecionado = $("funcionario").value;
+  const filtro = $("statusValidade").value;
+  const itens = [];
+
+  registrosValidade.forEach(registro => {
+    if (
+      funcionarioSelecionado &&
+      normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
+    ) return;
+
+    const dias = diasAte(registro.validadeISO);
+    if (dias === null) return;
+
+    const sit = situacao(dias);
+
+    if (filtro === "criticos" && sit.chave === "vendavel") return;
+    if (filtro !== "criticos" && filtro !== "todos" && sit.chave !== filtro) return;
+
+    itens.push({ registro: registro, dias: dias, sit: sit });
+  });
+
+  itens.sort((a, b) => a.dias - b.dias);
+
+  atualizarResumo(itens.map(item => item.registro));
+
+  const destino = $("resultado");
+  destino.replaceChildren();
+
+  if (!itens.length) {
+    definirMensagem("Nenhum produto encontrado para a situação e o funcionário selecionados.");
+    mostrarVazio("Não há produtos para exibir.");
+    return;
+  }
+
+  definirMensagem(
+    itens.length + " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    "Vencido: até " + LIMITE_VENCIDO_PADRAO + " dias. À vencer: até " +
+    LIMITE_A_VENCER + " dias."
+  );
+
+  const card = document.createElement("section");
+  card.className = "card grupo";
+
+  const wrap = document.createElement("div");
+  wrap.className = "tabela-wrap";
+
+  const tabela = document.createElement("table");
+  tabela.className = "larga";
+  tabela.appendChild(criarCabecalho([
+    "Situação",
+    "Produto / EAN",
+    "Lote",
+    "Validade",
+    "Quantidade",
+    "Funcionário"
+  ]));
+
+  const tbody = document.createElement("tbody");
+
+  itens.forEach(item => {
+    const tr = document.createElement("tr");
+
+    const tdSituacao = document.createElement("td");
+    const selo = document.createElement("span");
+    selo.className = "selo " + item.sit.chave;
+    selo.textContent = item.sit.texto;
+    tdSituacao.appendChild(selo);
+    tr.appendChild(tdSituacao);
+
+    tr.appendChild(criarCelulaProduto(item.registro.codigo));
+    tr.appendChild(criarCelula(item.registro.lote));
+    tr.appendChild(criarCelula(item.registro.validade));
+    tr.appendChild(criarCelula(
+      Number(item.registro.quantidade || 0).toLocaleString("pt-BR"),
+      "quantidade"
+    ));
+    tr.appendChild(criarCelula(item.registro.funcionario));
+
+    tbody.appendChild(tr);
+  });
+
+  tabela.appendChild(tbody);
+  wrap.appendChild(tabela);
+  card.appendChild(wrap);
+  destino.appendChild(card);
+}
+
+/* =========================
+   TROCA DE MODO
+   ========================= */
+
+function definirModo(novoModo) {
+  modo = novoModo;
+  const validade = modo === "validade";
+
+  $("btnModoMes").setAttribute("aria-pressed", String(!validade));
+  $("btnModoValidade").setAttribute("aria-pressed", String(validade));
+  $("campoMes").hidden = validade;
+  $("campoStatus").hidden = !validade;
+
+  $("subtitulo").textContent = validade
+    ? "Produtos próximos do vencimento, de todos os lançamentos"
+    : "Histórico mensal de produtos por funcionário";
+
+  if (validade) {
+    if (validadeCarregada) renderizar();
+    else {
+      $("resultado").replaceChildren();
+      consultarValidades();
+    }
+  } else {
+    if (mesCarregado) renderizar();
+    else {
+      $("resultado").replaceChildren();
+      consultarHistorico();
+    }
+  }
+}
+
+$("btnModoMes").addEventListener("click", () => definirModo("mes"));
+$("btnModoValidade").addEventListener("click", () => definirModo("validade"));
+$("btnBuscar").addEventListener("click", consultar);
 $("funcionario").addEventListener("change", renderizar);
+$("statusValidade").addEventListener("change", renderizar);
 
 $("mes").value = mesAtualISO();
 
