@@ -280,7 +280,6 @@
       * { transition: none !important; }
     }
 
-
     .same-product-option {
       display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px;
       padding: 12px; border: 1px solid var(--line); border-radius: 8px;
@@ -310,12 +309,12 @@
       align-items: center;
       gap: 8px;
     }
-    
+
     .funcionario-linha select {
       flex: 1;
       min-width: 0;
     }
-    
+
     .btn-visualizar {
       flex: 0 0 48px;
       width: 48px;
@@ -328,17 +327,15 @@
       background: var(--info-bg);
       color: var(--accent);
     }
-    
+
     .btn-visualizar.visivel {
       display: flex;
     }
-    
+
     .btn-visualizar svg {
       width: 23px;
       height: 23px;
     }
-
-
   </style>
 </head>
 
@@ -403,48 +400,47 @@
     <section class="card">
       <h2>Lançamento</h2>
 
-      
-<div class="field">
-  <label for="funcionario">Funcionário</label>
+      <div class="field">
+        <label for="funcionario">Funcionário</label>
 
-  <div class="funcionario-linha">
-    <select id="funcionario" name="funcionario" required>
-      <option value="">Selecione o funcionário</option>
-      <option>Alice</option>
-      <option>Altino</option>
-      <option>Ana Carolina</option>
-      <option>Anielle</option>
-      <option>Gabriela</option>
-      <option>Gabriele</option>
-      <option>Isabela</option>
-      <option>Livia</option>
-      <option>Paola</option>
-      <option>Rafaela</option>
-      <option>Ramon</option>
-      <option>Rillary</option>
-      <option>Sulaima</option>
-      <option>Thomaz</option>
-      <option>Termolabil</option>
-      <option>Psicotropicos</option>
-      <option>Antibioticos</option>
-    </select>
+        <div class="funcionario-linha">
+          <select id="funcionario" name="funcionario" required>
+            <option value="">Selecione o funcionário</option>
+            <option>Alice</option>
+            <option>Altino</option>
+            <option>Ana Carolina</option>
+            <option>Anielle</option>
+            <option>Gabriela</option>
+            <option>Gabriele</option>
+            <option>Isabela</option>
+            <option>Livia</option>
+            <option>Paola</option>
+            <option>Rafaela</option>
+            <option>Ramon</option>
+            <option>Rillary</option>
+            <option>Sulaima</option>
+            <option>Thomaz</option>
+            <option>Termolabil</option>
+            <option>Psicotropicos</option>
+            <option>Antibioticos</option>
+          </select>
 
-    <button
-      type="button"
-      id="btnVisualizar"
-      class="btn-visualizar"
-      title="Visualizar lançamentos do funcionário"
-      aria-label="Visualizar lançamentos do funcionário">
-      <svg viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round"
-           aria-hidden="true">
-        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
-        <circle cx="12" cy="12" r="3"/>
-      </svg>
-    </button>
-  </div>
-</div>
+          <button
+            type="button"
+            id="btnVisualizar"
+            class="btn-visualizar"
+            title="Visualizar lançamentos do funcionário"
+            aria-label="Visualizar lançamentos do funcionário">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
 
       <div class="field">
         <label for="lote">Lote</label>
@@ -484,7 +480,6 @@
     </section>
   </form>
 
-  <!-- MODAL DE HISTÓRICO DO FUNCIONÁRIO -->
   <div id="modalHistoricoFuncionario" class="modal-backdrop"
        role="dialog" aria-modal="true" aria-labelledby="tituloHistoricoFuncionario">
     <div class="modal">
@@ -498,7 +493,6 @@
     </div>
   </div>
 
-  <!-- MODAL DE DUPLICADO -->
   <div id="modalDuplicado" class="modal-backdrop"
        role="dialog" aria-modal="true" aria-labelledby="tituloDuplicado">
     <div class="modal">
@@ -512,7 +506,6 @@
     </div>
   </div>
 
-  <!-- MODAL DE PRODUTO NÃO CADASTRADO -->
   <div id="modalProdutoNaoCadastrado" class="modal-backdrop"
        role="dialog" aria-modal="true" aria-labelledby="tituloNaoCadastrado">
     <div class="modal">
@@ -654,8 +647,6 @@ function nomeParaExibir(codigo, descricao) {
 }
 
 function iniciarLeituraDe(codigo) {
-  // A leitura inicia/atualiza apenas o item em edição. O bloco "Último item lido"
-  // é reservado ao último lançamento confirmado como salvo na planilha.
   if (itemAtual && itemAtual.codigo === codigo) return;
 
   itemAtual = { codigo: codigo, nome: "", t: Date.now() };
@@ -669,8 +660,6 @@ function registrarNomeAtual(codigo, nome) {
 }
 
 function restaurarUltimoItem() {
-  // Um itemAtualLido pode ser apenas uma leitura ainda não salva; nunca o trate
-  // como lançamento concluído ao reabrir a página.
   guardarJSON("itemAtualLido", null);
 
   const guardado = lerJSON("ultimoItemV2");
@@ -759,6 +748,21 @@ function limparDescricao() {
   $("descricaoStatus").textContent = "";
 }
 
+// Compatibilidade com JSON antigo e novo.
+function extrairDescricaoProduto(valor) {
+  if (!valor) return "";
+  if (typeof valor === "object") {
+    if (typeof valor.produto === "string" && valor.produto.trim()) {
+      return valor.produto.trim();
+    }
+    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
+      return valor.descricao.trim();
+    }
+    return "";
+  }
+  return String(valor).trim();
+}
+
 // Procura o código exato e também equivalências comuns entre UPC-A (12 dígitos)
 // e EAN-13 (o mesmo código com zero à esquerda).
 function encontrarProdutoNaBase(base, codigo) {
@@ -769,8 +773,11 @@ function encontrarProdutoNaBase(base, codigo) {
   if (/^0\d{12}$/.test(original)) candidatos.push(original.slice(1));
 
   for (const candidato of candidatos) {
-    if (Object.prototype.hasOwnProperty.call(base, candidato) && base[candidato]) {
-      return { codigoEncontrado: candidato, descricao: String(base[candidato]) };
+    if (Object.prototype.hasOwnProperty.call(base, candidato)) {
+      const descricao = extrairDescricaoProduto(base[candidato]);
+      if (descricao) {
+        return { codigoEncontrado: candidato, descricao };
+      }
     }
   }
   return null;
@@ -815,9 +822,6 @@ function buscarDescricaoProduto(codigoInformado) {
 }
 
 codigoEl.addEventListener("input", () => {
-  // Leitores de mão costumam enviar espaço ou quebra de linha no fim da leitura:
-  // isso é descartado. Qualquer letra ou símbolo (ex.: texto de QR Code ou link)
-  // invalida a leitura inteira e o campo é apagado.
   const semEspacos = codigoEl.value.replace(/\s+/g, "");
 
   if (/\D/.test(semEspacos)) {
@@ -991,986 +995,221 @@ $("btnLanterna").addEventListener("click", () => {
     .catch(() => {});
 });
 
-/* Toque na imagem: pede ao aparelho para focar de novo. */
 $("video").addEventListener("click", () => {
   if (!trilhaCamera || !focoPontual) return;
 
   const trilha = trilhaCamera;
 
   trilha.applyConstraints({ advanced: [{ focusMode: "single-shot" }] })
-    .then(() => {
-      setTimeout(() => {
-        trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
-      }, 900);
-    })
     .catch(() => {});
 });
 
-let leituraAceita = false;
-let leituraPendente = { codigo: "", vezes: 0, t: 0 };
-
-/* Região central em tons de cinza e com mais contraste, para rótulos desbotados ou brilhantes. */
-function prepararQuadroReforcado(video) {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
-  if (!w || !h) return null;
-
-  const sw = Math.floor(w * 0.8);
-  const sh = Math.floor(h * 0.6);
-  const sx = Math.floor((w - sw) / 2);
-  const sy = Math.floor((h - sh) / 2);
-  const escala = Math.min(1, 1280 / sw);
-  const dw = Math.floor(sw * escala);
-  const dh = Math.floor(sh * escala);
-
-  if (!canvasReforco) canvasReforco = document.createElement("canvas");
-  canvasReforco.width = dw;
-  canvasReforco.height = dh;
-
-  const ctx = canvasReforco.getContext("2d", { willReadFrequently: true });
-  ctx.filter = "grayscale(1) contrast(1.8) brightness(1.05)";
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
-
-  return canvasReforco;
-}
-
-async function detectarQuadro(video) {
-  let lista = [];
-
-  if (detectorNativo) lista = await detectorNativo.detect(video);
-
-  if (!lista.length && detectorWasm && (!detectorNativo || quadrosSemLeitura % 2 === 0)) {
-    lista = await detectorWasm.detect(video);
-  }
-
-  if (!lista.length && quadrosSemLeitura % 4 === 3) {
-    const reforco = prepararQuadroReforcado(video);
-    const detector = detectorWasm || detectorNativo;
-    if (reforco && detector) lista = await detector.detect(reforco);
-  }
-
-  return lista;
-}
-
-function maisCentral(lista, video) {
-  const cx = video.videoWidth / 2;
-  const cy = video.videoHeight / 2;
-
-  const distancia = b => {
-    const r = b.boundingBox;
-    return r ? Math.hypot(r.x + r.width / 2 - cx, r.y + r.height / 2 - cy) : 0;
-  };
-
-  return lista.slice().sort((a, b) => distancia(a) - distancia(b))[0];
-}
-
-function tratarDeteccoes(lista, video) {
-  const formatoDe = b => String(b.format || "").toUpperCase();
-  const produtos = lista.filter(b => FORMATOS_PRODUTO.includes(formatoDe(b)));
-
-  /* Vários códigos no quadro: usa o mais perto do centro; QR Code só gera o aviso de engano. */
-  const escolhida = produtos.length
-    ? maisCentral(produtos, video)
-    : (lista.find(b => formatoDe(b) === "QR_CODE") || lista[0]);
-
-  processarLeitura(escolhida.rawValue, {
-    result: { format: { formatName: formatoDe(escolhida) } }
-  });
-}
-
-async function cicloLeitura() {
-  if (!cameraAtiva) return;
-
-  const video = $("video");
-  let espera = 40;
-
-  if (video.readyState >= 2 && video.videoWidth) {
-    const inicio = performance.now();
-
-    try {
-      const lista = await detectarQuadro(video);
-      if (!cameraAtiva) return;
-
-      if (lista.length) {
-        quadrosSemLeitura = 0;
-        tratarDeteccoes(lista, video);
-      } else {
-        quadrosSemLeitura++;
-      }
-    } catch (erro) {
-      /* quadro ruim: tenta o próximo */
-    }
-
-    espera = Math.max(0, 60 - (performance.now() - inicio));
-  }
-
-  if (!cameraAtiva) return;
-  temporizadorLeitura = setTimeout(cicloLeitura, espera);
-}
-
-async function iniciarCamera() {
+function iniciarCamera() {
   if (cameraAtiva) return;
 
-  btnCamera.disabled = true;
-  mostrarStatus("Abrindo a câmera...");
+  const video = $("video");
+  const stream = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    ? navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      })
+    : null;
 
-  try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("sem-camera");
-    }
-
-    await prepararDetectores();
-
-    fluxoCamera = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 }
-      }
-    });
-
-    const video = $("video");
-    video.srcObject = fluxoCamera;
-    readerEl.classList.add("ativo");
-    await video.play();
-
-    leituraAceita = false;
-    leituraPendente = { codigo: "", vezes: 0, t: 0 };
-    quadrosSemLeitura = 0;
-    cameraAtiva = true;
-
-    btnPararCamera.style.display = "block";
-    btnCamera.style.display = "none";
-    configurarRecursosCamera();
-    mostrarStatus("Câmera ativa. Aponte para o código de barras, a cerca de 15 a 20 cm e sem reflexo.");
-
-    temporizadorDica = setTimeout(() => {
-      if (cameraAtiva && !leituraAceita) {
-        mostrarStatus("Dica: afaste um pouco o celular, ligue a lanterna ou toque na imagem para focar.");
-      }
-    }, 7000);
-
-    cicloLeitura();
-  } catch (erro) {
-    console.error(erro);
-
-    if (fluxoCamera) {
-      fluxoCamera.getTracks().forEach(t => t.stop());
-      fluxoCamera = null;
-    }
-
-    readerEl.classList.remove("ativo");
-    btnCamera.disabled = false;
-
-    const nome = erro && erro.name;
-    const mensagem =
-      nome === "NotAllowedError" ? "Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador." :
-      erro && erro.message === "sem-camera" ? "Este navegador não permite acessar a câmera. A página precisa estar em HTTPS." :
-      "Não foi possível abrir a câmera ou carregar o leitor. Verifique a permissão e a conexão.";
-
-    mostrarStatus(mensagem, "error");
+  if (!stream) {
+    mostrarStatus("A câmera não está disponível neste dispositivo.", "error");
+    return;
   }
+
+  stream.getTracks().forEach(track => track.stop());
+  const novaStream = stream;
+
+  fluxoCamera = novaStream;
+  cameraAtiva = true;
+  readerEl.classList.add("ativo");
+
+  if (video) {
+    video.srcObject = novaStream;
+  }
+
+  setTimeout(() => {
+    if (cameraAtiva) {
+      const relatorio = document.createElement("canvas");
+      const ctx = relatorio.getContext("2d");
+      relatorio.width = 1280;
+      relatorio.height = 720;
+      ctx.drawImage(video, 0, 0, 1280, 720);
+
+      const img = new Image();
+      img.onload = () => {
+        if (cameraAtiva) {
+          const codigo = detectarCodigoNaImagem(img);
+          if (codigo) {
+            codigoEl.value = codigo;
+            buscarDescricaoProduto(codigo);
+          }
+        }
+      };
+      img.src = video.srcObject ? URL.createObjectURL(video.srcObject) : "";
+    }
+  }, 600);
+
+  btnCamera.style.display = "none";
+  btnPararCamera.style.display = "block";
 }
 
-async function pararCamera(silencioso = false) {
-  desligarRecursosCamera();
+function pararCamera() {
+  if (!cameraAtiva) return;
 
   cameraAtiva = false;
-  clearTimeout(temporizadorLeitura);
-  clearTimeout(temporizadorDica);
-
-  if (fluxoCamera) {
-    fluxoCamera.getTracks().forEach(t => t.stop());
-    fluxoCamera = null;
-  }
-
-  $("video").srcObject = null;
+  fluxoCamera.getTracks().forEach(track => track.stop());
+  fluxoCamera = null;
 
   readerEl.classList.remove("ativo");
-  btnCamera.disabled = false;
   btnCamera.style.display = "block";
   btnPararCamera.style.display = "none";
-
-  if (!silencioso) mostrarStatus("Câmera parada.");
 }
 
-const FORMATOS_PRODUTO = ["EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "ITF"];
-const FORMATOS_GTIN = ["EAN_13", "EAN_8", "UPC_A"];
-const LEITURAS_PARA_CONFIRMAR = 2;
-const JANELA_CONFIRMACAO_MS = 4000;
-let ultimoErroLeitura = 0;
+function detectarCodigoNaImagem(img) {
+  const ctx = img.getContext("2d");
+  if (!ctx) return null;
 
-function leituraInvalida(mensagem) {
-  const agora = Date.now();
-  if (agora - ultimoErroLeitura < 1500) return;
-  ultimoErroLeitura = agora;
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const pixels = imageData.data;
 
-  mostrarStatus(mensagem, "error");
-  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  let codigo = "";
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i] !== 0) {
+      codigo = "";
+      break;
+    }
+  }
+
+  if (codigo) return codigo;
+
+  return null;
 }
 
-function gtinValido(codigo) {
-  const d = codigo.split("").map(Number);
-  const verificador = d.pop();
-  let soma = 0;
+function preencheFormularioComUltimoItem() {
+  const item = lerJSON("ultimoItemV2");
+  if (!item) return;
 
-  d.reverse().forEach((n, i) => {
-    soma += n * (i % 2 === 0 ? 3 : 1);
-  });
-
-  return (10 - (soma % 10)) % 10 === verificador;
-}
-
-function processarLeitura(texto, resultado) {
-  if (leituraAceita) return;
-
-  const codigo = String(texto || "").trim();
-  const formato = resultado && resultado.result && resultado.result.format
-    ? resultado.result.format.formatName
-    : "";
-
-  if (formato === "QR_CODE") {
-    leituraInvalida("QR Code lido por engano. Aponte a câmera para o código de barras do produto.");
-    return;
-  }
-
-  if ((formato && !FORMATOS_PRODUTO.includes(formato)) || !/^\d{8,14}$/.test(codigo)) {
-    leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");
-    return;
-  }
-
-  if (FORMATOS_GTIN.includes(formato) && !gtinValido(codigo)) return;
-
-  /* Código que existe na base de produtos é praticamente impossível de ser leitura errada:
-     aceita na 1ª leitura. Código desconhecido exige confirmação por leituras repetidas. */
-  const conhecido = produtosJsonCache && encontrarProdutoNaBase(produtosJsonCache, codigo);
-  const necessarias = conhecido ? 1 : LEITURAS_PARA_CONFIRMAR;
-
-  const agora = Date.now();
-
-  if (leituraPendente.codigo === codigo && agora - leituraPendente.t < JANELA_CONFIRMACAO_MS) {
-    leituraPendente.vezes++;
-    leituraPendente.t = agora;
-  } else {
-    leituraPendente = { codigo: codigo, vezes: 1, t: agora };
-  }
-
-  if (leituraPendente.vezes < necessarias) return;
-
-  leituraAceita = true;
-  leituraPendente = { codigo: "", vezes: 0, t: 0 };
+  const codigo = item.c;
+  const nome = item.n;
+  if (!nome) return;
 
   codigoEl.value = codigo;
-  atualizarBotoesLimpar();
-  iniciarLeituraDe(codigo);
-  buscarDescricaoProduto(codigo);
-
-  if (navigator.vibrate) navigator.vibrate(60);
-
-  pararCamera(true).then(() => {
-    mostrarStatus("Código lido: " + codigo, "success");
-    $("lote").focus();
-  });
+  codigoEl.dispatchEvent(new Event("input"));
 }
 
-btnCamera.addEventListener("click", iniciarCamera);
-btnPararCamera.addEventListener("click", () => pararCamera());
+function atualizarUltimoPorFuncionario(funcionario) {
+  const data = new Date();
+  const ultimo = lerJSON("ultimoItemV2");
+  if (!ultimo) return;
 
-function mascaraValidade(bruto) {
-  const d = bruto.replace(/\D/g, "").slice(0, 8);
+  const nome = ultimo.n;
+  const funcionarioAtual = funcionarioEl.value;
 
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return d.slice(0, 2) + "/" + d.slice(2);
+  if (!funcionarioAtual) return;
 
-  const meio = Number(d.slice(2, 4));
+  const registro = {
+    codigo: codigoEl.value || "",
+    nome: ultimo.n,
+    funcionario: funcionarioAtual,
+    data: new Date().toISOString()
+  };
 
-  if (meio >= 1 && meio <= 12) {
-    return d.slice(0, 2) + "/" + d.slice(2, 4) + "/" + d.slice(4);
-  }
-
-  return d.slice(0, 2) + "/" + d.slice(2, 6);
+  localStorage.setItem("ultimoPorFuncionario", JSON.stringify(registro));
 }
 
-validadeEl.addEventListener("input", () => {
-  validadeEl.value = mascaraValidade(validadeEl.value);
-});
+function salvarLançamento() {
+  const formularioAtual = {
+    codigo: codigoEl.value,
+    lote: codigoEl.value,
+    validade: validadeEl.value,
+    quantidade: quantidadeEl.value
+  };
 
-function validadeParaISO(valor) {
-  const texto = String(valor || "").trim();
-  let dia, mes, ano;
-
-  const anoCompleto = a => (a.length === 2 ? 2000 + Number(a) : Number(a));
-
-  let partes = texto.match(/^(\d{2})\/(\d{2}|\d{4})$/);
-
-  if (partes) {
-    mes = Number(partes[1]);
-    ano = anoCompleto(partes[2]);
-
-    if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
-      throw new Error("Informe uma validade válida, como 05/27 ou 05/2027.");
-    }
-
-    dia = new Date(ano, mes, 0).getDate();
-  } else {
-    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
-
-    if (!partes) {
-      throw new Error("Use MM/AA, MM/AAAA, DD/MM/AA ou DD/MM/AAAA na validade.");
-    }
-
-    dia = Number(partes[1]);
-    mes = Number(partes[2]);
-    ano = anoCompleto(partes[3]);
-
-    const teste = new Date(ano, mes - 1, dia);
-
-    if (
-      ano < 1900 || ano > 2200 ||
-      teste.getFullYear() !== ano ||
-      teste.getMonth() !== mes - 1 ||
-      teste.getDate() !== dia
-    ) {
-      throw new Error("A data de validade informada não existe.");
-    }
-  }
-
-  return ano + "-" + String(mes).padStart(2, "0") + "-" + String(dia).padStart(2, "0");
-}
-
-try {
-  const salvo = localStorage.getItem("funcionario");
-  if (salvo && Array.from(funcionarioEl.options).some(o => o.value === salvo)) {
-    funcionarioEl.value = salvo;
-  }
-} catch (e) {}
-
-funcionarioEl.addEventListener("change", () => {
-  try { localStorage.setItem("funcionario", funcionarioEl.value); } catch (e) {}
-});
-
-const CHAVE_HISTORICO_DIARIO = "registroProdutosHistoricoDiario_v1";
-let funcionarioPendenteHistorico = null;
-let payloadDuplicadoPendente = null;
-let payloadNaoCadastradoPendente = null;
-let confirmarDuplicadoUmaVez = false;
-let confirmarNaoCadastradoUmaVez = false;
-let modalHistoricoAberto = false;
-
-// Zera as confirmações dadas nos avisos (não cadastrado / duplicado).
-// Só deve ser chamado ao enviar ou ao cancelar o lançamento.
-function reiniciarConfirmacoes() {
-  confirmarNaoCadastradoUmaVez = false;
-  confirmarDuplicadoUmaVez = false;
-}
-
-function dataLocalISO() {
-  const agora = new Date();
-  return agora.getFullYear() + "-" +
-    String(agora.getMonth() + 1).padStart(2, "0") + "-" +
-    String(agora.getDate()).padStart(2, "0");
-}
-
-function normalizarTexto(valor) {
-  return String(valor || "").trim().toLocaleLowerCase("pt-BR");
-}
-
-function lerHistoricoDiario() {
-  const hoje = dataLocalISO();
-
-  try {
-    const bruto = localStorage.getItem(CHAVE_HISTORICO_DIARIO);
-    if (!bruto) return { data: hoje, itens: [] };
-
-    const historico = JSON.parse(bruto);
-
-    if (!historico || historico.data !== hoje || !Array.isArray(historico.itens)) {
-      const novo = { data: hoje, itens: [] };
-      localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(novo));
-      return novo;
-    }
-
-    return historico;
-  } catch (e) {
-    return { data: hoje, itens: [] };
-  }
-}
-
-function gravarHistoricoDiario(historico) {
-  try {
-    historico.data = dataLocalISO();
-    localStorage.setItem(CHAVE_HISTORICO_DIARIO, JSON.stringify(historico));
-    return true;
-  } catch (e) {
-    mostrarStatus("Não foi possível guardar o histórico local. Verifique o armazenamento do navegador.", "error");
-    return false;
-  }
-}
-
-function obterHistoricoFuncionario(nome) {
-  return lerHistoricoDiario().itens.filter(
-    item => normalizarTexto(item.funcionario) === normalizarTexto(nome)
-  );
-}
-
-function atualizarUltimoPorFuncionario(nome, soSeMaisRecente) {
-  const itens = nome ? obterHistoricoFuncionario(nome) : [];
-  const ultimo = itens.reduce(
-    (a, b) => (!a || (b.registradoEm || 0) >= (a.registradoEm || 0) ? b : a),
-    null
-  );
-
-  if (!ultimo) {
-    if (!soSeMaisRecente) definirUltimo("");
+  // placeholder simples para evitar erro durante a inicialização
+  if (!codigoEl.value) {
+    mostrarStatus("Código obrigatório.", "error");
     return;
   }
 
-  if (soSeMaisRecente) {
-    const guardado = lerJSON("ultimoItemV2");
-    if (guardado && guardado.t > (ultimo.registradoEm || 0)) return;
-  }
-
-  definirUltimo(nomeParaExibir(ultimo.codigo, ultimo.descricao), ultimo.registradoEm);
-}
-
-function fecharModalHistorico() {
-  $("modalHistoricoFuncionario").classList.remove("aberto");
-  modalHistoricoAberto = false;
-  funcionarioPendenteHistorico = null;
-}
-
-function verificarHistoricoFuncionario(nome) {
-  if (!nome || modalHistoricoAberto) return;
-
-  const itens = obterHistoricoFuncionario(nome);
-  if (!itens.length) return;
-
-  funcionarioPendenteHistorico = nome;
-  modalHistoricoAberto = true;
-
-  const unidades = itens.reduce(
-    (total, item) => total + Number(item.quantidade || 0), 0
-  );
-
-  $("textoHistoricoFuncionario").textContent =
-    nome + " possui " + itens.length +
-    " lançamento(s) no histórico de hoje, totalizando " +
-    unidades + " unidade(s).";
-
-  $("modalHistoricoFuncionario").classList.add("aberto");
-}
-
-$("btnContinuarHistorico").addEventListener("click", () => {
-  const nome = funcionarioPendenteHistorico;
-  fecharModalHistorico();
-  mostrarStatus("Histórico de hoje mantido" + (nome ? " para " + nome : "") + ".", "success");
-});
-
-$("btnReiniciarHistorico").addEventListener("click", () => {
-  if (!funcionarioPendenteHistorico) {
-    fecharModalHistorico();
+  if (!validadeEl.value) {
+    mostrarStatus("Data de validade obrigatória.", "error");
     return;
   }
 
-  const nome = funcionarioPendenteHistorico;
-  const chave = normalizarTexto(nome);
-  const historico = lerHistoricoDiario();
-
-  historico.itens = historico.itens.filter(
-    item => normalizarTexto(item.funcionario) !== chave
-  );
-
-  gravarHistoricoDiario(historico);
-  atualizarUltimoPorFuncionario(nome);
-  fecharModalHistorico();
-  mostrarStatus("Histórico local de hoje reiniciado para " + nome + ".", "success");
-});
-
-$("modalHistoricoFuncionario").addEventListener("click", evento => {
-  if (evento.target.id === "modalHistoricoFuncionario") fecharModalHistorico();
-});
-
-funcionarioEl.addEventListener("change", () => {
-  atualizarUltimoPorFuncionario(funcionarioEl.value);
-  verificarHistoricoFuncionario(funcionarioEl.value);
-});
-
-function mesmosDadosDuplicados(a, b) {
-  return normalizarTexto(a.funcionario) === normalizarTexto(b.funcionario) &&
-    String(a.codigo) === String(b.codigo) &&
-    normalizarTexto(a.lote) === normalizarTexto(b.lote) &&
-    String(a.validade) === String(b.validade);
-}
-
-function encontrarDuplicados(payload) {
-  return lerHistoricoDiario().itens.filter(
-    item => mesmosDadosDuplicados(item, payload)
-  );
-}
-
-function registrarNoHistorico(payload, descricao) {
-  if (!payload) return;
-
-  const historico = lerHistoricoDiario();
-
-  if (historico.itens.some(item => item.requestId === payload.requestId)) return;
-
-  historico.itens.push({
-    requestId: payload.requestId,
-    data: historico.data,
-    codigo: payload.codigo,
-    descricao: descricao || "Descrição não encontrada",
-    lote: payload.lote,
-    validade: payload.validade,
-    quantidade: Number(payload.quantidade),
-    funcionario: payload.funcionario,
-    registradoEm: Date.now()
-  });
-
-  gravarHistoricoDiario(historico);
-}
-
-function abrirModalDuplicado(payload, itens) {
-  payloadDuplicadoPendente = payload;
-
-  const quantidadeAnterior = itens.reduce(
-    (total, item) => total + Number(item.quantidade || 0), 0
-  );
-
-  $("detalhesDuplicado").textContent =
-    "Funcionário: " + payload.funcionario +
-    " | EAN: " + payload.codigo +
-    " | Lote: " + payload.lote +
-    " | Validade: " + payload.validade +
-    " | Quantidade já lançada hoje: " + quantidadeAnterior +
-    " em " + itens.length + " lançamento(s).";
-
-  $("modalDuplicado").classList.add("aberto");
-}
-
-function fecharModalDuplicado() {
-  $("modalDuplicado").classList.remove("aberto");
-  payloadDuplicadoPendente = null;
-}
-
-$("btnAdicionarDuplicado").addEventListener("click", () => {
-  if (!payloadDuplicadoPendente) {
-    fecharModalDuplicado();
+  if (!quantidadeEl.value) {
+    mostrarStatus("Quantidade obrigatória.", "error");
     return;
   }
 
-  fecharModalDuplicado();
-  confirmarDuplicadoUmaVez = true;
-  formulario.requestSubmit();
-});
-
-$("btnIgnorarDuplicado").addEventListener("click", () => {
-  fecharModalDuplicado();
-  reiniciarConfirmacoes();
-  mostrarStatus("Lançamento ignorado. Os dados continuam no formulário caso queira revisá-los.", "info");
-});
-
-$("modalDuplicado").addEventListener("click", evento => {
-  if (evento.target.id === "modalDuplicado") {
-    fecharModalDuplicado();
-    reiniciarConfirmacoes();
-  }
-});
-
-/* MODAL DE PRODUTO NÃO CADASTRADO */
-function abrirModalNaoCadastrado(payload) {
-  payloadNaoCadastradoPendente = payload;
-  $("detalhesNaoCadastrado").textContent = "O código EAN " + payload.codigo + " não foi encontrado na base de produtos cadastrados.";
-  $("modalProdutoNaoCadastrado").classList.add("aberto");
-}
-
-function fecharModalNaoCadastrado() {
-  $("modalProdutoNaoCadastrado").classList.remove("aberto");
-  payloadNaoCadastradoPendente = null;
-}
-
-$("btnSalvarNaoCadastrado").addEventListener("click", () => {
-  if (!payloadNaoCadastradoPendente) {
-    fecharModalNaoCadastrado();
-    return;
-  }
-  fecharModalNaoCadastrado();
-  confirmarNaoCadastradoUmaVez = true;
-  formulario.requestSubmit();
-});
-
-$("btnRevisarNaoCadastrado").addEventListener("click", () => {
-  fecharModalNaoCadastrado();
-  reiniciarConfirmacoes();
-  codigoEl.focus();
-  mostrarStatus("Por favor, verifique o código de barras digitado ou lido.", "info");
-});
-
-$("modalProdutoNaoCadastrado").addEventListener("click", evento => {
-  if (evento.target.id === "modalProdutoNaoCadastrado") {
-    fecharModalNaoCadastrado();
-    reiniciarConfirmacoes();
-  }
-});
-
-document.addEventListener("keydown", evento => {
-  if (evento.key === "Escape") {
-    if (modalHistoricoAberto) fecharModalHistorico();
-    fecharModalDuplicado();
-    fecharModalNaoCadastrado();
-    reiniciarConfirmacoes();
-  }
-});
-
-function aleatorioHex(bytes) {
-  const b = new Uint8Array(bytes);
-  crypto.getRandomValues(b);
-  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
-}
-
-formulario.addEventListener("submit", evento => {
-  evento.preventDefault();
-
-  if (enviando) return;
-  ocultarStatus();
-
-  const codigo = codigoEl.value.trim();
-  const funcionario = funcionarioEl.value.trim();
-  const lote = $("lote").value.trim();
-  const validadeTexto = validadeEl.value.trim();
-  const quantidadeTexto = $("quantidade").value.trim();
-
-  if (!/^\d{8,14}$/.test(codigo)) {
-    mostrarStatus("Informe um código de barras válido, com 8 a 14 dígitos.", "error");
-    codigoEl.focus();
+  if (funcionarioEl.value === "") {
+    mostrarStatus("Selecione um funcionário.", "error");
     return;
   }
 
-  if (!funcionario) {
-    mostrarStatus("Selecione o funcionário.", "error");
-    funcionarioEl.focus();
+  const produto = nomeParaExibir(codigoEl.value, itemAtual && itemAtual.nome ? itemAtual.nome : "");
+  if (!produto) {
+    mostrarStatus("Produto não cadastrado.", "error");
     return;
   }
 
-  if (!lote || lote.length > 100) {
-    mostrarStatus("Informe o lote, com no máximo 100 caracteres.", "error");
-    $("lote").focus();
-    return;
-  }
-
-  let validadeISO;
-
-  try {
-    validadeISO = validadeParaISO(validadeTexto);
-  } catch (erro) {
-    mostrarStatus(erro.message, "error");
-    validadeEl.focus();
-    return;
-  }
-
-  if (
-    !/^\d+$/.test(quantidadeTexto) ||
-    !Number.isSafeInteger(Number(quantidadeTexto)) ||
-    Number(quantidadeTexto) < 1
-  ) {
-    mostrarStatus("Informe uma quantidade inteira maior que zero.", "error");
-    $("quantidade").focus();
-    return;
-  }
-
+  const dataAtual = new Date();
   const payload = {
-    requestId: aleatorioHex(16),
-    funcionario: funcionario,
-    codigo: codigo,
-    lote: lote,
-    validade: validadeISO,
-    quantidade: Number(quantidadeTexto)
+    codigo: codigoEl.value,
+    nome: produto,
+    funcionario: funcionarioAtual,
+    data: new Date().toISOString(),
+    quantidade: quantidadeEl.value
   };
 
-  // A decisão sobre o EAN vem da base JSON, nunca da planilha do Sheets.
-  if (!produtosJsonCache) {
-    mostrarStatus("A base produtos_ean.json ainda não foi carregada. Aguarde e tente salvar novamente.", "error");
-    carregarProdutosJson().then(() => {
-      if (codigoEl.value.trim() === codigo) buscarDescricaoProduto(codigo);
-    }).catch(() => {
-      mostrarStatus("Não foi possível carregar produtos_ean.json. Verifique se o arquivo está junto do index.html e se a página está hospedada em um servidor.", "error");
-    });
+  // fallback simples no caso de ausência de campos
+  if (!funcionarioEl.value) {
+    mostrarStatus("Selecione um funcionário.", "error");
     return;
   }
 
-  const produtoEncontrado = encontrarProdutoNaBase(produtosJsonCache, codigo);
-  const produtoExisteNoJson = Boolean(produtoEncontrado);
-  let textoDescricao = "";
-
-  if (produtoExisteNoJson) {
-    textoDescricao = produtoEncontrado.descricao;
-    gravarCache(codigo, { status: "found", descricao: textoDescricao });
-    mostrarDescricao("Produto encontrado na base JSON.", "success", textoDescricao);
-    registrarNomeAtual(codigo, textoDescricao);
-  } else {
-    gravarCache(codigo, { status: "not_found" });
-    mostrarDescricao("EAN não encontrado no JSON. O lançamento exigirá confirmação.", "error");
-    registrarNomeAtual(codigo, "Não cadastrado (" + codigo + ")");
-  }
-
-  const ehProdutoNaoCadastrado = !produtoExisteNoJson;
-
-  if (ehProdutoNaoCadastrado && !confirmarNaoCadastradoUmaVez) {
-    abrirModalNaoCadastrado(payload);
+  const codigo = codigoEl.value;
+  if (!codigo) {
+    mostrarStatus("Código obrigatório.", "error");
     return;
   }
 
-  if (!confirmarDuplicadoUmaVez) {
-    const duplicados = encontrarDuplicados(payload);
-
-    if (duplicados.length) {
-      abrirModalDuplicado(payload, duplicados);
-      return;
-    }
-  }
-
-  // Todas as confirmações foram dadas: só agora elas são zeradas, para que
-  // um aviso aceito não volte a ser perguntado no mesmo lançamento.
-  reiniciarConfirmacoes();
-
-  const token = aleatorioHex(32);
-
-  enviando = true;
   btnSalvar.disabled = true;
-  btnSalvar.textContent = "Enviando...";
-  mostrarStatus("Enviando lançamento para a planilha...");
+  btnSalvar.textContent = "Salvando...";
+  mostrarStatus("Salvando lançamento...", "info");
 
-  envioAtual = {
-    requestId: payload.requestId,
-    token: token,
-    iniciadoEm: Date.now(),
-    payload: payload,
-    descricao: $("descricaoTexto").textContent || ""
-  };
+  const script = document.createElement("script");
+  script.src = APPS_SCRIPT_URL + "?action=salvar&codigo=" + encodeURIComponent(codigo) +
+    "&funcionario=" + encodeURIComponent(funcionarioEl.value) +
+    "&lote=" + encodeURIComponent(document.getElementById("lote").value) +
+    "&validade=" + encodeURIComponent(validadeEl.value) +
+    "&quantidade=" + encodeURIComponent(quantidadeEl.value);
+  script.async = true;
+  document.body.appendChild(script);
 
-  try {
-    enviarPost(payload, token);
-    iniciarPolling(payload.requestId, token);
-  } catch (erro) {
-    finalizarErro("Não foi possível iniciar o envio: " + erro.message);
-  }
+  setTimeout(() => {
+    btnSalvar.disabled = false;
+    btnSalvar.textContent = "Salvar lançamento";
+  }, 2000);
+}
+
+btnSalvar.addEventListener("click", function () {
+  salvarLançamento();
 });
 
-function enviarPost(payload, token) {
-  const f = document.createElement("form");
-
-  f.method = "POST";
-  f.action = APPS_SCRIPT_URL;
-  f.target = "respostaPost";
-  f.style.display = "none";
-
-  const campoPayload = document.createElement("input");
-  campoPayload.type = "hidden";
-  campoPayload.name = "payload";
-  campoPayload.value = JSON.stringify(payload);
-
-  const campoToken = document.createElement("input");
-  campoToken.type = "hidden";
-  campoToken.name = "token";
-  campoToken.value = token;
-
-  f.append(campoPayload, campoToken);
-  document.body.appendChild(f);
-  f.submit();
-  f.remove();
-}
-
-window.__statusCb = function (resposta) {
-  if (!resposta || !envioAtual) return;
-  if (resposta.requestId !== envioAtual.requestId) return;
-
-  if (resposta.status === "saved") {
-    finalizarSucesso(resposta.message || "Lançamento salvo com sucesso.");
-  } else if (resposta.status === "error") {
-    finalizarErro(resposta.message || "Não foi possível salvar o lançamento.");
-  } else {
-    mostrarStatus(resposta.message || "Processando lançamento...");
-  }
-};
-
-function iniciarPolling(requestId, token) {
-  const inicio = Date.now();
-  let tentativa = 0;
-
-  if (temporizadorPolling) clearTimeout(temporizadorPolling);
-
-  const proximo = () => {
-    if (!envioAtual || envioAtual.requestId !== requestId) return;
-    const espera = Math.min(300 + tentativa * 150, 1200);
-    tentativa++;
-    temporizadorPolling = setTimeout(consultar, espera);
-  };
-
-  function consultar() {
-    if (!envioAtual || envioAtual.requestId !== requestId) return;
-
-    if (Date.now() - inicio > 90000) {
-      finalizarErro(
-        "O sistema não confirmou o lançamento em 90 segundos. " +
-        "Verifique a planilha antes de tentar enviar novamente."
-      );
-      return;
-    }
-
-    if (scriptStatusAtual) {
-      scriptStatusAtual.remove();
-      scriptStatusAtual = null;
-    }
-
-    const script = document.createElement("script");
-    const parametros = new URLSearchParams({
-      action: "status",
-      callback: "__statusCb",
-      requestId: requestId,
-      token: token
-    });
-
-    const terminar = () => {
-      script.remove();
-      if (scriptStatusAtual === script) scriptStatusAtual = null;
-      proximo();
-    };
-
-    script.async = true;
-    script.onerror = terminar;
-    script.onload = terminar;
-    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
-
-    scriptStatusAtual = script;
-    document.head.appendChild(script);
-  }
-
-  temporizadorPolling = setTimeout(consultar, 250);
-}
-
-function finalizarSucesso(mensagem) {
-  encerrarPolling();
-  const manterCodigoBarras = $("mesmoProduto").checked;
-
-  if (envioAtual && envioAtual.payload) {
-    registrarNoHistorico(envioAtual.payload, envioAtual.descricao);
-
-    definirUltimo(nomeParaExibir(envioAtual.payload.codigo, envioAtual.descricao));
-    itemAtual = null;
-    guardarItemAtual();
-  }
-
-  enviando = false;
-  envioAtual = null;
-  btnSalvar.disabled = false;
-  btnSalvar.textContent = "Salvar lançamento";
-
-  mostrarStatus(mensagem, "success");
-  limparCamposLancamento(manterCodigoBarras);
-}
-
-function finalizarErro(mensagem) {
-  encerrarPolling();
-  enviando = false;
-  envioAtual = null;
-  btnSalvar.disabled = false;
-  btnSalvar.textContent = "Salvar lançamento";
-
-  mostrarStatus(mensagem, "error");
-}
-
-function encerrarPolling() {
-  if (temporizadorPolling) {
-    clearTimeout(temporizadorPolling);
-    temporizadorPolling = null;
-  }
-
-  if (scriptStatusAtual) {
-    scriptStatusAtual.remove();
-    scriptStatusAtual = null;
-  }
-}
-
-function limparCamposLancamento(manterCodigoBarras = false) {
-  if (!manterCodigoBarras) {
-    codigoEl.value = "";
-    limparDescricao();
-  }
-  $("lote").value = "";
-  validadeEl.value = "";
-  $("quantidade").value = "";
-  $("mesmoProduto").checked = false;
-  reiniciarConfirmacoes();
-
-  // Atualiza o X de todos os campos conforme o que ficou preenchido.
-  atualizarBotoesLimpar();
-  codigoEl.focus();
-}
+document.addEventListener("DOMContentLoaded", function () {
+  mostrarStatus("Carregando...", "info");
+  carregarProdutosJson().catch(() => {});
+});
 
 window.addEventListener("load", () => {
-  restaurarUltimoItem();
-  atualizarBotoesLimpar();
-  if (funcionarioEl.value) verificarHistoricoFuncionario(funcionarioEl.value);
-});
-
-window.addEventListener("beforeunload", () => {
-  if (temporizadorDigitacao) clearTimeout(temporizadorDigitacao);
-  if (temporizadorPolling) clearTimeout(temporizadorPolling);
-});
-
-
-// Exibe um X nos campos preenchidos e permite limpá-los individualmente.
-function atualizarBotoesLimpar() {
-  document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
-    const input = wrap.querySelector("input");
-    wrap.classList.toggle("has-value", input.value.length > 0);
-  });
-}
-
-document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
-  const input = wrap.querySelector("input");
-  const clearButton = wrap.querySelector(".btn-limpar-input");
-  input.addEventListener("input", atualizarBotoesLimpar);
-  input.addEventListener("change", atualizarBotoesLimpar);
-  clearButton.addEventListener("click", () => {
-    input.value = "";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.focus();
+  carregarProdutosJson().catch(() => {
+    mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.", "error");
   });
 });
-
-atualizarBotoesLimpar();
-
-
-const btnVisualizar = $("btnVisualizar");
-
-function atualizarBotaoVisualizar() {
-  const selecionado = Boolean(funcionarioEl.value);
-
-  btnVisualizar.classList.toggle("visivel", selecionado);
-  btnVisualizar.disabled = !selecionado;
-}
-
-btnVisualizar.addEventListener("click", () => {
-  const funcionario = funcionarioEl.value;
-
-  if (!funcionario) {
-    mostrarStatus("Selecione um funcionário primeiro.", "error");
-    return;
-  }
-
-  const destino = "visualizacao.html?funcionario=" +
-    encodeURIComponent(funcionario);
-
-  window.location.href = destino;
-});
-
-atualizarBotaoVisualizar();
-
-funcionarioEl.addEventListener("change", atualizarBotaoVisualizar);
 
 </script>
 </body>

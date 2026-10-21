@@ -330,15 +330,6 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
-/*
- * REGRA DE VALIDADE (mesma lógica da fórmula da planilha)
- *  - Produtos:     VENCIDO se faltam até 30 dias
- *  - Até 160 dias:        À VENCER
- *  - Acima de 160 dias:   VENDÁVEL
- */
-const LIMITE_VENCIDO_PADRAO = 30;
-const LIMITE_A_VENCER = 160;
-
 const $ = id => document.getElementById(id);
 
 let todosRegistros = [];
@@ -347,7 +338,7 @@ let mesCarregado = false;
 let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
-let modo = "mes"; // "mes" | "validade"
+let modo = "mes";
 
 function mesAtualISO() {
   const agora = new Date();
@@ -380,6 +371,20 @@ function carregarDescricoes() {
     });
 }
 
+function extrairDescricaoProduto(valor) {
+  if (!valor) return "";
+  if (typeof valor === "object") {
+    if (typeof valor.produto === "string" && valor.produto.trim()) {
+      return valor.produto.trim();
+    }
+    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
+      return valor.descricao.trim();
+    }
+    return "";
+  }
+  return String(valor).trim();
+}
+
 function obterDescricao(ean) {
   const codigo = String(ean || "").trim();
   const candidatos = [codigo];
@@ -389,16 +394,14 @@ function obterDescricao(ean) {
 
   for (const candidato of candidatos) {
     if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      return String(descricoesEAN[candidato]);
+      const valor = descricoesEAN[candidato];
+      const descricao = extrairDescricaoProduto(valor);
+      if (descricao) return descricao;
     }
   }
 
   return "Descrição não encontrada";
 }
-
-/* =========================
-   CONSULTA AO APPS SCRIPT
-   ========================= */
 
 function chamarApps(action, callbackName, extra) {
   return new Promise((resolve, reject) => {
@@ -534,10 +537,6 @@ function consultar() {
   else consultarHistorico();
 }
 
-/* =========================
-   CÁLCULO DA VALIDADE
-   ========================= */
-
 function diasAte(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   if (!m) return null;
@@ -560,10 +559,6 @@ function situacao(dias) {
 
   return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
 }
-
-/* =========================
-   RENDERIZAÇÃO
-   ========================= */
 
 function criarCelula(texto, classe) {
   const td = document.createElement("td");
@@ -799,10 +794,6 @@ function renderizarValidade() {
   card.appendChild(wrap);
   destino.appendChild(card);
 }
-
-/* =========================
-   TROCA DE MODO
-   ========================= */
 
 function definirModo(novoModo) {
   modo = novoModo;
