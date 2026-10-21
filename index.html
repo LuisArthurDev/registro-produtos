@@ -759,20 +759,50 @@ function limparDescricao() {
   $("descricaoStatus").textContent = "";
 }
 
-// Procura o código exato e também equivalências comuns entre UPC-A (12 dígitos)
+// Procura o código exato e equivalências comuns entre UPC-A (12 dígitos)
 // e EAN-13 (o mesmo código com zero à esquerda).
+// Compatível com o formato antigo e o novo produtos_ean.json.
 function encontrarProdutoNaBase(base, codigo) {
-  const candidatos = [String(codigo || "").trim()];
-  const original = candidatos[0];
+  const original = String(codigo || "").trim();
+  const candidatos = [original];
 
-  if (/^\d{12}$/.test(original)) candidatos.push("0" + original);
-  if (/^0\d{12}$/.test(original)) candidatos.push(original.slice(1));
+  if (/^\d{12}$/.test(original)) {
+    candidatos.push("0" + original);
+  }
+
+  if (/^0\d{12}$/.test(original)) {
+    candidatos.push(original.slice(1));
+  }
 
   for (const candidato of candidatos) {
-    if (Object.prototype.hasOwnProperty.call(base, candidato) && base[candidato]) {
-      return { codigoEncontrado: candidato, descricao: String(base[candidato]) };
+    if (!Object.prototype.hasOwnProperty.call(base, candidato)) {
+      continue;
+    }
+
+    const item = base[candidato];
+
+    if (typeof item === "string" && item.trim()) {
+      return {
+        codigoEncontrado: candidato,
+        descricao: item.trim(),
+        secao: ""
+      };
+    }
+
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const descricao = String(item.produto || "").trim();
+      const secao = String(item.secao || "").trim();
+
+      if (descricao) {
+        return {
+          codigoEncontrado: candidato,
+          descricao: descricao,
+          secao: secao
+        };
+      }
     }
   }
+
   return null;
 }
 
