@@ -722,6 +722,7 @@ function criarCelulaExcluir(registro) {
   return td;
 }
 
+
 async function excluirLancamento(registro, botao) {
   if (exclusaoEmAndamento) return;
 
@@ -729,15 +730,17 @@ async function excluirLancamento(registro, botao) {
     registro && registro.funcionario || ""
   ).trim();
 
-  const chaveUnica = String(
-    registro && registro.chaveUnica || ""
+  const chaveCompleta = String(
+    registro && registro.chaveUnica || registro && registro.id || ""
   ).trim();
 
-  if (!funcionario || !chaveUnica) {
+  // Em registros acumulados, a chave pode conter vários IDs separados por |
+  const id = chaveCompleta.split("|")[0].trim();
+
+  if (!funcionario || !id) {
     alert(
       "Não foi possível identificar a chave deste lançamento.\n\n" +
-      "O botão está visível, mas o Code.gs precisa retornar a propriedade " +
-      "'chaveUnica' para permitir a exclusão."
+      "Confira se o Code.gs retorna a propriedade 'chaveUnica'."
     );
     return;
   }
@@ -764,11 +767,11 @@ async function excluirLancamento(registro, botao) {
       "__excluirCb",
       {
         funcionario: funcionario,
-        chaveUnica: chaveUnica
+        id: id
       }
     );
 
-    if (!resposta || !resposta.sucesso) {
+    if (!resposta || resposta.sucesso !== true) {
       throw new Error(
         resposta && resposta.mensagem
           ? resposta.mensagem
@@ -779,9 +782,7 @@ async function excluirLancamento(registro, botao) {
     mesCarregado = false;
     validadeCarregada = false;
 
-    definirMensagem(
-      "Lançamento excluído. Atualizando os dados..."
-    );
+    definirMensagem("Lançamento excluído. Atualizando os dados...");
 
     if (modo === "validade") {
       consultarValidades();
@@ -791,12 +792,12 @@ async function excluirLancamento(registro, botao) {
   } catch (erro) {
     alert(
       "Não foi possível excluir o lançamento.\n\n" +
-      (erro && erro.message ? erro.message : "Erro desconhecido.") +
-      "\n\nVerifique se a ação excluirLancamento está implementada no Code.gs."
+      (erro && erro.message ? erro.message : "Erro desconhecido.")
     );
 
     botao.disabled = false;
     botao.textContent = "✕";
+
     definirMensagem("A exclusão não foi concluída.");
   } finally {
     exclusaoEmAndamento = false;
