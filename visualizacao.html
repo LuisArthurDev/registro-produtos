@@ -384,18 +384,33 @@ function obterDescricao(ean) {
   const codigo = String(ean || "").trim();
   const candidatos = [codigo];
 
-  if (/^\d{12}$/.test(codigo)) candidatos.push("0" + codigo);
-  if (/^0\d{12}$/.test(codigo)) candidatos.push(codigo.slice(1));
+  if (/^\d{12}$/.test(codigo)) {
+    candidatos.push("0" + codigo);
+  }
+
+  if (/^0\d{12}$/.test(codigo)) {
+    candidatos.push(codigo.slice(1));
+  }
 
   for (const candidato of candidatos) {
-    if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      return String(descricoesEAN[candidato]);
+    if (
+      Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)
+    ) {
+      const item = descricoesEAN[candidato];
+
+      // Compatibilidade com o formato antigo e o novo
+      if (typeof item === "string") {
+        return item;
+      }
+
+      if (item && typeof item === "object") {
+        return String(item.produto || "Descrição não encontrada");
+      }
     }
   }
 
   return "Descrição não encontrada";
 }
-
 /* =========================
    CONSULTA AO APPS SCRIPT
    ========================= */
