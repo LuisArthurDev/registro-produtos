@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-root = Path(__file__).resolve().parent
+root = Path(__file__).resolve().parents[1]
 items_path = root / "items.txt"
 json_path = root / "produtos_ean.json"
 
@@ -21,13 +21,15 @@ def build_item_map() -> dict[str, str]:
             line = line.strip()
             if not line:
                 continue
+
             parts = [p.strip() for p in line.split("\t")]
             if len(parts) >= 3:
-                ean, produto, secao = parts[0], parts[1], parts[2]
+                _, produto, secao = parts
                 item_map[normalize(produto).upper()] = normalize(secao)
             elif len(parts) == 2:
-                produto, secao = parts[0], parts[1]
+                produto, secao = parts
                 item_map[normalize(produto).upper()] = normalize(secao)
+
     return item_map
 
 
