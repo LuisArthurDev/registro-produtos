@@ -330,18 +330,6 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
-/*
- * REGRA DE VALIDADE (mesma lógica da fórmula da planilha)
- *  - Nutricao e Conveniencia: VENCIDO se faltam até 15 dias
- *  - Demais produtos:        VENCIDO se faltam até 30 dias
- *  - Até 160 dias:           À VENCER
- *  - Acima de 160 dias:      VENDÁVEL
- */
-const LIMITE_VENCIDO_NUTRICAO = 15;
-const LIMITE_VENCIDO_PADRAO = 30;
-const LIMITE_A_VENCER = 160;
-const SECOES_CRITICAS = ["nutricao", "conveniencia"];
-
 const $ = id => document.getElementById(id);
 
 let todosRegistros = [];
@@ -362,47 +350,8 @@ function normalizar(valor) {
   return String(valor || "").trim().toLocaleLowerCase("pt-BR");
 }
 
-function removerAcentos(valor) {
-  return String(valor || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
-}
-
 function definirMensagem(texto) {
   $("mensagem").textContent = texto;
-}
-
-function extrairDescricaoProduto(valor) {
-  if (!valor) return "";
-
-  if (typeof valor === "object") {
-    if (typeof valor.produto === "string" && valor.produto.trim()) {
-      return valor.produto.trim();
-    }
-
-    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
-      return valor.descricao.trim();
-    }
-
-    return "";
-  }
-
-  return String(valor).trim();
-}
-
-function extrairSecaoProduto(valor) {
-  if (!valor) return "";
-
-  if (typeof valor === "object") {
-    const secao = valor.secao || valor.section || valor.categoria || "";
-    if (typeof secao === "string" && secao.trim()) {
-      return secao.trim();
-    }
-    return "";
-  }
-
-  return "";
 }
 
 function carregarDescricoes() {
@@ -422,6 +371,20 @@ function carregarDescricoes() {
     });
 }
 
+function extrairDescricaoProduto(valor) {
+  if (!valor) return "";
+  if (typeof valor === "object") {
+    if (typeof valor.produto === "string" && valor.produto.trim()) {
+      return valor.produto.trim();
+    }
+    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
+      return valor.descricao.trim();
+    }
+    return "";
+  }
+  return String(valor).trim();
+}
+
 function obterDescricao(ean) {
   const codigo = String(ean || "").trim();
   const candidatos = [codigo];
@@ -433,41 +396,12 @@ function obterDescricao(ean) {
     if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
       const valor = descricoesEAN[candidato];
       const descricao = extrairDescricaoProduto(valor);
-
       if (descricao) return descricao;
     }
   }
 
   return "Descrição não encontrada";
 }
-
-function obterSecao(ean) {
-  const codigo = String(ean || "").trim();
-  const candidatos = [codigo];
-
-  if (/^\d{12}$/.test(codigo)) candidatos.push("0" + codigo);
-  if (/^0\d{12}$/.test(codigo)) candidatos.push(codigo.slice(1));
-
-  for (const candidato of candidatos) {
-    if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      const valor = descricoesEAN[candidato];
-      const secao = extrairSecaoProduto(valor);
-
-      if (secao) return secao;
-    }
-  }
-
-  return "";
-}
-
-function ehSecaoCritica(registro) {
-  const secao = removerAcentos(obterSecao(registro.codigo));
-  return SECOES_CRITICAS.includes(secao);
-}
-
-/* =========================
-   CONSULTA AO APPS SCRIPT
-   ========================= */
 
 function chamarApps(action, callbackName, extra) {
   return new Promise((resolve, reject) => {
@@ -603,10 +537,6 @@ function consultar() {
   else consultarHistorico();
 }
 
-/* =========================
-   CÁLCULO DA VALIDADE
-   ========================= */
-
 function diasAte(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   if (!m) return null;
@@ -618,10 +548,8 @@ function diasAte(iso) {
   return Math.round((alvo - hoje) / 86400000);
 }
 
-function situacao(dias, critico) {
-  const limiteVencido = critico ? LIMITE_VENCIDO_NUTRICAO : LIMITE_VENCIDO_PADRAO;
-
-  if (dias <= limiteVencido) {
+function situacao(dias) {
+  if (dias <= LIMITE_VENCIDO_PADRAO) {
     return { chave: "vencido", texto: "VENCIDO" };
   }
 
@@ -631,10 +559,6 @@ function situacao(dias, critico) {
 
   return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
 }
-
-/* =========================
-   RENDERIZAÇÃO
-   ========================= */
 
 function criarCelula(texto, classe) {
   const td = document.createElement("td");
@@ -797,8 +721,7 @@ function renderizarValidade() {
     const dias = diasAte(registro.validadeISO);
     if (dias === null) return;
 
-    const critico = ehSecaoCritica(registro);
-    const sit = situacao(dias, critico);
+    const sit = situacao(dias);
 
     if (filtro === "criticos" && sit.chave === "vendavel") return;
     if (filtro !== "criticos" && filtro !== "todos" && sit.chave !== filtro) return;
@@ -821,9 +744,8 @@ function renderizarValidade() {
 
   definirMensagem(
     itens.length + " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
-    "Nutricao/Conveniência: até " + LIMITE_VENCIDO_NUTRICAO + " dias. " +
-    "Demais: até " + LIMITE_VENCIDO_PADRAO + " dias. " +
-    "À vencer: até " + LIMITE_A_VENCER + " dias."
+    "Vencido: até " + LIMITE_VENCIDO_PADRAO + " dias. À vencer: até " +
+    LIMITE_A_VENCER + " dias."
   );
 
   const card = document.createElement("section");
@@ -872,10 +794,6 @@ function renderizarValidade() {
   card.appendChild(wrap);
   destino.appendChild(card);
 }
-
-/* =========================
-   TROCA DE MODO
-   ========================= */
 
 function definirModo(novoModo) {
   modo = novoModo;
