@@ -1,15 +1,393 @@
-function extrairDescricaoProduto(valor) {
-  if (!valor) return "";
-  if (typeof valor === "object") {
-    if (typeof valor.produto === "string" && valor.produto.trim()) {
-      return valor.produto.trim();
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f2a3d">
+  <title>Visualização dos Lançamentos</title>
+
+  <style>
+    :root {
+      --bg: #eaeff3;
+      --surface: #fff;
+      --ink: #0f1b2d;
+      --muted: #5a6877;
+      --line: #d3dce5;
+      --brand: #0f2a3d;
+      --accent: #0a7c86;
+      --ok: #17803d;
+      --ok-bg: #e4f5ea;
+      --err: #b3261e;
+      --err-bg: #fdeceb;
+      --warn: #a15c07;
+      --warn-bg: #fff3df;
+      --shadow: 0 1px 2px rgba(15,27,45,.06);
     }
-    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
-      return valor.descricao.trim();
+
+    :root[data-theme="dark"] {
+      --bg: #0b141c;
+      --surface: #142230;
+      --ink: #e8eef4;
+      --muted: #9aa9b8;
+      --line: #284054;
+      --brand: #0b1a26;
+      --accent: #31b3bf;
+      --ok: #5fd08a;
+      --ok-bg: #12301f;
+      --err: #ff8a80;
+      --err-bg: #3a1714;
+      --warn: #f0b45a;
+      --warn-bg: #36270f;
+      --shadow: none;
     }
-    return "";
-  }
-  return String(valor).trim();
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    header {
+      background: var(--brand);
+      color: white;
+      padding: 18px;
+    }
+
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; color: #c5d4df; font-size: 13px; }
+
+    main {
+      width: min(100% - 24px, 1000px);
+      margin: 18px auto 40px;
+    }
+
+    .card {
+      padding: 16px;
+      margin-bottom: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .modos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .modo {
+      background: var(--bg);
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    .modo[aria-pressed="true"] {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .filtros {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input, select, button {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font: inherit;
+    }
+
+    input, select {
+      color: var(--ink);
+      background: var(--surface);
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: .6; cursor: wait; }
+
+    .resumo {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .numero {
+      font-size: 23px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .legenda { color: var(--muted); font-size: 12px; }
+
+    #mensagem {
+      padding: 12px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow-wrap: anywhere;
+    }
+
+    .grupo { margin-bottom: 18px; }
+    .grupo h2 { font-size: 17px; margin: 0 0 10px; }
+
+    .tabela-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 690px;
+      border-collapse: collapse;
+      background: var(--surface);
+    }
+
+    table.larga { min-width: 780px; }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      color: var(--muted);
+      background: var(--bg);
+      font-size: 12px;
+    }
+
+    td { overflow-wrap: anywhere; }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    .descricao { font-weight: 700; }
+    .ean { display: block; color: var(--muted); font-size: 12px; }
+    .quantidade { font-weight: 800; white-space: nowrap; }
+
+    .selo {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .selo.vencido { background: var(--err-bg); color: var(--err); }
+    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
+    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
+
+    .acoes {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .acoes a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: var(--line);
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .vazio { padding: 20px; text-align: center; color: var(--muted); }
+
+    @media (max-width: 620px) {
+      .filtros { grid-template-columns: 1fr; }
+      .resumo { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Visualização dos Lançamentos</h1>
+  <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
+</header>
+
+<main>
+  <div class="acoes">
+    <a href="index.html">← Voltar ao lançamento</a>
+  </div>
+
+  <section class="card">
+    <div class="modos">
+      <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
+        Por mês de lançamento
+      </button>
+      <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
+        Validade (a vencer)
+      </button>
+    </div>
+
+    <div class="filtros">
+      <div id="campoMes">
+        <label for="mes">Mês do lançamento</label>
+        <input id="mes" type="month">
+      </div>
+
+      <div id="campoStatus" hidden>
+        <label for="statusValidade">Situação da validade</label>
+        <select id="statusValidade">
+          <option value="criticos">Vencidos e à vencer</option>
+          <option value="vencido">Somente vencidos</option>
+          <option value="avencer">Somente à vencer</option>
+          <option value="vendavel">Somente vendáveis</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="funcionario">Funcionário</label>
+        <select id="funcionario">
+          <option value="">Todos os funcionários</option>
+          <option>Alice</option>
+          <option>Altino</option>
+          <option>Ana Carolina</option>
+          <option>Anielle</option>
+          <option>Gabriela</option>
+          <option>Gabriele</option>
+          <option>Isabela</option>
+          <option>Livia</option>
+          <option>Paola</option>
+          <option>Rafaela</option>
+          <option>Ramon</option>
+          <option>Rillary</option>
+          <option>Sulaima</option>
+          <option>Thomaz</option>
+          <option>Termolabil</option>
+          <option>Psicotropicos</option>
+          <option>Antibioticos</option>
+        </select>
+      </div>
+
+      <button id="btnBuscar" type="button">Consultar</button>
+    </div>
+  </section>
+
+  <div id="mensagem" role="status" aria-live="polite">
+    Carregando histórico...
+  </div>
+
+  <section class="card">
+    <div class="resumo">
+      <div>
+        <div id="totalRegistros" class="numero">0</div>
+        <div class="legenda">Lançamentos</div>
+      </div>
+      <div>
+        <div id="totalUnidades" class="numero">0</div>
+        <div class="legenda">Unidades lançadas</div>
+      </div>
+      <div>
+        <div id="totalFuncionarios" class="numero">0</div>
+        <div class="legenda">Funcionários</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="resultado"></div>
+</main>
+
+<script>
+"use strict";
+
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+
+/*
+ * REGRA DE VALIDADE (mesma lógica da fórmula da planilha)
+ *  - Nutricao e Conveniencia: VENCIDO se faltam até 15 dias
+ *  - Demais produtos:        VENCIDO se faltam até 30 dias
+ *  - Até 160 dias:           À VENCER
+ *  - Acima de 160 dias:      VENDÁVEL
+ */
+const LIMITE_VENCIDO_NUTRICAO = 15;
+const LIMITE_VENCIDO_PADRAO = 30;
+const LIMITE_A_VENCER = 160;
+const SECOES_CRITICAS = ["nutricao", "conveniencia"];
+
+const $ = id => document.getElementById(id);
+
+let todosRegistros = [];
+let registrosValidade = [];
+let mesCarregado = false;
+let validadeCarregada = false;
+let descricoesEAN = {};
+let consultaEmAndamento = false;
+let modo = "mes"; // "mes" | "validade"
+
+function mesAtualISO() {
+  const agora = new Date();
+  return agora.getFullYear() + "-" +
+    String(agora.getMonth() + 1).padStart(2, "0");
+}
+
+function normalizar(valor) {
+  return String(valor || "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function removerAcentos(valor) {
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function definirMensagem(texto) {
+  $("mensagem").textContent = texto;
+}
+
+function carregarDescricoes() {
+  return fetch("produtos_ean.json?v=1", { cache: "no-cache" })
+    .then(resposta => {
+      if (!resposta.ok) {
+        throw new Error("Não foi possível carregar produtos_ean.json.");
+      }
+      return resposta.json();
+    })
+    .then(dados => {
+      if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
+        throw new Error("A base de produtos não é um JSON válido.");
+      }
+
+      descricoesEAN = dados;
+    });
 }
 
 function obterDescricao(ean) {
@@ -21,11 +399,515 @@ function obterDescricao(ean) {
 
   for (const candidato of candidatos) {
     if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      const valor = descricoesEAN[candidato];
-      const descricao = extrairDescricaoProduto(valor);
-      if (descricao) return descricao;
+      const item = descricoesEAN[candidato];
+
+      if (typeof item === "string") {
+        return String(item);
+      }
+
+      if (item && typeof item === "object") {
+        return String(item.produto || item.descricao || "Descrição não encontrada");
+      }
     }
   }
 
   return "Descrição não encontrada";
 }
+
+function obterSecao(ean) {
+  const codigo = String(ean || "").trim();
+  const candidatos = [codigo];
+
+  if (/^\d{12}$/.test(codigo)) candidatos.push("0" + codigo);
+  if (/^0\d{12}$/.test(codigo)) candidatos.push(codigo.slice(1));
+
+  for (const candidato of candidatos) {
+    if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
+      const item = descricoesEAN[candidato];
+
+      if (item && typeof item === "object") {
+        return String(item.secao || "").trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function ehSecaoCritica(registro) {
+  const secao = removerAcentos(obterSecao(registro.codigo));
+  return SECOES_CRITICAS.includes(secao);
+}
+
+/* =========================
+   CONSULTA AO APPS SCRIPT
+   ========================= */
+
+function chamarApps(action, callbackName, extra) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const anterior = window[callbackName];
+    let finalizado = false;
+    let limite = null;
+
+    function finalizar() {
+      if (finalizado) return false;
+      finalizado = true;
+      clearTimeout(limite);
+      script.remove();
+
+      if (anterior) {
+        window[callbackName] = anterior;
+      } else {
+        delete window[callbackName];
+      }
+
+      return true;
+    }
+
+    limite = setTimeout(() => {
+      if (finalizar()) reject(new Error("timeout"));
+    }, 20000);
+
+    window[callbackName] = resposta => {
+      if (finalizar()) resolve(resposta);
+    };
+
+    script.onerror = () => {
+      if (finalizar()) reject(new Error("falha"));
+    };
+
+    const parametros = new URLSearchParams(
+      Object.assign({ action: action, callback: callbackName }, extra || {})
+    );
+
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function mensagemDeErroConsulta(erro) {
+  if (erro && erro.message === "timeout") {
+    return "A consulta demorou demais. Verifique a conexão e tente novamente.";
+  }
+
+  return "Falha ao acessar o Apps Script. Confira se a implantação está atualizada e acessível.";
+}
+
+function iniciarConsulta(texto) {
+  if (consultaEmAndamento) return false;
+  consultaEmAndamento = true;
+  $("btnBuscar").disabled = true;
+  definirMensagem(texto);
+  return true;
+}
+
+function encerrarConsulta() {
+  consultaEmAndamento = false;
+  $("btnBuscar").disabled = false;
+}
+
+function consultarHistorico() {
+  const mes = $("mes").value;
+
+  if (!/^\d{4}-\d{2}$/.test(mes)) {
+    definirMensagem("Selecione um mês válido.");
+    return;
+  }
+
+  if (!iniciarConsulta("Consultando os lançamentos...")) return;
+
+  chamarApps("historicoMes", "__historicoCb", { mes: mes })
+    .then(resposta => {
+      encerrarConsulta();
+
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar o histórico."
+        );
+        return;
+      }
+
+      todosRegistros = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+      mesCarregado = true;
+
+      if (modo === "mes") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+
+function consultarValidades() {
+  if (!iniciarConsulta("Consultando as validades...")) return;
+
+  chamarApps("validades", "__validadeCb", {})
+    .then(resposta => {
+      encerrarConsulta();
+
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar as validades."
+        );
+        return;
+      }
+
+      registrosValidade = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+      validadeCarregada = true;
+
+      if (modo === "validade") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+
+function consultar() {
+  if (modo === "validade") consultarValidades();
+  else consultarHistorico();
+}
+
+/* =========================
+   CÁLCULO DA VALIDADE
+   ========================= */
+
+function diasAte(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!m) return null;
+
+  const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const agora = new Date();
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+  return Math.round((alvo - hoje) / 86400000);
+}
+
+function situacao(dias, critico) {
+  const limiteVencido = critico
+    ? LIMITE_VENCIDO_NUTRICAO
+    : LIMITE_VENCIDO_PADRAO;
+
+  if (dias <= limiteVencido) {
+    return { chave: "vencido", texto: "VENCIDO" };
+  }
+
+  if (dias <= LIMITE_A_VENCER) {
+    return { chave: "avencer", texto: "À VENCER - " + dias + " dias" };
+  }
+
+  return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
+}
+
+/* =========================
+   RENDERIZAÇÃO
+   ========================= */
+
+function criarCelula(texto, classe) {
+  const td = document.createElement("td");
+  if (classe) td.className = classe;
+  td.textContent = texto;
+  return td;
+}
+
+function criarCabecalho(colunas) {
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+
+  colunas.forEach(titulo => {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    tr.appendChild(th);
+  });
+
+  thead.appendChild(tr);
+  return thead;
+}
+
+function criarCelulaProduto(codigo) {
+  const td = document.createElement("td");
+
+  const descricao = document.createElement("span");
+  descricao.className = "descricao";
+  descricao.textContent = obterDescricao(codigo);
+
+  const ean = document.createElement("span");
+  ean.className = "ean";
+  ean.textContent = "EAN: " + codigo;
+
+  td.append(descricao, ean);
+  return td;
+}
+
+function atualizarResumo(registros) {
+  $("totalRegistros").textContent = registros.length.toLocaleString("pt-BR");
+
+  $("totalUnidades").textContent = registros.reduce(
+    (total, registro) => total + (Number(registro.quantidade) || 0),
+    0
+  ).toLocaleString("pt-BR");
+
+  $("totalFuncionarios").textContent = new Set(
+    registros.map(registro => registro.funcionario)
+  ).size.toLocaleString("pt-BR");
+}
+
+function mostrarVazio(texto) {
+  const vazio = document.createElement("div");
+  vazio.className = "card vazio";
+  vazio.textContent = texto;
+  $("resultado").appendChild(vazio);
+}
+
+function renderizar() {
+  if (modo === "validade") renderizarValidade();
+  else renderizarMes();
+}
+
+function renderizarMes() {
+  const funcionarioSelecionado = $("funcionario").value;
+
+  const registros = todosRegistros.filter(registro =>
+    !funcionarioSelecionado ||
+    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
+  );
+
+  atualizarResumo(registros);
+
+  const destino = $("resultado");
+  destino.replaceChildren();
+
+  if (!registros.length) {
+    definirMensagem(
+      "Nenhum lançamento encontrado para o mês e funcionário selecionados."
+    );
+    mostrarVazio("Não há lançamentos para exibir.");
+    return;
+  }
+
+  definirMensagem(
+    registros.length + " lançamento(s) encontrado(s) em " + $("mes").value + "."
+  );
+
+  const grupos = new Map();
+
+  registros.forEach(registro => {
+    const nome = registro.funcionario || "Funcionário não informado";
+    if (!grupos.has(nome)) grupos.set(nome, []);
+    grupos.get(nome).push(registro);
+  });
+
+  const nomes = Array.from(grupos.keys()).sort((a, b) =>
+    a.localeCompare(b, "pt-BR")
+  );
+
+  nomes.forEach(nome => {
+    const grupo = document.createElement("section");
+    grupo.className = "card grupo";
+
+    const titulo = document.createElement("h2");
+    const especial = grupos.get(nome).some(r => r.especial);
+    titulo.textContent = nome + " (" + grupos.get(nome).length + " lançamento(s))" +
+      (especial ? " — todos os meses" : "");
+    grupo.appendChild(titulo);
+
+    const wrap = document.createElement("div");
+    wrap.className = "tabela-wrap";
+
+    const tabela = document.createElement("table");
+    tabela.appendChild(criarCabecalho([
+      "Produto / EAN",
+      "Lote",
+      "Validade",
+      "Quantidade",
+      "Data do lançamento"
+    ]));
+
+    const tbody = document.createElement("tbody");
+
+    grupos.get(nome)
+      .slice()
+      .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+      .forEach(registro => {
+        const tr = document.createElement("tr");
+
+        tr.appendChild(criarCelulaProduto(registro.codigo));
+        tr.appendChild(criarCelula(registro.lote));
+        tr.appendChild(criarCelula(registro.validade));
+        tr.appendChild(criarCelula(
+          Number(registro.quantidade || 0).toLocaleString("pt-BR"),
+          "quantidade"
+        ));
+        tr.appendChild(criarCelula(registro.dataLancamento));
+
+        tbody.appendChild(tr);
+      });
+
+    tabela.appendChild(tbody);
+    wrap.appendChild(tabela);
+    grupo.appendChild(wrap);
+    destino.appendChild(grupo);
+  });
+}
+
+function renderizarValidade() {
+  const funcionarioSelecionado = $("funcionario").value;
+  const filtro = $("statusValidade").value;
+  const itens = [];
+
+  registrosValidade.forEach(registro => {
+    if (
+      funcionarioSelecionado &&
+      normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
+    ) return;
+
+    const dias = diasAte(registro.validadeISO);
+    if (dias === null) return;
+
+    const critico = ehSecaoCritica(registro);
+    const sit = situacao(dias, critico);
+
+    if (filtro === "criticos" && sit.chave === "vendavel") return;
+    if (filtro !== "criticos" && filtro !== "todos" && sit.chave !== filtro) return;
+
+    itens.push({ registro: registro, dias: dias, sit: sit });
+  });
+
+  itens.sort((a, b) => a.dias - b.dias);
+
+  atualizarResumo(itens.map(item => item.registro));
+
+  const destino = $("resultado");
+  destino.replaceChildren();
+
+  if (!itens.length) {
+    definirMensagem("Nenhum produto encontrado para a situação e o funcionário selecionados.");
+    mostrarVazio("Não há produtos para exibir.");
+    return;
+  }
+
+  definirMensagem(
+    itens.length + " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    "Nutricao/Conveniência: até " + LIMITE_VENCIDO_NUTRICAO + " dias. " +
+    "Demais: até " + LIMITE_VENCIDO_PADRAO + " dias. " +
+    "À vencer: até " + LIMITE_A_VENCER + " dias."
+  );
+
+  const card = document.createElement("section");
+  card.className = "card grupo";
+
+  const wrap = document.createElement("div");
+  wrap.className = "tabela-wrap";
+
+  const tabela = document.createElement("table");
+  tabela.className = "larga";
+  tabela.appendChild(criarCabecalho([
+    "Situação",
+    "Produto / EAN",
+    "Lote",
+    "Validade",
+    "Quantidade",
+    "Funcionário"
+  ]));
+
+  const tbody = document.createElement("tbody");
+
+  itens.forEach(item => {
+    const tr = document.createElement("tr");
+
+    const tdSituacao = document.createElement("td");
+    const selo = document.createElement("span");
+    selo.className = "selo " + item.sit.chave;
+    selo.textContent = item.sit.texto;
+    tdSituacao.appendChild(selo);
+    tr.appendChild(tdSituacao);
+
+    tr.appendChild(criarCelulaProduto(item.registro.codigo));
+    tr.appendChild(criarCelula(item.registro.lote));
+    tr.appendChild(criarCelula(item.registro.validade));
+    tr.appendChild(criarCelula(
+      Number(item.registro.quantidade || 0).toLocaleString("pt-BR"),
+      "quantidade"
+    ));
+    tr.appendChild(criarCelula(item.registro.funcionario));
+
+    tbody.appendChild(tr);
+  });
+
+  tabela.appendChild(tbody);
+  wrap.appendChild(tabela);
+  card.appendChild(wrap);
+  destino.appendChild(card);
+}
+
+/* =========================
+   TROCA DE MODO
+   ========================= */
+
+function definirModo(novoModo) {
+  modo = novoModo;
+  const validade = modo === "validade";
+
+  $("btnModoMes").setAttribute("aria-pressed", String(!validade));
+  $("btnModoValidade").setAttribute("aria-pressed", String(validade));
+  $("campoMes").hidden = validade;
+  $("campoStatus").hidden = !validade;
+
+  $("subtitulo").textContent = validade
+    ? "Produtos próximos do vencimento, de todos os lançamentos"
+    : "Histórico mensal de produtos por funcionário";
+
+  if (validade) {
+    if (validadeCarregada) renderizar();
+    else {
+      $("resultado").replaceChildren();
+      consultarValidades();
+    }
+  } else {
+    if (mesCarregado) renderizar();
+    else {
+      $("resultado").replaceChildren();
+      consultarHistorico();
+    }
+  }
+}
+
+$("btnModoMes").addEventListener("click", () => definirModo("mes"));
+$("btnModoValidade").addEventListener("click", () => definirModo("validade"));
+$("btnBuscar").addEventListener("click", consultar);
+$("funcionario").addEventListener("change", renderizar);
+$("statusValidade").addEventListener("change", renderizar);
+
+$("mes").value = mesAtualISO();
+
+const parametrosURL = new URLSearchParams(window.location.search);
+const funcionarioURL = parametrosURL.get("funcionario");
+
+if (funcionarioURL) {
+  const opcao = Array.from($("funcionario").options).find(
+    item => normalizar(item.value) === normalizar(funcionarioURL)
+  );
+
+  if (opcao) $("funcionario").value = opcao.value;
+}
+
+Promise.all([carregarDescricoes()])
+  .then(consultarHistorico)
+  .catch(erro => {
+    console.error(erro);
+    definirMensagem(
+      "Não foi possível carregar produtos_ean.json. Confira se ele está na mesma pasta da página."
+    );
+  });
+</script>
+</body>
+</html>
