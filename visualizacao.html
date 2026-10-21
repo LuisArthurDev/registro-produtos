@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -460,7 +459,9 @@ function renderizar() {
     grupo.className = "card grupo";
 
     const titulo = document.createElement("h2");
-    titulo.textContent = nome + " (" + grupos.get(nome).length + " lançamento(s))";
+    const especial = grupos.get(nome).some(r => r.especial);
+    titulo.textContent = nome + " (" + grupos.get(nome).length + " lançamento(s))" +
+      (especial ? " — todos os meses" : "");
     grupo.appendChild(titulo);
 
     const wrap = document.createElement("div");
@@ -489,7 +490,7 @@ function renderizar() {
 
     grupos.get(nome)
       .slice()
-      .sort((a, b) => String(b.dataLancamento).localeCompare(String(a.dataLancamento)))
+      .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
       .forEach(registro => {
         const tr = document.createElement("tr");
 
