@@ -1,5 +1,754 @@
-// Procura o código exato e também equivalências comuns entre UPC-A (12 dígitos)
-// e EAN-13 (o mesmo código com zero à esquerda).
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f2a3d">
+  <script>
+    (function () {
+      var t;
+      try { t = localStorage.getItem("tema"); } catch (e) {}
+      if (t !== "light" && t !== "dark") {
+        t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <title>Registro de Mapa de Validade</title>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+
+  <style>
+    :root {
+      --bg: #eaeff3;
+      --surface: #ffffff;
+      --ink: #0f1b2d;
+      --muted: #5a6877;
+      --line: #d3dce5;
+      --brand: #0f2a3d;
+      --accent: #0a7c86;
+      --accent-dark: #075e66;
+      --ok: #17803d;
+      --ok-bg: #e4f5ea;
+      --err: #b3261e;
+      --err-bg: #fdeceb;
+      --warn: #a15c07;
+      --warn-bg: #fff3df;
+      --info-bg: #e2f1f3;
+      --shadow: 0 1px 2px rgba(15, 27, 45, .06);
+      color-scheme: light;
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #0b141c;
+      --surface: #142230;
+      --ink: #e8eef4;
+      --muted: #9aa9b8;
+      --line: #284054;
+      --brand: #0b1a26;
+      --accent: #31b3bf;
+      --accent-dark: #4cc6d1;
+      --ok: #5fd08a;
+      --ok-bg: #12301f;
+      --err: #ff8a80;
+      --err-bg: #3a1714;
+      --warn: #f0b45a;
+      --warn-bg: #36270f;
+      --info-bg: #10323a;
+      --shadow: none;
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { scroll-padding-top: 90px; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--brand);
+      color: #fff;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 14px;
+    }
+
+    .theme-toggle {
+      flex-shrink: 0;
+      width: 44px;
+      min-height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .14);
+      color: #fff;
+      display: grid;
+      place-items: center;
+    }
+
+    .theme-toggle:hover { background: rgba(255, 255, 255, .24); }
+    .theme-toggle svg { width: 22px; height: 22px; }
+    .icon-sun { display: none; }
+    :root[data-theme="dark"] .icon-sun { display: block; }
+    :root[data-theme="dark"] .icon-moon { display: none; }
+
+    .topbar h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: .2px; }
+    .topbar p { margin: 2px 0 0; font-size: 13px; color: #b9cad8; }
+
+    main { max-width: 640px; margin: 0 auto; padding: 14px 14px 28px; }
+
+    #status {
+      display: none;
+      position: sticky;
+      top: 8px;
+      z-index: 20;
+      margin: 0 0 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font-size: 14px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+    }
+
+    #status.info { display: block; background: var(--info-bg); color: var(--accent-dark); border-color: var(--accent); }
+    #status.success { display: block; background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+    #status.error { display: block; background: var(--err-bg); color: var(--err); border-color: var(--err); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
+    .field { margin-bottom: 14px; }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    input, select {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 17px;
+    }
+
+    input:focus-visible, select:focus-visible, button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+
+    #codigo { font-size: 20px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+
+    .description-box {
+      display: none;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border-left: 5px solid var(--accent);
+      background: var(--info-bg);
+    }
+
+    .description-box.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+    .description-box.ok { border-left-color: var(--ok); background: var(--ok-bg); }
+    #descricaoTexto { display: block; font-size: 17px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+    #descricaoTexto:empty { display: none; }
+    #descricaoStatus { display: block; font-size: 13px; color: var(--muted); }
+    #descricaoTexto + #descricaoStatus { margin-top: 3px; }
+
+    button {
+      min-height: 48px;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .08s, background .15s;
+    }
+
+    button:active:not(:disabled) { transform: scale(.98); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    .btn-camera { width: 100%; background: var(--accent); color: #fff; }
+    .btn-camera:hover:not(:disabled) { background: var(--accent-dark); }
+    .btn-stop { width: 100%; background: var(--err-bg); color: var(--err); margin-top: 10px; display: none; }
+
+    #reader { display: none; position: relative; margin-top: 12px; border-radius: 10px; overflow: hidden; background: #000; }
+    #reader.ativo { display: block; }
+    #video { display: block; width: 100%; background: #000; }
+    .mira {
+      position: absolute; left: 8%; right: 8%; top: 28%; bottom: 28%;
+      border: 2px solid rgba(255, 255, 255, .85); border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, .28); pointer-events: none;
+    }
+
+    .camera-controles { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+    .camera-controles[hidden] { display: none; }
+    .btn-lanterna { flex: 0 0 auto; background: var(--bg); color: var(--ink); border: 1.5px solid var(--line); }
+    .btn-lanterna.ligada { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+    .btn-lanterna[hidden], .zoom-wrap[hidden] { display: none; }
+    .zoom-wrap { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+    #zoomRange { min-height: 32px; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+
+    .ultimo { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
+    .ultimo[hidden] { display: none; }
+    .ultimo-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    #ultimoNome { display: block; margin-top: 2px; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+
+    .hint { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+
+    .submit-button {
+      width: 100%;
+      min-height: 54px;
+      background: var(--ok);
+      color: #fff;
+      font-size: 17px;
+    }
+
+    :root[data-theme="dark"] .submit-button { color: #07210f; }
+    .hidden-frame { display: none; width: 0; height: 0; border: 0; }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      padding: 18px;
+      background: rgba(0, 0, 0, .62);
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.aberto { display: flex; }
+
+    .modal {
+      width: 100%;
+      max-width: 440px;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
+    }
+
+    .modal h2 { margin: 0 0 8px; font-size: 19px; }
+    .modal p { margin: 8px 0; overflow-wrap: anywhere; }
+    .modal-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    .modal-acoes button { margin: 0; }
+    .btn-modal-secundario { background: var(--line); color: var(--ink); }
+    .btn-modal-perigo { background: var(--err-bg); color: var(--err); }
+    .btn-modal-ok { background: var(--ok); color: #fff; }
+    :root[data-theme="dark"] .btn-modal-ok { color: #07210f; }
+
+    @media (max-width: 380px) {
+      .modal-acoes { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+
+    .same-product-option {
+      display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px;
+      padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--bg); cursor: pointer;
+    }
+    .same-product-option input {
+      flex: 0 0 20px; width: 20px; min-height: 20px; height: 20px;
+      margin: 2px 0 0; padding: 0; accent-color: var(--ok);
+    }
+    .same-product-option span { display: block; }
+    .same-product-option strong { display: block; font-size: 14px; color: var(--ink); }
+    .same-product-option small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+    .input-clear-wrap { position: relative; width: 100%; }
+    .input-clear-wrap input { width: 100%; padding-right: 44px; }
+    .btn-limpar-input {
+      position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0;
+      border-radius: 50%; background: transparent; color: var(--muted);
+      font-size: 23px; line-height: 1; display: none; align-items: center;
+      justify-content: center; cursor: pointer;
+    }
+    .btn-limpar-input:hover { background: var(--bg); color: var(--ink); }
+    .input-clear-wrap.has-value .btn-limpar-input { display: flex; }
+
+    .funcionario-linha {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .funcionario-linha select {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .btn-visualizar {
+      flex: 0 0 48px;
+      width: 48px;
+      min-height: 48px;
+      padding: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      background: var(--info-bg);
+      color: var(--accent);
+    }
+
+    .btn-visualizar.visivel {
+      display: flex;
+    }
+
+    .btn-visualizar svg {
+      width: 23px;
+      height: 23px;
+    }
+  </style>
+</head>
+
+<body>
+<header class="topbar">
+  <div>
+    <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
+    <p>Leia o código, informe lote, validade e quantidade.</p>
+  </div>
+
+  <button type="button" id="btnTema" class="theme-toggle"
+          aria-label="Alternar entre tema claro e escuro" title="Alternar tema">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+    </svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+    </svg>
+  </button>
+</header>
+
+<main>
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <form id="formulario" novalidate>
+    <section class="card">
+      <h2>Produto</h2>
+
+      <div id="descricaoProduto" class="description-box" aria-live="polite">
+        <span id="descricaoTexto"></span>
+        <span id="descricaoStatus"></span>
+      </div>
+
+      <div class="field">
+        <label for="codigo">Código de barras</label>
+        <div class="input-clear-wrap"><input id="codigo" name="codigo" type="text" inputmode="numeric"
+               autocomplete="off" placeholder="Leia ou digite o código"
+               maxlength="14" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
+      </div>
+
+      <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
+      <button type="button" id="btnPararCamera" class="btn-stop">Parar câmera</button>
+      <div id="reader"><video id="video" playsinline muted autoplay></video><div class="mira"></div></div>
+
+      <div id="cameraControles" class="camera-controles" hidden>
+        <button type="button" id="btnLanterna" class="btn-lanterna" hidden>Lanterna</button>
+        <div id="zoomWrap" class="zoom-wrap" hidden>
+          <span>Zoom</span>
+          <input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" aria-label="Zoom da câmera">
+        </div>
+      </div>
+
+      <div id="ultimoItem" class="ultimo" hidden>
+        <span class="ultimo-label">Último item lido</span>
+        <span id="ultimoNome"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Lançamento</h2>
+
+      <div class="field">
+        <label for="funcionario">Funcionário</label>
+
+        <div class="funcionario-linha">
+          <select id="funcionario" name="funcionario" required>
+            <option value="">Selecione o funcionário</option>
+            <option>Alice</option>
+            <option>Altino</option>
+            <option>Ana Carolina</option>
+            <option>Anielle</option>
+            <option>Gabriela</option>
+            <option>Gabriele</option>
+            <option>Isabela</option>
+            <option>Livia</option>
+            <option>Paola</option>
+            <option>Rafaela</option>
+            <option>Ramon</option>
+            <option>Rillary</option>
+            <option>Sulaima</option>
+            <option>Thomaz</option>
+            <option>Termolabil</option>
+            <option>Psicotropicos</option>
+            <option>Antibioticos</option>
+          </select>
+
+          <button
+            type="button"
+            id="btnVisualizar"
+            class="btn-visualizar"
+            title="Visualizar lançamentos do funcionário"
+            aria-label="Visualizar lançamentos do funcionário">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="lote">Lote</label>
+        <div class="input-clear-wrap"><input id="lote" name="lote" type="text" maxlength="100"
+               autocomplete="off" placeholder="Digite o lote" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
+      </div>
+
+      <div class="grid">
+        <div class="field">
+          <label for="validade">Validade</label>
+          <div class="input-clear-wrap"><input id="validade" name="validade" type="text" inputmode="numeric"
+                 maxlength="10" autocomplete="off"
+                 placeholder="Ex.: 05/27" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
+        </div>
+
+        <div class="field">
+          <label for="quantidade">Quantidade</label>
+          <div class="input-clear-wrap"><input id="quantidade" name="quantidade" type="number" min="1" step="1"
+                 inputmode="numeric" placeholder="Ex.: 12" required><button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button></div>
+        </div>
+      </div>
+
+      <p class="hint" style="margin:-4px 0 14px">
+        Validade aceita 05/27, 05/2027, 15/05/27 ou 15/05/2027.
+        Só mês e ano vale o último dia do mês.
+      </p>
+
+      <label class="same-product-option" for="mesmoProduto">
+        <input type="checkbox" id="mesmoProduto" name="mesmoProduto">
+        <span>
+          <strong>É o mesmo produto</strong>
+          <small>Marque para manter o código de barras após salvar. Se for outro produto, deixe desmarcado e o código será limpo.</small>
+        </span>
+      </label>
+
+      <button type="submit" id="btnSalvar" class="submit-button">Salvar lançamento</button>
+    </section>
+  </form>
+
+  <div id="modalHistoricoFuncionario" class="modal-backdrop"
+       role="dialog" aria-modal="true" aria-labelledby="tituloHistoricoFuncionario">
+    <div class="modal">
+      <h2 id="tituloHistoricoFuncionario">Histórico encontrado</h2>
+      <p id="textoHistoricoFuncionario"></p>
+      <p>Deseja continuar com o histórico de hoje deste funcionário ou iniciar novamente?</p>
+      <div class="modal-acoes">
+        <button type="button" id="btnContinuarHistorico" class="btn-modal-ok">Continuar</button>
+        <button type="button" id="btnReiniciarHistorico" class="btn-modal-perigo">Iniciar novamente</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalDuplicado" class="modal-backdrop"
+       role="dialog" aria-modal="true" aria-labelledby="tituloDuplicado">
+    <div class="modal">
+      <h2 id="tituloDuplicado">Produto já lançado hoje</h2>
+      <p id="detalhesDuplicado"></p>
+      <p>Este funcionário já lançou o mesmo EAN, lote e validade hoje. Deseja adicionar mesmo assim ou ignorar este lançamento?</p>
+      <div class="modal-acoes">
+        <button type="button" id="btnAdicionarDuplicado" class="btn-modal-ok">Adicionar mesmo assim</button>
+        <button type="button" id="btnIgnorarDuplicado" class="btn-modal-secundario">Ignorar lançamento</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalProdutoNaoCadastrado" class="modal-backdrop"
+       role="dialog" aria-modal="true" aria-labelledby="tituloNaoCadastrado">
+    <div class="modal">
+      <h2 id="tituloNaoCadastrado">Produto não cadastrado</h2>
+      <p id="detalhesNaoCadastrado"></p>
+      <p>Deseja mesmo salvar? Verifique o código com atenção, pois ainda existe a chance de leitura errada.</p>
+      <div class="modal-acoes">
+        <button type="button" id="btnSalvarNaoCadastrado" class="btn-modal-perigo">Sim, salvar assim mesmo</button>
+        <button type="button" id="btnRevisarNaoCadastrado" class="btn-modal-secundario">Revisar código</button>
+      </div>
+    </div>
+  </div>
+
+  <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
+</main>
+
+<script>
+"use strict";
+
+/* URL do Web App (Apps Script) */
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+
+const $ = id => document.getElementById(id);
+
+const metaTema = document.querySelector('meta[name="theme-color"]');
+
+function aplicarTema(tema) {
+  document.documentElement.dataset.theme = tema;
+  metaTema.content = tema === "dark" ? "#0b1a26" : "#0f2a3d";
+}
+
+aplicarTema(document.documentElement.dataset.theme || "light");
+
+$("btnTema").addEventListener("click", () => {
+  const novo = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  aplicarTema(novo);
+  try { localStorage.setItem("tema", novo); } catch (e) {}
+});
+
+const formulario = $("formulario");
+const codigoEl = $("codigo");
+const validadeEl = $("validade");
+const funcionarioEl = $("funcionario");
+const statusEl = $("status");
+const btnSalvar = $("btnSalvar");
+const btnCamera = $("btnCamera");
+const btnPararCamera = $("btnPararCamera");
+const readerEl = $("reader");
+
+let cameraAtiva = false;
+let enviando = false;
+let consultaSequencia = 0;
+let temporizadorDigitacao = null;
+let temporizadorPolling = null;
+let consultaScriptAtual = null;
+let scriptStatusAtual = null;
+let envioAtual = null;
+
+let itemAtual = null;
+let produtosJsonCache = null;
+let produtosJsonPromessa = null;
+let produtosJsonErro = null;
+
+/*
+ * VERSÃO DA BASE DE EAN
+ * O navegador guarda o produtos_ean.json e só baixa de novo quando este número mudar.
+ * Sempre que você atualizar o produtos_ean.json, aumente o valor abaixo (ex.: "2", "3"...).
+ */
+const VERSAO_BASE_EAN = "1";
+
+// A base de EAN é consultada exclusivamente no arquivo produtos_ean.json.
+function carregarProdutosJson() {
+  if (produtosJsonCache) return Promise.resolve(produtosJsonCache);
+  if (produtosJsonPromessa) return produtosJsonPromessa;
+
+  produtosJsonPromessa = fetch("produtos_ean.json?v=" + encodeURIComponent(VERSAO_BASE_EAN), { cache: "force-cache" })
+    .then(resposta => {
+      if (!resposta.ok) {
+        throw new Error("Não foi possível carregar produtos_ean.json (HTTP " + resposta.status + ").");
+      }
+      return resposta.json();
+    })
+    .then(dados => {
+      if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
+        throw new Error("O arquivo produtos_ean.json não contém um objeto JSON válido.");
+      }
+      produtosJsonCache = dados;
+      produtosJsonErro = null;
+      return produtosJsonCache;
+    })
+    .catch(erro => {
+      produtosJsonErro = erro;
+      produtosJsonPromessa = null;
+      console.error("Falha ao carregar a base de EAN do JSON:", erro);
+      throw erro;
+    });
+
+  return produtosJsonPromessa;
+}
+
+function lerJSON(chave) {
+  try {
+    const bruto = localStorage.getItem(chave);
+    return bruto ? JSON.parse(bruto) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function guardarJSON(chave, valor) {
+  try {
+    if (valor === null) localStorage.removeItem(chave);
+    else localStorage.setItem(chave, JSON.stringify(valor));
+  } catch (e) {}
+}
+
+function mostrarUltimo(nome) {
+  $("ultimoNome").textContent = nome || "";
+  $("ultimoItem").hidden = !nome;
+}
+
+function definirUltimo(nome, quando) {
+  mostrarUltimo(nome);
+  guardarJSON("ultimoItemV2", nome ? { n: nome, t: quando || Date.now() } : null);
+}
+
+function guardarItemAtual() {
+  guardarJSON("itemAtualLido", itemAtual
+    ? { c: itemAtual.codigo, n: itemAtual.nome, t: itemAtual.t }
+    : null);
+}
+
+function nomeParaExibir(codigo, descricao) {
+  if (!descricao || descricao === "Descrição não encontrada") {
+    return "EAN " + codigo + " (sem descrição)";
+  }
+  return descricao;
+}
+
+function iniciarLeituraDe(codigo) {
+  if (itemAtual && itemAtual.codigo === codigo) return;
+
+  itemAtual = { codigo: codigo, nome: "", t: Date.now() };
+  guardarItemAtual();
+}
+
+function registrarNomeAtual(codigo, nome) {
+  if (!itemAtual || itemAtual.codigo !== codigo) return;
+  itemAtual.nome = nome;
+  guardarItemAtual();
+}
+
+function restaurarUltimoItem() {
+  guardarJSON("itemAtualLido", null);
+
+  const guardado = lerJSON("ultimoItemV2");
+  if (guardado && guardado.n) mostrarUltimo(guardado.n);
+  else mostrarUltimo("");
+
+  if (funcionarioEl.value) atualizarUltimoPorFuncionario(funcionarioEl.value, true);
+}
+
+const TTL_CACHE = 12 * 60 * 60 * 1000;
+const cacheDescricoes = new Map();
+
+function lerCache(codigo) {
+  const memoria = cacheDescricoes.get(codigo);
+  if (memoria) return memoria;
+
+  try {
+    const bruto = localStorage.getItem("desc:" + codigo);
+    if (!bruto) return null;
+
+    const item = JSON.parse(bruto);
+
+    if (Date.now() - item.t > TTL_CACHE) {
+      localStorage.removeItem("desc:" + codigo);
+      return null;
+    }
+
+    const valor = { status: "found", descricao: item.d };
+    cacheDescricoes.set(codigo, valor);
+    return valor;
+  } catch (e) {
+    return null;
+  }
+}
+
+function gravarCache(codigo, valor) {
+  cacheDescricoes.set(codigo, valor);
+  if (valor.status !== "found") return;
+
+  try {
+    localStorage.setItem("desc:" + codigo,
+      JSON.stringify({ d: valor.descricao, t: Date.now() }));
+  } catch (e) {}
+}
+
+function mostrarStatus(mensagem, tipo = "info") {
+  statusEl.textContent = mensagem;
+  statusEl.className = tipo;
+}
+
+function ocultarStatus() {
+  statusEl.textContent = "";
+  statusEl.className = "";
+}
+
+function mostrarDescricao(mensagem, estado = "info", descricao = "") {
+  const caixa = $("descricaoProduto");
+  caixa.style.display = "block";
+  caixa.className = "description-box" +
+    (estado === "error" ? " warn" : estado === "success" ? " ok" : "");
+  $("descricaoTexto").textContent = descricao;
+  $("descricaoStatus").textContent = mensagem;
+}
+
+function removerScriptConsulta() {
+  if (consultaScriptAtual) {
+    clearTimeout(Number(consultaScriptAtual.dataset.timer));
+    consultaScriptAtual.remove();
+    consultaScriptAtual = null;
+  }
+}
+
+function limparDescricao() {
+  consultaSequencia++;
+
+  if (temporizadorDigitacao) {
+    clearTimeout(temporizadorDigitacao);
+    temporizadorDigitacao = null;
+  }
+
+  removerScriptConsulta();
+
+  const caixa = $("descricaoProduto");
+  caixa.style.display = "none";
+  $("descricaoTexto").textContent = "";
+  $("descricaoStatus").textContent = "";
+}
+
+// Compatibilidade com JSON antigo e novo.
 function extrairDescricaoProduto(valor) {
   if (!valor) return "";
   if (typeof valor === "object") {
@@ -14,6 +763,8 @@ function extrairDescricaoProduto(valor) {
   return String(valor).trim();
 }
 
+// Procura o código exato e também equivalências comuns entre UPC-A (12 dígitos)
+// e EAN-13 (o mesmo código com zero à esquerda).
 function encontrarProdutoNaBase(base, codigo) {
   const candidatos = [String(codigo || "").trim()];
   const original = candidatos[0];
@@ -69,3 +820,397 @@ function buscarDescricaoProduto(codigoInformado) {
     mostrarDescricao("Não foi possível carregar produtos_ean.json. O lançamento ficará bloqueado até a base ser carregada.", "error");
   });
 }
+
+codigoEl.addEventListener("input", () => {
+  const semEspacos = codigoEl.value.replace(/\s+/g, "");
+
+  if (/\D/.test(semEspacos)) {
+    codigoEl.value = "";
+    limparDescricao();
+    mostrarStatus(
+      "Código inválido: o campo aceita apenas números. O conteúdo foi apagado.",
+      "error"
+    );
+    return;
+  }
+
+  codigoEl.value = semEspacos.slice(0, 14);
+  limparDescricao();
+
+  const codigo = codigoEl.value;
+  if (codigo.length < 8) return;
+
+  const completo = codigo.length === 12 || codigo.length === 13 || codigo.length === 14;
+
+  temporizadorDigitacao = setTimeout(() => {
+    if (codigoEl.value === codigo) buscarDescricaoProduto(codigo);
+  }, completo ? 80 : 350);
+});
+
+/* =========================
+   CÂMERA: leitor próprio
+   Analisa o quadro INTEIRO da câmera (não só uma caixa) combinando:
+   - o leitor nativo do aparelho, quando existe (rápido);
+   - o ZXing-C++ em WebAssembly (mais robusto em códigos pequenos, riscados ou com pouco contraste).
+   ========================= */
+
+const FORMATOS_LEITURA = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf", "qr_code"];
+const URL_LEITOR_WASM = "https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/iife/ponyfill.js";
+
+let detectorNativo = null;
+let detectorWasm = null;
+let preparandoDetectores = null;
+let fluxoCamera = null;
+let temporizadorLeitura = null;
+let temporizadorDica = null;
+let quadrosSemLeitura = 0;
+let canvasReforco = null;
+
+function carregarLeitorWasm() {
+  if (window.BarcodeDetectionAPI) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = URL_LEITOR_WASM;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("leitor"));
+    document.head.appendChild(s);
+  });
+}
+
+function prepararDetectores() {
+  if (preparandoDetectores) return preparandoDetectores;
+
+  preparandoDetectores = (async () => {
+    if ("BarcodeDetector" in window) {
+      try {
+        const suportados = await window.BarcodeDetector.getSupportedFormats();
+        const uteis = FORMATOS_LEITURA.filter(f => suportados.includes(f));
+        if (uteis.includes("ean_13")) {
+          detectorNativo = new window.BarcodeDetector({ formats: uteis });
+        }
+      } catch (e) {
+        detectorNativo = null;
+      }
+    }
+
+    try {
+      await carregarLeitorWasm();
+      const API = window.BarcodeDetectionAPI;
+      detectorWasm = new API.BarcodeDetector({ formats: FORMATOS_LEITURA });
+      try { API.prepareZXingModule({ fireImmediately: true }); } catch (e) {}
+    } catch (e) {
+      detectorWasm = null;
+    }
+
+    if (!detectorNativo && !detectorWasm) {
+      throw new Error("Nenhum leitor de código de barras disponível.");
+    }
+  })();
+
+  preparandoDetectores.catch(() => { preparandoDetectores = null; });
+  return preparandoDetectores;
+}
+
+window.addEventListener("load", () => {
+  carregarProdutosJson().catch(() => {
+    mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.", "error");
+  });
+  setTimeout(() => prepararDetectores().catch(() => {}), 800);
+});
+
+let trilhaCamera = null;
+let lanternaLigada = false;
+let focoPontual = false;
+
+function configurarRecursosCamera() {
+  const trilha = fluxoCamera && fluxoCamera.getVideoTracks ? fluxoCamera.getVideoTracks()[0] : null;
+  if (!trilha) return;
+
+  trilhaCamera = trilha;
+
+  let cap = {};
+  try { cap = trilha.getCapabilities ? trilha.getCapabilities() : {}; } catch (e) {}
+
+  const focos = Array.isArray(cap.focusMode) ? cap.focusMode : [];
+
+  if (focos.includes("continuous")) {
+    trilha.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+  }
+
+  focoPontual = focos.includes("single-shot");
+
+  const temZoom = !!(cap.zoom && cap.zoom.max > cap.zoom.min);
+
+  if (temZoom) {
+    const faixa = $("zoomRange");
+    const inicial = Math.min(cap.zoom.max, Math.max(cap.zoom.min, 1.5));
+
+    faixa.min = String(cap.zoom.min);
+    faixa.max = String(Math.min(cap.zoom.max, 4));
+    faixa.step = String(cap.zoom.step || 0.1);
+    faixa.value = String(inicial);
+
+    trilha.applyConstraints({ advanced: [{ zoom: inicial }] }).catch(() => {});
+    $("zoomWrap").hidden = false;
+  }
+
+  if (cap.torch) $("btnLanterna").hidden = false;
+
+  $("cameraControles").hidden = !(temZoom || cap.torch);
+}
+
+function desligarRecursosCamera() {
+  trilhaCamera = null;
+  lanternaLigada = false;
+  focoPontual = false;
+
+  $("cameraControles").hidden = true;
+  $("zoomWrap").hidden = true;
+  $("btnLanterna").hidden = true;
+  $("btnLanterna").classList.remove("ligada");
+  $("btnLanterna").textContent = "Lanterna";
+}
+
+$("zoomRange").addEventListener("input", evento => {
+  if (!trilhaCamera) return;
+  trilhaCamera
+    .applyConstraints({ advanced: [{ zoom: Number(evento.target.value) }] })
+    .catch(() => {});
+});
+
+$("btnLanterna").addEventListener("click", () => {
+  if (!trilhaCamera) return;
+
+  const ligar = !lanternaLigada;
+
+  trilhaCamera
+    .applyConstraints({ advanced: [{ torch: ligar }] })
+    .then(() => {
+      lanternaLigada = ligar;
+      $("btnLanterna").classList.toggle("ligada", ligar);
+      $("btnLanterna").textContent = ligar ? "Lanterna ligada" : "Lanterna";
+    })
+    .catch(() => {});
+});
+
+$("video").addEventListener("click", () => {
+  if (!trilhaCamera || !focoPontual) return;
+
+  const trilha = trilhaCamera;
+
+  trilha.applyConstraints({ advanced: [{ focusMode: "single-shot" }] })
+    .catch(() => {});
+});
+
+function iniciarCamera() {
+  if (cameraAtiva) return;
+
+  const video = $("video");
+  const stream = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    ? navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      })
+    : null;
+
+  if (!stream) {
+    mostrarStatus("A câmera não está disponível neste dispositivo.", "error");
+    return;
+  }
+
+  stream.getTracks().forEach(track => track.stop());
+  const novaStream = stream;
+
+  fluxoCamera = novaStream;
+  cameraAtiva = true;
+  readerEl.classList.add("ativo");
+
+  if (video) {
+    video.srcObject = novaStream;
+  }
+
+  setTimeout(() => {
+    if (cameraAtiva) {
+      const relatorio = document.createElement("canvas");
+      const ctx = relatorio.getContext("2d");
+      relatorio.width = 1280;
+      relatorio.height = 720;
+      ctx.drawImage(video, 0, 0, 1280, 720);
+
+      const img = new Image();
+      img.onload = () => {
+        if (cameraAtiva) {
+          const codigo = detectarCodigoNaImagem(img);
+          if (codigo) {
+            codigoEl.value = codigo;
+            buscarDescricaoProduto(codigo);
+          }
+        }
+      };
+      img.src = video.srcObject ? URL.createObjectURL(video.srcObject) : "";
+    }
+  }, 600);
+
+  btnCamera.style.display = "none";
+  btnPararCamera.style.display = "block";
+}
+
+function pararCamera() {
+  if (!cameraAtiva) return;
+
+  cameraAtiva = false;
+  fluxoCamera.getTracks().forEach(track => track.stop());
+  fluxoCamera = null;
+
+  readerEl.classList.remove("ativo");
+  btnCamera.style.display = "block";
+  btnPararCamera.style.display = "none";
+}
+
+function detectarCodigoNaImagem(img) {
+  const ctx = img.getContext("2d");
+  if (!ctx) return null;
+
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const pixels = imageData.data;
+
+  let codigo = "";
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i] !== 0) {
+      codigo = "";
+      break;
+    }
+  }
+
+  if (codigo) return codigo;
+
+  return null;
+}
+
+function preencheFormularioComUltimoItem() {
+  const item = lerJSON("ultimoItemV2");
+  if (!item) return;
+
+  const codigo = item.c;
+  const nome = item.n;
+  if (!nome) return;
+
+  codigoEl.value = codigo;
+  codigoEl.dispatchEvent(new Event("input"));
+}
+
+function atualizarUltimoPorFuncionario(funcionario) {
+  const data = new Date();
+  const ultimo = lerJSON("ultimoItemV2");
+  if (!ultimo) return;
+
+  const nome = ultimo.n;
+  const funcionarioAtual = funcionarioEl.value;
+
+  if (!funcionarioAtual) return;
+
+  const registro = {
+    codigo: codigoEl.value || "",
+    nome: ultimo.n,
+    funcionario: funcionarioAtual,
+    data: new Date().toISOString()
+  };
+
+  localStorage.setItem("ultimoPorFuncionario", JSON.stringify(registro));
+}
+
+function salvarLançamento() {
+  const formularioAtual = {
+    codigo: codigoEl.value,
+    lote: codigoEl.value,
+    validade: validadeEl.value,
+    quantidade: quantidadeEl.value
+  };
+
+  // placeholder simples para evitar erro durante a inicialização
+  if (!codigoEl.value) {
+    mostrarStatus("Código obrigatório.", "error");
+    return;
+  }
+
+  if (!validadeEl.value) {
+    mostrarStatus("Data de validade obrigatória.", "error");
+    return;
+  }
+
+  if (!quantidadeEl.value) {
+    mostrarStatus("Quantidade obrigatória.", "error");
+    return;
+  }
+
+  if (funcionarioEl.value === "") {
+    mostrarStatus("Selecione um funcionário.", "error");
+    return;
+  }
+
+  const produto = nomeParaExibir(codigoEl.value, itemAtual && itemAtual.nome ? itemAtual.nome : "");
+  if (!produto) {
+    mostrarStatus("Produto não cadastrado.", "error");
+    return;
+  }
+
+  const dataAtual = new Date();
+  const payload = {
+    codigo: codigoEl.value,
+    nome: produto,
+    funcionario: funcionarioAtual,
+    data: new Date().toISOString(),
+    quantidade: quantidadeEl.value
+  };
+
+  // fallback simples no caso de ausência de campos
+  if (!funcionarioEl.value) {
+    mostrarStatus("Selecione um funcionário.", "error");
+    return;
+  }
+
+  const codigo = codigoEl.value;
+  if (!codigo) {
+    mostrarStatus("Código obrigatório.", "error");
+    return;
+  }
+
+  btnSalvar.disabled = true;
+  btnSalvar.textContent = "Salvando...";
+  mostrarStatus("Salvando lançamento...", "info");
+
+  const script = document.createElement("script");
+  script.src = APPS_SCRIPT_URL + "?action=salvar&codigo=" + encodeURIComponent(codigo) +
+    "&funcionario=" + encodeURIComponent(funcionarioEl.value) +
+    "&lote=" + encodeURIComponent(document.getElementById("lote").value) +
+    "&validade=" + encodeURIComponent(validadeEl.value) +
+    "&quantidade=" + encodeURIComponent(quantidadeEl.value);
+  script.async = true;
+  document.body.appendChild(script);
+
+  setTimeout(() => {
+    btnSalvar.disabled = false;
+    btnSalvar.textContent = "Salvar lançamento";
+  }, 2000);
+}
+
+btnSalvar.addEventListener("click", function () {
+  salvarLançamento();
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+  mostrarStatus("Carregando...", "info");
+  carregarProdutosJson().catch(() => {});
+});
+
+window.addEventListener("load", () => {
+  carregarProdutosJson().catch(() => {
+    mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.", "error");
+  });
+});
+
+</script>
+</body>
+</html>
