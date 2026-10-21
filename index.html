@@ -683,7 +683,15 @@ lojaOrigemEl.addEventListener("input",()=>{
 });
 
 funcionarioEl.addEventListener("change",()=>{
-  try{localStorage.setItem("funcionario",funcionarioEl.value)}catch(e){}
+  try {
+    localStorage.setItem("funcionario", funcionarioEl.value);
+  } catch(e) {}
+
+  // Atualiza os campos imediatamente, sem precisar recarregar a página.
+  atualizarCamposTransferencia();
+
+  // Atualiza o botão de visualizar lançamentos.
+  atualizarBotaoVisualizar();
 });
 
 const CHAVE_HISTORICO_DIARIO="registroProdutosHistoricoDiario_v1";
