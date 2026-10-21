@@ -1,0 +1,602 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+
+  <title>Login | Registro de Mapa de Validade</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      color-scheme: light;
+      --page-bg: #f3f6fb;
+      --card-bg: #ffffff;
+      --text-color: #172033;
+      --muted-color: #687386;
+      --border-color: #dce3ed;
+      --input-bg: #ffffff;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --hover-bg: #edf2f8;
+      --shadow: 0 18px 55px rgba(25, 45, 80, 0.10);
+      --danger: #dc2626;
+      --success: #15803d;
+    }
+
+    body.dark {
+      color-scheme: dark;
+      --page-bg: #0b1120;
+      --card-bg: #151e2e;
+      --text-color: #e5eaf3;
+      --muted-color: #a0aec0;
+      --border-color: #344155;
+      --input-bg: #0e1726;
+      --primary: #3b82f6;
+      --primary-hover: #60a5fa;
+      --hover-bg: #202c40;
+      --shadow: 0 18px 55px rgba(0, 0, 0, 0.25);
+      --danger: #f87171;
+      --success: #4ade80;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--page-bg);
+      color: var(--text-color);
+      font-family: Inter, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, Arial, sans-serif;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    .topbar {
+      min-height: 82px;
+      padding: 16px 5%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--card-bg);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: clamp(17px, 2.5vw, 22px);
+      font-weight: 750;
+      letter-spacing: -0.5px;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted-color);
+      font-size: 13px;
+    }
+
+    .brand sup {
+      margin-left: 6px;
+      color: var(--muted-color);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .theme-toggle {
+      width: 42px;
+      height: 42px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border-color);
+      border-radius: 11px;
+      background: var(--card-bg);
+      color: var(--text-color);
+      cursor: pointer;
+    }
+
+    .theme-toggle svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .icon-sun {
+      display: none;
+    }
+
+    body.dark .icon-moon {
+      display: none;
+    }
+
+    body.dark .icon-sun {
+      display: block;
+    }
+
+    .page {
+      min-height: calc(100vh - 82px);
+      padding: 40px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 430px;
+      padding: 36px;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+    }
+
+    .brand-icon {
+      width: 54px;
+      height: 54px;
+      margin-bottom: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: rgba(37, 99, 235, 0.12);
+      color: var(--primary);
+    }
+
+    .brand-icon svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .login-card h2 {
+      margin: 0;
+      font-size: 27px;
+      letter-spacing: -0.8px;
+    }
+
+    .subtitle {
+      margin: 10px 0 28px;
+      color: var(--muted-color);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .field {
+      margin-bottom: 20px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .field input {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      outline: none;
+      background: var(--input-bg);
+      color: var(--text-color);
+      font-size: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
+    }
+
+    .password-wrap {
+      position: relative;
+    }
+
+    .password-wrap input {
+      padding-right: 78px;
+    }
+
+    .show-password {
+      position: absolute;
+      top: 50%;
+      right: 12px;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .submit-button {
+      width: 100%;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: none;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .submit-button:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .submit-button:disabled {
+      opacity: 0.65;
+      cursor: wait;
+    }
+
+    .message {
+      display: none;
+      margin-bottom: 18px;
+      padding: 12px 13px;
+      border-radius: 9px;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .message.error {
+      display: block;
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      background: rgba(220, 38, 38, 0.08);
+      color: var(--danger);
+    }
+
+    .message.success {
+      display: block;
+      border: 1px solid rgba(21, 128, 61, 0.25);
+      background: rgba(21, 128, 61, 0.08);
+      color: var(--success);
+    }
+
+    .back-link {
+      display: block;
+      margin-top: 25px;
+      color: var(--muted-color);
+      font-size: 13px;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .back-link:hover {
+      color: var(--primary);
+    }
+
+    .security-note {
+      margin: 24px 0 0;
+      padding-top: 19px;
+      border-top: 1px solid var(--border-color);
+      color: var(--muted-color);
+      font-size: 11px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    @media (max-width: 480px) {
+      .topbar {
+        padding: 14px 18px;
+      }
+
+      .page {
+        padding: 24px 15px;
+      }
+
+      .login-card {
+        padding: 26px 21px;
+        border-radius: 16px;
+      }
+
+      .login-card h2 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
+      <p>Acesso ao sistema</p>
+    </div>
+
+    <button
+      type="button"
+      id="btnTema"
+      class="theme-toggle"
+      aria-label="Alternar entre tema claro e escuro"
+      title="Alternar tema"
+    >
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l-1.4 1.4M17.7 6.3l-1.4-1.4"/>
+      </svg>
+    </button>
+  </header>
+
+  <main class="page">
+    <section class="login-card">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="10" width="18" height="11" rx="2"/>
+          <path d="M7 10V7a5 5 0 0 1 10 0v3"/>
+          <circle cx="12" cy="15" r="1.5"/>
+          <path d="M12 16.5V18"/>
+        </svg>
+      </div>
+
+      <h2>Bem-vindo de volta</h2>
+      <p class="subtitle">
+        Entre com seu usuário e senha para acessar o sistema.
+      </p>
+
+      <div
+        id="mensagem"
+        class="message"
+        role="status"
+        aria-live="polite"
+      ></div>
+
+      <form id="formLogin">
+        <div class="field">
+          <label for="usuario">Usuário</label>
+          <input
+            type="text"
+            id="usuario"
+            name="usuario"
+            placeholder="Digite seu usuário"
+            autocomplete="username"
+            autocapitalize="none"
+            spellcheck="false"
+            maxlength="32"
+            required
+          >
+        </div>
+
+        <div class="field">
+          <label for="senha">Senha</label>
+
+          <div class="password-wrap">
+            <input
+              type="password"
+              id="senha"
+              name="senha"
+              placeholder="Digite sua senha"
+              autocomplete="current-password"
+              required
+            >
+
+            <button
+              type="button"
+              id="btnMostrarSenha"
+              class="show-password"
+              aria-label="Mostrar senha"
+            >Mostrar</button>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          id="btnEntrar"
+          class="submit-button"
+        >
+          Entrar no sistema
+        </button>
+      </form>
+
+      <a href="index.html" class="back-link">
+        ← Voltar para o mapa de validade
+      </a>
+
+      <p class="security-note">
+        Acesso restrito a usuários autorizados.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    // ================================================
+    // CONFIGURAÇÃO DO SUPABASE
+    // Use somente a chave pública do projeto aqui.
+    // NUNCA coloque a service_role no navegador.
+    // ================================================
+
+    const SUPABASE_URL = "SUA_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "SUA_CHAVE_PUBLICA_SUPABASE";
+
+    const mensagem = document.getElementById("mensagem");
+    const formLogin = document.getElementById("formLogin");
+    const campoUsuario = document.getElementById("usuario");
+    const campoSenha = document.getElementById("senha");
+    const btnEntrar = document.getElementById("btnEntrar");
+    const btnMostrarSenha = document.getElementById("btnMostrarSenha");
+
+    let supabaseClient = null;
+
+    function mostrarMensagem(texto, tipo) {
+      mensagem.textContent = texto;
+      mensagem.className = "message " + tipo;
+    }
+
+    function limparMensagem() {
+      mensagem.textContent = "";
+      mensagem.className = "message";
+    }
+
+    function inicializarSupabase() {
+      const configurado =
+        SUPABASE_URL.startsWith("https://") &&
+        !SUPABASE_URL.includes("SUA_SUPABASE_URL") &&
+        SUPABASE_ANON_KEY.length > 20 &&
+        !SUPABASE_ANON_KEY.includes("SUA_CHAVE_PUBLICA_SUPABASE");
+
+      if (!configurado) {
+        btnEntrar.disabled = true;
+        mostrarMensagem(
+          "Configure a URL e a chave pública do Supabase no código.",
+          "error"
+        );
+        return;
+      }
+
+      if (!window.supabase?.createClient) {
+        btnEntrar.disabled = true;
+        mostrarMensagem(
+          "Não foi possível carregar o Supabase. Verifique sua conexão.",
+          "error"
+        );
+        return;
+      }
+
+      supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false
+          }
+        }
+      );
+    }
+
+    btnMostrarSenha.addEventListener("click", () => {
+      const mostrar = campoSenha.type === "password";
+
+      campoSenha.type = mostrar ? "text" : "password";
+      btnMostrarSenha.textContent = mostrar ? "Ocultar" : "Mostrar";
+      btnMostrarSenha.setAttribute(
+        "aria-label",
+        mostrar ? "Ocultar senha" : "Mostrar senha"
+      );
+    });
+
+    formLogin.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      limparMensagem();
+
+      if (!supabaseClient) {
+        mostrarMensagem(
+          "A conexão com o Supabase não está configurada.",
+          "error"
+        );
+        return;
+      }
+
+      const usuario = campoUsuario.value.trim();
+      const senha = campoSenha.value;
+
+      if (!usuario || !senha) {
+        mostrarMensagem(
+          "Informe seu usuário e sua senha.",
+          "error"
+        );
+        return;
+      }
+
+      btnEntrar.disabled = true;
+      btnEntrar.textContent = "Verificando acesso...";
+
+      try {
+        const { data, error } = await supabaseClient.functions.invoke(
+          "login-usuario",
+          {
+            body: {
+              usuario,
+              senha
+            }
+          }
+        );
+
+        if (error || !data?.session?.access_token ||
+            !data?.session?.refresh_token) {
+          throw new Error("Não foi possível autenticar.");
+        }
+
+        const { error: erroSessao } =
+          await supabaseClient.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token
+          });
+
+        if (erroSessao) {
+          throw erroSessao;
+        }
+
+        mostrarMensagem(
+          "Login realizado com sucesso. Abrindo o sistema...",
+          "success"
+        );
+
+        window.location.replace("index.html");
+      } catch (error) {
+        console.error("Falha no login:", error);
+
+        mostrarMensagem(
+          "Não foi possível entrar. Confira suas credenciais e tente novamente.",
+          "error"
+        );
+      } finally {
+        btnEntrar.disabled = false;
+        btnEntrar.textContent = "Entrar no sistema";
+      }
+    });
+
+    // Alternância de tema.
+    const btnTema = document.getElementById("btnTema");
+
+    try {
+      if (localStorage.getItem("tema") === "escuro") {
+        document.body.classList.add("dark");
+      }
+    } catch (_) {}
+
+    btnTema.addEventListener("click", () => {
+      document.body.classList.toggle("dark");
+
+      try {
+        localStorage.setItem(
+          "tema",
+          document.body.classList.contains("dark") ? "escuro" : "claro"
+        );
+      } catch (_) {}
+    });
+
+    inicializarSupabase();
+  </script>
+</body>
+</html>
