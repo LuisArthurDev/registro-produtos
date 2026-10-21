@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -334,7 +334,7 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
-const LIMITE_VENCIDO_PADRAO = 30;
+const LIMITE_VENCIDO_PADRAO = 60;
 const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
 const LIMITE_A_VENCER = 160;
 
@@ -900,7 +900,7 @@ function renderizarValidade() {
   definirMensagem(
     itens.length +
     " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
-    "NUTRICAO e CONVENIENCIA: VENCIDO até " +
+    "Nutrição e Conveniência: VENCIDO até " +
     LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
     " dias. Demais seções: VENCIDO até " +
     LIMITE_VENCIDO_PADRAO +
@@ -1050,4 +1050,3 @@ carregarDescricoes()
 </script>
 </body>
 </html>
-```
