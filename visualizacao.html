@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -172,6 +173,8 @@
     }
 
     table.larga { min-width: 780px; }
+    table.transferencias { min-width: 950px; }
+    table.validade-transferencias { min-width: 1050px; }
 
     th, td {
       text-align: left;
@@ -293,6 +296,7 @@
           <option>Termolabil</option>
           <option>Psicotropicos</option>
           <option>Antibioticos</option>
+          <option>Transferencias</option>
         </select>
       </div>
 
@@ -330,22 +334,6 @@
 const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
-/*
- * REGRA DE VALIDADE
- *
- * NUTRICAO e CONVENIENCIA:
- *   0 a 15 dias: VENCIDO
- *   16 a 160 dias: À VENCER
- *   Acima de 160 dias: VENDÁVEL
- *
- * Demais seções:
- *   Até 30 dias: VENCIDO
- *   31 a 160 dias: À VENCER
- *   Acima de 160 dias: VENDÁVEL
- *
- * Validades já passadas também são VENCIDO.
- */
-
 const LIMITE_VENCIDO_PADRAO = 30;
 const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
 const LIMITE_A_VENCER = 160;
@@ -369,6 +357,10 @@ function mesAtualISO() {
 
 function normalizar(valor) {
   return String(valor || "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function ehTransferencia(registro) {
+  return normalizar(registro && registro.funcionario) === "transferencias";
 }
 
 function definirMensagem(texto) {
@@ -778,14 +770,17 @@ function renderizarMes() {
   );
 
   nomes.forEach(nome => {
+    const registrosGrupo = grupos.get(nome);
+    const transferencia = normalizar(nome) === "transferencias";
+
     const grupo = document.createElement("section");
     grupo.className = "card grupo";
 
     const titulo = document.createElement("h2");
-    const especial = grupos.get(nome).some(r => r.especial);
+    const especial = registrosGrupo.some(r => r.especial);
 
     titulo.textContent =
-      nome + " (" + grupos.get(nome).length + " lançamento(s))" +
+      nome + " (" + registrosGrupo.length + " lançamento(s))" +
       (especial ? " — todos os meses" : "");
 
     grupo.appendChild(titulo);
@@ -795,17 +790,26 @@ function renderizarMes() {
 
     const tabela = document.createElement("table");
 
-    tabela.appendChild(criarCabecalho([
+    if (transferencia) tabela.classList.add("transferencias");
+
+    const colunas = [
       "Produto / EAN",
       "Lote",
       "Validade",
-      "Quantidade",
-      "Data do lançamento"
-    ]));
+      "Quantidade"
+    ];
+
+    if (transferencia) {
+      colunas.push("Loja de Origem", "Romaneio", "Mês de Lançamento");
+    } else {
+      colunas.push("Data do lançamento");
+    }
+
+    tabela.appendChild(criarCabecalho(colunas));
 
     const tbody = document.createElement("tbody");
 
-    grupos.get(nome)
+    registrosGrupo
       .slice()
       .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
       .forEach(registro => {
@@ -820,7 +824,15 @@ function renderizarMes() {
           "quantidade"
         ));
 
-        tr.appendChild(criarCelula(registro.dataLancamento));
+        if (transferencia) {
+          tr.appendChild(criarCelula(registro.lojaOrigem || ""));
+          tr.appendChild(criarCelula(registro.romaneio || ""));
+          tr.appendChild(criarCelula(
+            registro.mesLancamento || registro.dataLancamento || ""
+          ));
+        } else {
+          tr.appendChild(criarCelula(registro.dataLancamento));
+        }
 
         tbody.appendChild(tr);
       });
@@ -896,6 +908,10 @@ function renderizarValidade() {
     LIMITE_A_VENCER + " dias."
   );
 
+  const mostrarColunasTransferencia = itens.some(
+    item => ehTransferencia(item.registro)
+  );
+
   const card = document.createElement("section");
   card.className = "card grupo";
 
@@ -903,16 +919,24 @@ function renderizarValidade() {
   wrap.className = "tabela-wrap";
 
   const tabela = document.createElement("table");
-  tabela.className = "larga";
+  tabela.className = mostrarColunasTransferencia
+    ? "validade-transferencias"
+    : "larga";
 
-  tabela.appendChild(criarCabecalho([
+  const colunas = [
     "Situação",
     "Produto / EAN",
     "Lote",
     "Validade",
     "Quantidade",
     "Funcionário"
-  ]));
+  ];
+
+  if (mostrarColunasTransferencia) {
+    colunas.push("Loja de Origem", "Romaneio");
+  }
+
+  tabela.appendChild(criarCabecalho(colunas));
 
   const tbody = document.createElement("tbody");
 
@@ -938,6 +962,16 @@ function renderizarValidade() {
     ));
 
     tr.appendChild(criarCelula(item.registro.funcionario));
+
+    if (mostrarColunasTransferencia) {
+      tr.appendChild(criarCelula(
+        item.registro.lojaOrigem || ""
+      ));
+
+      tr.appendChild(criarCelula(
+        item.registro.romaneio || ""
+      ));
+    }
 
     tbody.appendChild(tr);
   });
@@ -1003,7 +1037,7 @@ if (funcionarioURL) {
   if (opcao) $("funcionario").value = opcao.value;
 }
 
-Promise.all([carregarDescricoes()])
+carregarDescricoes()
   .then(consultarHistorico)
   .catch(erro => {
     console.error(erro);
@@ -1016,3 +1050,4 @@ Promise.all([carregarDescricoes()])
 </script>
 </body>
 </html>
+```
