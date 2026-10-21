@@ -131,7 +131,10 @@
       font-weight: 700;
     }
 
-    button:disabled { opacity: .6; cursor: wait; }
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
 
     .resumo {
       display: grid;
@@ -145,7 +148,10 @@
       overflow-wrap: anywhere;
     }
 
-    .legenda { color: var(--muted); font-size: 12px; }
+    .legenda {
+      color: var(--muted);
+      font-size: 12px;
+    }
 
     #mensagem {
       padding: 12px;
@@ -167,18 +173,18 @@
 
     table {
       width: 100%;
-      min-width: 690px;
+      min-width: 730px;
       border-collapse: collapse;
       background: var(--surface);
     }
 
-    table.larga { min-width: 780px; }
-    table.transferencias { min-width: 950px; }
-    table.validade-transferencias { min-width: 1050px; }
+    table.larga { min-width: 820px; }
+    table.transferencias { min-width: 1000px; }
+    table.validade-transferencias { min-width: 1100px; }
 
     th, td {
       text-align: left;
-      vertical-align: top;
+      vertical-align: middle;
       padding: 10px;
       border-bottom: 1px solid var(--line);
     }
@@ -193,8 +199,16 @@
     tbody tr:last-child td { border-bottom: 0; }
 
     .descricao { font-weight: 700; }
-    .ean { display: block; color: var(--muted); font-size: 12px; }
-    .quantidade { font-weight: 800; white-space: nowrap; }
+    .ean {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .quantidade {
+      font-weight: 800;
+      white-space: nowrap;
+    }
 
     .selo {
       display: inline-block;
@@ -205,9 +219,20 @@
       white-space: nowrap;
     }
 
-    .selo.vencido { background: var(--err-bg); color: var(--err); }
-    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
-    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
+    .selo.vencido {
+      background: var(--err-bg);
+      color: var(--err);
+    }
+
+    .selo.avencer {
+      background: var(--warn-bg);
+      color: var(--warn);
+    }
+
+    .selo.vendavel {
+      background: var(--ok-bg);
+      color: var(--ok);
+    }
 
     .acoes {
       display: flex;
@@ -228,11 +253,54 @@
       font-weight: 700;
     }
 
-    .vazio { padding: 20px; text-align: center; color: var(--muted); }
+    .vazio {
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    /* BOTÃO X PARA EXCLUIR */
+    .celula-acoes {
+      width: 65px;
+      min-width: 65px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    button.btn-excluir {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      min-height: 38px;
+      padding: 0;
+      margin: 0;
+      border: none;
+      border-radius: 8px;
+      background: #b3261e;
+      color: #fff;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    button.btn-excluir:hover {
+      background: #8f1d17;
+    }
+
+    button.btn-excluir:disabled {
+      opacity: .5;
+      cursor: wait;
+    }
 
     @media (max-width: 620px) {
       .filtros { grid-template-columns: 1fr; }
       .resumo { grid-template-columns: 1fr 1fr; }
+      main { width: calc(100% - 16px); }
+      .card { padding: 12px; }
     }
   </style>
 </head>
@@ -253,6 +321,7 @@
       <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
         Por mês de lançamento
       </button>
+
       <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
         Validade (a vencer)
       </button>
@@ -314,10 +383,12 @@
         <div id="totalRegistros" class="numero">0</div>
         <div class="legenda">Lançamentos</div>
       </div>
+
       <div>
         <div id="totalUnidades" class="numero">0</div>
         <div class="legenda">Unidades lançadas</div>
       </div>
+
       <div>
         <div id="totalFuncionarios" class="numero">0</div>
         <div class="legenda">Funcionários</div>
@@ -346,7 +417,12 @@ let mesCarregado = false;
 let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
+let exclusaoEmAndamento = false;
 let modo = "mes";
+
+/* =========================
+   UTILITÁRIOS
+   ========================= */
 
 function mesAtualISO() {
   const agora = new Date();
@@ -408,9 +484,7 @@ function candidatosEAN(ean) {
 
 function obterProdutoEAN(ean) {
   for (const candidato of candidatosEAN(ean)) {
-    if (
-      Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)
-    ) {
+    if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
       const item = descricoesEAN[candidato];
 
       if (typeof item === "string") {
@@ -590,6 +664,111 @@ function consultar() {
 }
 
 /* =========================
+   EXCLUSÃO DE LANÇAMENTOS
+   ========================= */
+
+function criarCelulaExcluir(registro) {
+  const td = document.createElement("td");
+  td.className = "celula-acoes";
+
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "btn-excluir";
+  botao.textContent = "✕";
+  botao.title = "Excluir lançamento";
+  botao.setAttribute("aria-label", "Excluir lançamento");
+
+  botao.addEventListener("click", function () {
+    excluirLancamento(registro, botao);
+  });
+
+  td.appendChild(botao);
+
+  return td;
+}
+
+async function excluirLancamento(registro, botao) {
+  if (exclusaoEmAndamento) return;
+
+  const funcionario = String(
+    registro && registro.funcionario || ""
+  ).trim();
+
+  const chaveUnica = String(
+    registro && registro.chaveUnica || ""
+  ).trim();
+
+  if (!funcionario || !chaveUnica) {
+    alert(
+      "Não foi possível identificar a chave deste lançamento.\n\n" +
+      "O botão está visível, mas o Code.gs precisa retornar a propriedade " +
+      "'chaveUnica' para permitir a exclusão."
+    );
+    return;
+  }
+
+  const mensagem = registro.especial
+    ? "Deseja excluir este registro?\n\n" +
+      "Atenção: esta linha possui quantidade acumulada. " +
+      "A exclusão removerá a linha inteira e toda a quantidade nela registrada."
+    : "Deseja realmente excluir este lançamento?\n\n" +
+      "Funcionário: " + funcionario + "\n" +
+      "Produto: " + obterDescricao(registro.codigo);
+
+  if (!window.confirm(mensagem)) return;
+
+  exclusaoEmAndamento = true;
+  botao.disabled = true;
+  botao.textContent = "…";
+
+  definirMensagem("Excluindo lançamento...");
+
+  try {
+    const resposta = await chamarApps(
+      "excluirLancamento",
+      "__excluirCb",
+      {
+        funcionario: funcionario,
+        chaveUnica: chaveUnica
+      }
+    );
+
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(
+        resposta && resposta.mensagem
+          ? resposta.mensagem
+          : "O Apps Script não confirmou a exclusão."
+      );
+    }
+
+    mesCarregado = false;
+    validadeCarregada = false;
+
+    definirMensagem(
+      "Lançamento excluído. Atualizando os dados..."
+    );
+
+    if (modo === "validade") {
+      consultarValidades();
+    } else {
+      consultarHistorico();
+    }
+  } catch (erro) {
+    alert(
+      "Não foi possível excluir o lançamento.\n\n" +
+      (erro && erro.message ? erro.message : "Erro desconhecido.") +
+      "\n\nVerifique se a ação excluirLancamento está implementada no Code.gs."
+    );
+
+    botao.disabled = false;
+    botao.textContent = "✕";
+    definirMensagem("A exclusão não foi concluída.");
+  } finally {
+    exclusaoEmAndamento = false;
+  }
+}
+
+/* =========================
    CÁLCULO DA VALIDADE
    ========================= */
 
@@ -704,7 +883,8 @@ function atualizarResumo(registros) {
     registros.length.toLocaleString("pt-BR");
 
   $("totalUnidades").textContent = registros.reduce(
-    (total, registro) => total + (Number(registro.quantidade) || 0),
+    (total, registro) =>
+      total + (Number(registro.quantidade) || 0),
     0
   ).toLocaleString("pt-BR");
 
@@ -726,6 +906,10 @@ function renderizar() {
   if (modo === "validade") renderizarValidade();
   else renderizarMes();
 }
+
+/* =========================
+   HISTÓRICO MENSAL
+   ========================= */
 
 function renderizarMes() {
   const funcionarioSelecionado = $("funcionario").value;
@@ -790,7 +974,9 @@ function renderizarMes() {
 
     const tabela = document.createElement("table");
 
-    if (transferencia) tabela.classList.add("transferencias");
+    if (transferencia) {
+      tabela.classList.add("transferencias");
+    }
 
     const colunas = [
       "Produto / EAN",
@@ -800,10 +986,17 @@ function renderizarMes() {
     ];
 
     if (transferencia) {
-      colunas.push("Loja de Origem", "Romaneio", "Mês de Lançamento");
+      colunas.push(
+        "Loja de Origem",
+        "Romaneio",
+        "Mês de Lançamento"
+      );
     } else {
       colunas.push("Data do lançamento");
     }
+
+    /* Coluna do botão X */
+    colunas.push("Ações");
 
     tabela.appendChild(criarCabecalho(colunas));
 
@@ -834,6 +1027,9 @@ function renderizarMes() {
           tr.appendChild(criarCelula(registro.dataLancamento));
         }
 
+        /* Botão X em cada registro */
+        tr.appendChild(criarCelulaExcluir(registro));
+
         tbody.appendChild(tr);
       });
 
@@ -843,6 +1039,10 @@ function renderizarMes() {
     destino.appendChild(grupo);
   });
 }
+
+/* =========================
+   CONSULTA DE VALIDADES
+   ========================= */
 
 function renderizarValidade() {
   const funcionarioSelecionado = $("funcionario").value;
@@ -864,7 +1064,9 @@ function renderizarValidade() {
     const secao = obterSecao(registro.codigo);
     const sit = situacao(dias, secao);
 
-    if (filtro === "criticos" && sit.chave === "vendavel") return;
+    if (filtro === "criticos" && sit.chave === "vendavel") {
+      return;
+    }
 
     if (
       filtro !== "criticos" &&
@@ -919,6 +1121,7 @@ function renderizarValidade() {
   wrap.className = "tabela-wrap";
 
   const tabela = document.createElement("table");
+
   tabela.className = mostrarColunasTransferencia
     ? "validade-transferencias"
     : "larga";
@@ -935,6 +1138,9 @@ function renderizarValidade() {
   if (mostrarColunasTransferencia) {
     colunas.push("Loja de Origem", "Romaneio");
   }
+
+  /* Coluna do botão X */
+  colunas.push("Ações");
 
   tabela.appendChild(criarCabecalho(colunas));
 
@@ -964,14 +1170,12 @@ function renderizarValidade() {
     tr.appendChild(criarCelula(item.registro.funcionario));
 
     if (mostrarColunasTransferencia) {
-      tr.appendChild(criarCelula(
-        item.registro.lojaOrigem || ""
-      ));
-
-      tr.appendChild(criarCelula(
-        item.registro.romaneio || ""
-      ));
+      tr.appendChild(criarCelula(item.registro.lojaOrigem || ""));
+      tr.appendChild(criarCelula(item.registro.romaneio || ""));
     }
+
+    /* Botão X em cada produto */
+    tr.appendChild(criarCelulaExcluir(item.registro));
 
     tbody.appendChild(tr);
   });
@@ -1018,11 +1222,24 @@ function definirModo(novoModo) {
   }
 }
 
+/* =========================
+   EVENTOS E INICIALIZAÇÃO
+   ========================= */
+
 $("btnModoMes").addEventListener("click", () => definirModo("mes"));
 $("btnModoValidade").addEventListener("click", () => definirModo("validade"));
 $("btnBuscar").addEventListener("click", consultar);
+
 $("funcionario").addEventListener("change", renderizar);
 $("statusValidade").addEventListener("change", renderizar);
+
+$("mes").addEventListener("change", () => {
+  mesCarregado = false;
+
+  if (modo === "mes") {
+    consultarHistorico();
+  }
+});
 
 $("mes").value = mesAtualISO();
 
@@ -1034,7 +1251,9 @@ if (funcionarioURL) {
     item => normalizar(item.value) === normalizar(funcionarioURL)
   );
 
-  if (opcao) $("funcionario").value = opcao.value;
+  if (opcao) {
+    $("funcionario").value = opcao.value;
+  }
 }
 
 carregarDescricoes()
