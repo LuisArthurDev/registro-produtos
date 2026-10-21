@@ -305,6 +305,40 @@
     .btn-limpar-input:hover { background: var(--bg); color: var(--ink); }
     .input-clear-wrap.has-value .btn-limpar-input { display: flex; }
 
+    .funcionario-linha {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .funcionario-linha select {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .btn-visualizar {
+      flex: 0 0 48px;
+      width: 48px;
+      min-height: 48px;
+      padding: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      background: var(--info-bg);
+      color: var(--accent);
+    }
+    
+    .btn-visualizar.visivel {
+      display: flex;
+    }
+    
+    .btn-visualizar svg {
+      width: 23px;
+      height: 23px;
+    }
+
+
   </style>
 </head>
 
@@ -369,29 +403,48 @@
     <section class="card">
       <h2>Lançamento</h2>
 
-      <div class="field">
-        <label for="funcionario">Funcionário</label>
-        <select id="funcionario" name="funcionario" required>
-          <option value="">Selecione o funcionário</option>
-          <option>Alice</option>
-          <option>Altino</option>
-          <option>Ana Carolina</option>
-          <option>Anielle</option>
-          <option>Gabriela</option>
-          <option>Gabriele</option>
-          <option>Isabela</option>
-          <option>Livia</option>
-          <option>Paola</option>
-          <option>Rafaela</option>
-          <option>Ramon</option>
-          <option>Rillary</option>
-          <option>Sulaima</option>
-          <option>Thomaz</option>
-          <option>Termolabil</option>
-          <option>Psicotropicos</option>
-          <option>Antibioticos</option>
-        </select>
-      </div>
+      
+<div class="field">
+  <label for="funcionario">Funcionário</label>
+
+  <div class="funcionario-linha">
+    <select id="funcionario" name="funcionario" required>
+      <option value="">Selecione o funcionário</option>
+      <option>Alice</option>
+      <option>Altino</option>
+      <option>Ana Carolina</option>
+      <option>Anielle</option>
+      <option>Gabriela</option>
+      <option>Gabriele</option>
+      <option>Isabela</option>
+      <option>Livia</option>
+      <option>Paola</option>
+      <option>Rafaela</option>
+      <option>Ramon</option>
+      <option>Rillary</option>
+      <option>Sulaima</option>
+      <option>Thomaz</option>
+      <option>Termolabil</option>
+      <option>Psicotropicos</option>
+      <option>Antibioticos</option>
+    </select>
+
+    <button
+      type="button"
+      id="btnVisualizar"
+      class="btn-visualizar"
+      title="Visualizar lançamentos do funcionário"
+      aria-label="Visualizar lançamentos do funcionário">
+      <svg viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+  </div>
+</div>
 
       <div class="field">
         <label for="lote">Lote</label>
@@ -1890,6 +1943,34 @@ document.querySelectorAll(".input-clear-wrap").forEach((wrap) => {
 });
 
 atualizarBotoesLimpar();
+
+
+const btnVisualizar = $("btnVisualizar");
+
+function atualizarBotaoVisualizar() {
+  const selecionado = Boolean(funcionarioEl.value);
+
+  btnVisualizar.classList.toggle("visivel", selecionado);
+  btnVisualizar.disabled = !selecionado;
+}
+
+btnVisualizar.addEventListener("click", () => {
+  const funcionario = funcionarioEl.value;
+
+  if (!funcionario) {
+    mostrarStatus("Selecione um funcionário primeiro.", "error");
+    return;
+  }
+
+  const destino = "visualizacao.html?funcionario=" +
+    encodeURIComponent(funcionario);
+
+  window.location.href = destino;
+});
+
+atualizarBotaoVisualizar();
+
+funcionarioEl.addEventListener("change", atualizarBotaoVisualizar);
 
 </script>
 </body>
