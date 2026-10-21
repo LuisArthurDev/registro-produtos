@@ -350,7 +350,7 @@ let mesCarregado = false;
 let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
-let modo = "mes"; // "mes" | "validade"
+let modo = "mes";
 
 function mesAtualISO() {
   const agora = new Date();
@@ -371,6 +371,38 @@ function removerAcentos(valor) {
 
 function definirMensagem(texto) {
   $("mensagem").textContent = texto;
+}
+
+function extrairDescricaoProduto(valor) {
+  if (!valor) return "";
+
+  if (typeof valor === "object") {
+    if (typeof valor.produto === "string" && valor.produto.trim()) {
+      return valor.produto.trim();
+    }
+
+    if (typeof valor.descricao === "string" && valor.descricao.trim()) {
+      return valor.descricao.trim();
+    }
+
+    return "";
+  }
+
+  return String(valor).trim();
+}
+
+function extrairSecaoProduto(valor) {
+  if (!valor) return "";
+
+  if (typeof valor === "object") {
+    const secao = valor.secao || valor.section || valor.categoria || "";
+    if (typeof secao === "string" && secao.trim()) {
+      return secao.trim();
+    }
+    return "";
+  }
+
+  return "";
 }
 
 function carregarDescricoes() {
@@ -399,15 +431,10 @@ function obterDescricao(ean) {
 
   for (const candidato of candidatos) {
     if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      const item = descricoesEAN[candidato];
+      const valor = descricoesEAN[candidato];
+      const descricao = extrairDescricaoProduto(valor);
 
-      if (typeof item === "string") {
-        return String(item);
-      }
-
-      if (item && typeof item === "object") {
-        return String(item.produto || item.descricao || "Descrição não encontrada");
-      }
+      if (descricao) return descricao;
     }
   }
 
@@ -423,11 +450,10 @@ function obterSecao(ean) {
 
   for (const candidato of candidatos) {
     if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      const item = descricoesEAN[candidato];
+      const valor = descricoesEAN[candidato];
+      const secao = extrairSecaoProduto(valor);
 
-      if (item && typeof item === "object") {
-        return String(item.secao || "").trim();
-      }
+      if (secao) return secao;
     }
   }
 
@@ -593,9 +619,7 @@ function diasAte(iso) {
 }
 
 function situacao(dias, critico) {
-  const limiteVencido = critico
-    ? LIMITE_VENCIDO_NUTRICAO
-    : LIMITE_VENCIDO_PADRAO;
+  const limiteVencido = critico ? LIMITE_VENCIDO_NUTRICAO : LIMITE_VENCIDO_PADRAO;
 
   if (dias <= limiteVencido) {
     return { chave: "vencido", texto: "VENCIDO" };
