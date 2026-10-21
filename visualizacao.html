@@ -331,12 +331,23 @@ const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 
 /*
- * REGRA DE VALIDADE (mesma lógica da fórmula da planilha)
- *  - Produtos:     VENCIDO se faltam até 30 dias
- *  - Até 160 dias:        À VENCER
- *  - Acima de 160 dias:   VENDÁVEL
+ * REGRA DE VALIDADE
+ *
+ * NUTRICAO e CONVENIENCIA:
+ *   0 a 15 dias: VENCIDO
+ *   16 a 160 dias: À VENCER
+ *   Acima de 160 dias: VENDÁVEL
+ *
+ * Demais seções:
+ *   Até 30 dias: VENCIDO
+ *   31 a 160 dias: À VENCER
+ *   Acima de 160 dias: VENDÁVEL
+ *
+ * Validades já passadas também são VENCIDO.
  */
+
 const LIMITE_VENCIDO_PADRAO = 30;
+const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
 const LIMITE_A_VENCER = 160;
 
 const $ = id => document.getElementById(id);
@@ -347,10 +358,11 @@ let mesCarregado = false;
 let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
-let modo = "mes"; // "mes" | "validade"
+let modo = "mes";
 
 function mesAtualISO() {
   const agora = new Date();
+
   return agora.getFullYear() + "-" +
     String(agora.getMonth() + 1).padStart(2, "0");
 }
@@ -363,12 +375,19 @@ function definirMensagem(texto) {
   $("mensagem").textContent = texto;
 }
 
+/* =========================
+   BASE DE PRODUTOS / EAN
+   ========================= */
+
 function carregarDescricoes() {
-  return fetch("produtos_ean.json?v=1", { cache: "no-cache" })
+  return fetch("produtos_ean.json?v=2", {
+    cache: "no-cache"
+  })
     .then(resposta => {
       if (!resposta.ok) {
         throw new Error("Não foi possível carregar produtos_ean.json.");
       }
+
       return resposta.json();
     })
     .then(dados => {
@@ -380,7 +399,7 @@ function carregarDescricoes() {
     });
 }
 
-function obterDescricao(ean) {
+function candidatosEAN(ean) {
   const codigo = String(ean || "").trim();
   const candidatos = [codigo];
 
@@ -392,25 +411,46 @@ function obterDescricao(ean) {
     candidatos.push(codigo.slice(1));
   }
 
-  for (const candidato of candidatos) {
+  return candidatos;
+}
+
+function obterProdutoEAN(ean) {
+  for (const candidato of candidatosEAN(ean)) {
     if (
       Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)
     ) {
       const item = descricoesEAN[candidato];
 
-      // Compatibilidade com o formato antigo e o novo
       if (typeof item === "string") {
-        return item;
+        return {
+          produto: item,
+          secao: ""
+        };
       }
 
       if (item && typeof item === "object") {
-        return String(item.produto || "Descrição não encontrada");
+        return {
+          produto: String(item.produto || "Descrição não encontrada"),
+          secao: String(item.secao || "").trim()
+        };
       }
     }
   }
 
-  return "Descrição não encontrada";
+  return {
+    produto: "Descrição não encontrada",
+    secao: ""
+  };
 }
+
+function obterDescricao(ean) {
+  return obterProdutoEAN(ean).produto;
+}
+
+function obterSecao(ean) {
+  return obterProdutoEAN(ean).secao;
+}
+
 /* =========================
    CONSULTA AO APPS SCRIPT
    ========================= */
@@ -424,6 +464,7 @@ function chamarApps(action, callbackName, extra) {
 
     function finalizar() {
       if (finalizado) return false;
+
       finalizado = true;
       clearTimeout(limite);
       script.remove();
@@ -450,7 +491,10 @@ function chamarApps(action, callbackName, extra) {
     };
 
     const parametros = new URLSearchParams(
-      Object.assign({ action: action, callback: callbackName }, extra || {})
+      Object.assign({
+        action: action,
+        callback: callbackName
+      }, extra || {})
     );
 
     script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
@@ -468,9 +512,11 @@ function mensagemDeErroConsulta(erro) {
 
 function iniciarConsulta(texto) {
   if (consultaEmAndamento) return false;
+
   consultaEmAndamento = true;
   $("btnBuscar").disabled = true;
   definirMensagem(texto);
+
   return true;
 }
 
@@ -505,6 +551,7 @@ function consultarHistorico() {
       todosRegistros = Array.isArray(resposta.registros)
         ? resposta.registros
         : [];
+
       mesCarregado = true;
 
       if (modo === "mes") renderizar();
@@ -534,6 +581,7 @@ function consultarValidades() {
       registrosValidade = Array.isArray(resposta.registros)
         ? resposta.registros
         : [];
+
       validadeCarregada = true;
 
       if (modo === "validade") renderizar();
@@ -555,25 +603,63 @@ function consultar() {
 
 function diasAte(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+
   if (!m) return null;
 
-  const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const alvo = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3])
+  );
+
   const agora = new Date();
-  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const hoje = new Date(
+    agora.getFullYear(),
+    agora.getMonth(),
+    agora.getDate()
+  );
 
   return Math.round((alvo - hoje) / 86400000);
 }
 
-function situacao(dias) {
-  if (dias <= LIMITE_VENCIDO_PADRAO) {
-    return { chave: "vencido", texto: "VENCIDO" };
+function limiteVencidoPorSecao(secao) {
+  const secaoNormalizada = String(secao || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    secaoNormalizada === "NUTRICAO" ||
+    secaoNormalizada === "CONVENIENCIA"
+  ) {
+    return LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA;
+  }
+
+  return LIMITE_VENCIDO_PADRAO;
+}
+
+function situacao(dias, secao = "") {
+  const limiteVencido = limiteVencidoPorSecao(secao);
+
+  if (dias <= limiteVencido) {
+    return {
+      chave: "vencido",
+      texto: "VENCIDO"
+    };
   }
 
   if (dias <= LIMITE_A_VENCER) {
-    return { chave: "avencer", texto: "À VENCER - " + dias + " dias" };
+    return {
+      chave: "avencer",
+      texto: "À VENCER - " + dias + " dias"
+    };
   }
 
-  return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
+  return {
+    chave: "vendavel",
+    texto: "VENDÁVEL - " + dias + " dias"
+  };
 }
 
 /* =========================
@@ -582,8 +668,11 @@ function situacao(dias) {
 
 function criarCelula(texto, classe) {
   const td = document.createElement("td");
+
   if (classe) td.className = classe;
-  td.textContent = texto;
+
+  td.textContent = texto == null ? "" : String(texto);
+
   return td;
 }
 
@@ -598,6 +687,7 @@ function criarCabecalho(colunas) {
   });
 
   thead.appendChild(tr);
+
   return thead;
 }
 
@@ -610,14 +700,16 @@ function criarCelulaProduto(codigo) {
 
   const ean = document.createElement("span");
   ean.className = "ean";
-  ean.textContent = "EAN: " + codigo;
+  ean.textContent = "EAN: " + (codigo || "");
 
   td.append(descricao, ean);
+
   return td;
 }
 
 function atualizarResumo(registros) {
-  $("totalRegistros").textContent = registros.length.toLocaleString("pt-BR");
+  $("totalRegistros").textContent =
+    registros.length.toLocaleString("pt-BR");
 
   $("totalUnidades").textContent = registros.reduce(
     (total, registro) => total + (Number(registro.quantidade) || 0),
@@ -631,8 +723,10 @@ function atualizarResumo(registros) {
 
 function mostrarVazio(texto) {
   const vazio = document.createElement("div");
+
   vazio.className = "card vazio";
   vazio.textContent = texto;
+
   $("resultado").appendChild(vazio);
 }
 
@@ -658,19 +752,24 @@ function renderizarMes() {
     definirMensagem(
       "Nenhum lançamento encontrado para o mês e funcionário selecionados."
     );
+
     mostrarVazio("Não há lançamentos para exibir.");
     return;
   }
 
   definirMensagem(
-    registros.length + " lançamento(s) encontrado(s) em " + $("mes").value + "."
+    registros.length +
+    " lançamento(s) encontrado(s) em " +
+    $("mes").value + "."
   );
 
   const grupos = new Map();
 
   registros.forEach(registro => {
     const nome = registro.funcionario || "Funcionário não informado";
+
     if (!grupos.has(nome)) grupos.set(nome, []);
+
     grupos.get(nome).push(registro);
   });
 
@@ -684,14 +783,18 @@ function renderizarMes() {
 
     const titulo = document.createElement("h2");
     const especial = grupos.get(nome).some(r => r.especial);
-    titulo.textContent = nome + " (" + grupos.get(nome).length + " lançamento(s))" +
+
+    titulo.textContent =
+      nome + " (" + grupos.get(nome).length + " lançamento(s))" +
       (especial ? " — todos os meses" : "");
+
     grupo.appendChild(titulo);
 
     const wrap = document.createElement("div");
     wrap.className = "tabela-wrap";
 
     const tabela = document.createElement("table");
+
     tabela.appendChild(criarCabecalho([
       "Produto / EAN",
       "Lote",
@@ -711,10 +814,12 @@ function renderizarMes() {
         tr.appendChild(criarCelulaProduto(registro.codigo));
         tr.appendChild(criarCelula(registro.lote));
         tr.appendChild(criarCelula(registro.validade));
+
         tr.appendChild(criarCelula(
           Number(registro.quantidade || 0).toLocaleString("pt-BR"),
           "quantidade"
         ));
+
         tr.appendChild(criarCelula(registro.dataLancamento));
 
         tbody.appendChild(tr);
@@ -736,17 +841,32 @@ function renderizarValidade() {
     if (
       funcionarioSelecionado &&
       normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
-    ) return;
+    ) {
+      return;
+    }
 
     const dias = diasAte(registro.validadeISO);
+
     if (dias === null) return;
 
-    const sit = situacao(dias);
+    const secao = obterSecao(registro.codigo);
+    const sit = situacao(dias, secao);
 
     if (filtro === "criticos" && sit.chave === "vendavel") return;
-    if (filtro !== "criticos" && filtro !== "todos" && sit.chave !== filtro) return;
 
-    itens.push({ registro: registro, dias: dias, sit: sit });
+    if (
+      filtro !== "criticos" &&
+      filtro !== "todos" &&
+      sit.chave !== filtro
+    ) {
+      return;
+    }
+
+    itens.push({
+      registro: registro,
+      dias: dias,
+      sit: sit
+    });
   });
 
   itens.sort((a, b) => a.dias - b.dias);
@@ -757,14 +877,22 @@ function renderizarValidade() {
   destino.replaceChildren();
 
   if (!itens.length) {
-    definirMensagem("Nenhum produto encontrado para a situação e o funcionário selecionados.");
+    definirMensagem(
+      "Nenhum produto encontrado para a situação e o funcionário selecionados."
+    );
+
     mostrarVazio("Não há produtos para exibir.");
     return;
   }
 
   definirMensagem(
-    itens.length + " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
-    "Vencido: até " + LIMITE_VENCIDO_PADRAO + " dias. À vencer: até " +
+    itens.length +
+    " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    "NUTRICAO e CONVENIENCIA: VENCIDO até " +
+    LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
+    " dias. Demais seções: VENCIDO até " +
+    LIMITE_VENCIDO_PADRAO +
+    " dias. À vencer até " +
     LIMITE_A_VENCER + " dias."
   );
 
@@ -776,6 +904,7 @@ function renderizarValidade() {
 
   const tabela = document.createElement("table");
   tabela.className = "larga";
+
   tabela.appendChild(criarCabecalho([
     "Situação",
     "Produto / EAN",
@@ -792,18 +921,22 @@ function renderizarValidade() {
 
     const tdSituacao = document.createElement("td");
     const selo = document.createElement("span");
+
     selo.className = "selo " + item.sit.chave;
     selo.textContent = item.sit.texto;
+
     tdSituacao.appendChild(selo);
     tr.appendChild(tdSituacao);
 
     tr.appendChild(criarCelulaProduto(item.registro.codigo));
     tr.appendChild(criarCelula(item.registro.lote));
     tr.appendChild(criarCelula(item.registro.validade));
+
     tr.appendChild(criarCelula(
       Number(item.registro.quantidade || 0).toLocaleString("pt-BR"),
       "quantidade"
     ));
+
     tr.appendChild(criarCelula(item.registro.funcionario));
 
     tbody.appendChild(tr);
@@ -821,10 +954,12 @@ function renderizarValidade() {
 
 function definirModo(novoModo) {
   modo = novoModo;
+
   const validade = modo === "validade";
 
   $("btnModoMes").setAttribute("aria-pressed", String(!validade));
   $("btnModoValidade").setAttribute("aria-pressed", String(validade));
+
   $("campoMes").hidden = validade;
   $("campoStatus").hidden = !validade;
 
@@ -833,14 +968,16 @@ function definirModo(novoModo) {
     : "Histórico mensal de produtos por funcionário";
 
   if (validade) {
-    if (validadeCarregada) renderizar();
-    else {
+    if (validadeCarregada) {
+      renderizar();
+    } else {
       $("resultado").replaceChildren();
       consultarValidades();
     }
   } else {
-    if (mesCarregado) renderizar();
-    else {
+    if (mesCarregado) {
+      renderizar();
+    } else {
       $("resultado").replaceChildren();
       consultarHistorico();
     }
@@ -870,8 +1007,10 @@ Promise.all([carregarDescricoes()])
   .then(consultarHistorico)
   .catch(erro => {
     console.error(erro);
+
     definirMensagem(
-      "Não foi possível carregar produtos_ean.json. Confira se ele está na mesma pasta da página."
+      "Não foi possível carregar produtos_ean.json. " +
+      "Confira se ele está na mesma pasta da página."
     );
   });
 </script>
