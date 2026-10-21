@@ -173,14 +173,49 @@
 
     table {
       width: 100%;
-      min-width: 730px;
+      min-width: 0;
+      table-layout: fixed;
       border-collapse: collapse;
       background: var(--surface);
     }
-
-    table.larga { min-width: 820px; }
-    table.transferencias { min-width: 1000px; }
-    table.validade-transferencias { min-width: 1100px; }
+    
+    table.larga,
+    table.transferencias,
+    table.validade-transferencias {
+      min-width: 0;
+    }
+    
+    th, td {
+      text-align: left;
+      vertical-align: middle;
+      padding: 8px 5px;
+      border-bottom: 1px solid var(--line);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      font-size: 12px;
+    }
+    
+    th {
+      color: var(--muted);
+      background: var(--bg);
+      font-size: 11px;
+    }
+    
+    .celula-acoes {
+      width: 48px;
+      min-width: 48px;
+      padding: 5px 3px;
+      text-align: center;
+    }
+    
+    button.btn-excluir {
+      width: 30px;
+      min-width: 30px;
+      height: 30px;
+      min-height: 30px;
+      padding: 0;
+      font-size: 17px;
+    }
 
     th, td {
       text-align: left;
