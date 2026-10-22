@@ -1265,18 +1265,31 @@ document.querySelectorAll(".input-clear-wrap").forEach(w=>{
   });
 });
 
+
 /* Visualizar lançamentos */
-const btnVisualizar=$("btnVisualizar");
-function atualizarBotaoVisualizar(){
-  const selecionado=Boolean(funcionarioEl.value);
-  btnVisualizar.classList.toggle("visivel",selecionado);
-  btnVisualizar.disabled=!selecionado;
+
+// Botão do HEADER: mostra todos os lançamentos.
+const btnVisualizar = $("btnVisualizar");
+
+// Botão ao lado do campo FUNCIONÁRIO: filtra pelo selecionado.
+const btnVisualizarFuncionario = $("btnVisualizarFuncionario");
+
+// Mostra o botão ao lado do funcionário somente após a seleção.
+function atualizarBotaoVisualizar() {
+  const selecionado = Boolean(funcionarioEl.value.trim());
+
+  btnVisualizarFuncionario.classList.toggle("visivel", selecionado);
+  btnVisualizarFuncionario.disabled = !selecionado;
 }
-$("btnVisualizar").addEventListener("click", () => {
+
+// HEADER: abre a visualização geral, sem filtro.
+btnVisualizar.addEventListener("click", () => {
   window.location.href = "visualizacao.html";
 });
-$("btnVisualizarFuncionario").addEventListener("click", () => {
-  const funcionario = $("funcionario").value.trim();
+
+// FUNCIONÁRIO: abre a visualização filtrada pelo selecionado.
+btnVisualizarFuncionario.addEventListener("click", () => {
+  const funcionario = funcionarioEl.value.trim();
 
   if (!funcionario) {
     alert("Selecione um funcionário.");
@@ -1287,7 +1300,10 @@ $("btnVisualizarFuncionario").addEventListener("click", () => {
     "visualizacao.html?funcionario=" +
     encodeURIComponent(funcionario);
 });
-funcionarioEl.addEventListener("change",atualizarBotaoVisualizar);
+
+// Atualiza a visibilidade quando o funcionário muda.
+funcionarioEl.addEventListener("change", atualizarBotaoVisualizar);
+
 
 window.addEventListener("load",()=>{
   restaurarUltimoItem();
