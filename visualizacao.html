@@ -328,10 +328,107 @@
     .acao-subir-vencidos {
   background: #176b3a;
 }
+
+ 
+/* =========================
+   TELA DE CARREGAMENTO
+   ========================= */
+
+#telaCarregamento {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(8, 20, 30, 0.48);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+#telaCarregamento[hidden] {
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.carregamento-conteudo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 34px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  animation: aparecerCarregamento 0.25s ease;
+}
+
+.carregamento-circulo {
+  width: 54px;
+  height: 54px;
+  border: 5px solid var(--line);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-radius: 50%;
+  animation: girarCarregamento 0.8s linear infinite;
+}
+
+#textoCarregamento {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+}
+
+@keyframes girarCarregamento {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aparecerCarregamento {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carregamento-circulo,
+  .carregamento-conteudo {
+    animation: none;
+  }
+
+  #telaCarregamento {
+    transition: none;
+  }
+}
+   
   </style>
 </head>
 
 <body>
+  
+<div id="telaCarregamento" hidden role="status" aria-live="polite">
+  <div class="carregamento-conteudo">
+    <div class="carregamento-circulo" aria-hidden="true"></div>
+    <p id="textoCarregamento">Carregando...</p>
+  </div>
+</div>
+
 <header>
   <h1>Visualização dos Lançamentos</h1>
   <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
@@ -580,6 +677,16 @@ function definirMensagem(texto) {
   $("mensagem").textContent = texto;
 }
 
+function mostrarCarregamento(texto) {
+  $("textoCarregamento").textContent = texto || "Carregando...";
+  $("telaCarregamento").hidden = false;
+}
+
+function ocultarCarregamento() {
+  $("telaCarregamento").hidden = true;
+}
+
+
 /* =========================
    BASE DE PRODUTOS / EAN
    ========================= */
@@ -741,9 +848,12 @@ function consultarHistorico() {
 
   if (!iniciarConsulta("Consultando os lançamentos...")) return;
 
+  mostrarCarregamento("Consultando os lançamentos...");
+
   chamarApps("historicoMes", "__historicoCb", { mes: mes })
     .then(resposta => {
       encerrarConsulta();
+      ocultarCarregamento();
 
       if (!resposta || !resposta.sucesso) {
         definirMensagem(
@@ -771,9 +881,12 @@ function consultarHistorico() {
 function consultarValidades() {
   if (!iniciarConsulta("Consultando as validades...")) return;
 
+  mostrarCarregamento("Consultando as validades...");
+
   chamarApps("validades", "__validadeCb", {})
     .then(resposta => {
       encerrarConsulta();
+      ocultarCarregamento();
 
       if (!resposta || !resposta.sucesso) {
         definirMensagem(
@@ -953,46 +1066,69 @@ $("formEdicao").addEventListener("submit", evento => {
   });
 });
 
-function subirParaVencidos(chaveUnica) {
-  if (!chaveUnica) {
+
+function subirParaVencidos(registro) {
+  if (
+    !registro ||
+    !String(registro.chaveUnica || "").trim()
+  ) {
     alert("Não foi possível identificar a chave única deste lançamento.");
     return;
   }
 
+  if (registro.especial) {
+    alert(
+      "Esta aba agrupa quantidades de vários lançamentos. " +
+      "Não é possível mover um lançamento individual para Vencidos."
+    );
+    return;
+  }
+
+  const chaveUnica = String(registro.chaveUnica).trim();
+
   const confirmar = confirm(
     "Deseja mover este lançamento para a aba Vencidos?\n\n" +
-    "A linha original será removida e as sinalizações associadas serão excluídas."
+    "Produto: " + obterDescricao(registro.codigo) +
+    "\nLote: " + (registro.lote || "") +
+    "\nValidade: " + (registro.validade || "") +
+    "\nQuantidade: " + (registro.quantidade || 0) +
+    "\n\nA linha original será removida e as sinalizações associadas serão excluídas."
   );
 
   if (!confirmar) return;
 
-  google.script.run
-    .withSuccessHandler(function(resposta) {
-      if (resposta && resposta.sucesso) {
-        alert(resposta.mensagem || "Lançamento movido para Vencidos.");
+  const botoes = document.querySelectorAll(".acao-subir-vencidos");
+  botoes.forEach(botao => botao.disabled = true);
 
-        // Atualize as listas usando as funções já existentes na página.
-        // Substitua pelos nomes reais das funções de atualização.
-        if (typeof carregarHistoricoMes === "function") {
-          carregarHistoricoMes();
-        }
-
-        if (typeof carregarValidades === "function") {
-          carregarValidades();
-        }
-      } else {
-        alert(
+  chamarApps("subirVencidos", "__subirVencidosCb", {
+    chaveUnica: chaveUnica
+  })
+    .then(resposta => {
+      if (!resposta || !resposta.sucesso) {
+        throw new Error(
           resposta && resposta.mensagem
             ? resposta.mensagem
-            : "Não foi possível mover o lançamento."
+            : "Não foi possível mover o lançamento para Vencidos."
         );
       }
+
+      alert(resposta.mensagem || "Lançamento movido para Vencidos.");
+
+      // Invalidar os dados em cache para forçar uma nova consulta.
+      mesCarregado = false;
+      validadeCarregada = false;
+
+      consultar();
     })
-    .withFailureHandler(function(erro) {
-      alert("Erro ao mover para Vencidos: " + erro.message);
+    .catch(erro => {
+      alert(erro.message || "Erro ao mover o lançamento para Vencidos.");
     })
-    .subirVencidos({ chaveUnica: chaveUnica });
+    .finally(() => {
+      document.querySelectorAll(".acao-subir-vencidos")
+        .forEach(botao => botao.disabled = false);
+    });
 }
+
   
 function excluirRegistro(registro) {
   if (!registro || !String(registro.chaveUnica || "").trim()) {
