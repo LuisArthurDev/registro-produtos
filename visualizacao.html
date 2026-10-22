@@ -416,6 +416,11 @@
     transition: none;
   }
 }
+
+  .btn-informacoes {
+    background: #0a7c86;
+    color: #fff;
+  }
    
   </style>
 </head>
@@ -452,15 +457,6 @@
     <div class="filtros">
       <div id="campoMes">
         <label for="mes">Mês do lançamento</label>
-      
-        <div class="campo-mes-controles">
-          <button
-            id="btnInformacoes"
-            class="btn-informacoes"
-            type="button"
-            title="Informações sobre os mapas"
-            aria-label="Informações sobre os mapas"
-          >ⓘ</button>
       
           <input id="mes" type="month">
       
@@ -952,7 +948,21 @@ function criarCelulaAcoes(registro, opcoes = {}) {
   excluir.setAttribute("aria-label", "Excluir lançamento");
   excluir.addEventListener("click", () => excluirRegistro(registro));
 
-  grupo.append(editar, excluir);
+  const informacoes = document.createElement("button");
+  informacoes.type = "button";
+  informacoes.className = "btn-informacoes";
+  informacoes.textContent = "ⓘ";
+  informacoes.title = "Informações deste lançamento";
+  informacoes.setAttribute(
+    "aria-label",
+    "Informações deste lançamento"
+  );
+
+  informacoes.addEventListener("click", () => {
+    mostrarInformacoesRegistro(registro);
+  });
+  
+  grupo.append(editar, excluir, informacoes);
 
   if (opcoes.modo === "validade" && opcoes.vencido === true) {
     const subir = document.createElement("button");
@@ -1770,6 +1780,11 @@ $("todosMeses").addEventListener("change", () => {
 $("btnInformacoes").addEventListener("click", () => {
   alert("O sistema de informações dos mapas será implementado posteriormente.");
 });
+
+  function mostrarInformacoesRegistro(registro) {
+  alert("Funcionalidade de informações do lançamento ainda está em desenvolvimento.");
+}
+
 </script>
 </body>
 </html>
