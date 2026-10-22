@@ -42,13 +42,8 @@
       --shadow: none;
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    [hidden] {
-      display: none !important;
-    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
 
     body {
       margin: 0;
@@ -63,16 +58,8 @@
       padding: 18px;
     }
 
-    header h1 {
-      margin: 0;
-      font-size: 20px;
-    }
-
-    header p {
-      margin: 4px 0 0;
-      color: #c5d4df;
-      font-size: 13px;
-    }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; color: #c5d4df; font-size: 13px; }
 
     main {
       width: min(100% - 24px, 1200px);
@@ -95,36 +82,6 @@
       margin-bottom: 14px;
     }
 
-    input,
-    select,
-    button {
-      width: 100%;
-      min-height: 44px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 9px 11px;
-      font: inherit;
-    }
-
-    input,
-    select {
-      color: var(--ink);
-      background: var(--surface);
-    }
-
-    button {
-      cursor: pointer;
-      border: 0;
-      background: var(--accent);
-      color: white;
-      font-weight: 700;
-    }
-
-    button:disabled {
-      opacity: .6;
-      cursor: wait;
-    }
-
     .modo {
       background: var(--bg);
       color: var(--ink);
@@ -139,7 +96,7 @@
 
     .filtros {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+      grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) auto;
       gap: 12px;
       align-items: end;
     }
@@ -151,6 +108,30 @@
       font-size: 13px;
       font-weight: 600;
     }
+
+    input, select, button {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font: inherit;
+    }
+
+    input, select {
+      color: var(--ink);
+      background: var(--surface);
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: .6; cursor: wait; }
 
     .resumo {
       display: grid;
@@ -164,10 +145,7 @@
       overflow-wrap: anywhere;
     }
 
-    .legenda {
-      color: var(--muted);
-      font-size: 12px;
-    }
+    .legenda { color: var(--muted); font-size: 12px; }
 
     #mensagem {
       padding: 12px;
@@ -178,180 +156,65 @@
       overflow-wrap: anywhere;
     }
 
-    .grupo {
-      margin-bottom: 18px;
-    }
+    .grupo { margin-bottom: 18px; }
+    .grupo h2 { font-size: 17px; margin: 0 0 10px; }
 
-    .grupo h2 {
-      font-size: 17px;
-      margin: 0 0 10px;
-    }
-
-    /* Tabelas com rolagem horizontal */
     .tabela-wrap {
-      width: 100%;
       overflow-x: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
-      -webkit-overflow-scrolling: touch;
     }
 
     table {
       width: 100%;
-      min-width: 760px;
-      table-layout: fixed;
+      min-width: 850px;
       border-collapse: collapse;
       background: var(--surface);
     }
 
-    table.transferencias,
-    table.validade-transferencias {
-      min-width: 1050px;
-    }
+    table.transferencias { min-width: 1100px; }
+    table.validade-transferencias { min-width: 1200px; }
 
-    table.larga {
-      min-width: 760px;
-    }
-
-    th,
-    td {
-      box-sizing: border-box;
+    th, td {
       text-align: left;
       vertical-align: middle;
-      padding: 10px 8px;
+      padding: 10px;
       border-bottom: 1px solid var(--line);
-      font-size: 12px;
-      overflow-wrap: anywhere;
-      word-break: normal;
     }
 
     th {
       color: var(--muted);
       background: var(--bg);
-      font-size: 11px;
-      white-space: normal;
+      font-size: 12px;
     }
 
-    td {
-      color: var(--ink);
-    }
+    td { overflow-wrap: anywhere; }
+    tbody tr:last-child td { border-bottom: 0; }
 
-    tbody tr:last-child td {
-      border-bottom: 0;
-    }
+    .descricao { font-weight: 700; }
+    .ean { display: block; color: var(--muted); font-size: 12px; }
+    .quantidade { font-weight: 800; white-space: nowrap; }
 
-    .descricao {
-      display: block;
-      font-weight: 700;
-      overflow-wrap: anywhere;
-      word-break: normal;
-    }
-
-    .ean {
-      display: block;
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 11px;
-      overflow-wrap: anywhere;
-    }
-
-    .quantidade {
+    .selo {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
       font-weight: 800;
       white-space: nowrap;
     }
 
-    /* Situação da validade */
-    .selo {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 800;
-      white-space: normal;
-    }
+    .selo.vencido { background: var(--err-bg); color: var(--err); }
+    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
+    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
 
-    .selo.vencido {
-      background: var(--err-bg);
-      color: var(--err);
-    }
-
-    .selo.avencer {
-      background: var(--warn-bg);
-      color: var(--warn);
-    }
-
-    .selo.vendavel {
-      background: var(--ok-bg);
-      color: var(--ok);
-    }
-
-    /* Coluna com os dois botões */
-    .celula-acoes {
-      width: 75px;
-      min-width: 75px;
-      padding: 6px 4px;
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    .acoes-registro {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-    }
-
-    button.btn-excluir,
-    button.btn-sinalizar {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      min-width: 36px;
-      height: 36px;
-      min-height: 36px;
-      padding: 0;
-      margin: 0;
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      cursor: pointer;
-    }
-
-    button.btn-excluir {
-      background: #b3261e;
-      font-size: 20px;
-      font-weight: 800;
-    }
-
-    button.btn-excluir:hover {
-      background: #8f1d17;
-    }
-
-    button.btn-sinalizar {
-      background: #a15c07;
-      font-size: 18px;
-      font-weight: 800;
-    }
-
-    button.btn-sinalizar:hover {
-      background: #804800;
-    }
-
-    button.btn-excluir:disabled,
-    button.btn-sinalizar:disabled {
-      opacity: .5;
-      cursor: wait;
-    }
-
-    /* Link para voltar */
-    .acoes {
+    .acoes-topo {
       display: flex;
       gap: 10px;
       margin-bottom: 14px;
     }
 
-    .acoes a {
+    .acoes-topo a {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -364,56 +227,86 @@
       font-weight: 700;
     }
 
-    .vazio {
+    .acoes-linha {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .btn-acao {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      min-width: 38px;
+      min-height: 38px;
+      padding: 4px;
+      border-radius: 8px;
+      font-size: 17px;
+    }
+
+    .btn-editar { background: #1769aa; }
+    .btn-excluir { background: #b3261e; }
+    .btn-sinalizar { background: #a15c07; }
+
+    .btn-acao:disabled { opacity: .45; }
+
+    .vazio { padding: 20px; text-align: center; color: var(--muted); }
+
+    /* Modal de edição */
+    .modal-fundo {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0,0,0,.55);
+    }
+
+    .modal {
+      width: min(100%, 430px);
+      max-height: 90vh;
+      overflow-y: auto;
       padding: 20px;
-      text-align: center;
-      color: var(--muted);
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
     }
 
-    @media (max-width: 800px) {
-      .filtros {
-        grid-template-columns: 1fr 1fr;
-      }
+    .modal h2 { margin: 0 0 5px; font-size: 20px; }
+    .modal p { color: var(--muted); font-size: 13px; }
 
-      .filtros > button {
-        grid-column: 1 / -1;
-      }
+    .campo-modal { margin-top: 14px; }
+
+    .botoes-modal {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 20px;
     }
 
-    @media (max-width: 520px) {
-      .filtros {
-        grid-template-columns: 1fr;
-      }
+    .btn-cancelar {
+      background: var(--line);
+      color: var(--ink);
+    }
 
-      .filtros > button {
-        grid-column: auto;
-      }
+    .btn-salvar { background: var(--accent); }
 
-      .resumo {
-        grid-template-columns: 1fr 1fr;
-      }
+    .aviso-modal {
+      margin-top: 12px;
+      color: var(--warn);
+      font-size: 12px;
+    }
 
-      main {
-        width: calc(100% - 16px);
-      }
-
-      .card {
-        padding: 12px;
-      }
-
-      .modos {
-        grid-template-columns: 1fr;
-      }
-
-      table,
-      table.larga {
-        min-width: 760px;
-      }
-
-      table.transferencias,
-      table.validade-transferencias {
-        min-width: 1050px;
-      }
+    @media (max-width: 620px) {
+      .filtros { grid-template-columns: 1fr; }
+      .resumo { grid-template-columns: 1fr 1fr; }
+      .modos { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -425,7 +318,7 @@
 </header>
 
 <main>
-  <div class="acoes">
+  <div class="acoes-topo">
     <a href="index.html">← Voltar ao lançamento</a>
   </div>
 
@@ -434,9 +327,8 @@
       <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
         Por mês de lançamento
       </button>
-
       <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
-        Validade (a vencer)
+        Validade
       </button>
     </div>
 
@@ -487,21 +379,19 @@
   </section>
 
   <div id="mensagem" role="status" aria-live="polite">
-    Carregando histórico...
+    Carregando lançamentos...
   </div>
 
   <section class="card">
     <div class="resumo">
       <div>
         <div id="totalRegistros" class="numero">0</div>
-        <div class="legenda">Lançamentos</div>
+        <div class="legenda">Registros</div>
       </div>
-
       <div>
         <div id="totalUnidades" class="numero">0</div>
-        <div class="legenda">Unidades lançadas</div>
+        <div class="legenda">Unidades</div>
       </div>
-
       <div>
         <div id="totalFuncionarios" class="numero">0</div>
         <div class="legenda">Funcionários</div>
@@ -511,6 +401,42 @@
 
   <div id="resultado"></div>
 </main>
+
+<!-- Modal para editar -->
+<div id="modalFundo" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloModal">
+    <h2 id="tituloModal">Editar lançamento</h2>
+    <p id="modalProduto">Altere os campos desejados.</p>
+
+    <form id="formEditar">
+      <div class="campo-modal">
+        <label for="editarLote">Lote</label>
+        <input id="editarLote" type="text" maxlength="100" required>
+      </div>
+
+      <div class="campo-modal">
+        <label for="editarValidade">Validade</label>
+        <input id="editarValidade" type="date" required>
+      </div>
+
+      <div class="campo-modal">
+        <label for="editarQuantidade">Quantidade</label>
+        <input id="editarQuantidade" type="number" min="1" step="1" required>
+      </div>
+
+      <div id="avisoModal" class="aviso-modal" hidden></div>
+
+      <div class="botoes-modal">
+        <button id="btnCancelarEdicao" class="btn-cancelar" type="button">
+          Cancelar
+        </button>
+        <button id="btnSalvarEdicao" class="btn-salvar" type="submit">
+          Salvar alterações
+        </button>
+      </div>
+    </form>
+  </section>
+</div>
 
 <script>
 "use strict";
@@ -530,16 +456,12 @@ let mesCarregado = false;
 let validadeCarregada = false;
 let descricoesEAN = {};
 let consultaEmAndamento = false;
-let exclusaoEmAndamento = false;
 let modo = "mes";
-
-/* =========================
-   UTILITÁRIOS
-   ========================= */
+let registroEmEdicao = null;
+let operacaoEmAndamento = false;
 
 function mesAtualISO() {
   const agora = new Date();
-
   return agora.getFullYear() + "-" +
     String(agora.getMonth() + 1).padStart(2, "0");
 }
@@ -556,26 +478,26 @@ function definirMensagem(texto) {
   $("mensagem").textContent = texto;
 }
 
+function escaparTexto(valor) {
+  return String(valor == null ? "" : valor);
+}
+
 /* =========================
-   BASE DE PRODUTOS / EAN
+   PRODUTOS E EAN
    ========================= */
 
 function carregarDescricoes() {
-  return fetch("produtos_ean.json?v=2", {
-    cache: "no-cache"
-  })
+  return fetch("produtos_ean.json?v=2", { cache: "no-cache" })
     .then(resposta => {
       if (!resposta.ok) {
         throw new Error("Não foi possível carregar produtos_ean.json.");
       }
-
       return resposta.json();
     })
     .then(dados => {
       if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
         throw new Error("A base de produtos não é um JSON válido.");
       }
-
       descricoesEAN = dados;
     });
 }
@@ -584,42 +506,31 @@ function candidatosEAN(ean) {
   const codigo = String(ean || "").trim();
   const candidatos = [codigo];
 
-  if (/^\d{12}$/.test(codigo)) {
-    candidatos.push("0" + codigo);
-  }
-
-  if (/^0\d{12}$/.test(codigo)) {
-    candidatos.push(codigo.slice(1));
-  }
+  if (/^\d{12}$/.test(codigo)) candidatos.push("0" + codigo);
+  if (/^0\d{12}$/.test(codigo)) candidatos.push(codigo.slice(1));
 
   return candidatos;
 }
 
 function obterProdutoEAN(ean) {
   for (const candidato of candidatosEAN(ean)) {
-    if (Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) {
-      const item = descricoesEAN[candidato];
+    if (!Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)) continue;
 
-      if (typeof item === "string") {
-        return {
-          produto: item,
-          secao: ""
-        };
-      }
+    const item = descricoesEAN[candidato];
 
-      if (item && typeof item === "object") {
-        return {
-          produto: String(item.produto || "Descrição não encontrada"),
-          secao: String(item.secao || "").trim()
-        };
-      }
+    if (typeof item === "string") {
+      return { produto: item, secao: "" };
+    }
+
+    if (item && typeof item === "object") {
+      return {
+        produto: String(item.produto || "Descrição não encontrada"),
+        secao: String(item.secao || "").trim()
+      };
     }
   }
 
-  return {
-    produto: "Descrição não encontrada",
-    secao: ""
-  };
+  return { produto: "Descrição não encontrada", secao: "" };
 }
 
 function obterDescricao(ean) {
@@ -631,7 +542,7 @@ function obterSecao(ean) {
 }
 
 /* =========================
-   CONSULTA AO APPS SCRIPT
+   CHAMADAS JSONP AO APPS SCRIPT
    ========================= */
 
 function chamarApps(action, callbackName, extra) {
@@ -639,7 +550,6 @@ function chamarApps(action, callbackName, extra) {
     const script = document.createElement("script");
     const anterior = window[callbackName];
     let finalizado = false;
-    let limite = null;
 
     function finalizar() {
       if (finalizado) return false;
@@ -648,16 +558,13 @@ function chamarApps(action, callbackName, extra) {
       clearTimeout(limite);
       script.remove();
 
-      if (anterior) {
-        window[callbackName] = anterior;
-      } else {
-        delete window[callbackName];
-      }
+      if (anterior) window[callbackName] = anterior;
+      else delete window[callbackName];
 
       return true;
     }
 
-    limite = setTimeout(() => {
+    const limite = setTimeout(() => {
       if (finalizar()) reject(new Error("timeout"));
     }, 20000);
 
@@ -670,10 +577,7 @@ function chamarApps(action, callbackName, extra) {
     };
 
     const parametros = new URLSearchParams(
-      Object.assign({
-        action: action,
-        callback: callbackName
-      }, extra || {})
+      Object.assign({ action, callback: callbackName }, extra || {})
     );
 
     script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
@@ -686,11 +590,11 @@ function mensagemDeErroConsulta(erro) {
     return "A consulta demorou demais. Verifique a conexão e tente novamente.";
   }
 
-  return "Falha ao acessar o Apps Script. Confira se a implantação está atualizada e acessível.";
+  return "Falha ao acessar o Apps Script. Confira a implantação e tente novamente.";
 }
 
 function iniciarConsulta(texto) {
-  if (consultaEmAndamento) return false;
+  if (consultaEmAndamento || operacaoEmAndamento) return false;
 
   consultaEmAndamento = true;
   $("btnBuscar").disabled = true;
@@ -714,23 +618,16 @@ function consultarHistorico() {
 
   if (!iniciarConsulta("Consultando os lançamentos...")) return;
 
-  chamarApps("historicoMes", "__historicoCb", { mes: mes })
+  chamarApps("historicoMes", "__historicoCb", { mes })
     .then(resposta => {
       encerrarConsulta();
 
       if (!resposta || !resposta.sucesso) {
-        definirMensagem(
-          resposta && resposta.mensagem
-            ? resposta.mensagem
-            : "Não foi possível consultar o histórico."
-        );
+        definirMensagem(resposta?.mensagem || "Não foi possível consultar o histórico.");
         return;
       }
 
-      todosRegistros = Array.isArray(resposta.registros)
-        ? resposta.registros
-        : [];
-
+      todosRegistros = Array.isArray(resposta.registros) ? resposta.registros : [];
       mesCarregado = true;
 
       if (modo === "mes") renderizar();
@@ -749,18 +646,11 @@ function consultarValidades() {
       encerrarConsulta();
 
       if (!resposta || !resposta.sucesso) {
-        definirMensagem(
-          resposta && resposta.mensagem
-            ? resposta.mensagem
-            : "Não foi possível consultar as validades."
-        );
+        definirMensagem(resposta?.mensagem || "Não foi possível consultar as validades.");
         return;
       }
 
-      registrosValidade = Array.isArray(resposta.registros)
-        ? resposta.registros
-        : [];
-
+      registrosValidade = Array.isArray(resposta.registros) ? resposta.registros : [];
       validadeCarregada = true;
 
       if (modo === "validade") renderizar();
@@ -777,203 +667,70 @@ function consultar() {
 }
 
 /* =========================
-   EXCLUSÃO E SINALIZAÇÃO
-   ========================= */
-
-function criarCelulaExcluir(registro) {
-  const td = document.createElement("td");
-  td.className = "celula-acoes";
-
-  const container = document.createElement("div");
-  container.className = "acoes-registro";
-
-  // Botão de excluir
-  const botaoExcluir = document.createElement("button");
-  botaoExcluir.type = "button";
-  botaoExcluir.className = "btn-excluir";
-  botaoExcluir.textContent = "✕";
-  botaoExcluir.title = "Excluir lançamento";
-  botaoExcluir.setAttribute("aria-label", "Excluir lançamento");
-
-  botaoExcluir.addEventListener("click", function() {
-    excluirLancamento(registro, botaoExcluir);
-  });
-
-  // Botão de sinalizar: ação futura
-  const botaoSinalizar = document.createElement("button");
-  botaoSinalizar.type = "button";
-  botaoSinalizar.className = "btn-sinalizar";
-  botaoSinalizar.textContent = "⚑";
-  botaoSinalizar.title = "Sinalizar lançamento";
-  botaoSinalizar.setAttribute("aria-label", "Sinalizar lançamento");
-
-  botaoSinalizar.addEventListener("click", function() {
-    alert("A função de sinalização ainda será implementada.");
-  });
-
-  container.appendChild(botaoExcluir);
-  container.appendChild(botaoSinalizar);
-  td.appendChild(container);
-
-  return td;
-}
-
-async function excluirLancamento(registro, botao) {
-  if (exclusaoEmAndamento) return;
-
-  const funcionario = String(
-    registro && registro.funcionario || ""
-  ).trim();
-
-  const chaveCompleta = String(
-    registro && (registro.chaveUnica || registro.id) || ""
-  ).trim();
-
-  const id = chaveCompleta.split("|")[0].trim();
-
-  if (!funcionario || !id) {
-    alert(
-      "Não foi possível identificar a chave deste lançamento.\n\n" +
-      "Confira se o Code.gs retorna a propriedade 'chaveUnica'."
-    );
-    return;
-  }
-
-  const mensagem = registro.especial
-    ? "Deseja excluir este registro?\n\n" +
-      "Atenção: esta linha possui quantidade acumulada. " +
-      "A exclusão removerá a linha inteira e toda a quantidade nela registrada."
-    : "Deseja realmente excluir este lançamento?\n\n" +
-      "Funcionário: " + funcionario + "\n" +
-      "Produto: " + obterDescricao(registro.codigo);
-
-  if (!window.confirm(mensagem)) return;
-
-  exclusaoEmAndamento = true;
-  botao.disabled = true;
-  botao.textContent = "…";
-
-  definirMensagem("Excluindo lançamento...");
-
-  try {
-    const resposta = await chamarApps(
-      "excluirLancamento",
-      "__excluirCb",
-      {
-        funcionario: funcionario,
-        id: id
-      }
-    );
-
-    if (!resposta || resposta.sucesso !== true) {
-      throw new Error(
-        resposta && resposta.mensagem
-          ? resposta.mensagem
-          : "O Apps Script não confirmou a exclusão."
-      );
-    }
-
-    mesCarregado = false;
-    validadeCarregada = false;
-
-    definirMensagem("Lançamento excluído. Atualizando os dados...");
-
-    if (modo === "validade") {
-      consultarValidades();
-    } else {
-      consultarHistorico();
-    }
-  } catch (erro) {
-    alert(
-      "Não foi possível excluir o lançamento.\n\n" +
-      (erro && erro.message ? erro.message : "Erro desconhecido.")
-    );
-
-    botao.disabled = false;
-    botao.textContent = "✕";
-
-    definirMensagem("A exclusão não foi concluída.");
-  } finally {
-    exclusaoEmAndamento = false;
-  }
-}
-
-/* =========================
-   CÁLCULO DA VALIDADE
+   DATA E SITUAÇÃO
    ========================= */
 
 function diasAte(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
-
   if (!m) return null;
 
-  const alvo = new Date(
-    Number(m[1]),
-    Number(m[2]) - 1,
-    Number(m[3])
-  );
-
+  const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   const agora = new Date();
-  const hoje = new Date(
-    agora.getFullYear(),
-    agora.getMonth(),
-    agora.getDate()
-  );
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
 
   return Math.round((alvo - hoje) / 86400000);
 }
 
+function validadeParaISO(texto) {
+  const partes = String(texto || "").split("/");
+
+  if (partes.length !== 3) return "";
+
+  return partes[2] + "-" +
+    String(partes[1]).padStart(2, "0") + "-" +
+    String(partes[0]).padStart(2, "0");
+}
+
+function validadeParaExibicao(iso) {
+  const partes = String(iso || "").split("-");
+
+  if (partes.length !== 3) return "";
+
+  return partes[2] + "/" + partes[1] + "/" + partes[0];
+}
+
 function limiteVencidoPorSecao(secao) {
-  const secaoNormalizada = String(secao || "")
+  const s = String(secao || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toUpperCase();
 
-  if (
-    secaoNormalizada === "NUTRICAO" ||
-    secaoNormalizada === "CONVENIENCIA"
-  ) {
-    return LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA;
-  }
-
-  return LIMITE_VENCIDO_PADRAO;
+  return s === "NUTRICAO" || s === "CONVENIENCIA"
+    ? LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA
+    : LIMITE_VENCIDO_PADRAO;
 }
 
 function situacao(dias, secao = "") {
-  const limiteVencido = limiteVencidoPorSecao(secao);
-
-  if (dias <= limiteVencido) {
-    return {
-      chave: "vencido",
-      texto: "VENCIDO"
-    };
+  if (dias <= limiteVencidoPorSecao(secao)) {
+    return { chave: "vencido", texto: "VENCIDO" };
   }
 
   if (dias <= LIMITE_A_VENCER) {
-    return {
-      chave: "avencer",
-      texto: "À VENCER - " + dias + " dias"
-    };
+    return { chave: "avencer", texto: "À VENCER - " + dias + " dias" };
   }
 
-  return {
-    chave: "vendavel",
-    texto: "VENDÁVEL - " + dias + " dias"
-  };
+  return { chave: "vendavel", texto: "VENDÁVEL - " + dias + " dias" };
 }
 
 /* =========================
-   ELEMENTOS DA TABELA
+   CONSTRUÇÃO DA TABELA
    ========================= */
 
 function criarCelula(texto, classe) {
   const td = document.createElement("td");
-
   if (classe) td.className = classe;
-
   td.textContent = texto == null ? "" : String(texto);
-
   return td;
 }
 
@@ -1006,25 +763,11 @@ function criarCelulaProduto(codigo) {
   return td;
 }
 
-function aplicarLarguras(tabela, larguras) {
-  const colgroup = document.createElement("colgroup");
-
-  larguras.forEach(largura => {
-    const col = document.createElement("col");
-    col.style.width = largura + "px";
-    colgroup.appendChild(col);
-  });
-
-  tabela.appendChild(colgroup);
-}
-
 function atualizarResumo(registros) {
-  $("totalRegistros").textContent =
-    registros.length.toLocaleString("pt-BR");
+  $("totalRegistros").textContent = registros.length.toLocaleString("pt-BR");
 
   $("totalUnidades").textContent = registros.reduce(
-    (total, registro) =>
-      total + (Number(registro.quantidade) || 0),
+    (total, registro) => total + (Number(registro.quantidade) || 0),
     0
   ).toLocaleString("pt-BR");
 
@@ -1046,7 +789,74 @@ function renderizar() {
 }
 
 /* =========================
-   HISTÓRICO MENSAL
+   BOTÕES DE AÇÃO
+   ========================= */
+
+function obterChave(registro) {
+  return String(registro.chaveUnica || registro.id || "").trim();
+}
+
+function criarBotaoAcao(rotulo, classe, titulo, aoClicar) {
+  const botao = document.createElement("button");
+
+  botao.type = "button";
+  botao.className = "btn-acao " + classe;
+  botao.textContent = rotulo;
+  botao.title = titulo;
+  botao.setAttribute("aria-label", titulo);
+  botao.addEventListener("click", aoClicar);
+
+  return botao;
+}
+
+function criarCelulaAcoes(registro) {
+  const td = document.createElement("td");
+  const grupo = document.createElement("div");
+
+  grupo.className = "acoes-linha";
+
+  const chave = obterChave(registro);
+  const temChave = Boolean(chave);
+
+  const editar = criarBotaoAcao(
+    "✎",
+    "btn-editar",
+    "Editar lote, validade e quantidade",
+    () => abrirEdicao(registro)
+  );
+
+  editar.disabled = !temChave || operacaoEmAndamento;
+
+  const excluir = criarBotaoAcao(
+    "✕",
+    "btn-excluir",
+    "Excluir lançamento",
+    () => excluirLancamento(registro)
+  );
+
+  excluir.disabled = !temChave || operacaoEmAndamento;
+
+  const sinalizar = criarBotaoAcao(
+    "⚑",
+    "btn-sinalizar",
+    "Mostrar identificação do registro",
+    () => {
+      alert(
+        "Funcionário: " + (registro.funcionario || "") +
+        "\nEAN: " + (registro.codigo || "") +
+        "\nChave: " + (chave || "Não disponível")
+      );
+    }
+  );
+
+  grupo.append(editar, excluir, sinalizar);
+  td.appendChild(grupo);
+
+  return td;
+}
+
+/* =========================
+   RENDERIZAR HISTÓRICO
    ========================= */
 
 function renderizarMes() {
@@ -1063,18 +873,12 @@ function renderizarMes() {
   destino.replaceChildren();
 
   if (!registros.length) {
-    definirMensagem(
-      "Nenhum lançamento encontrado para o mês e funcionário selecionados."
-    );
-
+    definirMensagem("Nenhum lançamento encontrado para os filtros selecionados.");
     mostrarVazio("Não há lançamentos para exibir.");
     return;
   }
 
-  definirMensagem(
-    registros.length + " lançamento(s) encontrado(s) em " +
-    $("mes").value + "."
-  );
+  definirMensagem(registros.length + " registro(s) encontrado(s) em " + $("mes").value + ".");
 
   const grupos = new Map();
 
@@ -1082,105 +886,79 @@ function renderizarMes() {
     const nome = registro.funcionario || "Funcionário não informado";
 
     if (!grupos.has(nome)) grupos.set(nome, []);
-
     grupos.get(nome).push(registro);
   });
 
-  const nomes = Array.from(grupos.keys()).sort((a, b) =>
-    a.localeCompare(b, "pt-BR")
-  );
+  Array.from(grupos.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"))
+    .forEach(nome => {
+      const registrosGrupo = grupos.get(nome);
+      const transferencia = normalizar(nome) === "transferencias";
 
-  nomes.forEach(nome => {
-    const registrosGrupo = grupos.get(nome);
-    const transferencia = normalizar(nome) === "transferencias";
+      const grupo = document.createElement("section");
+      grupo.className = "card grupo";
 
-    const grupo = document.createElement("section");
-    grupo.className = "card grupo";
+      const titulo = document.createElement("h2");
+      titulo.textContent = nome + " (" + registrosGrupo.length + " registro(s))";
+      grupo.appendChild(titulo);
 
-    const titulo = document.createElement("h2");
-    const especial = registrosGrupo.some(r => r.especial);
+      const wrap = document.createElement("div");
+      wrap.className = "tabela-wrap";
 
-    titulo.textContent =
-      nome + " (" + registrosGrupo.length + " lançamento(s))" +
-      (especial ? " — todos os meses" : "");
+      const tabela = document.createElement("table");
+      if (transferencia) tabela.classList.add("transferencias");
 
-    grupo.appendChild(titulo);
+      const colunas = [
+        "Produto / EAN",
+        "Lote",
+        "Validade",
+        "Quantidade"
+      ];
 
-    const wrap = document.createElement("div");
-    wrap.className = "tabela-wrap";
+      if (transferencia) {
+        colunas.push("Loja de Origem", "Romaneio", "Mês de Lançamento");
+      } else {
+        colunas.push("Data do lançamento");
+      }
 
-    const tabela = document.createElement("table");
+      colunas.push("Ações");
+      tabela.appendChild(criarCabecalho(colunas));
 
-    const colunas = [
-      "Produto / EAN",
-      "Lote",
-      "Validade",
-      "Quantidade"
-    ];
+      const tbody = document.createElement("tbody");
 
-    if (transferencia) {
-      tabela.classList.add("transferencias");
+      registrosGrupo.slice()
+        .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+        .forEach(registro => {
+          const tr = document.createElement("tr");
 
-      colunas.push(
-        "Loja de Origem",
-        "Romaneio",
-        "Mês de Lançamento"
-      );
-    } else {
-      colunas.push("Data do lançamento");
-    }
-
-    colunas.push("Ações");
-
-    aplicarLarguras(
-      tabela,
-      transferencia
-        ? [220, 100, 110, 80, 120, 120, 145, 75]
-        : [260, 120, 120, 100, 180, 75]
-    );
-
-    tabela.appendChild(criarCabecalho(colunas));
-
-    const tbody = document.createElement("tbody");
-
-    registrosGrupo
-      .slice()
-      .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
-      .forEach(registro => {
-        const tr = document.createElement("tr");
-
-        tr.appendChild(criarCelulaProduto(registro.codigo));
-        tr.appendChild(criarCelula(registro.lote));
-        tr.appendChild(criarCelula(registro.validade));
-
-        tr.appendChild(criarCelula(
-          Number(registro.quantidade || 0).toLocaleString("pt-BR"),
-          "quantidade"
-        ));
-
-        if (transferencia) {
-          tr.appendChild(criarCelula(registro.lojaOrigem || ""));
-          tr.appendChild(criarCelula(registro.romaneio || ""));
+          tr.appendChild(criarCelulaProduto(registro.codigo));
+          tr.appendChild(criarCelula(registro.lote));
+          tr.appendChild(criarCelula(registro.validade));
           tr.appendChild(criarCelula(
-            registro.mesLancamento || registro.dataLancamento || ""
+            Number(registro.quantidade || 0).toLocaleString("pt-BR"),
+            "quantidade"
           ));
-        } else {
-          tr.appendChild(criarCelula(registro.dataLancamento));
-        }
 
-        tr.appendChild(criarCelulaExcluir(registro));
-        tbody.appendChild(tr);
-      });
+          if (transferencia) {
+            tr.appendChild(criarCelula(registro.lojaOrigem || ""));
+            tr.appendChild(criarCelula(registro.romaneio || ""));
+            tr.appendChild(criarCelula(registro.mesLancamento || registro.dataLancamento || ""));
+          } else {
+            tr.appendChild(criarCelula(registro.dataLancamento || ""));
+          }
 
-    tabela.appendChild(tbody);
-    wrap.appendChild(tabela);
-    grupo.appendChild(wrap);
-    destino.appendChild(grupo);
-  });
+          tr.appendChild(criarCelulaAcoes(registro));
+          tbody.appendChild(tr);
+        });
+
+      tabela.appendChild(tbody);
+      wrap.appendChild(tabela);
+      grupo.appendChild(wrap);
+      destino.appendChild(grupo);
+    });
 }
 
 /* =========================
-   CONSULTA DE VALIDADES
+   RENDERIZAR VALIDADES
    ========================= */
 
 function renderizarValidade() {
@@ -1192,66 +970,43 @@ function renderizarValidade() {
     if (
       funcionarioSelecionado &&
       normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
-    ) {
-      return;
-    }
+    ) return;
 
     const dias = diasAte(registro.validadeISO);
-
     if (dias === null) return;
 
-    const secao = obterSecao(registro.codigo);
-    const sit = situacao(dias, secao);
+    const sit = situacao(dias, obterSecao(registro.codigo));
 
-    if (filtro === "criticos" && sit.chave === "vendavel") {
+    if (filtro === "criticos" && sit.chave === "vendavel") return;
+
+    if (filtro !== "criticos" && filtro !== "todos" && sit.chave !== filtro) {
       return;
     }
 
-    if (
-      filtro !== "criticos" &&
-      filtro !== "todos" &&
-      sit.chave !== filtro
-    ) {
-      return;
-    }
-
-    itens.push({
-      registro: registro,
-      dias: dias,
-      sit: sit
-    });
+    itens.push({ registro, dias, sit });
   });
 
   itens.sort((a, b) => a.dias - b.dias);
-
   atualizarResumo(itens.map(item => item.registro));
 
   const destino = $("resultado");
   destino.replaceChildren();
 
   if (!itens.length) {
-    definirMensagem(
-      "Nenhum produto encontrado para a situação e o funcionário selecionados."
-    );
-
+    definirMensagem("Nenhum produto encontrado para os filtros selecionados.");
     mostrarVazio("Não há produtos para exibir.");
     return;
   }
 
   definirMensagem(
-    itens.length +
-    " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
-    "Nutrição e Conveniência: VENCIDO até " +
+    itens.length + " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    "Nutrição e Conveniência: vencido até " +
     LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
-    " dias. Demais seções: VENCIDO até " +
-    LIMITE_VENCIDO_PADRAO +
-    " dias. À vencer até " +
-    LIMITE_A_VENCER + " dias."
+    " dias; demais seções: vencido até " + LIMITE_VENCIDO_PADRAO +
+    " dias; à vencer até " + LIMITE_A_VENCER + " dias."
   );
 
-  const mostrarColunasTransferencia = itens.some(
-    item => ehTransferencia(item.registro)
-  );
+  const mostrarTransferencias = itens.some(item => ehTransferencia(item.registro));
 
   const card = document.createElement("section");
   card.className = "card grupo";
@@ -1260,10 +1015,7 @@ function renderizarValidade() {
   wrap.className = "tabela-wrap";
 
   const tabela = document.createElement("table");
-
-  tabela.className = mostrarColunasTransferencia
-    ? "validade-transferencias"
-    : "larga";
+  if (mostrarTransferencias) tabela.className = "validade-transferencias";
 
   const colunas = [
     "Situação",
@@ -1274,24 +1026,15 @@ function renderizarValidade() {
     "Funcionário"
   ];
 
-  if (mostrarColunasTransferencia) {
-    colunas.push("Loja de Origem", "Romaneio");
-  }
+  if (mostrarTransferencias) colunas.push("Loja de Origem", "Romaneio");
 
   colunas.push("Ações");
-
-  aplicarLarguras(
-    tabela,
-    mostrarColunasTransferencia
-      ? [105, 220, 90, 105, 85, 130, 115, 120, 75]
-      : [105, 260, 105, 115, 90, 150, 75]
-  );
-
   tabela.appendChild(criarCabecalho(colunas));
 
   const tbody = document.createElement("tbody");
 
   itens.forEach(item => {
+    const registro = item.registro;
     const tr = document.createElement("tr");
 
     const tdSituacao = document.createElement("td");
@@ -1299,27 +1042,24 @@ function renderizarValidade() {
 
     selo.className = "selo " + item.sit.chave;
     selo.textContent = item.sit.texto;
-
     tdSituacao.appendChild(selo);
     tr.appendChild(tdSituacao);
 
-    tr.appendChild(criarCelulaProduto(item.registro.codigo));
-    tr.appendChild(criarCelula(item.registro.lote));
-    tr.appendChild(criarCelula(item.registro.validade));
-
+    tr.appendChild(criarCelulaProduto(registro.codigo));
+    tr.appendChild(criarCelula(registro.lote));
+    tr.appendChild(criarCelula(registro.validade));
     tr.appendChild(criarCelula(
-      Number(item.registro.quantidade || 0).toLocaleString("pt-BR"),
+      Number(registro.quantidade || 0).toLocaleString("pt-BR"),
       "quantidade"
     ));
+    tr.appendChild(criarCelula(registro.funcionario));
 
-    tr.appendChild(criarCelula(item.registro.funcionario));
-
-    if (mostrarColunasTransferencia) {
-      tr.appendChild(criarCelula(item.registro.lojaOrigem || ""));
-      tr.appendChild(criarCelula(item.registro.romaneio || ""));
+    if (mostrarTransferencias) {
+      tr.appendChild(criarCelula(registro.lojaOrigem || ""));
+      tr.appendChild(criarCelula(registro.romaneio || ""));
     }
 
-    tr.appendChild(criarCelulaExcluir(item.registro));
+    tr.appendChild(criarCelulaAcoes(registro));
     tbody.appendChild(tr);
   });
 
@@ -1327,6 +1067,226 @@ function renderizarValidade() {
   wrap.appendChild(tabela);
   card.appendChild(wrap);
   destino.appendChild(card);
+}
+
+/* =========================
+   ABRIR E SALVAR EDIÇÃO
+   ========================= */
+
+function abrirEdicao(registro) {
+  const chave = obterChave(registro);
+
+  if (!chave) {
+    alert("Não foi possível identificar esse lançamento. Atualize a página e tente novamente.");
+    return;
+  }
+
+  registroEmEdicao = registro;
+
+  $("modalProduto").textContent =
+    obterDescricao(registro.codigo) + " — EAN: " + registro.codigo;
+
+  $("editarLote").value = registro.lote || "";
+  $("editarValidade").value =
+    registro.validadeISO || validadeParaISO(registro.validade);
+  $("editarQuantidade").value = Number(registro.quantidade) || 1;
+
+  $("avisoModal").hidden = true;
+  $("avisoModal").textContent = "";
+  $("btnSalvarEdicao").disabled = false;
+  $("btnSalvarEdicao").textContent = "Salvar alterações";
+  $("modalFundo").hidden = false;
+
+  $("editarLote").focus();
+}
+
+function fecharEdicao() {
+  if (operacaoEmAndamento) return;
+
+  $("modalFundo").hidden = true;
+  registroEmEdicao = null;
+}
+
+function mostrarAvisoModal(texto) {
+  $("avisoModal").textContent = texto;
+  $("avisoModal").hidden = false;
+}
+
+$("btnCancelarEdicao").addEventListener("click", fecharEdicao);
+
+$("modalFundo").addEventListener("click", evento => {
+  if (evento.target === $("modalFundo")) fecharEdicao();
+});
+
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape" && !$("modalFundo").hidden) fecharEdicao();
+});
+
+$("formEditar").addEventListener("submit", async evento => {
+  evento.preventDefault();
+
+  if (!registroEmEdicao || operacaoEmAndamento) return;
+
+  const registro = registroEmEdicao;
+  const chave = obterChave(registro);
+  const lote = $("editarLote").value.trim();
+  const validade = $("editarValidade").value;
+  const quantidade = $("editarQuantidade").value;
+
+  if (!lote) {
+    mostrarAvisoModal("Informe o lote.");
+    return;
+  }
+
+  if (!validade) {
+    mostrarAvisoModal("Informe a validade.");
+    return;
+  }
+
+  if (!Number.isSafeInteger(Number(quantidade)) || Number(quantidade) < 1) {
+    mostrarAvisoModal("A quantidade deve ser um número inteiro maior que zero.");
+    return;
+  }
+
+  operacaoEmAndamento = true;
+  $("btnSalvarEdicao").disabled = true;
+  $("btnCancelarEdicao").disabled = true;
+  $("btnSalvarEdicao").textContent = "Salvando...";
+  mostrarAvisoModal("Salvando alterações...");
+
+  try {
+    const resposta = await chamarApps("editarLancamento", "__editarCb", {
+      funcionario: registro.funcionario,
+      chaveUnica: chave,
+      lote: lote,
+      validade: validade,
+      quantidade: String(quantidade)
+    });
+
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta?.mensagem || "Não foi possível editar o lançamento.");
+    }
+
+    $("modalFundo").hidden = true;
+    registroEmEdicao = null;
+    definirMensagem(resposta.mensagem || "Lançamento atualizado.");
+
+    // Atualiza os dados apresentados consultando novamente a planilha.
+    if (modo === "validade") {
+      validadeCarregada = false;
+      consultarValidades();
+    } else {
+      mesCarregado = false;
+      consultarHistorico();
+    }
+
+  } catch (erro) {
+    mostrarAvisoModal(erro.message || "Falha ao salvar as alterações.");
+  } finally {
+    operacaoEmAndamento = false;
+    $("btnSalvarEdicao").disabled = false;
+    $("btnCancelarEdicao").disabled = false;
+    $("btnSalvarEdicao").textContent = "Salvar alterações";
+  }
+});
+
+/* =========================
+   EXCLUIR LANÇAMENTO
+   ========================= */
+
+async function excluirLancamento(registro) {
+  if (operacaoEmAndamento) return;
+
+  const chave = obterChave(registro);
+
+  if (!chave) {
+    alert("Não foi possível identificar esse lançamento. Atualize a página.");
+    return;
+  }
+
+  const confirmar = confirm(
+    "Deseja excluir este lançamento?\n\n" +
+    "Produto: " + obterDescricao(registro.codigo) + "\n" +
+    "Lote: " + (registro.lote || "") + "\n" +
+    "Validade: " + (registro.validade || "") + "\n" +
+    "Quantidade: " + (registro.quantidade || 0) + "\n\n" +
+    "Essa ação não pode ser desfeita."
+  );
+
+  if (!confirmar) return;
+
+  operacaoEmAndamento = true;
+  definirMensagem("Excluindo lançamento...");
+
+  try {
+    const resposta = await chamarApps("excluirLancamento", "__excluirCb", {
+      funcionario: registro.funcionario,
+      chaveUnica: chave
+    });
+
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta?.mensagem || "Não foi possível excluir o lançamento.");
+    }
+
+    alert(resposta.mensagem || "Operação concluída.");
+
+    if (modo === "validade") {
+      validadeCarregada = false;
+      await atualizarDadosAtuais();
+    } else {
+      mesCarregado = false;
+      await atualizarDadosAtuais();
+    }
+
+  } catch (erro) {
+    definirMensagem(erro.message || "Falha ao excluir lançamento.");
+    alert(erro.message || "Falha ao excluir lançamento.");
+  } finally {
+    operacaoEmAndamento = false;
+  }
+}
+
+async function atualizarDadosAtuais() {
+  // Faz a consulta novamente após a operação.
+  if (modo === "validade") {
+    await carregarValidadesSilenciosamente();
+  } else {
+    await carregarHistoricoSilenciosamente();
+  }
+}
+
+async function carregarHistoricoSilenciosamente() {
+  try {
+    const resposta = await chamarApps("historicoMes", "__historicoCb", {
+      mes: $("mes").value
+    });
+
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta?.mensagem || "Falha ao atualizar histórico.");
+    }
+
+    todosRegistros = Array.isArray(resposta.registros) ? resposta.registros : [];
+    mesCarregado = true;
+    renderizar();
+  } catch (erro) {
+    definirMensagem(mensagemDeErroConsulta(erro));
+  }
+}
+
+async function carregarValidadesSilenciosamente() {
+  try {
+    const resposta = await chamarApps("validades", "__validadeCb", {});
+
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta?.mensagem || "Falha ao atualizar validades.");
+    }
+
+    registrosValidade = Array.isArray(resposta.registros) ? resposta.registros : [];
+    validadeCarregada = true;
+    renderizar();
+  } catch (erro) {
+    definirMensagem(mensagemDeErroConsulta(erro));
+  }
 }
 
 /* =========================
@@ -1345,43 +1305,27 @@ function definirModo(novoModo) {
   $("campoStatus").hidden = !validade;
 
   $("subtitulo").textContent = validade
-    ? "Produtos próximos do vencimento, de todos os lançamentos"
+    ? "Produtos organizados pela situação da validade"
     : "Histórico mensal de produtos por funcionário";
 
+  $("resultado").replaceChildren();
+
   if (validade) {
-    if (validadeCarregada) {
-      renderizar();
-    } else {
-      $("resultado").replaceChildren();
-      consultarValidades();
-    }
+    if (validadeCarregada) renderizar();
+    else consultarValidades();
   } else {
-    if (mesCarregado) {
-      renderizar();
-    } else {
-      $("resultado").replaceChildren();
-      consultarHistorico();
-    }
+    if (mesCarregado) renderizar();
+    else consultarHistorico();
   }
 }
-
-/* =========================
-   EVENTOS E INICIALIZAÇÃO
-   ========================= */
 
 $("btnModoMes").addEventListener("click", () => definirModo("mes"));
 $("btnModoValidade").addEventListener("click", () => definirModo("validade"));
 $("btnBuscar").addEventListener("click", consultar);
-
 $("funcionario").addEventListener("change", renderizar);
 $("statusValidade").addEventListener("change", renderizar);
-
 $("mes").addEventListener("change", () => {
   mesCarregado = false;
-
-  if (modo === "mes") {
-    consultarHistorico();
-  }
 });
 
 $("mes").value = mesAtualISO();
@@ -1394,19 +1338,15 @@ if (funcionarioURL) {
     item => normalizar(item.value) === normalizar(funcionarioURL)
   );
 
-  if (opcao) {
-    $("funcionario").value = opcao.value;
-  }
+  if (opcao) $("funcionario").value = opcao.value;
 }
 
 carregarDescricoes()
   .then(consultarHistorico)
   .catch(erro => {
     console.error(erro);
-
     definirMensagem(
-      "Não foi possível carregar produtos_ean.json. " +
-      "Confira se ele está na mesma pasta da página."
+      "Não foi possível carregar produtos_ean.json. Confira se ele está na mesma pasta desta página."
     );
   });
 </script>
