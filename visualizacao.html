@@ -288,6 +288,46 @@
     grid-template-columns: 1fr;
   }
 }
+
+  .campo-mes-controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.campo-mes-controles > #mes {
+  flex: 1 1 150px;
+  min-width: 130px;
+}
+
+.btn-informacoes {
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px;
+  border-radius: 50%;
+  font-size: 21px;
+}
+
+.opcao-todos-meses {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.opcao-todos-meses input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+}
+
+    .acao-subir-vencidos {
+  background: #176b3a;
+}
   </style>
 </head>
 
@@ -315,7 +355,23 @@
     <div class="filtros">
       <div id="campoMes">
         <label for="mes">Mês do lançamento</label>
-        <input id="mes" type="month">
+      
+        <div class="campo-mes-controles">
+          <button
+            id="btnInformacoes"
+            class="btn-informacoes"
+            type="button"
+            title="Informações sobre os mapas"
+            aria-label="Informações sobre os mapas"
+          >ⓘ</button>
+      
+          <input id="mes" type="month">
+      
+          <label class="opcao-todos-meses" for="todosMeses">
+            <input id="todosMeses" type="checkbox">
+            Todos os meses
+          </label>
+        </div>
       </div>
 
       <div id="campoStatus" hidden>
@@ -675,10 +731,11 @@ function encerrarConsulta() {
 }
 
 function consultarHistorico() {
-  const mes = $("mes").value;
+  const todosMeses = $("todosMeses").checked;
+  const mes = todosMeses ? "TODOS" : $("mes").value;
 
-  if (!/^\d{4}-\d{2}$/.test(mes)) {
-    definirMensagem("Selecione um mês válido.");
+  if (!todosMeses && !/^\d{4}-\d{2}$/.test(mes)) {
+    definirMensagem("Selecione um mês válido ou marque Todos os meses.");
     return;
   }
 
@@ -710,7 +767,7 @@ function consultarHistorico() {
       definirMensagem(mensagemDeErroConsulta(erro));
     });
 }
-
+  
 function consultarValidades() {
   if (!iniciarConsulta("Consultando as validades...")) return;
 
@@ -760,9 +817,10 @@ function dataParaISO(dataTexto) {
   return br ? br[3] + "-" + br[2] + "-" + br[1] : "";
 }
 
-function criarCelulaAcoes(registro) {
+function criarCelulaAcoes(registro, opcoes = {}) {
   const td = document.createElement("td");
   const grupo = document.createElement("div");
+
   grupo.className = "acoes-lancamento";
 
   const editar = document.createElement("button");
@@ -781,15 +839,37 @@ function criarCelulaAcoes(registro) {
   excluir.setAttribute("aria-label", "Excluir lançamento");
   excluir.addEventListener("click", () => excluirRegistro(registro));
 
-  const sinalizar = document.createElement("button");
-  sinalizar.type = "button";
-  sinalizar.className = "acao-sinalizar";
-  sinalizar.textContent = "⚑";
-  sinalizar.title = "Sinalizar lançamento";
-  sinalizar.setAttribute("aria-label", "Sinalizar lançamento");
-  sinalizar.addEventListener("click", () => abrirSinalizacao(registro));
+  grupo.append(editar, excluir);
 
-  grupo.append(editar, excluir, sinalizar);
+  if (opcoes.modo === "validade" && opcoes.vencido === true) {
+    const subir = document.createElement("button");
+
+    subir.type = "button";
+    subir.className = "acao-subir-vencidos";
+    subir.textContent = "⬆️";
+    subir.title = "Encaminhar para a aba Vencidos";
+    subir.setAttribute(
+      "aria-label",
+      "Encaminhar produto para a aba Vencidos"
+    );
+
+    subir.addEventListener("click", () => subirParaVencidos(registro));
+
+    grupo.appendChild(subir);
+  } else {
+    const sinalizar = document.createElement("button");
+
+    sinalizar.type = "button";
+    sinalizar.className = "acao-sinalizar";
+    sinalizar.textContent = "⚑";
+    sinalizar.title = "Sinalizar lançamento";
+    sinalizar.setAttribute("aria-label", "Sinalizar lançamento");
+
+    sinalizar.addEventListener("click", () => abrirSinalizacao(registro));
+
+    grupo.appendChild(sinalizar);
+  }
+
   td.appendChild(grupo);
   return td;
 }
@@ -872,6 +952,48 @@ $("formEdicao").addEventListener("submit", evento => {
     botao.textContent = "Salvar alterações";
   });
 });
+
+function subirParaVencidos(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar este lançamento.");
+    return;
+  }
+
+  const detalhes =
+    "Produto: " + obterDescricao(registro.codigo) +
+    "\nEAN: " + (registro.codigo || "") +
+    "\nLote: " + (registro.lote || "") +
+    "\nValidade: " + (registro.validade || "") +
+    "\nQuantidade: " + (registro.quantidade || 0);
+
+  if (!confirm(
+    "Deseja encaminhar este produto para a aba Vencidos?\n\n" +
+    detalhes
+  )) {
+    return;
+  }
+
+  // A ação será implementada no Code.gs na próxima etapa.
+  chamarApps("subirParaVencidos", "__subirVencidosCb", {
+    chaveUnica: String(registro.chaveUnica)
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(
+        resposta && resposta.mensagem
+          ? resposta.mensagem
+          : "Não foi possível encaminhar o produto para Vencidos."
+      );
+    }
+
+    alert(resposta.mensagem || "Produto encaminhado para Vencidos.");
+
+    validadeCarregada = false;
+    mesCarregado = false;
+    consultar();
+  }).catch(erro => {
+    alert(erro.message || "Erro ao encaminhar o produto para Vencidos.");
+  });
+}
 
 function excluirRegistro(registro) {
   if (!registro || !String(registro.chaveUnica || "").trim()) {
@@ -1150,7 +1272,8 @@ function renderizarMes() {
   definirMensagem(
     registros.length +
     " lançamento(s) encontrado(s) em " +
-    $("mes").value + "."
+    ($("todosMeses").checked ? "todos os meses" : $("mes").value) +
+    "."
   );
 
   const grupos = new Map();
@@ -1374,7 +1497,10 @@ function renderizarValidade() {
         item.registro.romaneio || ""
       ));
     }
-    tr.appendChild(criarCelulaAcoes(item.registro));
+    tr.appendChild(criarCelulaAcoes(item.registro, {
+      modo: "validade",
+      vencido: item.sit.chave === "vencido"
+    }));
 
     tbody.appendChild(tr);
   });
@@ -1495,6 +1621,20 @@ function limparPesquisa() {
 });
 
 $("btnLimparPesquisa").addEventListener("click", limparPesquisa);
+
+$("todosMeses").addEventListener("change", () => {
+  $("mes").disabled = $("todosMeses").checked;
+
+  mesCarregado = false;
+
+  if (modo === "mes") {
+    consultarHistorico();
+  }
+});
+
+$("btnInformacoes").addEventListener("click", () => {
+  alert("O sistema de informações dos mapas será implementado posteriormente.");
+});
 </script>
 </body>
 </html>
