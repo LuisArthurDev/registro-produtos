@@ -951,13 +951,19 @@ function criarCelulaAcoes(registro, opcoes = {}) {
   editar.setAttribute("aria-label", "Editar lançamento");
   editar.addEventListener("click", () => abrirEdicao(registro));
 
-  const excluir = document.createElement("button");
-  excluir.type = "button";
-  excluir.className = "acao-excluir";
-  excluir.textContent = "🗑️";
-  excluir.title = "Excluir lançamento";
-  excluir.setAttribute("aria-label", "Excluir lançamento");
-  excluir.addEventListener("click", () => excluirRegistro(registro));
+  if (opcoes.vencido !== true) {
+    const excluir = document.createElement("button");
+  
+    excluir.type = "button";
+    excluir.className = "acao-excluir";
+    excluir.textContent = "🗑️";
+    excluir.title = "Excluir lançamento";
+    excluir.setAttribute("aria-label", "Excluir lançamento");
+  
+    excluir.addEventListener("click", () => excluirRegistro(registro));
+  
+    grupo.appendChild(excluir);
+  }
 
   const informacoes = document.createElement("button");
   informacoes.type = "button";
@@ -973,7 +979,7 @@ function criarCelulaAcoes(registro, opcoes = {}) {
     mostrarInformacoesRegistro(registro);
   });
   
-  grupo.append(editar, excluir);
+  grupo.append(editar);
 
   if (opcoes.modo === "validade" && opcoes.vencido === true) {
     const subir = document.createElement("button");
@@ -1014,36 +1020,58 @@ function abrirEdicao(registro) {
     return;
   }
 
-  if (registro.especial) {
-    alert(
-      "Esta aba agrupa quantidades de vários lançamentos. " +
-      "A edição individual não está disponível."
-    );
-    return;
-  }
-
   registroParaEditar = registro;
+
+  const especial = registro.especial === true;
+  const ehTransf = ehTransferencia(registro);
+
+  $("tituloEdicao").textContent = especial
+    ? "Editar quantidade total"
+    : "Editar lançamento";
 
   $("itemEdicao").textContent =
     "Produto: " + obterDescricao(registro.codigo) +
     " | EAN: " + (registro.codigo || "") +
-    " | Funcionário: " + (registro.funcionario || "");
+    " | Funcionário: " + (registro.funcionario || "") +
+    (especial
+      ? " | Quantidade total atual: " + registro.quantidade
+      : "");
 
   $("loteEdicao").value = registro.lote || "";
   $("validadeEdicao").value =
     dataParaISO(registro.validadeISO || registro.validade);
   $("quantidadeEdicao").value = Number(registro.quantidade || 1);
 
-  const ehTransf = ehTransferencia(registro);
+  // Nas abas especiais, somente a quantidade poderá ser alterada.
+  $("loteEdicao").disabled = especial;
+  $("validadeEdicao").disabled = especial;
 
-  $("camposTransferenciaEdicao").hidden = !ehTransf;
+  $("loteEdicao").parentElement.hidden = especial;
+  $("validadeEdicao").parentElement.hidden = especial;
+
+  $("camposTransferenciaEdicao").hidden = especial || !ehTransf;
+
   $("lojaOrigemEdicao").value = registro.lojaOrigem || "";
   $("romaneioEdicao").value = registro.romaneio || "";
 
-  $("lojaOrigemEdicao").required = ehTransf;
-  $("romaneioEdicao").required = ehTransf;
+  $("lojaOrigemEdicao").required = !especial && ehTransf;
+  $("romaneioEdicao").required = !especial && ehTransf;
 
-  $("mensagemEdicao").textContent = "";
+  $("lojaOrigemEdicao").disabled = especial;
+  $("romaneioEdicao").disabled = especial;
+
+  $("quantidadeEdicao").disabled = false;
+  $("quantidadeEdicao").min = "1";
+  $("quantidadeEdicao").step = "1";
+
+  $("btnSalvarEdicao").textContent = especial
+    ? "Salvar quantidade"
+    : "Salvar alterações";
+
+  $("mensagemEdicao").textContent = especial
+    ? "Apenas a quantidade total poderá ser alterada."
+    : "";
+
   $("modalEdicao").hidden = false;
 }
 
