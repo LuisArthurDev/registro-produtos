@@ -953,48 +953,47 @@ $("formEdicao").addEventListener("submit", evento => {
   });
 });
 
-function subirParaVencidos(registro) {
-  if (!registro || !String(registro.chaveUnica || "").trim()) {
-    alert("Não foi possível identificar este lançamento.");
+function subirParaVencidos(chaveUnica) {
+  if (!chaveUnica) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
     return;
   }
 
-  const detalhes =
-    "Produto: " + obterDescricao(registro.codigo) +
-    "\nEAN: " + (registro.codigo || "") +
-    "\nLote: " + (registro.lote || "") +
-    "\nValidade: " + (registro.validade || "") +
-    "\nQuantidade: " + (registro.quantidade || 0);
+  const confirmar = confirm(
+    "Deseja mover este lançamento para a aba Vencidos?\n\n" +
+    "A linha original será removida e as sinalizações associadas serão excluídas."
+  );
 
-  if (!confirm(
-    "Deseja encaminhar este produto para a aba Vencidos?\n\n" +
-    detalhes
-  )) {
-    return;
-  }
+  if (!confirmar) return;
 
-  // A ação será implementada no Code.gs na próxima etapa.
-  chamarApps("subirParaVencidos", "__subirVencidosCb", {
-    chaveUnica: String(registro.chaveUnica)
-  }).then(resposta => {
-    if (!resposta || !resposta.sucesso) {
-      throw new Error(
-        resposta && resposta.mensagem
-          ? resposta.mensagem
-          : "Não foi possível encaminhar o produto para Vencidos."
-      );
-    }
+  google.script.run
+    .withSuccessHandler(function(resposta) {
+      if (resposta && resposta.sucesso) {
+        alert(resposta.mensagem || "Lançamento movido para Vencidos.");
 
-    alert(resposta.mensagem || "Produto encaminhado para Vencidos.");
+        // Atualize as listas usando as funções já existentes na página.
+        // Substitua pelos nomes reais das funções de atualização.
+        if (typeof carregarHistoricoMes === "function") {
+          carregarHistoricoMes();
+        }
 
-    validadeCarregada = false;
-    mesCarregado = false;
-    consultar();
-  }).catch(erro => {
-    alert(erro.message || "Erro ao encaminhar o produto para Vencidos.");
-  });
+        if (typeof carregarValidades === "function") {
+          carregarValidades();
+        }
+      } else {
+        alert(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível mover o lançamento."
+        );
+      }
+    })
+    .withFailureHandler(function(erro) {
+      alert("Erro ao mover para Vencidos: " + erro.message);
+    })
+    .subirVencidos({ chaveUnica: chaveUnica });
 }
-
+  
 function excluirRegistro(registro) {
   if (!registro || !String(registro.chaveUnica || "").trim()) {
     alert("Não foi possível identificar a chave única deste lançamento.");
