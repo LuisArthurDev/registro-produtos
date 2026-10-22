@@ -301,16 +301,6 @@
   min-width: 130px;
 }
 
-.btn-informacoes {
-  flex: 0 0 44px;
-  width: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 5px;
-  border-radius: 50%;
-  font-size: 21px;
-}
-
 .opcao-todos-meses {
   display: flex;
   align-items: center;
@@ -418,9 +408,30 @@
 }
 
   .btn-informacoes {
-    background: #0a7c86;
-    color: #fff;
-  }
+  flex: 0 0 24px !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  margin-right: 6px;
+  border: 1.5px solid var(--muted) !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 15px !important;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-informacoes:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent !important;
+}
    
   </style>
 </head>
@@ -962,7 +973,7 @@ function criarCelulaAcoes(registro, opcoes = {}) {
     mostrarInformacoesRegistro(registro);
   });
   
-  grupo.append(editar, excluir, informacoes);
+  grupo.append(editar, excluir);
 
   if (opcoes.modo === "validade" && opcoes.vencido === true) {
     const subir = document.createElement("button");
@@ -1345,8 +1356,25 @@ function criarCabecalho(colunas) {
   return thead;
 }
 
-function criarCelulaProduto(codigo) {
+function criarCelulaProduto(codigo, registro) {
   const td = document.createElement("td");
+
+  const informacoes = document.createElement("button");
+  informacoes.type = "button";
+  informacoes.className = "btn-informacoes";
+  informacoes.textContent = "i";
+  informacoes.title = "Informações do lançamento";
+  informacoes.setAttribute(
+    "aria-label",
+    "Informações do lançamento"
+  );
+
+  informacoes.addEventListener("click", () => {
+    mostrarInformacoesRegistro(registro);
+  });
+
+  const conteudo = document.createElement("span");
+  conteudo.style.display = "inline";
 
   const descricao = document.createElement("span");
   descricao.className = "descricao";
@@ -1356,7 +1384,8 @@ function criarCelulaProduto(codigo) {
   ean.className = "ean";
   ean.textContent = "EAN: " + (codigo || "");
 
-  td.append(descricao, ean);
+  conteudo.append(descricao, ean);
+  td.append(informacoes, conteudo);
 
   return td;
 }
@@ -1482,7 +1511,7 @@ function renderizarMes() {
       .forEach(registro => {
         const tr = document.createElement("tr");
 
-        tr.appendChild(criarCelulaProduto(registro.codigo));
+        tr.appendChild(criarCelulaProduto(registro.codigo, registro));
         tr.appendChild(criarCelula(registro.lote));
         tr.appendChild(criarCelula(registro.validade));
 
@@ -1622,7 +1651,9 @@ function renderizarValidade() {
     tdSituacao.appendChild(selo);
     tr.appendChild(tdSituacao);
 
-    tr.appendChild(criarCelulaProduto(item.registro.codigo));
+    tr.appendChild(
+      criarCelulaProduto(item.registro.codigo, item.registro)
+    );
     tr.appendChild(criarCelula(item.registro.lote));
     tr.appendChild(criarCelula(item.registro.validade));
 
