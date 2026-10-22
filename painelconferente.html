@@ -3,380 +3,626 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#102b3f">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f2a3d">
   <title>Painel do Conferente</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
   <style>
     :root {
-      --navy: #102b3f;
-      --navy-light: #193e55;
-      --blue: #2775d8;
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --ink: #172b3a;
+      --muted: #718096;
+      --primary: #0f2a3d;
+      --primary-light: #193e56;
+      --accent: #16a085;
       --green: #16a34a;
-      --yellow: #eab308;
-      --bg: #f3f6fa;
-      --surface: #fff;
-      --text: #182b3a;
-      --muted: #788795;
-      --border: #e7edf2;
-      --sidebar-width: 252px;
-      --sidebar-small: 76px;
-      --radius: 15px;
+      --yellow: #f4c430;
+      --red: #dc2626;
+      --border: #e2e8f0;
+      --shadow: 0 5px 20px rgba(15, 42, 61, .06);
+      --sidebar-width: 245px;
+      --sidebar-mini: 76px;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
-      font-family: Inter, Arial, sans-serif;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
       background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
+      color: var(--ink);
     }
 
-    button { font: inherit; cursor: pointer; }
-    button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+    button, input, select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      min-height: 100vh;
+    }
+
+    /* MENU LATERAL */
 
     .sidebar {
       position: fixed;
-      z-index: 20;
       inset: 0 auto 0 0;
       width: var(--sidebar-width);
-      background: var(--navy);
-      color: #fff;
+      height: 100dvh;
+      background: var(--primary);
+      color: white;
       display: flex;
       flex-direction: column;
-      transition: width .25s, transform .25s;
-      overflow-x: hidden;
-      overflow-y: auto;
+      z-index: 1000;
+      overflow: hidden;
+      transition: width .25s ease, transform .25s ease;
     }
 
     .brand {
+      min-height: 66px;
+      padding: 12px 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 23px 20px;
-      min-height: 86px;
-      border-bottom: 1px solid #ffffff15;
-      white-space: nowrap;
+      gap: 11px;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+      flex-shrink: 0;
     }
 
-    .brand-icon {
-      width: 38px;
-      height: 38px;
-      flex: 0 0 38px;
+    .brand-logo {
       display: grid;
       place-items: center;
-      border-radius: 12px;
-      background: #2775d8;
-      font-size: 18px;
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      border-radius: 11px;
+      background: #16a085;
+      font-size: 20px;
+      font-weight: 800;
     }
 
-    .brand strong { font-size: 15px; }
-    .brand small { display: block; margin-top: 5px; color: #a8bdca; font-size: 10px; }
-
-    .nav { padding: 16px 12px; flex: 1; }
-
-    .nav-label {
-      padding: 13px 10px 8px;
-      color: #8da7b7;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-size: 9px;
-      font-weight: 700;
+    .brand-text {
+      min-width: 0;
+      overflow: hidden;
       white-space: nowrap;
     }
 
-    .nav-link {
+    .brand-text strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .brand-text small {
+      display: block;
+      color: #a9bdca;
+      margin-top: 3px;
+      font-size: 10px;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 7px 9px 12px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      overscroll-behavior: contain;
+    }
+
+    .sidebar-scroll::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    .menu-section {
+      margin: 5px 0 9px;
+    }
+
+    .section-title {
+      padding: 8px 10px 5px;
+      color: #8fa7b7;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.1px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .menu-item {
+      width: 100%;
+      min-height: 35px;
       display: flex;
       align-items: center;
-      gap: 13px;
-      width: 100%;
-      min-height: 43px;
-      padding: 11px 13px;
-      margin: 3px 0;
+      gap: 10px;
+      padding: 7px 10px;
+      margin: 2px 0;
       border: 0;
-      border-radius: 9px;
+      border-radius: 7px;
+      color: #d5e1e9;
       background: transparent;
-      color: #c3d2dc;
       text-align: left;
-      white-space: nowrap;
       font-size: 12px;
-      transition: .2s;
+      white-space: nowrap;
+      transition: background .15s, color .15s;
     }
 
-    .nav-link i {
-      width: 18px;
-      flex: 0 0 18px;
-      text-align: center;
-      font-size: 15px;
-    }
-
-    .nav-link:hover, .nav-link.active {
+    .menu-item:hover {
+      background: rgba(255,255,255,.09);
       color: white;
-      background: #ffffff16;
     }
 
-    .nav-link.active {
-      background: #2775d8;
-      box-shadow: 0 5px 14px #00000012;
+    .menu-item.active {
+      color: white;
+      background: #176b69;
+      box-shadow: inset 3px 0 #4de0b4;
+    }
+
+    .menu-icon {
+      width: 19px;
+      min-width: 19px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .menu-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .sidebar-footer {
-      padding: 15px 12px;
-      border-top: 1px solid #ffffff15;
+      flex-shrink: 0;
+      border-top: 1px solid rgba(255,255,255,.1);
+      padding: 8px;
+      background: var(--primary);
     }
 
-    .sidebar.collapsed { width: var(--sidebar-small); }
-    .sidebar.collapsed .brand { padding-left: 19px; }
+    .collapse-button {
+      width: 100%;
+      min-height: 34px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #d5e1e9;
+      background: transparent;
+      border: 0;
+      border-radius: 7px;
+      font-size: 12px;
+      text-align: left;
+    }
 
-    .sidebar.collapsed .brand-copy,
-    .sidebar.collapsed .nav-label,
-    .sidebar.collapsed .nav-text,
-    .sidebar.collapsed .sidebar-footer .nav-text {
+    .collapse-button:hover {
+      background: rgba(255,255,255,.09);
+    }
+
+    /* MENU RECOLHIDO */
+
+    .sidebar.collapsed {
+      width: var(--sidebar-mini);
+    }
+
+    .sidebar.collapsed .brand {
+      justify-content: center;
+      padding: 10px 5px;
+    }
+
+    .sidebar.collapsed .brand-text,
+    .sidebar.collapsed .section-title,
+    .sidebar.collapsed .menu-label,
+    .sidebar.collapsed .collapse-label {
       display: none;
     }
 
-    .sidebar.collapsed .nav-link {
-      justify-content: center;
-      padding: 12px 0;
+    .sidebar.collapsed .sidebar-scroll {
+      padding-left: 8px;
+      padding-right: 8px;
     }
 
-    .sidebar.collapsed .nav-link i { font-size: 17px; }
-    .sidebar.collapsed .sidebar-footer { padding: 12px 8px; }
+    .sidebar.collapsed .menu-item,
+    .sidebar.collapsed .collapse-button {
+      justify-content: center;
+      padding: 8px 4px;
+      gap: 0;
+    }
+
+    .sidebar.collapsed .menu-icon {
+      font-size: 18px;
+    }
+
+    .sidebar.collapsed .menu-item.active {
+      box-shadow: inset 0 -3px #4de0b4;
+    }
+
+    /* ÁREA PRINCIPAL */
 
     .main {
-      margin-left: var(--sidebar-width);
       min-height: 100vh;
-      transition: margin-left .25s;
+      margin-left: var(--sidebar-width);
+      transition: margin-left .25s ease;
     }
 
-    .main.expanded { margin-left: var(--sidebar-small); }
+    .main.expanded {
+      margin-left: var(--sidebar-mini);
+    }
 
     .topbar {
-      height: 76px;
-      background: white;
+      height: 66px;
+      padding: 0 26px;
+      background: var(--surface);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 30px;
-      gap: 15px;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
-    .top-left, .top-right { display: flex; align-items: center; gap: 16px; }
-
-    .icon-button {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: white;
-      color: #536675;
-      width: 38px;
-      height: 38px;
-    }
-
-    .icon-button:hover { background: var(--bg); }
-    .date-label { color: var(--muted); font-size: 12px; }
-
-    .user-box {
+    .topbar-left,
+    .topbar-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 13px;
+    }
+
+    .mobile-menu {
+      display: none;
+    }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 9px;
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+    }
+
+    .topbar-title {
+      font-weight: 750;
+      font-size: 16px;
+    }
+
+    .topbar-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .user-chip {
+      display: flex;
+      align-items: center;
+      gap: 9px;
     }
 
     .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
+      width: 35px;
+      height: 35px;
       display: grid;
       place-items: center;
-      background: #e1edff;
-      color: #2366bd;
+      border-radius: 50%;
+      background: #d9f4ed;
+      color: #087f68;
       font-weight: 800;
-    }
-
-    .user-box strong { font-size: 12px; }
-    .user-box small { display: block; color: var(--muted); margin-top: 4px; font-size: 10px; }
-
-    .logout {
-      padding: 10px 13px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: white;
-      color: #526575;
       font-size: 12px;
     }
 
-    .logout:hover { background: #fff1f2; color: #be123c; }
+    .user-info strong {
+      display: block;
+      font-size: 12px;
+    }
 
-    .content { padding: 28px 30px 40px; max-width: 1600px; margin: auto; }
+    .user-info small {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 3px;
+    }
 
-    .page { display: none; }
-    .page.active { display: block; }
+    .logout-button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #fff5f5;
+      border: 1px solid #fee2e2;
+      color: #b91c1c;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .content {
+      padding: 25px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
 
     .page-heading {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 15px;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
     }
 
-    h1 { margin: 0; font-size: 24px; letter-spacing: -.7px; }
-    h2 { margin: 0; font-size: 15px; }
-    h3 { margin: 0; font-size: 13px; }
-    p { line-height: 1.6; }
-
-    .subtitle { color: var(--muted); margin: 8px 0 0; font-size: 12px; }
-    .eyebrow { color: var(--blue); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; margin-bottom: 8px; }
-
-    .section-title {
-      font-size: 15px;
-      font-weight: 700;
-      margin: 27px 0 14px;
+    .page-heading h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: -.5px;
     }
 
-    .grid { display: grid; gap: 16px; }
-    .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .page-heading p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
 
-    .card {
-      background: var(--surface);
+    .date-chip {
+      background: white;
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      min-width: 0;
-      box-shadow: 0 3px 12px #142d4005;
-    }
-
-    .summary-card { position: relative; overflow: hidden; min-height: 140px; }
-
-    .summary-card::after {
-      content: "";
-      position: absolute;
-      right: -22px;
-      bottom: -36px;
-      width: 105px;
-      height: 105px;
-      border-radius: 50%;
-      background: var(--tint, #eaf2ff);
-      opacity: .8;
-    }
-
-    .summary-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-
-    .summary-icon {
-      width: 40px;
-      height: 40px;
-      display: grid;
-      place-items: center;
-      border-radius: 12px;
-      background: var(--tint, #eaf2ff);
-      color: var(--accent, var(--blue));
-      font-size: 17px;
-    }
-
-    .summary-label { color: #657685; font-size: 12px; font-weight: 600; }
-    .summary-number { font-size: 30px; font-weight: 800; margin-top: 15px; letter-spacing: -1px; }
-    .summary-note { color: var(--muted); font-size: 10px; margin-top: 5px; }
-
-    .queima-card .summary-number { margin-top: 10px; }
-    .monthly-number { color: var(--green); font-size: 12px; font-weight: 700; margin-top: 7px; }
-
-    .overview-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
-
-    .card-heading {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .card-heading p { margin: 5px 0 0; font-size: 11px; color: var(--muted); }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 9px;
-      border-radius: 7px;
-      background: #edf5ff;
-      color: #2563b9;
-      font-size: 10px;
-      font-weight: 700;
+      border-radius: 9px;
+      padding: 10px 13px;
+      font-size: 12px;
+      color: #526476;
       white-space: nowrap;
     }
 
-    .activity-list { display: grid; gap: 0; }
+    /* CARDS */
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 15px;
+      margin-bottom: 21px;
+    }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      padding: 17px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .stat-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .stat-icon {
+      width: 37px;
+      height: 37px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .stat-value {
+      margin-top: 15px;
+      font-size: 27px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -.7px;
+    }
+
+    .stat-foot {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .stat-foot span {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .blue-bg { background: #e5efff; }
+    .green-bg { background: #dcfce7; }
+    .yellow-bg { background: #fef3c7; }
+    .red-bg { background: #fee2e2; }
+
+    /* PAINÉIS */
+
+    .panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .panel-header {
+      padding: 17px 19px;
+      border-bottom: 1px solid #edf1f5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .panel-header p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+      gap: 18px;
+      margin-bottom: 19px;
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+    }
 
     .activity-item {
       display: flex;
-      align-items: center;
       gap: 12px;
-      padding: 14px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+      border-bottom: 1px solid #edf1f5;
     }
 
-    .activity-item:last-child { border-bottom: 0; padding-bottom: 0; }
+    .activity-item:last-child {
+      border-bottom: 0;
+    }
 
     .activity-icon {
-      flex: 0 0 37px;
-      width: 37px;
-      height: 37px;
-      border-radius: 11px;
+      width: 35px;
+      height: 35px;
+      flex-shrink: 0;
       display: grid;
       place-items: center;
-      background: #edf4ff;
-      color: var(--blue);
+      background: #edf7f5;
+      border-radius: 10px;
+      font-size: 16px;
     }
 
-    .activity-item strong { font-size: 11px; }
-    .activity-item p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
-    .activity-time { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
-
-    .quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-
-    .quick-link {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      background: white;
-      text-align: left;
-      color: var(--text);
-      transition: .2s;
-      min-height: 112px;
-    }
-
-    .quick-link:hover { border-color: #93bdf5; transform: translateY(-2px); }
-    .quick-link i { color: var(--blue); font-size: 19px; margin-bottom: 14px; }
-    .quick-link strong { display: block; font-size: 12px; }
-    .quick-link span { display: block; color: var(--muted); font-size: 10px; margin-top: 6px; }
-
-    .conference-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .chart-card { padding: 23px; }
-    .chart-title { font-size: 15px; font-weight: 700; }
-    .chart-description { margin-top: 6px; color: var(--muted); font-size: 11px; }
-
-    .rings-layout {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-      padding: 14px 0 5px;
-    }
-
-    .rings {
-      width: min(100%, 225px);
-      flex: 0 1 225px;
+    .activity-text {
+      flex: 1;
       min-width: 0;
-      aspect-ratio: 1;
-      position: relative;
     }
 
-    .rings svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .activity-text strong {
+      display: block;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .activity-text p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .activity-time {
+      color: #8b98a6;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .quick-button {
+      min-height: 88px;
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 9px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      color: var(--ink);
+      text-align: left;
+      transition: border .15s, transform .15s, background .15s;
+    }
+
+    .quick-button:hover {
+      border-color: #8ed9c8;
+      background: #f4fcf9;
+      transform: translateY(-1px);
+    }
+
+    .quick-button span {
+      font-size: 21px;
+    }
+
+    .quick-button strong {
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    /* GRÁFICOS CONCÊNTRICOS */
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 19px;
+    }
+
+    .chart-card {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .chart-card h3 {
+      margin: 0;
+      align-self: flex-start;
+      font-size: 14px;
+    }
+
+    .chart-card > p {
+      align-self: flex-start;
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .ring-container {
+      width: 210px;
+      max-width: 100%;
+      position: relative;
+      margin: 16px auto 8px;
+    }
+
+    .ring-container svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg {
+      fill: none;
+      stroke: #edf1f5;
+    }
 
     .ring-total {
       fill: none;
@@ -384,692 +630,1182 @@
       stroke-width: 4;
     }
 
+    .ring-approved-bg {
+      fill: none;
+      stroke: #e7f5e9;
+      stroke-width: 15;
+    }
+
     .ring-approved {
       fill: none;
       stroke: var(--green);
       stroke-width: 15;
-      transform: rotate(-90deg);
-      transform-origin: 100px 100px;
       stroke-linecap: round;
-      transition: stroke-dasharray .5s;
+      transition: stroke-dashoffset .5s ease;
     }
 
     .ring-center {
       position: absolute;
       inset: 0;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
+      flex-direction: column;
       pointer-events: none;
     }
 
-    .ring-center strong { font-size: 28px; letter-spacing: -1px; }
-    .ring-center span { margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .ring-percent {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -1px;
+    }
 
-    .chart-legend { display: grid; gap: 15px; min-width: 100px; }
-    .legend-item { display: flex; align-items: flex-start; gap: 9px; }
-    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; margin-top: 3px; }
-    .legend-dot.green { background: var(--green); }
-    .legend-dot.yellow { background: var(--yellow); }
-    .legend-item strong { display: block; font-size: 13px; }
-    .legend-item span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
-
-    .chart-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      border-top: 1px solid var(--border);
-      margin-top: 20px;
-      padding-top: 15px;
+    .ring-center small {
+      margin-top: 3px;
       color: var(--muted);
       font-size: 10px;
     }
 
-    .chart-footer strong { color: var(--text); font-size: 12px; }
+    .chart-legend {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
 
-    .notice-list { display: grid; gap: 12px; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #617184;
+      font-size: 10px;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .chart-counts {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chart-count {
+      background: #f8fafc;
+      border: 1px solid #edf1f5;
+      border-radius: 9px;
+      padding: 11px;
+      text-align: center;
+    }
+
+    .chart-count strong {
+      display: block;
+      font-size: 19px;
+    }
+
+    .chart-count span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    /* AVISOS */
 
     .notice {
       display: flex;
       align-items: flex-start;
       gap: 12px;
-      padding: 15px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: white;
+      padding: 13px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      line-height: 1.5;
     }
 
-    .notice i { font-size: 16px; margin-top: 2px; }
-    .notice strong { font-size: 12px; }
-    .notice p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
-    .notice.info i { color: var(--blue); }
-    .notice.warning i { color: #d97706; }
-    .notice.success i { color: var(--green); }
+    .notice:last-child {
+      margin-bottom: 0;
+    }
+
+    .notice strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .notice.warning {
+      background: #fff8e6;
+      border: 1px solid #fce7a9;
+      color: #805b00;
+    }
+
+    .notice.info {
+      background: #edf6ff;
+      border: 1px solid #d5e9ff;
+      color: #205783;
+    }
+
+    .notice.success {
+      background: #edfcf3;
+      border: 1px solid #c8f1d8;
+      color: #17663b;
+    }
+
+    /* PÁGINAS DEMONSTRATIVAS */
+
+    .demo-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .demo-button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      color: white;
+      background: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .demo-button.secondary {
+      color: var(--ink);
+      background: white;
+      border: 1px solid var(--border);
+    }
+
+    .demo-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .demo-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 570px;
+    }
+
+    .demo-table th {
+      background: #f8fafc;
+      color: #66788a;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      text-align: left;
+    }
+
+    .demo-table th,
+    .demo-table td {
+      padding: 13px 14px;
+      border-bottom: 1px solid #edf1f5;
+    }
+
+    .demo-table td {
+      color: #334155;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 5px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .status.green {
+      color: #166534;
+      background: #dcfce7;
+    }
+
+    .status.yellow {
+      color: #92400e;
+      background: #fef3c7;
+    }
+
+    .status.red {
+      color: #991b1b;
+      background: #fee2e2;
+    }
 
     .placeholder {
-      padding: 55px 20px;
+      padding: 32px 16px;
       text-align: center;
-      border: 1px dashed #cad5df;
-      border-radius: var(--radius);
-      background: #ffffff90;
+      color: var(--muted);
+      font-size: 12px;
     }
 
-    .placeholder i { color: #92a4b3; font-size: 35px; margin-bottom: 16px; }
-    .placeholder h2 { font-size: 17px; }
-    .placeholder p { color: var(--muted); max-width: 430px; margin: 10px auto 0; font-size: 12px; }
+    .placeholder .placeholder-icon {
+      font-size: 35px;
+      margin-bottom: 12px;
+    }
+
+    .placeholder strong {
+      display: block;
+      color: var(--ink);
+      font-size: 15px;
+      margin-bottom: 7px;
+    }
+
+    .footer-note {
+      text-align: center;
+      padding: 22px 0 8px;
+      color: #8b98a6;
+      font-size: 10px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .mobile-overlay {
+      display: none;
+    }
+
+    /* RESPONSIVIDADE */
 
     @media (max-width: 1150px) {
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .rings-layout { gap: 12px; }
-      .rings { flex-basis: 190px; }
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
-    @media (max-width: 850px) {
+    @media (max-width: 760px) {
       .sidebar {
-        width: var(--sidebar-width);
+        width: min(280px, 85vw);
         transform: translateX(-100%);
       }
 
-      .sidebar.mobile-open { transform: translateX(0); }
-      .sidebar.collapsed { width: var(--sidebar-width); }
+      .sidebar.mobile-open {
+        transform: translateX(0);
+      }
 
-      .sidebar.collapsed .brand-copy,
-      .sidebar.collapsed .nav-text,
-      .sidebar.collapsed .sidebar-footer .nav-text { display: initial; }
+      .sidebar.collapsed {
+        width: min(280px, 85vw);
+      }
 
-      .sidebar.collapsed .nav-label { display: block; }
-      .sidebar.collapsed .nav-link { justify-content: flex-start; padding: 11px 13px; }
-      .main, .main.expanded { margin-left: 0; }
-      .overview-grid, .conference-grid { grid-template-columns: 1fr; }
-      .content { padding: 23px 20px 35px; }
-      .topbar { padding: 0 20px; }
+      .sidebar.collapsed .brand {
+        justify-content: flex-start;
+        padding: 12px 16px;
+      }
+
+      .sidebar.collapsed .brand-text,
+      .sidebar.collapsed .section-title,
+      .sidebar.collapsed .menu-label,
+      .sidebar.collapsed .collapse-label {
+        display: initial;
+      }
+
+      .sidebar.collapsed .menu-item {
+        justify-content: flex-start;
+        padding: 7px 10px;
+      }
+
+      .sidebar.collapsed .collapse-button {
+        justify-content: flex-start;
+        padding: 6px 10px;
+      }
+
+      .main,
+      .main.expanded {
+        margin-left: 0;
+      }
+
+      .mobile-menu {
+        display: grid;
+      }
+
+      .topbar {
+        height: 60px;
+        padding: 0 13px;
+      }
+
+      .topbar-title {
+        font-size: 13px;
+      }
+
+      .topbar-subtitle,
+      .user-info {
+        display: none;
+      }
+
+      .logout-button {
+        padding: 8px 9px;
+        font-size: 11px;
+      }
+
+      .content {
+        padding: 17px 13px;
+      }
+
+      .page-heading {
+        flex-direction: column;
+      }
+
+      .page-heading h1 {
+        font-size: 21px;
+      }
+
+      .stats-grid {
+        gap: 10px;
+      }
+
+      .stat-card {
+        padding: 13px;
+      }
+
+      .stat-value {
+        font-size: 23px;
+      }
+
+      .stat-label {
+        font-size: 11px;
+      }
+
+      .charts-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel-header,
+      .panel-body {
+        padding: 14px;
+      }
 
       .mobile-overlay.visible {
         display: block;
         position: fixed;
         inset: 0;
-        z-index: 15;
-        background: #06172580;
+        z-index: 900;
+        background: rgba(5, 18, 28, .5);
       }
     }
 
-    .mobile-overlay { display: none; }
+    @media (max-width: 380px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
 
-    @media (max-width: 540px) {
-      .content { padding: 20px 13px 28px; }
-      .topbar { height: 66px; padding: 0 13px; }
-      .date-label, .user-copy { display: none; }
-      .logout { padding: 9px; }
-      .summary-grid { gap: 10px; }
-      .card { padding: 15px; }
-      .summary-card { min-height: 128px; }
-      .summary-number { font-size: 26px; }
-      .page-heading { margin-bottom: 20px; }
-      h1 { font-size: 21px; }
-      .rings-layout { flex-direction: column; gap: 18px; }
-      .rings { width: 210px; flex-basis: auto; }
-      .chart-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; }
-      .legend-item { max-width: 130px; }
-      .quick-grid { gap: 9px; }
-      .quick-link { padding: 13px; }
-      .activity-time { display: none; }
+      .quick-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .topbar-right {
+        gap: 7px;
+      }
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { transition: none !important; }
+    @media (max-height: 700px) {
+      .brand {
+        min-height: 55px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .menu-section {
+        margin-top: 2px;
+        margin-bottom: 5px;
+      }
+
+      .section-title {
+        padding-top: 5px;
+        padding-bottom: 3px;
+      }
+
+      .menu-item {
+        min-height: 31px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        margin: 1px 0;
+      }
+
+      .sidebar-footer {
+        padding: 5px 8px;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div class="mobile-overlay" id="mobileOverlay"></div>
+<div class="app">
 
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-icon"><i class="fa-solid fa-clipboard-check"></i></div>
-      <div class="brand-copy">
+      <div class="brand-logo">PC</div>
+      <div class="brand-text">
         <strong>Painel do Conferente</strong>
-        <small>Gestão operacional</small>
+        <small>GESTÃO OPERACIONAL</small>
       </div>
     </div>
 
-    <nav class="nav">
-      <div class="nav-label">Principal</div>
-      <button class="nav-link active" data-page="dashboard" title="Dashboard">
-        <i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span>
-      </button>
+    <nav class="sidebar-scroll" aria-label="Menu principal">
 
-      <div class="nav-label">Operações</div>
-      <button class="nav-link" data-page="lancamentos" title="Lançamentos">
-        <i class="fa-solid fa-barcode"></i><span class="nav-text">Lançamentos</span>
-      </button>
-      <button class="nav-link" data-page="mapa" title="Mapa de Validade">
-        <i class="fa-solid fa-calendar-check"></i><span class="nav-text">Mapa de Validade</span>
-      </button>
-      <button class="nav-link" data-page="controle-validade" title="Controle de Validade">
-        <i class="fa-solid fa-calendar-days"></i><span class="nav-text">Controle de Validade</span>
-      </button>
-      <button class="nav-link" data-page="vencidos" title="Produtos Vencidos">
-        <i class="fa-solid fa-calendar-xmark"></i><span class="nav-text">Produtos Vencidos</span>
-      </button>
-      <button class="nav-link" data-page="transferencias" title="Transferências">
-        <i class="fa-solid fa-right-left"></i><span class="nav-text">Transferências</span>
-      </button>
-      <button class="nav-link" data-page="estoque" title="Controle de Estoque">
-        <i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Controle de Estoque</span>
-      </button>
+      <div class="menu-section">
+        <div class="section-title">Principal</div>
+        <button class="menu-item active" data-page="dashboard" title="Dashboard">
+          <span class="menu-icon">▦</span>
+          <span class="menu-label">Dashboard</span>
+        </button>
+      </div>
 
-      <div class="nav-label">Consultas</div>
-      <button class="nav-link" data-page="sinalizados" title="Sinalizados">
-        <i class="fa-solid fa-flag"></i><span class="nav-text">Sinalizados</span>
-      </button>
-      <button class="nav-link" data-page="historico" title="Histórico">
-        <i class="fa-solid fa-clock-rotate-left"></i><span class="nav-text">Histórico</span>
-      </button>
+      <div class="menu-section">
+        <div class="section-title">Operações</div>
 
-      <div class="nav-label">Configurações</div>
-      <button class="nav-link" data-page="funcionarios" title="Adicionar funcionário">
-        <i class="fa-solid fa-user-plus"></i><span class="nav-text">Adicionar funcionário</span>
-      </button>
+        <button class="menu-item" data-page="lancamentos" title="Lançamentos">
+          <span class="menu-icon">▤</span>
+          <span class="menu-label">Lançamentos</span>
+        </button>
+
+        <button class="menu-item" data-page="mapa" title="Mapa de Validade">
+          <span class="menu-icon">▧</span>
+          <span class="menu-label">Mapa de Validade</span>
+        </button>
+
+        <button class="menu-item" data-page="controle-validade" title="Controle de Validade">
+          <span class="menu-icon">◷</span>
+          <span class="menu-label">Controle de Validade</span>
+        </button>
+
+        <button class="menu-item" data-page="vencidos" title="Produtos Vencidos">
+          <span class="menu-icon">⚠</span>
+          <span class="menu-label">Produtos Vencidos</span>
+        </button>
+
+        <button class="menu-item" data-page="transferencias" title="Transferências">
+          <span class="menu-icon">⇄</span>
+          <span class="menu-label">Transferências</span>
+        </button>
+
+        <button class="menu-item" data-page="estoque" title="Controle de Estoque">
+          <span class="menu-icon">▣</span>
+          <span class="menu-label">Controle de Estoque</span>
+        </button>
+      </div>
+
+      <div class="menu-section">
+        <div class="section-title">Consultas</div>
+
+        <button class="menu-item" data-page="sinalizados" title="Sinalizados">
+          <span class="menu-icon">⚑</span>
+          <span class="menu-label">Sinalizados</span>
+        </button>
+
+        <button class="menu-item" data-page="historico" title="Histórico">
+          <span class="menu-icon">◴</span>
+          <span class="menu-label">Histórico</span>
+        </button>
+      </div>
+
+      <div class="menu-section">
+        <div class="section-title">Configurações</div>
+
+        <button class="menu-item" data-page="funcionarios" title="Adicionar funcionário">
+          <span class="menu-icon">♙</span>
+          <span class="menu-label">Adicionar funcionário</span>
+        </button>
+      </div>
     </nav>
 
     <div class="sidebar-footer">
-      <button class="nav-link" id="collapseButton" title="Recolher ou expandir menu">
-        <i class="fa-solid fa-angles-left" id="collapseIcon"></i>
-        <span class="nav-text">Recolher menu</span>
+      <button class="collapse-button" id="collapseButton" title="Recolher ou expandir menu">
+        <span class="menu-icon" id="collapseIcon">⇤</span>
+        <span class="collapse-label">Recolher menu</span>
       </button>
     </div>
   </aside>
 
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+
   <main class="main" id="main">
     <header class="topbar">
-      <div class="top-left">
-        <button class="icon-button" id="menuButton" aria-label="Abrir ou recolher menu">
-          <i class="fa-solid fa-bars"></i>
-        </button>
-        <span class="date-label" id="todayLabel"></span>
+      <div class="topbar-left">
+        <button class="icon-button mobile-menu" id="mobileMenu" aria-label="Abrir menu">☰</button>
+        <div>
+          <div class="topbar-title" id="topbarTitle">Dashboard</div>
+          <div class="topbar-subtitle">Visão geral das operações</div>
+        </div>
       </div>
 
-      <div class="top-right">
-        <div class="user-box">
-          <div class="avatar"><i class="fa-solid fa-user"></i></div>
-          <div class="user-copy">
+      <div class="topbar-right">
+        <div class="user-chip">
+          <div class="avatar">C</div>
+          <div class="user-info">
             <strong>Conferente</strong>
-            <small>Painel operacional</small>
+            <small>Usuário do sistema</small>
           </div>
         </div>
-        <button class="logout" id="logoutButton">
-          <i class="fa-solid fa-right-from-bracket"></i> Sair
-        </button>
+        <button class="logout-button" id="logoutButton">↪ Sair</button>
       </div>
     </header>
 
     <div class="content">
+
       <!-- DASHBOARD -->
-      <section class="page active" id="page-dashboard">
+      <section class="page" id="page-dashboard">
         <div class="page-heading">
           <div>
-            <div class="eyebrow">Visão operacional</div>
-            <h1>Dashboard</h1>
-            <p class="subtitle">Acompanhe os principais indicadores e atividades.</p>
+            <h1>Olá, Conferente! 👋</h1>
+            <p>Acompanhe os indicadores e as atividades do sistema.</p>
           </div>
-          <span class="badge"><i class="fa-regular fa-calendar" style="margin-right:6px"></i><span id="monthLabel"></span></span>
+          <div class="date-chip" id="currentDate">Carregando data...</div>
         </div>
 
-        <div class="section-title">Resumo Operacional</div>
-
-        <div class="grid summary-grid">
-          <article class="card summary-card" style="--accent:#2775d8;--tint:#e8f1ff">
-            <div class="summary-top">
-              <span class="summary-label">Lançamentos</span>
-              <span class="summary-icon"><i class="fa-solid fa-barcode"></i></span>
+        <div class="stats-grid">
+          <article class="stat-card">
+            <div class="stat-top">
+              <div class="stat-label">Lançamentos realizados</div>
+              <div class="stat-icon blue-bg">▤</div>
             </div>
-            <div class="summary-number">--</div>
-            <div class="summary-note">Total de lançamentos registrados</div>
+            <div class="stat-value">1.284</div>
+            <div class="stat-foot"><span>+12%</span> em relação ao período anterior</div>
           </article>
 
-          <article class="card summary-card queima-card" style="--accent:#16a34a;--tint:#e7f8ed">
-            <div class="summary-top">
-              <span class="summary-label">Produtos Queima</span>
-              <span class="summary-icon"><i class="fa-solid fa-fire"></i></span>
+          <article class="stat-card">
+            <div class="stat-top">
+              <div class="stat-label">Produtos conferidos</div>
+              <div class="stat-icon green-bg">✓</div>
             </div>
-            <div class="summary-number">--</div>
-            <div class="monthly-number">-- lançados neste mês</div>
-            <div class="summary-note">Contagem geral e mensal</div>
+            <div class="stat-value">967</div>
+            <div class="stat-foot"><span>75,2%</span> de aproveitamento demonstrativo</div>
           </article>
 
-          <article class="card summary-card" style="--accent:#d97706;--tint:#fff4dc">
-            <div class="summary-top">
-              <span class="summary-label">Próximos do Vencimento</span>
-              <span class="summary-icon"><i class="fa-solid fa-clock"></i></span>
+          <article class="stat-card">
+            <div class="stat-top">
+              <div class="stat-label">Produtos vencidos</div>
+              <div class="stat-icon red-bg">⚠</div>
             </div>
-            <div class="summary-number">--</div>
-            <div class="summary-note">Produtos próximos da validade</div>
+            <div class="stat-value">18</div>
+            <div class="stat-foot">Itens que precisam de atenção</div>
           </article>
 
-          <article class="card summary-card" style="--accent:#dc3545;--tint:#ffeaed">
-            <div class="summary-top">
-              <span class="summary-label">Vencidos</span>
-              <span class="summary-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+          <article class="stat-card">
+            <div class="stat-top">
+              <div class="stat-label">Transferências</div>
+              <div class="stat-icon yellow-bg">⇄</div>
             </div>
-            <div class="summary-number">--</div>
-            <div class="summary-note">Produtos com validade vencida</div>
+            <div class="stat-value">42</div>
+            <div class="stat-foot">Registros demonstrativos</div>
           </article>
         </div>
 
-        <div class="section-title">Visão Geral</div>
-
-        <div class="grid overview-grid">
-          <article class="card">
-            <div class="card-heading">
+        <div class="dashboard-grid">
+          <section class="panel">
+            <div class="panel-header">
               <div>
-                <h2>Atividades Recentes</h2>
-                <p>Últimas movimentações do sistema</p>
+                <h2>Atividades recentes</h2>
+                <p>Exemplos de movimentações do sistema</p>
               </div>
-              <span class="badge">Demonstração</span>
+              <button class="demo-button secondary" data-go="historico">Ver histórico</button>
             </div>
 
-            <div class="activity-list">
-              <div class="activity-item">
-                <div class="activity-icon"><i class="fa-solid fa-barcode"></i></div>
-                <div>
+            <div class="panel-body">
+              <div class="activity-list">
+                <div class="activity-item">
+                  <div class="activity-icon">▤</div>
+                  <div class="activity-text">
+                    <strong>Novo lançamento registrado</strong>
+                    <p>Produto demonstrativo · Lote LT-1025</p>
+                  </div>
+                  <div class="activity-time">09:42</div>
+                </div>
+
+                <div class="activity-item">
+                  <div class="activity-icon">✓</div>
+                  <div class="activity-text">
+                    <strong>Conferência de Queima atualizada</strong>
+                    <p>Exemplo de aprovação registrada</p>
+                  </div>
+                  <div class="activity-time">09:18</div>
+                </div>
+
+                <div class="activity-item">
+                  <div class="activity-icon">⚠</div>
+                  <div class="activity-text">
+                    <strong>Produto vencido identificado</strong>
+                    <p>Item demonstrativo para acompanhamento</p>
+                  </div>
+                  <div class="activity-time">08:55</div>
+                </div>
+
+                <div class="activity-item">
+                  <div class="activity-icon">⇄</div>
+                  <div class="activity-text">
+                    <strong>Transferência registrada</strong>
+                    <p>Movimentação demonstrativa de estoque</p>
+                  </div>
+                  <div class="activity-time">08:31</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Acesso rápido</h2>
+                <p>Acesse as principais operações</p>
+              </div>
+            </div>
+
+            <div class="panel-body">
+              <div class="quick-grid">
+                <button class="quick-button" data-go="lancamentos">
+                  <span>▤</span>
                   <strong>Lançamentos</strong>
-                  <p>As atividades serão exibidas aqui.</p>
-                </div>
-                <span class="activity-time">—</span>
-              </div>
-              <div class="activity-item">
-                <div class="activity-icon" style="background:#e9f9ef;color:#16a34a">
-                  <i class="fa-solid fa-circle-check"></i>
-                </div>
-                <div>
-                  <strong>Conferências</strong>
-                  <p>Acompanhe os produtos aprovados.</p>
-                </div>
-                <span class="activity-time">—</span>
-              </div>
-              <div class="activity-item">
-                <div class="activity-icon" style="background:#fff5df;color:#d97706">
-                  <i class="fa-solid fa-calendar"></i>
-                </div>
-                <div>
-                  <strong>Validades</strong>
-                  <p>Consulte produtos próximos do vencimento.</p>
-                </div>
-                <span class="activity-time">—</span>
-              </div>
-            </div>
-          </article>
+                </button>
 
-          <article class="card">
-            <div class="card-heading">
-              <div>
-                <h2>Acesso Rápido</h2>
-                <p>Acesse as áreas mais utilizadas</p>
-              </div>
-              <i class="fa-solid fa-arrow-up-right-from-square" style="color:#91a1ae"></i>
-            </div>
+                <button class="quick-button" data-go="mapa">
+                  <span>▧</span>
+                  <strong>Mapa de Validade</strong>
+                </button>
 
-            <div class="quick-grid">
-              <button class="quick-link" data-goto="mapa">
-                <i class="fa-solid fa-calendar-check"></i>
-                <strong>Mapa de Validade</strong>
-                <span>Consultar mapas</span>
-              </button>
-              <button class="quick-link" data-goto="controle-validade">
-                <i class="fa-solid fa-calendar-days" style="color:#0d9488"></i>
-                <strong>Controle de Validade</strong>
-                <span>Acompanhar validades</span>
-              </button>
-              <button class="quick-link" data-goto="vencidos">
-                <i class="fa-solid fa-calendar-xmark" style="color:#dc3545"></i>
-                <strong>Vencidos</strong>
-                <span>Ver produtos vencidos</span>
-              </button>
-              <button class="quick-link" data-goto="sinalizados">
-                <i class="fa-solid fa-flag" style="color:#d97706"></i>
-                <strong>Sinalizados</strong>
-                <span>Ver itens sinalizados</span>
-              </button>
-              <button class="quick-link" data-goto="estoque">
-                <i class="fa-solid fa-boxes-stacked" style="color:#16a34a"></i>
-                <strong>Controle de Estoque</strong>
-                <span>Consultar estoque</span>
-              </button>
+                <button class="quick-button" data-go="controle-validade">
+                  <span>◷</span>
+                  <strong>Controle de Validade</strong>
+                </button>
+
+                <button class="quick-button" data-go="vencidos">
+                  <span>⚠</span>
+                  <strong>Produtos Vencidos</strong>
+                </button>
+
+                <button class="quick-button" data-go="transferencias">
+                  <span>⇄</span>
+                  <strong>Transferências</strong>
+                </button>
+
+                <button class="quick-button" data-go="estoque">
+                  <span>▣</span>
+                  <strong>Controle de Estoque</strong>
+                </button>
+              </div>
             </div>
-          </article>
+          </section>
         </div>
 
-        <div class="section-title">Conferências</div>
-
-        <div class="grid conference-grid">
-          <article class="card chart-card">
-            <div class="card-heading">
-              <div>
-                <h2 class="chart-title">Produtos lançados no Queima</h2>
-                <p class="chart-description">Desempenho das conferências no mês atual</p>
-              </div>
-              <span class="badge" id="chartMonthBadge">Mês atual</span>
-            </div>
-
-            <div class="rings-layout">
-              <div class="rings">
-                <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico mensal de produtos lançados e aprovados">
-                  <circle class="ring-total" cx="100" cy="100" r="83"></circle>
-                  <circle class="ring-approved" id="monthRing" cx="100" cy="100" r="59" stroke-dasharray="0 370.71"></circle>
-                </svg>
-                <div class="ring-center">
-                  <strong id="monthPercent">--%</strong>
-                  <span>aprovados</span>
-                </div>
-              </div>
-
-              <div class="chart-legend">
-                <div class="legend-item">
-                  <span class="legend-dot green"></span>
-                  <div>
-                    <strong id="monthApproved">--</strong>
-                    <span>Produtos aprovados</span>
-                  </div>
-                </div>
-                <div class="legend-item">
-                  <span class="legend-dot yellow"></span>
-                  <div>
-                    <strong id="monthLaunched">--</strong>
-                    <span>Produtos lançados</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="chart-footer">
-              <span>Aprovados em relação aos lançados</span>
-              <strong id="monthPending">-- pendentes</strong>
-            </div>
-          </article>
-
-          <article class="card chart-card">
-            <div class="card-heading">
-              <div>
-                <h2 class="chart-title">Produtos lançados no Queima</h2>
-                <p class="chart-description">Desempenho acumulado geral</p>
-              </div>
-              <span class="badge">Geral</span>
-            </div>
-
-            <div class="rings-layout">
-              <div class="rings">
-                <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico geral de produtos lançados e aprovados">
-                  <circle class="ring-total" cx="100" cy="100" r="83"></circle>
-                  <circle class="ring-approved" id="generalRing" cx="100" cy="100" r="59" stroke-dasharray="0 370.71"></circle>
-                </svg>
-                <div class="ring-center">
-                  <strong id="generalPercent">--%</strong>
-                  <span>aprovados</span>
-                </div>
-              </div>
-
-              <div class="chart-legend">
-                <div class="legend-item">
-                  <span class="legend-dot green"></span>
-                  <div>
-                    <strong id="generalApproved">--</strong>
-                    <span>Produtos aprovados</span>
-                  </div>
-                </div>
-                <div class="legend-item">
-                  <span class="legend-dot yellow"></span>
-                  <div>
-                    <strong id="generalLaunched">--</strong>
-                    <span>Produtos lançados</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="chart-footer">
-              <span>Aprovados em relação aos lançados</span>
-              <strong id="generalPending">-- pendentes</strong>
-            </div>
-          </article>
-        </div>
-
-        <div class="section-title">Avisos do Sistema</div>
-
-        <div class="notice-list">
-          <div class="notice info">
-            <i class="fa-solid fa-circle-info"></i>
+        <section class="panel" style="margin-bottom:19px">
+          <div class="panel-header">
             <div>
-              <strong>Painel em modo demonstrativo</strong>
-              <p>Os indicadores ainda não estão conectados às planilhas. Os dados reais serão exibidos após a integração.</p>
+              <h2>Conferência de Queima</h2>
+              <p>Acompanhamento demonstrativo de lançamentos e aprovações</p>
             </div>
           </div>
-          <div class="notice warning">
-            <i class="fa-solid fa-bell"></i>
-            <div>
-              <strong>Acompanhe as validades</strong>
-              <p>Consulte regularmente o Mapa de Validade, o Controle de Validade e a lista de Produtos Vencidos.</p>
+
+          <div class="panel-body">
+            <div class="charts-grid" style="margin-bottom:0">
+
+              <article class="panel chart-card">
+                <h3>Mês atual</h3>
+                <p>Produtos lançados e aprovados neste mês</p>
+
+                <div class="ring-container">
+                  <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico de conferência mensal">
+                    <circle class="ring-bg" cx="100" cy="100" r="83" stroke-width="4"/>
+                    <circle class="ring-total" cx="100" cy="100" r="83"/>
+                    <circle class="ring-approved-bg" cx="100" cy="100" r="59"/>
+                    <circle class="ring-approved" id="monthRing" cx="100" cy="100" r="59"/>
+                  </svg>
+                  <div class="ring-center">
+                    <div class="ring-percent" id="monthPercent">50%</div>
+                    <small>aprovados</small>
+                  </div>
+                </div>
+
+                <div class="chart-legend">
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#f4c430"></span>
+                    Lançados
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#16a34a"></span>
+                    Aprovados
+                  </div>
+                </div>
+
+                <div class="chart-counts">
+                  <div class="chart-count">
+                    <strong id="monthLaunched">100</strong>
+                    <span>Total lançados</span>
+                  </div>
+                  <div class="chart-count">
+                    <strong id="monthApproved">50</strong>
+                    <span>Total aprovados</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel chart-card">
+                <h3>Geral</h3>
+                <p>Total de produtos lançados e aprovados</p>
+
+                <div class="ring-container">
+                  <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico geral de conferência">
+                    <circle class="ring-bg" cx="100" cy="100" r="83" stroke-width="4"/>
+                    <circle class="ring-total" cx="100" cy="100" r="83"/>
+                    <circle class="ring-approved-bg" cx="100" cy="100" r="59"/>
+                    <circle class="ring-approved" id="generalRing" cx="100" cy="100" r="59"/>
+                  </svg>
+                  <div class="ring-center">
+                    <div class="ring-percent" id="generalPercent">75%</div>
+                    <small>aprovados</small>
+                  </div>
+                </div>
+
+                <div class="chart-legend">
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#f4c430"></span>
+                    Lançados
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background:#16a34a"></span>
+                    Aprovados
+                  </div>
+                </div>
+
+                <div class="chart-counts">
+                  <div class="chart-count">
+                    <strong id="generalLaunched">400</strong>
+                    <span>Total lançados</span>
+                  </div>
+                  <div class="chart-count">
+                    <strong id="generalApproved">300</strong>
+                    <span>Total aprovados</span>
+                  </div>
+                </div>
+              </article>
+
             </div>
           </div>
-        </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Avisos do sistema</h2>
+              <p>Informações para acompanhamento operacional</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="notice warning">
+              <span>⚠️</span>
+              <div>
+                <strong>Produtos vencidos</strong>
+                Existem itens demonstrativos que precisam ser verificados.
+              </div>
+            </div>
+
+            <div class="notice info">
+              <span>ℹ️</span>
+              <div>
+                <strong>Conferência de Queima</strong>
+                Acompanhe a relação entre os produtos lançados e aprovados.
+              </div>
+            </div>
+
+            <div class="notice success">
+              <span>✓</span>
+              <div>
+                <strong>Painel visual</strong>
+                Os indicadores desta demonstração são fictícios e não representam dados reais.
+              </div>
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- LANÇAMENTOS -->
-      <section class="page" id="page-lancamentos">
+      <section class="page hidden" id="page-lancamentos">
         <div class="page-heading">
-          <div><div class="eyebrow">Operações</div><h1>Lançamentos</h1>
-          <p class="subtitle">Consulta e acompanhamento de lançamentos.</p></div>
+          <div>
+            <h1>Lançamentos</h1>
+            <p>Visualização demonstrativa dos lançamentos de produtos.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-barcode"></i><h2>Área de Lançamentos</h2><p>Esta página é apenas visual. A integração com os lançamentos será configurada posteriormente.</p></div>
+        <div class="demo-toolbar">
+          <button class="demo-button">＋ Novo lançamento</button>
+          <button class="demo-button secondary">⇩ Exportar</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Lançamentos recentes</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>100001</td><td>Produto demonstrativo A</td><td>LT-1025</td><td>15/12/2026</td><td>12</td><td><span class="status green">Registrado</span></td></tr>
+                <tr><td>100002</td><td>Produto demonstrativo B</td><td>LT-2030</td><td>20/01/2027</td><td>8</td><td><span class="status yellow">Pendente</span></td></tr>
+                <tr><td>100003</td><td>Produto demonstrativo C</td><td>LT-3040</td><td>10/05/2026</td><td>5</td><td><span class="status red">Vencido</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- MAPA DE VALIDADE -->
-      <section class="page" id="page-mapa">
+      <section class="page hidden" id="page-mapa">
         <div class="page-heading">
-          <div><div class="eyebrow">Operações</div><h1>Mapa de Validade</h1>
-          <p class="subtitle">Consulte os mapas de validade dos produtos.</p></div>
+          <div>
+            <h1>Mapa de Validade</h1>
+            <p>Visualização demonstrativa de lotes e respectivas validades.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-calendar-check"></i><h2>Mapa de Validade</h2><p>O conteúdo desta página será implementado posteriormente.</p></div>
+        <div class="demo-toolbar">
+          <button class="demo-button">＋ Adicionar registro</button>
+          <button class="demo-button secondary">⌕ Filtrar</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Mapa de produtos</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td>100001</td><td>Produto demonstrativo A</td><td>LT-1025</td><td>15/12/2026</td><td>12</td><td><span class="status green">Regular</span></td></tr>
+                <tr><td>100002</td><td>Produto demonstrativo B</td><td>LT-2030</td><td>20/01/2027</td><td>8</td><td><span class="status yellow">A vencer</span></td></tr>
+                <tr><td>100003</td><td>Produto demonstrativo C</td><td>LT-3040</td><td>10/05/2026</td><td>5</td><td><span class="status red">Vencido</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- CONTROLE DE VALIDADE -->
-      <section class="page" id="page-controle-validade">
+      <section class="page hidden" id="page-controle-validade">
         <div class="page-heading">
           <div>
-            <div class="eyebrow">Operações</div>
             <h1>Controle de Validade</h1>
-            <p class="subtitle">Acompanhe e consulte as validades dos produtos.</p>
+            <p>Acompanhe os produtos por situação de vencimento.</p>
           </div>
         </div>
-
-        <div class="placeholder">
-          <i class="fa-solid fa-calendar-days"></i>
-          <h2>Controle de Validade</h2>
-          <p>Esta área é apenas visual por enquanto. A funcionalidade será implementada posteriormente.</p>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-label">Dentro da validade</div><div class="stat-value">248</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Próximos do vencimento</div><div class="stat-value">32</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Vencidos</div><div class="stat-value">18</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Lotes acompanhados</div><div class="stat-value">298</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Situação dos produtos</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td>100001</td><td>Produto demonstrativo A</td><td>LT-1025</td><td>15/12/2026</td><td>12</td><td><span class="status green">Regular</span></td></tr>
+                <tr><td>100002</td><td>Produto demonstrativo B</td><td>LT-2030</td><td>20/01/2027</td><td>8</td><td><span class="status yellow">A vencer</span></td></tr>
+                <tr><td>100003</td><td>Produto demonstrativo C</td><td>LT-3040</td><td>10/05/2026</td><td>5</td><td><span class="status red">Vencido</span></td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <!-- PRODUTOS VENCIDOS -->
-      <section class="page" id="page-vencidos">
+      <section class="page hidden" id="page-vencidos">
         <div class="page-heading">
-          <div><div class="eyebrow">Operações</div><h1>Produtos Vencidos</h1>
-          <p class="subtitle">Acompanhamento de produtos vencidos.</p></div>
+          <div>
+            <h1>Produtos Vencidos</h1>
+            <p>Itens que exigem atenção por estarem fora da validade.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-calendar-xmark"></i><h2>Produtos Vencidos</h2><p>A listagem será conectada aos dados na próxima etapa.</p></div>
+        <div class="notice warning"><span>⚠️</span><div><strong>Atenção aos vencimentos</strong>Os dados abaixo são apenas exemplos visuais.</div></div>
+        <div class="panel">
+          <div class="panel-header"><h2>Lista de produtos vencidos</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th></tr></thead>
+              <tbody>
+                <tr><td>100003</td><td>Produto demonstrativo C</td><td>LT-3040</td><td>10/05/2026</td><td>5</td><td>15/04/2026</td></tr>
+                <tr><td>100004</td><td>Produto demonstrativo D</td><td>LT-4080</td><td>18/08/2026</td><td>3</td><td>20/04/2026</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- TRANSFERÊNCIAS -->
-      <section class="page" id="page-transferencias">
+      <section class="page hidden" id="page-transferencias">
         <div class="page-heading">
-          <div><div class="eyebrow">Operações</div><h1>Transferências</h1>
-          <p class="subtitle">Consulta de transferências de produtos.</p></div>
+          <div>
+            <h1>Transferências</h1>
+            <p>Visualize as movimentações demonstrativas entre locais.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-right-left"></i><h2>Transferências</h2><p>O conteúdo desta página será implementado posteriormente.</p></div>
+        <div class="demo-toolbar">
+          <button class="demo-button">＋ Nova transferência</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Histórico de transferências</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data</th></tr></thead>
+              <tbody>
+                <tr><td>100010</td><td>Produto demonstrativo E</td><td>LT-5020</td><td>10/12/2026</td><td>4</td><td>21/10/2026</td></tr>
+                <tr><td>100011</td><td>Produto demonstrativo F</td><td>LT-6040</td><td>25/02/2027</td><td>9</td><td>20/10/2026</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
-      <!-- CONTROLE DE ESTOQUE -->
-      <section class="page" id="page-estoque">
+      <!-- ESTOQUE -->
+      <section class="page hidden" id="page-estoque">
         <div class="page-heading">
-          <div><div class="eyebrow">Operações</div><h1>Controle de Estoque</h1>
-          <p class="subtitle">Visão geral do estoque.</p></div>
+          <div>
+            <h1>Controle de Estoque</h1>
+            <p>Visão demonstrativa de quantidades e movimentações.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-boxes-stacked"></i><h2>Controle de Estoque</h2><p>A consulta ao estoque será implementada posteriormente.</p></div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-label">Itens cadastrados</div><div class="stat-value">1.240</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Entradas</div><div class="stat-value">86</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Saídas</div><div class="stat-value">54</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+          <article class="stat-card"><div class="stat-label">Acompanhar</div><div class="stat-value">12</div><div class="stat-foot">Exemplo demonstrativo</div></article>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Posição de estoque</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td>100001</td><td>Produto demonstrativo A</td><td>LT-1025</td><td>15/12/2026</td><td>120</td><td><span class="status green">Disponível</span></td></tr>
+                <tr><td>100002</td><td>Produto demonstrativo B</td><td>LT-2030</td><td>20/01/2027</td><td>8</td><td><span class="status yellow">Estoque baixo</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- SINALIZADOS -->
-      <section class="page" id="page-sinalizados">
+      <section class="page hidden" id="page-sinalizados">
         <div class="page-heading">
-          <div><div class="eyebrow">Consultas</div><h1>Sinalizados</h1>
-          <p class="subtitle">Produtos que precisam de atenção.</p></div>
+          <div>
+            <h1>Sinalizados</h1>
+            <p>Consulte os produtos que precisam de verificação.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-flag"></i><h2>Produtos Sinalizados</h2><p>Os produtos sinalizados serão exibidos aqui após a integração.</p></div>
+        <div class="panel">
+          <div class="panel-header"><h2>Produtos sinalizados</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Motivo</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td>100020</td><td>Produto demonstrativo G</td><td>LT-7001</td><td>Verificar validade</td><td><span class="status yellow">Pendente</span></td></tr>
+                <tr><td>100021</td><td>Produto demonstrativo H</td><td>LT-7002</td><td>Conferir quantidade</td><td><span class="status red">Atenção</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- HISTÓRICO -->
-      <section class="page" id="page-historico">
+      <section class="page hidden" id="page-historico">
         <div class="page-heading">
-          <div><div class="eyebrow">Consultas</div><h1>Histórico</h1>
-          <p class="subtitle">Histórico de atividades e movimentações.</p></div>
+          <div>
+            <h1>Histórico</h1>
+            <p>Consulte as atividades anteriores do sistema.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-clock-rotate-left"></i><h2>Histórico de Atividades</h2><p>Esta página receberá os registros históricos futuramente.</p></div>
+        <div class="demo-toolbar">
+          <button class="demo-button secondary">▦ Selecionar período</button>
+          <button class="demo-button secondary">⇩ Exportar histórico</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Registros recentes</h2></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table">
+              <thead><tr><th>Data</th><th>Atividade</th><th>Descrição</th><th>Usuário</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td>21/10/2026</td><td>Lançamento</td><td>Registro demonstrativo</td><td>Conferente</td><td><span class="status green">Concluído</span></td></tr>
+                <tr><td>21/10/2026</td><td>Conferência</td><td>Aprovação demonstrativa</td><td>Conferente</td><td><span class="status green">Concluído</span></td></tr>
+                <tr><td>20/10/2026</td><td>Transferência</td><td>Movimentação demonstrativa</td><td>Conferente</td><td><span class="status yellow">Registrado</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- FUNCIONÁRIOS -->
-      <section class="page" id="page-funcionarios">
+      <section class="page hidden" id="page-funcionarios">
         <div class="page-heading">
-          <div><div class="eyebrow">Configurações</div><h1>Adicionar funcionário</h1>
-          <p class="subtitle">Área visual para gerenciamento de funcionários.</p></div>
+          <div>
+            <h1>Adicionar funcionário</h1>
+            <p>Modelo visual de cadastro de funcionários.</p>
+          </div>
         </div>
-        <div class="placeholder"><i class="fa-solid fa-user-plus"></i><h2>Cadastro de Funcionários</h2><p>O cadastro ainda não está ativo. A criação e o gerenciamento de funcionários serão configurados posteriormente.</p></div>
+        <div class="panel">
+          <div class="panel-header"><h2>Cadastro de funcionário</h2></div>
+          <div class="panel-body">
+            <div class="placeholder">
+              <div class="placeholder-icon">♙</div>
+              <strong>Formulário demonstrativo</strong>
+              Esta tela é apenas uma representação visual. O cadastro não está conectado a um banco de dados.
+            </div>
+          </div>
+        </div>
       </section>
+
+      <div class="footer-note">
+        Painel do Conferente · Protótipo visual · Dados fictícios
+      </div>
     </div>
   </main>
+</div>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
+<script>
+  const sidebar = document.getElementById("sidebar");
+  const main = document.getElementById("main");
+  const collapseButton = document.getElementById("collapseButton");
+  const collapseIcon = document.getElementById("collapseIcon");
+  const mobileMenu = document.getElementById("mobileMenu");
+  const mobileOverlay = document.getElementById("mobileOverlay");
+  const topbarTitle = document.getElementById("topbarTitle");
 
-    const sidebar = $("sidebar");
-    const main = $("main");
-    const overlay = $("mobileOverlay");
-    const collapseButton = $("collapseButton");
-    const collapseIcon = $("collapseIcon");
+  const pageTitles = {
+    dashboard: "Dashboard",
+    lancamentos: "Lançamentos",
+    mapa: "Mapa de Validade",
+    "controle-validade": "Controle de Validade",
+    vencidos: "Produtos Vencidos",
+    transferencias: "Transferências",
+    estoque: "Controle de Estoque",
+    sinalizados: "Sinalizados",
+    historico: "Histórico",
+    funcionarios: "Adicionar funcionário"
+  };
 
-    function isMobile() {
-      return window.matchMedia("(max-width: 850px)").matches;
+  function abrirPagina(nome) {
+    document.querySelectorAll(".page").forEach(pagina => {
+      pagina.classList.add("hidden");
+    });
+
+    const pagina = document.getElementById("page-" + nome);
+
+    if (pagina) {
+      pagina.classList.remove("hidden");
     }
 
-    function closeMobileMenu() {
-      sidebar.classList.remove("mobile-open");
-      overlay.classList.remove("visible");
-    }
-
-    $("menuButton").addEventListener("click", () => {
-      if (isMobile()) {
-        sidebar.classList.toggle("mobile-open");
-        overlay.classList.toggle("visible", sidebar.classList.contains("mobile-open"));
-      } else {
-        sidebar.classList.toggle("collapsed");
-        main.classList.toggle("expanded", sidebar.classList.contains("collapsed"));
-        collapseIcon.className = sidebar.classList.contains("collapsed")
-          ? "fa-solid fa-angles-right"
-          : "fa-solid fa-angles-left";
-      }
+    document.querySelectorAll(".menu-item").forEach(item => {
+      item.classList.toggle("active", item.dataset.page === nome);
     });
 
-    collapseButton.addEventListener("click", () => {
-      if (isMobile()) {
-        closeMobileMenu();
-        return;
-      }
+    topbarTitle.textContent = pageTitles[nome] || "Painel do Conferente";
 
-      sidebar.classList.toggle("collapsed");
-      main.classList.toggle("expanded", sidebar.classList.contains("collapsed"));
-      collapseIcon.className = sidebar.classList.contains("collapsed")
-        ? "fa-solid fa-angles-right"
-        : "fa-solid fa-angles-left";
+    document.querySelector(".topbar-subtitle").textContent =
+      nome === "dashboard"
+        ? "Visão geral das operações"
+        : "Área demonstrativa · " + topbarTitle.textContent;
+
+    fecharMenuMobile();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  document.querySelectorAll(".menu-item").forEach(item => {
+    item.addEventListener("click", () => {
+      abrirPagina(item.dataset.page);
     });
+  });
 
-    overlay.addEventListener("click", closeMobileMenu);
-
-    function showPage(pageName) {
-      const target = $("page-" + pageName);
-      if (!target) return;
-
-      document.querySelectorAll(".page").forEach(page => {
-        page.classList.toggle("active", page === target);
-      });
-
-      document.querySelectorAll(".nav-link[data-page]").forEach(link => {
-        link.classList.toggle("active", link.dataset.page === pageName);
-      });
-
-      closeMobileMenu();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    document.querySelectorAll(".nav-link[data-page]").forEach(link => {
-      link.addEventListener("click", () => showPage(link.dataset.page));
+  document.querySelectorAll("[data-go]").forEach(botao => {
+    botao.addEventListener("click", () => {
+      abrirPagina(botao.dataset.go);
     });
+  });
 
-    document.querySelectorAll("[data-goto]").forEach(button => {
-      button.addEventListener("click", () => showPage(button.dataset.goto));
-    });
-
-    // Valores fictícios para demonstração visual dos gráficos.
-    function updateRing(prefix, approved, launched) {
-      approved = Math.max(0, Number(approved) || 0);
-      launched = Math.max(0, Number(launched) || 0);
-
-      // Não pode haver mais produtos aprovados do que lançados.
-      approved = Math.min(approved, launched);
-
-      const percent = launched > 0
-        ? Math.round((approved / launched) * 100)
-        : 0;
-
-      const circumference = 2 * Math.PI * 59;
-      const approvedLength = circumference * percent / 100;
-
-      $(prefix + "Ring").setAttribute(
-        "stroke-dasharray",
-        `${approvedLength} ${circumference}`
+  collapseButton.addEventListener("click", () => {
+    if (window.innerWidth <= 760) {
+      sidebar.classList.toggle("mobile-open");
+      mobileOverlay.classList.toggle(
+        "visible",
+        sidebar.classList.contains("mobile-open")
       );
-
-      $(prefix + "Percent").textContent = percent + "%";
-      $(prefix + "Approved").textContent = approved.toLocaleString("pt-BR");
-      $(prefix + "Launched").textContent = launched.toLocaleString("pt-BR");
-      $(prefix + "Pending").textContent =
-        (launched - approved).toLocaleString("pt-BR") + " pendentes";
+      return;
     }
 
-    updateRing("month", 50, 100);
-    updateRing("general", 300, 400);
+    sidebar.classList.toggle("collapsed");
+    main.classList.toggle("expanded");
 
-    const now = new Date();
+    const recolhido = sidebar.classList.contains("collapsed");
 
-    $("todayLabel").textContent = now.toLocaleDateString("pt-BR", {
+    collapseIcon.textContent = recolhido ? "⇥" : "⇤";
+    collapseButton.querySelector(".collapse-label").textContent =
+      recolhido ? "Expandir menu" : "Recolher menu";
+    collapseButton.title = recolhido ? "Expandir menu" : "Recolher menu";
+  });
+
+  mobileMenu.addEventListener("click", () => {
+    sidebar.classList.add("mobile-open");
+    mobileOverlay.classList.add("visible");
+  });
+
+  function fecharMenuMobile() {
+    sidebar.classList.remove("mobile-open");
+    mobileOverlay.classList.remove("visible");
+  }
+
+  mobileOverlay.addEventListener("click", fecharMenuMobile);
+
+  document.getElementById("logoutButton").addEventListener("click", () => {
+    const sair = confirm("Deseja sair do Painel do Conferente?");
+
+    if (sair) {
+      window.location.href = "index.html";
+    }
+  });
+
+  // Gráficos demonstrativos de conferência.
+  // A quantidade aprovada nunca ultrapassa a quantidade lançada.
+  function updateRing(tipo, aprovados, lancados) {
+    lancados = Math.max(0, Number(lancados) || 0);
+    aprovados = Math.max(0, Number(aprovados) || 0);
+    aprovados = Math.min(aprovados, lancados);
+
+    const percentual = lancados > 0
+      ? (aprovados / lancados) * 100
+      : 0;
+
+    const raio = 59;
+    const circunferencia = 2 * Math.PI * raio;
+    const progresso = circunferencia * (percentual / 100);
+
+    const anel = document.getElementById(tipo + "Ring");
+
+    anel.style.strokeDasharray = circunferencia;
+    anel.style.strokeDashoffset = circunferencia - progresso;
+
+    document.getElementById(tipo + "Percent").textContent =
+      percentual.toLocaleString("pt-BR", {
+        maximumFractionDigits: 1
+      }) + "%";
+
+    document.getElementById(tipo + "Launched").textContent =
+      lancados.toLocaleString("pt-BR");
+
+    document.getElementById(tipo + "Approved").textContent =
+      aprovados.toLocaleString("pt-BR");
+  }
+
+  // Valores fictícios usados apenas para demonstrar o layout.
+  updateRing("month", 50, 100);
+  updateRing("general", 300, 400);
+
+  // Data atual do dispositivo.
+  document.getElementById("currentDate").textContent =
+    new Date().toLocaleDateString("pt-BR", {
       weekday: "long",
       day: "2-digit",
       month: "long",
       year: "numeric"
     });
-
-    $("monthLabel").textContent = now.toLocaleDateString("pt-BR", {
-      month: "long",
-      year: "numeric"
-    });
-
-    $("chartMonthBadge").textContent = now.toLocaleDateString("pt-BR", {
-      month: "long"
-    });
-
-    $("logoutButton").addEventListener("click", () => {
-      if (confirm("Deseja sair do Painel do Conferente?")) {
-        window.location.href = "index.html";
-      }
-    });
-  </script>
+</script>
 </body>
 </html>
