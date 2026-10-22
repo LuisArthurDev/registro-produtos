@@ -80,6 +80,7 @@
     .brand small { display: block; margin-top: 5px; color: #a8bdca; font-size: 10px; }
 
     .nav { padding: 16px 12px; flex: 1; }
+
     .nav-label {
       padding: 13px 10px 8px;
       color: #8da7b7;
@@ -132,10 +133,13 @@
 
     .sidebar.collapsed { width: var(--sidebar-small); }
     .sidebar.collapsed .brand { padding-left: 19px; }
+
     .sidebar.collapsed .brand-copy,
     .sidebar.collapsed .nav-label,
     .sidebar.collapsed .nav-text,
-    .sidebar.collapsed .sidebar-footer .nav-text { display: none; }
+    .sidebar.collapsed .sidebar-footer .nav-text {
+      display: none;
+    }
 
     .sidebar.collapsed .nav-link {
       justify-content: center;
@@ -249,6 +253,7 @@
     }
 
     .summary-card { position: relative; overflow: hidden; min-height: 140px; }
+
     .summary-card::after {
       content: "";
       position: absolute;
@@ -262,6 +267,7 @@
     }
 
     .summary-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
     .summary-icon {
       width: 40px;
       height: 40px;
@@ -305,6 +311,7 @@
     }
 
     .activity-list { display: grid; gap: 0; }
+
     .activity-item {
       display: flex;
       align-items: center;
@@ -314,6 +321,7 @@
     }
 
     .activity-item:last-child { border-bottom: 0; padding-bottom: 0; }
+
     .activity-icon {
       flex: 0 0 37px;
       width: 37px;
@@ -348,7 +356,6 @@
     .quick-link span { display: block; color: var(--muted); font-size: 10px; margin-top: 6px; }
 
     .conference-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
     .chart-card { padding: 23px; }
     .chart-title { font-size: 15px; font-weight: 700; }
     .chart-description { margin-top: 6px; color: var(--muted); font-size: 11px; }
@@ -423,6 +430,7 @@
     .chart-footer strong { color: var(--text); font-size: 12px; }
 
     .notice-list { display: grid; gap: 12px; }
+
     .notice {
       display: flex;
       align-items: flex-start;
@@ -452,8 +460,6 @@
     .placeholder h2 { font-size: 17px; }
     .placeholder p { color: var(--muted); max-width: 430px; margin: 10px auto 0; font-size: 12px; }
 
-    .mobile-overlay { display: none; }
-
     @media (max-width: 1150px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .rings-layout { gap: 12px; }
@@ -468,16 +474,18 @@
 
       .sidebar.mobile-open { transform: translateX(0); }
       .sidebar.collapsed { width: var(--sidebar-width); }
+
       .sidebar.collapsed .brand-copy,
-      .sidebar.collapsed .nav-label,
       .sidebar.collapsed .nav-text,
       .sidebar.collapsed .sidebar-footer .nav-text { display: initial; }
+
       .sidebar.collapsed .nav-label { display: block; }
       .sidebar.collapsed .nav-link { justify-content: flex-start; padding: 11px 13px; }
       .main, .main.expanded { margin-left: 0; }
       .overview-grid, .conference-grid { grid-template-columns: 1fr; }
       .content { padding: 23px 20px 35px; }
       .topbar { padding: 0 20px; }
+
       .mobile-overlay.visible {
         display: block;
         position: fixed;
@@ -486,6 +494,8 @@
         background: #06172580;
       }
     }
+
+    .mobile-overlay { display: none; }
 
     @media (max-width: 540px) {
       .content { padding: 20px 13px 28px; }
@@ -538,6 +548,9 @@
       <button class="nav-link" data-page="mapa" title="Mapa de Validade">
         <i class="fa-solid fa-calendar-check"></i><span class="nav-text">Mapa de Validade</span>
       </button>
+      <button class="nav-link" data-page="controle-validade" title="Controle de Validade">
+        <i class="fa-solid fa-calendar-days"></i><span class="nav-text">Controle de Validade</span>
+      </button>
       <button class="nav-link" data-page="vencidos" title="Produtos Vencidos">
         <i class="fa-solid fa-calendar-xmark"></i><span class="nav-text">Produtos Vencidos</span>
       </button>
@@ -557,7 +570,7 @@
       </button>
 
       <div class="nav-label">Configurações</div>
-      <button class="nav-link" data-page="funcionarios" title="Funcionários">
+      <button class="nav-link" data-page="funcionarios" title="Adicionar funcionário">
         <i class="fa-solid fa-user-plus"></i><span class="nav-text">Adicionar funcionário</span>
       </button>
     </nav>
@@ -705,6 +718,11 @@
                 <strong>Mapa de Validade</strong>
                 <span>Consultar mapas</span>
               </button>
+              <button class="quick-link" data-goto="controle-validade">
+                <i class="fa-solid fa-calendar-days" style="color:#0d9488"></i>
+                <strong>Controle de Validade</strong>
+                <span>Acompanhar validades</span>
+              </button>
               <button class="quick-link" data-goto="vencidos">
                 <i class="fa-solid fa-calendar-xmark" style="color:#dc3545"></i>
                 <strong>Vencidos</strong>
@@ -740,8 +758,7 @@
               <div class="rings">
                 <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico mensal de produtos lançados e aprovados">
                   <circle class="ring-total" cx="100" cy="100" r="83"></circle>
-                  <circle class="ring-approved" id="monthRing" cx="100" cy="100" r="59"
-                    stroke-dasharray="0 370.71"></circle>
+                  <circle class="ring-approved" id="monthRing" cx="100" cy="100" r="59" stroke-dasharray="0 370.71"></circle>
                 </svg>
                 <div class="ring-center">
                   <strong id="monthPercent">--%</strong>
@@ -786,8 +803,7 @@
               <div class="rings">
                 <svg viewBox="0 0 200 200" role="img" aria-label="Gráfico geral de produtos lançados e aprovados">
                   <circle class="ring-total" cx="100" cy="100" r="83"></circle>
-                  <circle class="ring-approved" id="generalRing" cx="100" cy="100" r="59"
-                    stroke-dasharray="0 370.71"></circle>
+                  <circle class="ring-approved" id="generalRing" cx="100" cy="100" r="59" stroke-dasharray="0 370.71"></circle>
                 </svg>
                 <div class="ring-center">
                   <strong id="generalPercent">--%</strong>
@@ -834,13 +850,13 @@
             <i class="fa-solid fa-bell"></i>
             <div>
               <strong>Acompanhe as validades</strong>
-              <p>Consulte regularmente o Mapa de Validade e a lista de Produtos Vencidos.</p>
+              <p>Consulte regularmente o Mapa de Validade, o Controle de Validade e a lista de Produtos Vencidos.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- PÁGINAS VISUAIS -->
+      <!-- LANÇAMENTOS -->
       <section class="page" id="page-lancamentos">
         <div class="page-heading">
           <div><div class="eyebrow">Operações</div><h1>Lançamentos</h1>
@@ -849,38 +865,83 @@
         <div class="placeholder"><i class="fa-solid fa-barcode"></i><h2>Área de Lançamentos</h2><p>Esta página é apenas visual. A integração com os lançamentos será configurada posteriormente.</p></div>
       </section>
 
+      <!-- MAPA DE VALIDADE -->
       <section class="page" id="page-mapa">
-        <div class="page-heading"><div><div class="eyebrow">Operações</div><h1>Mapa de Validade</h1><p class="subtitle">Consulte os mapas de validade dos produtos.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Operações</div><h1>Mapa de Validade</h1>
+          <p class="subtitle">Consulte os mapas de validade dos produtos.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-calendar-check"></i><h2>Mapa de Validade</h2><p>O conteúdo desta página será implementado posteriormente.</p></div>
       </section>
 
+      <!-- CONTROLE DE VALIDADE -->
+      <section class="page" id="page-controle-validade">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">Operações</div>
+            <h1>Controle de Validade</h1>
+            <p class="subtitle">Acompanhe e consulte as validades dos produtos.</p>
+          </div>
+        </div>
+
+        <div class="placeholder">
+          <i class="fa-solid fa-calendar-days"></i>
+          <h2>Controle de Validade</h2>
+          <p>Esta área é apenas visual por enquanto. A funcionalidade será implementada posteriormente.</p>
+        </div>
+      </section>
+
+      <!-- PRODUTOS VENCIDOS -->
       <section class="page" id="page-vencidos">
-        <div class="page-heading"><div><div class="eyebrow">Operações</div><h1>Produtos Vencidos</h1><p class="subtitle">Acompanhamento de produtos vencidos.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Operações</div><h1>Produtos Vencidos</h1>
+          <p class="subtitle">Acompanhamento de produtos vencidos.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-calendar-xmark"></i><h2>Produtos Vencidos</h2><p>A listagem será conectada aos dados na próxima etapa.</p></div>
       </section>
 
+      <!-- TRANSFERÊNCIAS -->
       <section class="page" id="page-transferencias">
-        <div class="page-heading"><div><div class="eyebrow">Operações</div><h1>Transferências</h1><p class="subtitle">Consulta de transferências de produtos.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Operações</div><h1>Transferências</h1>
+          <p class="subtitle">Consulta de transferências de produtos.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-right-left"></i><h2>Transferências</h2><p>O conteúdo desta página será implementado posteriormente.</p></div>
       </section>
 
+      <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
-        <div class="page-heading"><div><div class="eyebrow">Operações</div><h1>Controle de Estoque</h1><p class="subtitle">Visão geral do estoque.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Operações</div><h1>Controle de Estoque</h1>
+          <p class="subtitle">Visão geral do estoque.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-boxes-stacked"></i><h2>Controle de Estoque</h2><p>A consulta ao estoque será implementada posteriormente.</p></div>
       </section>
 
+      <!-- SINALIZADOS -->
       <section class="page" id="page-sinalizados">
-        <div class="page-heading"><div><div class="eyebrow">Consultas</div><h1>Sinalizados</h1><p class="subtitle">Produtos que precisam de atenção.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Consultas</div><h1>Sinalizados</h1>
+          <p class="subtitle">Produtos que precisam de atenção.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-flag"></i><h2>Produtos Sinalizados</h2><p>Os produtos sinalizados serão exibidos aqui após a integração.</p></div>
       </section>
 
+      <!-- HISTÓRICO -->
       <section class="page" id="page-historico">
-        <div class="page-heading"><div><div class="eyebrow">Consultas</div><h1>Histórico</h1><p class="subtitle">Histórico de atividades e movimentações.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Consultas</div><h1>Histórico</h1>
+          <p class="subtitle">Histórico de atividades e movimentações.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-clock-rotate-left"></i><h2>Histórico de Atividades</h2><p>Esta página receberá os registros históricos futuramente.</p></div>
       </section>
 
+      <!-- FUNCIONÁRIOS -->
       <section class="page" id="page-funcionarios">
-        <div class="page-heading"><div><div class="eyebrow">Configurações</div><h1>Adicionar funcionário</h1><p class="subtitle">Área visual para gerenciamento de funcionários.</p></div></div>
+        <div class="page-heading">
+          <div><div class="eyebrow">Configurações</div><h1>Adicionar funcionário</h1>
+          <p class="subtitle">Área visual para gerenciamento de funcionários.</p></div>
+        </div>
         <div class="placeholder"><i class="fa-solid fa-user-plus"></i><h2>Cadastro de Funcionários</h2><p>O cadastro ainda não está ativo. A criação e o gerenciamento de funcionários serão configurados posteriormente.</p></div>
       </section>
     </div>
@@ -956,14 +1017,12 @@
       button.addEventListener("click", () => showPage(button.dataset.goto));
     });
 
-    // Demonstração dos gráficos.
-    // Os valores abaixo são exemplos, não dados reais da planilha.
-    // Altere-os quando for conectar o painel aos dados verdadeiros.
+    // Valores fictícios para demonstração visual dos gráficos.
     function updateRing(prefix, approved, launched) {
       approved = Math.max(0, Number(approved) || 0);
       launched = Math.max(0, Number(launched) || 0);
 
-      // Um produto só pode ser aprovado se estiver lançado.
+      // Não pode haver mais produtos aprovados do que lançados.
       approved = Math.min(approved, launched);
 
       const percent = launched > 0
