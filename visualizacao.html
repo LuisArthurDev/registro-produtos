@@ -273,6 +273,21 @@
       .filtros { grid-template-columns: 1fr; }
       .resumo { grid-template-columns: 1fr 1fr; }
     }
+  .filtros-pesquisa {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 620px) {
+  .filtros-pesquisa {
+    grid-template-columns: 1fr;
+  }
+}
   </style>
 </head>
 
@@ -341,6 +356,36 @@
 
       <button id="btnBuscar" type="button">Consultar</button>
     </div>
+    <div class="filtros-pesquisa">
+  <div>
+    <label for="filtroEAN">Pesquisar por EAN</label>
+    <input
+      id="filtroEAN"
+      type="search"
+      placeholder="Digite o EAN"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <label for="filtroLote">Pesquisar por Lote</label>
+    <input
+      id="filtroLote"
+      type="search"
+      placeholder="Digite o lote"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <label for="filtroValidade">Pesquisar por Validade</label>
+    <input id="filtroValidade" type="date">
+  </div>
+
+  <button id="btnLimparPesquisa" type="button">
+    Limpar pesquisa
+  </button>
+</div>
   </section>
 
   <div id="mensagem" role="status" aria-live="polite">
@@ -376,6 +421,25 @@
       <div class="campo"><label for="loteEdicao">Lote</label><input id="loteEdicao" maxlength="100" required></div>
       <div class="campo"><label for="validadeEdicao">Validade</label><input id="validadeEdicao" type="date" required></div>
       <div class="campo"><label for="quantidadeEdicao">Quantidade</label><input id="quantidadeEdicao" type="number" min="1" step="1" required></div>
+      <div id="camposTransferenciaEdicao" hidden>
+      <div class="campo">
+        <label for="lojaOrigemEdicao">Loja de Origem</label>
+        <input
+          id="lojaOrigemEdicao"
+          maxlength="11"
+          placeholder="Ex.: V12"
+        >
+      </div>
+    
+      <div class="campo">
+        <label for="romaneioEdicao">Romaneio</label>
+        <input
+          id="romaneioEdicao"
+          maxlength="100"
+          placeholder="Informe o romaneio"
+        >
+      </div>
+    </div>
       <div id="mensagemEdicao" role="status" aria-live="polite"></div>
       <div class="botoes">
         <button id="btnSalvarEdicao" type="submit">Salvar alterações</button>
@@ -735,17 +799,36 @@ function abrirEdicao(registro) {
     alert("Não foi possível identificar a chave única deste lançamento.");
     return;
   }
+
   if (registro.especial) {
-    alert("Esta aba agrupa quantidades de vários lançamentos. A edição individual não está disponível.");
+    alert(
+      "Esta aba agrupa quantidades de vários lançamentos. " +
+      "A edição individual não está disponível."
+    );
     return;
   }
 
   registroParaEditar = registro;
-  $("itemEdicao").textContent = "Produto: " + obterDescricao(registro.codigo) +
-    " | EAN: " + (registro.codigo || "") + " | Funcionário: " + (registro.funcionario || "");
+
+  $("itemEdicao").textContent =
+    "Produto: " + obterDescricao(registro.codigo) +
+    " | EAN: " + (registro.codigo || "") +
+    " | Funcionário: " + (registro.funcionario || "");
+
   $("loteEdicao").value = registro.lote || "";
-  $("validadeEdicao").value = dataParaISO(registro.validadeISO || registro.validade);
+  $("validadeEdicao").value =
+    dataParaISO(registro.validadeISO || registro.validade);
   $("quantidadeEdicao").value = Number(registro.quantidade || 1);
+
+  const ehTransf = ehTransferencia(registro);
+
+  $("camposTransferenciaEdicao").hidden = !ehTransf;
+  $("lojaOrigemEdicao").value = registro.lojaOrigem || "";
+  $("romaneioEdicao").value = registro.romaneio || "";
+
+  $("lojaOrigemEdicao").required = ehTransf;
+  $("romaneioEdicao").required = ehTransf;
+
   $("mensagemEdicao").textContent = "";
   $("modalEdicao").hidden = false;
 }
@@ -772,8 +855,10 @@ $("formEdicao").addEventListener("submit", evento => {
     chaveUnica: String(registroParaEditar.chaveUnica),
     lote: $("loteEdicao").value.trim(),
     validade: $("validadeEdicao").value,
-    quantidade: $("quantidadeEdicao").value
-  }).then(resposta => {
+    quantidade: $("quantidadeEdicao").value,
+    lojaOrigem: $("lojaOrigemEdicao").value.trim(),
+    romaneio: $("romaneioEdicao").value.trim()
+}).then(resposta => {
     if (!resposta || !resposta.sucesso) throw new Error(resposta && resposta.mensagem || "Não foi possível editar o lançamento.");
     alert(resposta.mensagem);
     fecharEdicao();
@@ -1041,9 +1126,12 @@ function renderizarMes() {
   const funcionarioSelecionado = $("funcionario").value;
 
   const registros = todosRegistros.filter(registro =>
+  (
     !funcionarioSelecionado ||
     normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
-  );
+  ) &&
+  registroPassaPesquisa(registro)
+);
 
   atualizarResumo(registros);
 
@@ -1162,6 +1250,7 @@ function renderizarValidade() {
   const itens = [];
 
   registrosValidade.forEach(registro => {
+    if (!registroPassaPesquisa(registro)) return;
     if (
       funcionarioSelecionado &&
       normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
@@ -1361,6 +1450,51 @@ carregarDescricoes()
       "Confira se ele está na mesma pasta da página."
     );
   });
+  function validadeRegistroISO(registro) {
+  if (registro.validadeISO) {
+    return dataParaISO(registro.validadeISO);
+  }
+
+  return dataParaISO(registro.validade);
+}
+
+function registroPassaPesquisa(registro) {
+  const ean = normalizar($("filtroEAN").value);
+  const lote = normalizar($("filtroLote").value);
+  const validade = $("filtroValidade").value;
+
+  const codigoRegistro = normalizar(registro.codigo);
+  const loteRegistro = normalizar(registro.lote);
+  const validadeRegistro = validadeRegistroISO(registro);
+
+  if (ean && !codigoRegistro.includes(ean)) {
+    return false;
+  }
+
+  if (lote && !loteRegistro.includes(lote)) {
+    return false;
+  }
+
+  if (validade && validadeRegistro !== validade) {
+    return false;
+  }
+
+  return true;
+}
+
+function limparPesquisa() {
+  $("filtroEAN").value = "";
+  $("filtroLote").value = "";
+  $("filtroValidade").value = "";
+  renderizar();
+}
+
+["filtroEAN", "filtroLote", "filtroValidade"].forEach(id => {
+  $(id).addEventListener("input", renderizar);
+  $(id).addEventListener("change", renderizar);
+});
+
+$("btnLimparPesquisa").addEventListener("click", limparPesquisa);
 </script>
 </body>
 </html>
