@@ -123,6 +123,105 @@ button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:480px){.grid{grid-template-columns:1fr}.topbar-actions{gap:6px}.login-button{min-height:40px;padding:0 10px;gap:5px}}
 @media(max-width:380px){.modal-acoes{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Popup de produtos a vencer */
+.aviso-validade-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, .55);
+}
+
+.aviso-validade-fundo[hidden] {
+  display: none !important;
+}
+
+.aviso-validade {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .3);
+  text-align: center;
+}
+
+.aviso-validade-icone {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.aviso-validade h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.aviso-validade p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.aviso-validade-tempo {
+  height: 4px;
+  margin-top: 20px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.aviso-validade-progresso {
+  width: 100%;
+  height: 100%;
+  background: var(--warn);
+  transform-origin: left;
+  animation: avisoContagem 6s linear forwards;
+}
+
+.aviso-validade-acoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.aviso-validade-acoes button {
+  min-width: 0;
+  padding: 10px;
+  font-size: 14px;
+}
+
+#btnVerValidades {
+  background: var(--accent);
+  color: #fff;
+}
+
+#btnFecharAvisoValidade {
+  background: var(--line);
+  color: var(--ink);
+}
+
+@keyframes avisoContagem {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (max-width: 380px) {
+  .aviso-validade-acoes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aviso-validade-progresso {
+    animation: none;
+  }
+}
 </style>
 </head>
 
@@ -264,6 +363,36 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </div>
 </div>
 
+<div id="avisoValidadeFundo" class="aviso-validade-fundo" hidden>
+  <section
+    class="aviso-validade"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="tituloAvisoValidade"
+    aria-describedby="textoAvisoValidade"
+  >
+    <div class="aviso-validade-icone" aria-hidden="true">⚠️</div>
+
+    <h2 id="tituloAvisoValidade">Atenção às validades</h2>
+
+    <p id="textoAvisoValidade"></p>
+
+    <div class="aviso-validade-tempo" aria-hidden="true">
+      <div id="avisoValidadeProgresso" class="aviso-validade-progresso"></div>
+    </div>
+
+    <div class="aviso-validade-acoes">
+      <button type="button" id="btnVerValidades">
+        Ver lançamentos
+      </button>
+
+      <button type="button" id="btnFecharAvisoValidade">
+        Fechar
+      </button>
+    </div>
+  </section>
+</div>  
+  
 <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
 </main>
 
@@ -1001,6 +1130,220 @@ window.addEventListener("load",()=>{
 window.addEventListener("beforeunload",()=>{
   if(temporizadorDigitacao)clearTimeout(temporizadorDigitacao);
   if(temporizadorPolling)clearTimeout(temporizadorPolling);
+});
+/* Aviso automático de produtos a vencer */
+
+const TEMPO_AVISO_VALIDADE = 6000;
+const LIMITE_AVISO_VENCIDO = 60;
+const LIMITE_AVISO_NUTRICAO = 15;
+const LIMITE_AVISO_A_VENCER = 160;
+
+let temporizadorFecharAvisoValidade = null;
+let avisoValidadeAberto = false;
+
+function diasRestantesAvisoValidade(validadeISO) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+    String(validadeISO || "")
+  );
+
+  if (!partes) return null;
+
+  const validade = new Date(
+    Number(partes[1]),
+    Number(partes[2]) - 1,
+    Number(partes[3])
+  );
+
+  const agora = new Date();
+  const hoje = new Date(
+    agora.getFullYear(),
+    agora.getMonth(),
+    agora.getDate()
+  );
+
+  return Math.round(
+    (validade.getTime() - hoje.getTime()) / 86400000
+  );
+}
+
+function limiteVencidoAvisoValidade(secao) {
+  const normalizada = String(secao || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    normalizada === "NUTRICAO" ||
+    normalizada === "CONVENIENCIA"
+  ) {
+    return LIMITE_AVISO_NUTRICAO;
+  }
+
+  return LIMITE_AVISO_VENCIDO;
+}
+
+function buscarValidadesParaAviso() {
+  return new Promise((resolve, reject) => {
+    const callback = "__validadeCb";
+    const script = document.createElement("script");
+    let finalizado = false;
+
+    const timeout = setTimeout(() => {
+      finalizar();
+      reject(new Error("Tempo limite ao consultar as validades."));
+    }, 20000);
+
+    function finalizar() {
+      if (finalizado) return;
+
+      finalizado = true;
+      clearTimeout(timeout);
+      script.remove();
+
+      if (window[callback] === receberResposta) {
+        delete window[callback];
+      }
+    }
+
+    function receberResposta(resposta) {
+      if (finalizado) return;
+
+      finalizar();
+
+      if (!resposta || !resposta.sucesso) {
+        reject(new Error("Não foi possível consultar as validades."));
+        return;
+      }
+
+      resolve(
+        Array.isArray(resposta.registros)
+          ? resposta.registros
+          : []
+      );
+    }
+
+    window[callback] = receberResposta;
+
+    script.onerror = () => {
+      if (finalizado) return;
+
+      finalizar();
+      reject(new Error("Falha ao consultar as validades."));
+    };
+
+    const parametros = new URLSearchParams({
+      action: "validades",
+      callback
+    });
+
+    script.src =
+      APPS_SCRIPT_URL + "?" + parametros.toString();
+
+    document.head.appendChild(script);
+  });
+}
+
+function contarLancamentosAVencer(registros) {
+  return registros.filter(registro => {
+    const dias = diasRestantesAvisoValidade(
+      registro.validadeISO
+    );
+
+    if (dias === null) return false;
+
+    const produto = produtosJsonCache
+      ? encontrarProdutoNaBase(
+          produtosJsonCache,
+          registro.codigo
+        )
+      : null;
+
+    const secao = produto ? produto.secao : "";
+    const limiteVencido =
+      limiteVencidoAvisoValidade(secao);
+
+    return (
+      dias > limiteVencido &&
+      dias <= LIMITE_AVISO_A_VENCER
+    );
+  }).length;
+}
+
+function fecharAvisoValidade() {
+  if (temporizadorFecharAvisoValidade !== null) {
+    clearTimeout(temporizadorFecharAvisoValidade);
+    temporizadorFecharAvisoValidade = null;
+  }
+
+  $("avisoValidadeFundo").hidden = true;
+  avisoValidadeAberto = false;
+}
+
+function mostrarAvisoValidade(quantidade) {
+  if (quantidade <= 0 || avisoValidadeAberto) return;
+
+  $("textoAvisoValidade").textContent =
+    quantidade === 1
+      ? "Você tem 1 lançamento com produto a vencer. Clique em Ver lançamentos para consultar os detalhes."
+      : "Você tem " + quantidade +
+        " lançamentos com produtos a vencer. Clique em Ver lançamentos para consultar os detalhes.";
+
+  const progresso = $("avisoValidadeProgresso");
+
+  progresso.style.animation = "none";
+  void progresso.offsetWidth;
+  progresso.style.animation = "";
+
+  $("avisoValidadeFundo").hidden = false;
+  avisoValidadeAberto = true;
+
+  temporizadorFecharAvisoValidade = setTimeout(() => {
+    fecharAvisoValidade();
+  }, TEMPO_AVISO_VALIDADE);
+}
+
+function verificarAvisoValidade() {
+  Promise.all([
+    buscarValidadesParaAviso(),
+    carregarProdutosJson()
+  ])
+    .then(([registros]) => {
+      const quantidade = contarLancamentosAVencer(registros);
+      mostrarAvisoValidade(quantidade);
+    })
+    .catch(erro => {
+      console.error("Aviso de validade:", erro);
+    });
+}
+
+$("btnFecharAvisoValidade").addEventListener(
+  "click",
+  fecharAvisoValidade
+);
+
+$("avisoValidadeFundo").addEventListener(
+  "click",
+  evento => {
+    if (evento.target === $("avisoValidadeFundo")) {
+      fecharAvisoValidade();
+    }
+  }
+);
+
+$("btnVerValidades").addEventListener("click", () => {
+  fecharAvisoValidade();
+  window.location.href = "visualizacao.html";
+});
+
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape" && avisoValidadeAberto) {
+    fecharAvisoValidade();
+  }
+});
+
+window.addEventListener("load", () => {
+  verificarAvisoValidade();
 });
 </script>
 </body>
