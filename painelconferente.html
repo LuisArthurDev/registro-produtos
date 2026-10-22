@@ -4,28 +4,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0f2a3d">
+  <meta name="theme-color" content="#101827">
   <title>Painel do Conferente</title>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
     :root {
-      --bg: #edf2f6;
+      --bg: #f3f6fb;
       --surface: #ffffff;
-      --surface-soft: #f6f8fa;
-      --ink: #172b3a;
-      --muted: #718096;
-      --primary: #12364b;
-      --primary-light: #1c4b64;
-      --accent: #20a779;
-      --accent-soft: #e3f7ef;
-      --yellow: #f1bd38;
-      --red: #df5b63;
-      --blue: #4385db;
-      --border: #e5ebf0;
-      --sidebar-width: 258px;
-      --sidebar-collapsed: 78px;
-      --radius: 16px;
-      --shadow: 0 4px 18px rgba(20, 45, 65, .045);
+      --sidebar: #101827;
+      --sidebar-hover: #1d293b;
+      --primary: #3b82f6;
+      --primary-light: #eaf2ff;
+      --text: #172033;
+      --muted: #788399;
+      --border: #e6eaf0;
+      --green: #16a34a;
+      --red: #dc2626;
+      --orange: #d97706;
+      --purple: #7c3aed;
+      --radius: 12px;
+      --sidebar-width: 250px;
     }
 
     * {
@@ -35,11 +35,10 @@
     }
 
     body {
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--ink);
       font-family: Inter, "Segoe UI", Arial, sans-serif;
-      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
     }
 
     button, input, select {
@@ -54,993 +53,774 @@
       min-height: 100vh;
     }
 
-    /* MENU LATERAL */
-
     .sidebar {
       position: fixed;
       inset: 0 auto 0 0;
-      z-index: 100;
+      width: var(--sidebar-width);
+      background: var(--sidebar);
+      color: #d6deeb;
       display: flex;
       flex-direction: column;
-      width: var(--sidebar-width);
-      height: 100dvh;
-      background: var(--primary);
-      color: #fff;
-      transition: width .25s ease, transform .25s ease;
+      z-index: 100;
+      transition: transform .25s ease;
     }
 
-    .sidebar-header {
+    .brand {
+      height: 82px;
       display: flex;
       align-items: center;
       gap: 12px;
-      min-height: 78px;
-      padding: 17px 20px;
-      border-bottom: 1px solid rgba(255,255,255,.09);
-      overflow: hidden;
+      padding: 0 22px;
+      border-bottom: 1px solid #263246;
     }
 
     .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--primary);
+      color: white;
       display: grid;
       place-items: center;
-      flex-shrink: 0;
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      background: var(--accent);
-      font-size: 21px;
-      font-weight: 800;
     }
 
-    .brand-text {
-      min-width: 0;
-      white-space: nowrap;
+    .brand-icon svg {
+      width: 23px;
+      height: 23px;
     }
 
-    .brand-text strong {
-      display: block;
-      font-size: 16px;
-      letter-spacing: -.3px;
+    .brand-name {
+      font-size: 17px;
+      color: #fff;
+      font-weight: 750;
+      letter-spacing: -.4px;
     }
 
-    .brand-text small {
-      display: block;
-      margin-top: 4px;
-      color: #b9cbd5;
+    .brand-subtitle {
+      color: #91a0b7;
       font-size: 11px;
+      margin-top: 4px;
     }
 
-    .sidebar-scroll {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      padding: 12px 12px 18px;
-      scrollbar-width: none;
-    }
-
-    .sidebar-scroll::-webkit-scrollbar {
-      display: none;
-    }
-
-    .menu-section {
-      margin-bottom: 18px;
-    }
-
-    .section-title {
-      padding: 10px 10px 7px;
-      color: #8fa9b8;
+    .nav-label {
+      padding: 24px 22px 10px;
+      color: #78869c;
       font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 1.1px;
       text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .menu-item {
-      position: relative;
-      display: flex;
-      align-items: center;
-      width: 100%;
-      min-height: 42px;
-      gap: 12px;
-      padding: 10px 12px;
-      margin: 2px 0;
-      border: 0;
-      border-radius: 10px;
-      background: transparent;
-      color: #d7e3e9;
-      text-align: left;
-      transition: background .2s, color .2s;
-    }
-
-    .menu-item:hover {
-      background: rgba(255,255,255,.08);
-      color: #fff;
-    }
-
-    .menu-item.active {
-      background: #1b5068;
-      color: #fff;
+      letter-spacing: 1.3px;
       font-weight: 700;
     }
 
-    .menu-item.active::before {
-      position: absolute;
-      top: 9px;
-      bottom: 9px;
-      left: 0;
-      width: 3px;
-      border-radius: 0 4px 4px 0;
-      background: #35d3a0;
-      content: "";
+    .navigation {
+      overflow-y: auto;
+      padding: 0 12px 18px;
+      flex: 1;
     }
 
-    .menu-icon {
-      display: grid;
-      place-items: center;
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: #aebbd0;
+      padding: 12px 14px;
+      border-radius: 9px;
+      text-align: left;
+      margin: 3px 0;
+      font-size: 13px;
+      font-weight: 550;
+      transition: .18s ease;
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
       flex-shrink: 0;
-      width: 22px;
-      font-size: 18px;
-      line-height: 1;
     }
 
-    .menu-label {
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+    .nav-item:hover {
+      color: #fff;
+      background: var(--sidebar-hover);
     }
 
-    .sidebar-footer {
-      padding: 12px;
-      border-top: 1px solid rgba(255,255,255,.09);
+    .nav-item.active {
+      color: #fff;
+      background: #263b5b;
+      box-shadow: inset 3px 0 #60a5fa;
     }
 
-    .user-profile {
+    .sidebar-bottom {
+      padding: 15px 17px;
+      border-top: 1px solid #263246;
+    }
+
+    .profile {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 9px 6px;
-      overflow: hidden;
+      padding: 5px;
     }
 
     .avatar {
+      width: 37px;
+      height: 37px;
       display: grid;
       place-items: center;
-      flex-shrink: 0;
-      width: 38px;
-      height: 38px;
+      background: #31568a;
+      color: white;
+      font-weight: 750;
       border-radius: 50%;
-      background: #d7eee6;
-      color: #14583f;
-      font-weight: 800;
-    }
-
-    .user-info {
-      min-width: 0;
-      flex: 1;
-      white-space: nowrap;
-    }
-
-    .user-info strong,
-    .user-info small {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .user-info strong {
       font-size: 12px;
     }
 
-    .user-info small {
-      margin-top: 4px;
-      color: #b9cbd5;
+    .profile-name {
+      color: white;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .profile-role {
+      color: #94a3b8;
       font-size: 11px;
+      margin-top: 4px;
     }
-
-    /* MENU RECOLHIDO */
-
-    .app.collapsed .sidebar {
-      width: var(--sidebar-collapsed);
-    }
-
-    .app.collapsed .brand-text,
-    .app.collapsed .section-title,
-    .app.collapsed .menu-label,
-    .app.collapsed .user-info {
-      display: none;
-    }
-
-    .app.collapsed .sidebar-header {
-      justify-content: center;
-      padding: 12px 8px;
-    }
-
-    .app.collapsed .sidebar-scroll {
-      padding-right: 9px;
-      padding-left: 9px;
-    }
-
-    .app.collapsed .menu-item {
-      justify-content: center;
-      padding: 12px 6px;
-    }
-
-    .app.collapsed .menu-icon {
-      font-size: 20px;
-    }
-
-    .app.collapsed .user-profile {
-      justify-content: center;
-    }
-
-    .app.collapsed .sidebar-footer {
-      padding: 10px 6px;
-    }
-
-    /* ÁREA PRINCIPAL */
 
     .main {
-      min-height: 100vh;
       margin-left: var(--sidebar-width);
-      transition: margin-left .25s ease;
-    }
-
-    .app.collapsed .main {
-      margin-left: var(--sidebar-collapsed);
+      min-height: 100vh;
     }
 
     .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 50;
+      height: 75px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      min-height: 76px;
-      gap: 18px;
-      padding: 15px 30px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,.96);
-      backdrop-filter: blur(12px);
+      gap: 16px;
+      padding: 0 30px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
 
-    .topbar-left,
-    .topbar-actions {
+    .topbar-left, .topbar-right {
       display: flex;
       align-items: center;
       gap: 14px;
     }
 
-    .topbar h1 {
-      font-size: 21px;
+    .page-title {
+      font-size: 18px;
       font-weight: 750;
-      letter-spacing: -.5px;
+      letter-spacing: -.4px;
     }
 
-    .topbar p {
+    .page-subtitle {
+      font-size: 12px;
+      color: var(--muted);
       margin-top: 4px;
-      color: var(--muted);
-      font-size: 12px;
     }
 
-    .icon-button {
-      display: grid;
-      place-items: center;
-      width: 39px;
-      height: 39px;
+    .topbar-date {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 9px 12px;
       border: 1px solid var(--border);
-      border-radius: 11px;
-      background: #fff;
-      color: var(--ink);
-      font-size: 19px;
-    }
-
-    .icon-button:hover {
-      background: var(--surface-soft);
-    }
-
-    .date-label {
-      color: var(--muted);
-      font-size: 12px;
+      border-radius: 8px;
       white-space: nowrap;
     }
 
-    .content {
-      max-width: 1600px;
-      margin: 0 auto;
-      padding: 28px 30px 40px;
+    .icon-button {
+      border: 1px solid var(--border);
+      background: white;
+      color: #64748b;
+      border-radius: 8px;
+      width: 37px;
+      height: 37px;
+      display: grid;
+      place-items: center;
     }
 
-    .page {
+    .icon-button svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .mobile-menu {
       display: none;
-      animation: fadeIn .2s ease;
     }
 
-    .page.active {
-      display: block;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
+    .content {
+      padding: 28px 30px 40px;
+      max-width: 1700px;
+      margin: auto;
     }
 
     .welcome {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 20px;
+      gap: 18px;
       margin-bottom: 25px;
     }
 
     .welcome h2 {
-      font-size: 23px;
-      letter-spacing: -.5px;
+      font-size: 22px;
+      letter-spacing: -.6px;
+      font-weight: 750;
     }
 
     .welcome p {
-      margin-top: 7px;
       color: var(--muted);
-      line-height: 1.5;
+      font-size: 13px;
+      margin-top: 7px;
     }
 
-    .primary-button,
-    .secondary-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 40px;
-      padding: 10px 15px;
-      border: 0;
-      border-radius: 10px;
-      font-weight: 700;
-      text-decoration: none;
-      transition: .2s;
-    }
-
-    .primary-button {
-      background: var(--primary);
-      color: #fff;
-    }
-
-    .primary-button:hover {
-      background: var(--primary-light);
-    }
-
-    .secondary-button {
+    .button {
       border: 1px solid var(--border);
-      background: #fff;
-      color: var(--ink);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 650;
+      transition: .18s ease;
+      white-space: nowrap;
     }
 
-    .secondary-button:hover {
-      background: var(--surface-soft);
+    .button svg {
+      width: 15px;
+      height: 15px;
     }
 
-    /* CARTÕES DE INDICADORES */
+    .button:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
 
-    .stats-grid {
+    .button-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .button-primary:hover {
+      background: #2563eb;
+      color: white;
+    }
+
+    .button-danger {
+      color: var(--red);
+      border-color: #fecaca;
+    }
+
+    .stats {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 17px;
-      margin-bottom: 24px;
+      margin-bottom: 25px;
     }
 
     .stat-card {
-      min-width: 0;
-      padding: 20px;
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--surface);
-      box-shadow: var(--shadow);
+      padding: 19px;
+      min-width: 0;
     }
 
     .stat-top {
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      align-items: center;
+      gap: 8px;
     }
 
     .stat-label {
-      color: var(--muted);
       font-size: 12px;
-      font-weight: 650;
+      color: var(--muted);
+      font-weight: 600;
     }
 
     .stat-icon {
+      width: 39px;
+      height: 39px;
+      border-radius: 10px;
       display: grid;
       place-items: center;
-      flex-shrink: 0;
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-      background: #e8f2fb;
-      color: #3979bd;
-      font-size: 19px;
     }
 
-    .stat-icon.green {
-      background: var(--accent-soft);
-      color: #16845e;
+    .stat-icon svg {
+      width: 19px;
+      height: 19px;
     }
 
-    .stat-icon.yellow {
-      background: #fff5d9;
-      color: #a67b13;
-    }
-
-    .stat-icon.red {
-      background: #ffeded;
-      color: #c44952;
-    }
+    .blue { color: #2563eb; background: #eaf2ff; }
+    .green { color: #15803d; background: #e7f8ed; }
+    .orange { color: #c16a05; background: #fff3df; }
+    .red { color: #dc2626; background: #ffebeb; }
+    .purple { color: #7c3aed; background: #f0eaff; }
 
     .stat-value {
-      margin-top: 16px;
-      font-size: clamp(24px, 2.2vw, 31px);
+      font-size: 28px;
       font-weight: 800;
-      letter-spacing: -1px;
+      letter-spacing: -.8px;
+      margin-top: 17px;
     }
 
-    .stat-note {
-      margin-top: 8px;
+    .stat-footer {
       color: var(--muted);
       font-size: 11px;
-      line-height: 1.5;
+      margin-top: 8px;
     }
 
-    .positive {
-      color: #16845e;
-      font-weight: 700;
+    .stat-footer strong {
+      color: var(--green);
     }
 
-    /* PAINÉIS */
-
-    .dashboard-grid {
+    .grid-two {
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+      grid-template-columns: minmax(0, 1.45fr) minmax(290px, 1fr);
       gap: 20px;
       margin-bottom: 22px;
     }
 
     .panel {
-      min-width: 0;
-      padding: 22px;
+      background: white;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--surface);
-      box-shadow: var(--shadow);
+      min-width: 0;
+      overflow: hidden;
     }
 
     .panel-header {
+      padding: 19px 21px;
       display: flex;
-      align-items: flex-start;
       justify-content: space-between;
+      align-items: center;
       gap: 12px;
-      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .panel-header h3 {
-      font-size: 15px;
+    .panel-title {
+      font-size: 14px;
       font-weight: 750;
     }
 
-    .panel-header p {
-      margin-top: 5px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .text-button {
-      border: 0;
-      background: transparent;
-      color: #2777b8;
-      font-size: 12px;
-      font-weight: 750;
-      white-space: nowrap;
-    }
-
-    /* GRÁFICOS CIRCULARES */
-
-    .rings-container {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 22px;
-      align-items: center;
-      padding: 6px 0 12px;
-    }
-
-    .ring-block {
-      min-width: 0;
-      text-align: center;
-    }
-
-    .ring {
-      --progress: 50%;
-      --total-progress: 100%;
-      position: relative;
-      display: grid;
-      place-items: center;
-      width: 156px;
-      height: 156px;
-      max-width: 100%;
-      margin: 0 auto 14px;
-      border-radius: 50%;
-      background: conic-gradient(
-        var(--yellow) 0 var(--total-progress),
-        #f4f0df var(--total-progress) 100%
-      );
-    }
-
-    .ring::before {
-      position: absolute;
-      inset: 13px;
-      border-radius: 50%;
-      background: conic-gradient(
-        var(--accent) 0 var(--progress),
-        #e8f3ee var(--progress) 100%
-      );
-      content: "";
-    }
-
-    .ring::after {
-      position: absolute;
-      inset: 27px;
-      border-radius: 50%;
-      background: #fff;
-      content: "";
-    }
-
-    .ring-center {
-      position: relative;
-      z-index: 2;
-    }
-
-    .ring-percent {
-      font-size: 28px;
-      font-weight: 850;
-      letter-spacing: -1px;
-    }
-
-    .ring-caption {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 10px;
-    }
-
-    .ring-title {
-      font-size: 13px;
-      font-weight: 750;
-    }
-
-    .ring-subtitle {
-      margin-top: 5px;
+    .panel-subtitle {
       color: var(--muted);
       font-size: 11px;
+      margin-top: 5px;
     }
 
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 15px;
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 11px;
+    .panel-body {
+      padding: 20px;
     }
-
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .legend-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-    }
-
-    .legend-dot.yellow {
-      background: var(--yellow);
-    }
-
-    .legend-dot.green {
-      background: var(--accent);
-    }
-
-    /* ATIVIDADES */
 
     .activity-list {
       display: flex;
       flex-direction: column;
     }
 
-    .activity {
+    .activity-item {
       display: flex;
-      align-items: flex-start;
       gap: 12px;
       padding: 14px 0;
-      border-bottom: 1px solid #eef1f4;
+      border-bottom: 1px solid #f0f2f6;
     }
 
-    .activity:last-child {
+    .activity-item:first-child {
+      padding-top: 0;
+    }
+
+    .activity-item:last-child {
       border-bottom: 0;
+      padding-bottom: 0;
     }
 
     .activity-icon {
+      width: 35px;
+      height: 35px;
+      border-radius: 9px;
       display: grid;
       place-items: center;
       flex-shrink: 0;
-      width: 36px;
-      height: 36px;
-      border-radius: 11px;
-      background: #edf6f2;
-      color: #16845e;
-      font-size: 16px;
     }
 
-    .activity-icon.blue {
-      background: #edf4fc;
-      color: #3979bd;
+    .activity-icon svg {
+      width: 17px;
+      height: 17px;
     }
 
-    .activity-icon.yellow {
-      background: #fff5dc;
-      color: #a67b13;
-    }
-
-    .activity-icon.red {
-      background: #ffeded;
-      color: #c44952;
-    }
-
-    .activity-text {
-      min-width: 0;
-      flex: 1;
-    }
-
-    .activity-text strong {
-      display: block;
+    .activity-name {
       font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .activity-text p {
-      margin-top: 4px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.5;
-    }
-
-    .activity-time {
-      color: var(--muted);
-      font-size: 10px;
-      white-space: nowrap;
-    }
-
-    /* ACESSO RÁPIDO */
-
-    .quick-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .quick-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-      padding: 15px;
-      border: 1px solid var(--border);
-      border-radius: 13px;
-      background: #fff;
-      text-align: left;
-      transition: transform .2s, border-color .2s;
-    }
-
-    .quick-card:hover {
-      transform: translateY(-2px);
-      border-color: #a9c9da;
-    }
-
-    .quick-card .stat-icon {
-      width: 39px;
-      height: 39px;
-    }
-
-    .quick-card strong {
-      display: block;
-      font-size: 12px;
-    }
-
-    .quick-card small {
-      display: block;
-      margin-top: 5px;
-      color: var(--muted);
-      font-size: 10px;
-      line-height: 1.4;
-    }
-
-    /* PÁGINAS INTERNAS */
-
-    .page-intro {
-      margin-bottom: 24px;
-    }
-
-    .page-intro h2 {
-      font-size: 23px;
-      letter-spacing: -.5px;
-    }
-
-    .page-intro p {
-      margin-top: 7px;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 17px;
-    }
-
-    .toolbar-left,
-    .toolbar-right {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .search-input,
-    .filter-select {
-      min-height: 40px;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      outline: none;
-      background: #fff;
-      color: var(--ink);
-    }
-
-    .search-input {
-      width: min(300px, 100%);
-    }
-
-    .search-input:focus,
-    .filter-select:focus {
-      border-color: #6ba5c5;
-      box-shadow: 0 0 0 3px rgba(68,145,184,.1);
-    }
-
-    .table-wrap {
-      width: 100%;
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 13px;
-      background: #fff;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      white-space: nowrap;
-    }
-
-    th {
-      padding: 14px 16px;
-      background: #f7f9fb;
-      color: #657789;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .5px;
-      text-transform: uppercase;
-    }
-
-    td {
-      padding: 15px 16px;
-      border-top: 1px solid #edf1f4;
-      font-size: 12px;
-    }
-
-    tbody tr:hover {
-      background: #fafcfd;
-    }
-
-    .cell-main {
       font-weight: 700;
     }
 
-    .cell-sub {
-      display: block;
-      margin-top: 4px;
+    .activity-detail {
+      font-size: 11px;
       color: var(--muted);
-      font-size: 10px;
+      margin-top: 5px;
     }
 
-    .status {
+    .activity-time {
+      color: #94a3b8;
+      font-size: 10px;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .status-list {
+      display: flex;
+      flex-direction: column;
+      gap: 21px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      margin-bottom: 9px;
+      gap: 10px;
+    }
+
+    .status-row span:first-child {
+      color: #475569;
+    }
+
+    .status-row strong {
+      font-size: 12px;
+    }
+
+    .progress {
+      height: 7px;
+      background: #edf1f6;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      border-radius: 20px;
+    }
+
+    .table-panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+
+    .table-toolbar {
+      padding: 17px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      border: 1px solid var(--border);
+      padding: 0 11px;
+      border-radius: 8px;
+      min-width: 230px;
+      height: 37px;
+    }
+
+    .search-box svg {
+      width: 16px;
+      height: 16px;
+      color: #94a3b8;
+      flex-shrink: 0;
+    }
+
+    .search-box input {
+      width: 100%;
+      min-width: 0;
+      outline: none;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .filter-select {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      color: #475569;
+      height: 37px;
+      padding: 0 10px;
+      font-size: 12px;
+      max-width: 100%;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 720px;
+      text-align: left;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #788399;
+      font-size: 10px;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .55px;
+      padding: 14px 19px;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 15px 19px;
+      border-bottom: 1px solid #f0f2f6;
+      color: #475569;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tbody tr:hover {
+      background: #fafcff;
+    }
+
+    .cell-primary {
+      color: #1e293b;
+      font-weight: 700;
+    }
+
+    .cell-secondary {
+      color: #94a3b8;
+      font-size: 10px;
+      margin-top: 4px;
+    }
+
+    .badge {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 6px 9px;
-      border-radius: 30px;
+      border-radius: 6px;
+      padding: 5px 8px;
       font-size: 10px;
       font-weight: 750;
     }
 
-    .status.green {
-      background: #e4f7ee;
-      color: #16764f;
+    .badge-success { color: #15803d; background: #e7f8ed; }
+    .badge-warning { color: #b45309; background: #fff3df; }
+    .badge-danger { color: #b91c1c; background: #ffebeb; }
+    .badge-info { color: #1d4ed8; background: #eaf2ff; }
+    .badge-purple { color: #6d28d9; background: #f0eaff; }
+    .badge-neutral { color: #475569; background: #edf1f6; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 12px;
+      display: none;
     }
 
-    .status.yellow {
-      background: #fff4d5;
-      color: #98700b;
+    .empty-state svg {
+      display: block;
+      margin: 0 auto 12px;
+      width: 28px;
+      height: 28px;
     }
 
-    .status.red {
-      background: #ffebed;
-      color: #b83b46;
+    .page {
+      display: none;
     }
 
-    .status.blue {
-      background: #e9f2ff;
-      color: #3169a8;
+    .page.active {
+      display: block;
+      animation: fadeIn .18s ease;
     }
 
-    .table-footer {
+    @keyframes fadeIn {
+      from { opacity: .65; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .page-heading {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      padding: 15px 2px 0;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .page-heading h2 {
+      font-size: 21px;
+      letter-spacing: -.5px;
+    }
+
+    .page-heading p {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .mini-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .mini-stat {
+      padding: 17px 19px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .mini-stat span {
       color: var(--muted);
       font-size: 11px;
     }
 
-    .empty-state {
-      padding: 35px 20px;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .empty-state strong {
+    .mini-stat strong {
       display: block;
-      margin-bottom: 7px;
-      color: var(--ink);
+      font-size: 23px;
+      margin-top: 10px;
     }
 
-    .info-grid {
+    .quick-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 22px;
     }
 
-    .info-box {
-      padding: 20px;
+    .quick-card {
+      padding: 19px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: #fff;
+      background: white;
     }
 
-    .info-box h3 {
-      margin-bottom: 9px;
-      font-size: 14px;
+    .quick-card .stat-icon {
+      margin-bottom: 14px;
     }
 
-    .info-box p {
+    .quick-card h3 {
+      font-size: 13px;
+      margin-bottom: 7px;
+    }
+
+    .quick-card p {
+      font-size: 11px;
       color: var(--muted);
-      line-height: 1.7;
+      line-height: 1.6;
+    }
+
+    .notice {
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1e40af;
+      border-radius: 9px;
+      padding: 13px 15px;
       font-size: 12px;
+      line-height: 1.6;
+      margin-bottom: 20px;
     }
 
-    .footer-note {
-      margin-top: 30px;
-      color: #8794a1;
-      font-size: 10px;
+    .footer {
       text-align: center;
+      color: #94a3b8;
+      font-size: 10px;
+      padding: 10px 0 0;
     }
-
-    .mobile-overlay {
-      display: none;
-    }
-
-    /* RESPONSIVIDADE */
 
     @media (max-width: 1200px) {
-      .stats-grid {
+      .stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid-two {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+        box-shadow: 10px 0 35px #0f172a20;
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .main {
+        margin-left: 0;
+      }
+
+      .mobile-menu {
+        display: grid;
+      }
+
+      .topbar {
+        padding: 0 18px;
+      }
+
+      .content {
+        padding: 23px 18px 35px;
       }
 
       .quick-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
-
-      .dashboard-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
     }
 
-    @media (max-width: 760px) {
-      .sidebar {
-        width: min(var(--sidebar-width), 85vw);
-        transform: translateX(-100%);
-      }
-
-      .app.mobile-open .sidebar {
-        transform: translateX(0);
-      }
-
-      .app.collapsed .sidebar {
-        width: min(var(--sidebar-width), 85vw);
-      }
-
-      .app.collapsed .brand-text,
-      .app.collapsed .section-title,
-      .app.collapsed .menu-label,
-      .app.collapsed .user-info {
-        display: initial;
-      }
-
-      .app.collapsed .section-title {
-        display: block;
-      }
-
-      .app.collapsed .sidebar-header {
-        justify-content: flex-start;
-        padding: 17px 20px;
-      }
-
-      .app.collapsed .menu-item {
-        justify-content: flex-start;
-        padding: 10px 12px;
-      }
-
-      .app.collapsed .user-profile {
-        justify-content: flex-start;
-      }
-
-      .app.collapsed .sidebar-footer {
-        padding: 12px;
-      }
-
-      .main,
-      .app.collapsed .main {
-        margin-left: 0;
-      }
-
-      .app.mobile-open .mobile-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 90;
-        display: block;
-        background: rgba(9, 24, 35, .48);
-      }
-
-      .topbar {
-        min-height: 68px;
-        padding: 12px 16px;
-      }
-
-      .topbar h1 {
-        font-size: 17px;
-      }
-
-      .topbar p,
-      .date-label {
+    @media (max-width: 560px) {
+      .topbar-date {
         display: none;
       }
 
+      .topbar {
+        height: 68px;
+      }
+
+      .page-title {
+        font-size: 16px;
+      }
+
       .content {
-        padding: 22px 16px 30px;
+        padding: 20px 13px 28px;
       }
 
       .welcome {
@@ -1049,223 +829,160 @@
       }
 
       .welcome h2 {
-        font-size: 21px;
+        font-size: 20px;
       }
 
-      .stats-grid {
-        gap: 12px;
+      .stats {
+        gap: 10px;
       }
 
       .stat-card {
-        padding: 15px;
-      }
-
-      .stat-icon {
-        width: 33px;
-        height: 33px;
-        font-size: 16px;
+        padding: 14px;
       }
 
       .stat-value {
-        margin-top: 13px;
-        font-size: 25px;
-      }
-
-      .panel {
-        padding: 16px;
-      }
-
-      .rings-container {
-        gap: 12px;
-      }
-
-      .ring {
-        width: 130px;
-        height: 130px;
-      }
-
-      .ring-percent {
         font-size: 24px;
       }
 
-      .quick-grid {
-        gap: 9px;
+      .stat-label {
+        font-size: 11px;
       }
 
-      .quick-card {
-        align-items: flex-start;
-        flex-direction: column;
-        padding: 12px;
+      .stat-icon {
+        width: 34px;
+        height: 34px;
       }
 
-      .info-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    @media (max-width: 380px) {
-      .stats-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      .rings-container {
-        grid-template-columns: minmax(0, 1fr);
+      .mini-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .quick-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    @media (max-height: 650px) and (min-width: 761px) {
-      .sidebar-header {
-        min-height: 62px;
-        padding-top: 10px;
-        padding-bottom: 10px;
+        grid-template-columns: 1fr;
       }
 
-      .sidebar-scroll {
-        padding-top: 5px;
-        padding-bottom: 8px;
+      .search-box {
+        min-width: 100%;
       }
 
-      .menu-section {
-        margin-bottom: 8px;
+      .toolbar-actions {
+        width: 100%;
       }
 
-      .section-title {
-        padding-top: 7px;
-        padding-bottom: 4px;
+      .toolbar-actions .search-box {
+        flex: 1;
       }
 
-      .menu-item {
-        min-height: 35px;
-        padding-top: 7px;
-        padding-bottom: 7px;
+      .table-toolbar {
+        padding: 14px;
       }
 
-      .sidebar-footer {
-        padding-top: 6px;
-        padding-bottom: 6px;
+      .panel-header {
+        padding: 16px;
+      }
+
+      .panel-body {
+        padding: 16px;
+      }
+
+      .activity-time {
+        display: none;
       }
     }
   </style>
 </head>
 
 <body>
-<div class="app" id="app">
+<div class="app">
 
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="brand-icon">PC</div>
-      <div class="brand-text">
-        <strong>Painel do Conferente</strong>
-        <small>Gestão operacional</small>
+    <div class="brand">
+      <div class="brand-icon"><i data-lucide="scan-barcode"></i></div>
+      <div>
+        <div class="brand-name">Painel do Conferente</div>
+        <div class="brand-subtitle">Gestão de operações</div>
       </div>
     </div>
 
-    <nav class="sidebar-scroll" aria-label="Menu principal">
+    <div class="nav-label">Principal</div>
+    <nav class="navigation" id="navigation">
+      <button class="nav-item active" data-page="dashboard">
+        <i data-lucide="layout-dashboard"></i> Dashboard
+      </button>
 
-      <div class="menu-section">
-        <div class="section-title">Principal</div>
-        <button class="menu-item active" data-page="dashboard" title="Dashboard">
-          <span class="menu-icon">▦</span>
-          <span class="menu-label">Dashboard</span>
-        </button>
-      </div>
+      <button class="nav-item" data-page="lancamentos">
+        <i data-lucide="clipboard-list"></i> Lançamentos
+      </button>
 
-      <div class="menu-section">
-        <div class="section-title">Operações</div>
+      <button class="nav-item" data-page="mapa">
+        <i data-lucide="calendar-days"></i> Mapa de Validade
+      </button>
 
-        <button class="menu-item" data-page="lancamentos" title="Lançamentos">
-          <span class="menu-icon">▤</span>
-          <span class="menu-label">Lançamentos</span>
-        </button>
+      <button class="nav-item" data-page="controle-validade">
+        <i data-lucide="calendar-check"></i> Controle de Validade
+      </button>
 
-        <button class="menu-item" data-page="mapa" title="Mapa de Validade">
-          <span class="menu-icon">▧</span>
-          <span class="menu-label">Mapa de Validade</span>
-        </button>
+      <button class="nav-item" data-page="vencidos">
+        <i data-lucide="package-x"></i> Produtos Vencidos
+      </button>
 
-        <button class="menu-item" data-page="controle-validade" title="Controle de Validade">
-          <span class="menu-icon">◷</span>
-          <span class="menu-label">Controle de Validade</span>
-        </button>
+      <div class="nav-label">Estoque e movimentação</div>
 
-        <button class="menu-item" data-page="vencidos" title="Produtos Vencidos">
-          <span class="menu-icon">⚠</span>
-          <span class="menu-label">Produtos Vencidos</span>
-        </button>
+      <button class="nav-item" data-page="transferencias">
+        <i data-lucide="arrow-left-right"></i> Transferências
+      </button>
 
-        <button class="menu-item" data-page="transferencias" title="Transferências">
-          <span class="menu-icon">⇄</span>
-          <span class="menu-label">Transferências</span>
-        </button>
+      <button class="nav-item" data-page="estoque">
+        <i data-lucide="boxes"></i> Controle de Estoque
+      </button>
 
-        <button class="menu-item" data-page="estoque" title="Controle de Estoque">
-          <span class="menu-icon">▣</span>
-          <span class="menu-label">Controle de Estoque</span>
-        </button>
+      <button class="nav-item" data-page="produtos">
+        <i data-lucide="package"></i> Produtos
+      </button>
 
-        <button class="menu-item" data-page="produtos" title="Produtos">
-          <span class="menu-icon">▤</span>
-          <span class="menu-label">Produtos</span>
-        </button>
-      </div>
+      <div class="nav-label">Gestão</div>
 
-      <div class="menu-section">
-        <div class="section-title">Consultas</div>
+      <button class="nav-item" data-page="sinalizados">
+        <i data-lucide="flag"></i> Sinalizados
+      </button>
 
-        <button class="menu-item" data-page="sinalizados" title="Sinalizados">
-          <span class="menu-icon">⚑</span>
-          <span class="menu-label">Sinalizados</span>
-        </button>
+      <button class="nav-item" data-page="historico">
+        <i data-lucide="history"></i> Histórico
+      </button>
 
-        <button class="menu-item" data-page="historico" title="Histórico">
-          <span class="menu-icon">◴</span>
-          <span class="menu-label">Histórico</span>
-        </button>
-      </div>
-
-      <div class="menu-section">
-        <div class="section-title">Configurações</div>
-
-        <button class="menu-item" data-page="funcionarios" title="Funcionários">
-          <span class="menu-icon">♙</span>
-          <span class="menu-label">Funcionários</span>
-        </button>
-      </div>
-
+      <button class="nav-item" data-page="funcionarios">
+        <i data-lucide="users"></i> Funcionários
+      </button>
     </nav>
 
-    <div class="sidebar-footer">
-      <div class="user-profile">
-        <div class="avatar">CA</div>
-        <div class="user-info">
-          <strong>Conferente Admin</strong>
-          <small>Administrador</small>
+    <div class="sidebar-bottom">
+      <div class="profile">
+        <div class="avatar">AD</div>
+        <div>
+          <div class="profile-name">Administrador</div>
+          <div class="profile-role">Painel demonstrativo</div>
         </div>
       </div>
     </div>
   </aside>
 
-  <div class="mobile-overlay" id="mobileOverlay"></div>
-
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="icon-button" id="toggleSidebar" aria-label="Recolher ou abrir menu" title="Menu">
-          ☰
+        <button class="icon-button mobile-menu" id="menuToggle" aria-label="Abrir menu">
+          <i data-lucide="menu"></i>
         </button>
         <div>
-          <h1 id="pageTitle">Dashboard</h1>
-          <p>Visão geral das operações</p>
+          <div class="page-title" id="topTitle">Dashboard</div>
+          <div class="page-subtitle">Visão geral das operações</div>
         </div>
       </div>
 
-      <div class="topbar-actions">
-        <span class="date-label" id="currentDate"></span>
-        <button class="icon-button" id="logoutButton" title="Sair" aria-label="Sair">↪</button>
+      <div class="topbar-right">
+        <div class="topbar-date" id="currentDate"></div>
+        <button class="icon-button" id="refreshButton" title="Atualizar demonstração">
+          <i data-lucide="refresh-cw"></i>
+        </button>
       </div>
     </header>
 
@@ -1275,848 +992,537 @@
       <section class="page active" id="page-dashboard">
         <div class="welcome">
           <div>
-            <h2>Olá, Conferente! 👋</h2>
-            <p>Acompanhe os indicadores e as principais atividades da operação.</p>
+            <h2>Visão geral</h2>
+            <p>Acompanhe as atividades e os indicadores do conferente.</p>
           </div>
-          <button class="primary-button" data-go="lancamentos">＋ Novo lançamento</button>
+          <button class="button button-primary" data-go="lancamentos">
+            <i data-lucide="plus"></i> Novo lançamento
+          </button>
         </div>
 
-        <div class="stats-grid">
-          <article class="stat-card">
+        <div class="stats">
+          <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Total de produtos</span>
-              <span class="stat-icon">▣</span>
+              <span class="stat-label">Lançamentos hoje</span>
+              <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
             </div>
-            <div class="stat-value">1.240</div>
-            <div class="stat-note"><span class="positive">+ 38</span> registros neste mês</div>
-          </article>
+            <div class="stat-value">128</div>
+            <div class="stat-footer"><strong>+12%</strong> em relação ao período anterior</div>
+          </div>
 
-          <article class="stat-card">
+          <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Lançamentos do mês</span>
-              <span class="stat-icon green">▤</span>
+              <span class="stat-label">Produtos cadastrados</span>
+              <div class="stat-icon green"><i data-lucide="package"></i></div>
             </div>
-            <div class="stat-value">100</div>
-            <div class="stat-note">Registros no período atual</div>
-          </article>
+            <div class="stat-value">1.248</div>
+            <div class="stat-footer">Produtos no cadastro demonstrativo</div>
+          </div>
 
-          <article class="stat-card">
+          <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Produtos próximos do vencimento</span>
-              <span class="stat-icon yellow">◷</span>
+              <span class="stat-label">Próximos do vencimento</span>
+              <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
             </div>
-            <div class="stat-value">28</div>
-            <div class="stat-note">Precisam de acompanhamento</div>
-          </article>
+            <div class="stat-value">23</div>
+            <div class="stat-footer">Itens que precisam de atenção</div>
+          </div>
 
-          <article class="stat-card">
+          <div class="stat-card">
             <div class="stat-top">
               <span class="stat-label">Produtos vencidos</span>
-              <span class="stat-icon red">⚠</span>
+              <div class="stat-icon red"><i data-lucide="package-x"></i></div>
             </div>
-            <div class="stat-value">12</div>
-            <div class="stat-note">Itens para verificação</div>
-          </article>
+            <div class="stat-value">7</div>
+            <div class="stat-footer">Itens pendentes de verificação</div>
+          </div>
         </div>
 
-        <div class="dashboard-grid">
-          <article class="panel">
+        <div class="grid-two">
+          <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Desempenho dos lançamentos</h3>
-                <p>Produtos lançados e aprovados</p>
+                <div class="panel-title">Atividades recentes</div>
+                <div class="panel-subtitle">Últimas movimentações demonstrativas</div>
               </div>
-              <button class="text-button" data-go="historico">Ver histórico →</button>
+              <button class="button" data-go="historico">Ver histórico</button>
             </div>
-
-            <div class="rings-container">
-              <div class="ring-block">
-                <div class="ring" id="monthRing">
-                  <div class="ring-center">
-                    <div class="ring-percent" id="monthPercent">50%</div>
-                    <div class="ring-caption">aprovados</div>
+            <div class="panel-body">
+              <div class="activity-list">
+                <div class="activity-item">
+                  <div class="activity-icon blue"><i data-lucide="scan-barcode"></i></div>
+                  <div>
+                    <div class="activity-name">Novo lançamento registrado</div>
+                    <div class="activity-detail">Café Tradicional 500g · Lote CF1026</div>
                   </div>
+                  <div class="activity-time">09:42</div>
                 </div>
-                <div class="ring-title">Mês atual</div>
-                <div class="ring-subtitle" id="monthCounts">50 de 100 produtos</div>
-              </div>
-
-              <div class="ring-block">
-                <div class="ring" id="generalRing">
-                  <div class="ring-center">
-                    <div class="ring-percent" id="generalPercent">75%</div>
-                    <div class="ring-caption">aprovados</div>
+                <div class="activity-item">
+                  <div class="activity-icon green"><i data-lucide="arrow-left-right"></i></div>
+                  <div>
+                    <div class="activity-name">Transferência registrada</div>
+                    <div class="activity-detail">Movimentação entre setores</div>
                   </div>
+                  <div class="activity-time">09:18</div>
                 </div>
-                <div class="ring-title">Geral</div>
-                <div class="ring-subtitle" id="generalCounts">300 de 400 produtos</div>
+                <div class="activity-item">
+                  <div class="activity-icon orange"><i data-lucide="calendar-clock"></i></div>
+                  <div>
+                    <div class="activity-name">Produto sinalizado</div>
+                    <div class="activity-detail">Item próximo do vencimento</div>
+                  </div>
+                  <div class="activity-time">08:56</div>
+                </div>
+                <div class="activity-item">
+                  <div class="activity-icon purple"><i data-lucide="package-plus"></i></div>
+                  <div>
+                    <div class="activity-name">Cadastro de produto</div>
+                    <div class="activity-detail">Novo produto adicionado ao catálogo</div>
+                  </div>
+                  <div class="activity-time">08:31</div>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div class="legend">
-              <span class="legend-item"><span class="legend-dot yellow"></span>Total lançado</span>
-              <span class="legend-item"><span class="legend-dot green"></span>Produtos aprovados</span>
-            </div>
-          </article>
-
-          <article class="panel">
+          <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Atividades recentes</h3>
-                <p>Últimas movimentações registradas</p>
-              </div>
-              <button class="text-button" data-go="historico">Ver tudo →</button>
-            </div>
-
-            <div class="activity-list">
-              <div class="activity">
-                <div class="activity-icon">✓</div>
-                <div class="activity-text">
-                  <strong>Lançamento registrado</strong>
-                  <p>Café Tradicional 500g</p>
-                </div>
-                <span class="activity-time">10:42</span>
-              </div>
-
-              <div class="activity">
-                <div class="activity-icon blue">⇄</div>
-                <div class="activity-text">
-                  <strong>Transferência registrada</strong>
-                  <p>Movimentação entre setores</p>
-                </div>
-                <span class="activity-time">10:18</span>
-              </div>
-
-              <div class="activity">
-                <div class="activity-icon yellow">◷</div>
-                <div class="activity-text">
-                  <strong>Validade para conferir</strong>
-                  <p>Leite Integral 1L</p>
-                </div>
-                <span class="activity-time">09:56</span>
-              </div>
-
-              <div class="activity">
-                <div class="activity-icon red">⚑</div>
-                <div class="activity-text">
-                  <strong>Produto sinalizado</strong>
-                  <p>Refrigerante Cola 2L</p>
-                </div>
-                <span class="activity-time">09:31</span>
+                <div class="panel-title">Resumo de validade</div>
+                <div class="panel-subtitle">Distribuição ilustrativa dos produtos</div>
               </div>
             </div>
-          </article>
+            <div class="panel-body">
+              <div class="status-list">
+                <div>
+                  <div class="status-row"><span>Dentro da validade</span><strong>86%</strong></div>
+                  <div class="progress"><div class="progress-bar" style="width:86%;background:#22c55e"></div></div>
+                </div>
+                <div>
+                  <div class="status-row"><span>Próximos do vencimento</span><strong>9%</strong></div>
+                  <div class="progress"><div class="progress-bar" style="width:9%;background:#f59e0b"></div></div>
+                </div>
+                <div>
+                  <div class="status-row"><span>Vencidos</span><strong>3%</strong></div>
+                  <div class="progress"><div class="progress-bar" style="width:3%;background:#ef4444"></div></div>
+                </div>
+                <div>
+                  <div class="status-row"><span>Sem informação</span><strong>2%</strong></div>
+                  <div class="progress"><div class="progress-bar" style="width:2%;background:#94a3b8"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <article class="panel">
-          <div class="panel-header">
+        <div class="table-panel">
+          <div class="table-toolbar">
             <div>
-              <h3>Acesso rápido</h3>
-              <p>Acesse as funções mais utilizadas</p>
+              <div class="panel-title">Produtos que exigem atenção</div>
+              <div class="panel-subtitle">Exemplos de itens sinalizados no sistema</div>
             </div>
+            <button class="button" data-go="controle-validade">Ver validade</button>
           </div>
-
-          <div class="quick-grid">
-            <button class="quick-card" data-go="lancamentos">
-              <span class="stat-icon green">＋</span>
-              <span>
-                <strong>Lançamentos</strong>
-                <small>Consultar registros</small>
-              </span>
-            </button>
-
-            <button class="quick-card" data-go="produtos">
-              <span class="stat-icon">▣</span>
-              <span>
-                <strong>Produtos</strong>
-                <small>Consultar cadastro</small>
-              </span>
-            </button>
-
-            <button class="quick-card" data-go="vencidos">
-              <span class="stat-icon red">⚠</span>
-              <span>
-                <strong>Produtos vencidos</strong>
-                <small>Verificar vencimentos</small>
-              </span>
-            </button>
-
-            <button class="quick-card" data-go="transferencias">
-              <span class="stat-icon yellow">⇄</span>
-              <span>
-                <strong>Transferências</strong>
-                <small>Consultar movimentações</small>
-              </span>
-            </button>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td><div class="cell-primary">Leite Integral 1L</div><div class="cell-secondary">EAN: 7890000000012</div></td><td>LT1026</td><td>25/10/2026</td><td>24 un.</td><td><span class="badge badge-warning">Próximo do vencimento</span></td></tr>
+                <tr><td><div class="cell-primary">Biscoito Cream Cracker</div><div class="cell-secondary">EAN: 7890000000029</div></td><td>BC0926</td><td>18/10/2026</td><td>12 un.</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+                <tr><td><div class="cell-primary">Refrigerante Cola 2L</div><div class="cell-secondary">EAN: 7890000000036</div></td><td>RC1126</td><td>12/11/2026</td><td>36 un.</td><td><span class="badge badge-success">Dentro da validade</span></td></tr>
+              </tbody>
+            </table>
           </div>
-        </article>
+        </div>
       </section>
 
       <!-- LANÇAMENTOS -->
       <section class="page" id="page-lancamentos">
-        <div class="page-intro">
-          <h2>Lançamentos</h2>
-          <p>Consulte os registros de produtos realizados pela equipe.</p>
+        <div class="page-heading">
+          <div><h2>Lançamentos</h2><p>Consulte os registros de produtos, lotes, validades e quantidades.</p></div>
+          <button class="button button-primary" data-demo="Novo lançamento"><i data-lucide="plus"></i> Novo lançamento</button>
         </div>
 
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <input class="search-input" data-search="lancamentosTable" placeholder="Buscar produto, EAN ou funcionário...">
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Total de lançamentos</span><strong>1.284</strong></div>
+          <div class="mini-stat"><span>Lançamentos hoje</span><strong>128</strong></div>
+          <div class="mini-stat"><span>Itens sinalizados</span><strong>14</strong></div>
+        </div>
+
+        <div class="table-panel">
+          <div class="table-toolbar">
+            <div class="panel-title">Registros de lançamentos</div>
+            <div class="toolbar-actions">
+              <div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar lançamento..."></div>
+              <select class="filter-select table-filter"><option value="">Todas as situações</option><option>Registrado</option><option>Sinalizado</option><option>Pendente</option></select>
+              <button class="button" data-demo="Exportar lançamentos"><i data-lucide="download"></i> Exportar</button>
+            </div>
           </div>
-          <div class="toolbar-right">
-            <button class="secondary-button" onclick="showDemoAlert()">⇩ Exportar</button>
-            <button class="primary-button" onclick="showDemoAlert()">＋ Novo lançamento</button>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Produto</th><th>EAN</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Conferente</th><th>Situação</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-primary">Café Tradicional 500g</td><td>7890000000043</td><td>CF1026</td><td>10/03/2027</td><td>24</td><td>Alice</td><td><span class="badge badge-success">Registrado</span></td></tr>
+                <tr><td class="cell-primary">Leite Integral 1L</td><td>7890000000012</td><td>LT1026</td><td>25/10/2026</td><td>36</td><td>Gabriela</td><td><span class="badge badge-warning">Sinalizado</span></td></tr>
+                <tr><td class="cell-primary">Arroz Tipo 1 5kg</td><td>7890000000050</td><td>AR0826</td><td>10/08/2027</td><td>18</td><td>Altino</td><td><span class="badge badge-success">Registrado</span></td></tr>
+                <tr><td class="cell-primary">Biscoito Cream Cracker</td><td>7890000000029</td><td>BC0926</td><td>18/10/2026</td><td>12</td><td>Ana Carolina</td><td><span class="badge badge-danger">Pendente</span></td></tr>
+                <tr><td class="cell-primary">Refrigerante Cola 2L</td><td>7890000000036</td><td>RC1126</td><td>12/11/2026</td><td>36</td><td>Anielle</td><td><span class="badge badge-success">Registrado</span></td></tr>
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div class="table-wrap">
-          <table id="lancamentosTable">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th>EAN</th>
-                <th>Lote</th>
-                <th>Validade</th>
-                <th>Quantidade</th>
-                <th>Funcionário</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="cell-main">Café Tradicional 500g</span></td>
-                <td>7891000000011</td>
-                <td>CAF1026</td>
-                <td>15/12/2026</td>
-                <td>24</td>
-                <td>Alice</td>
-                <td><span class="status green">Aprovado</span></td>
-              </tr>
-              <tr>
-                <td><span class="cell-main">Leite Integral 1L</span></td>
-                <td>7891000000028</td>
-                <td>LEI0826</td>
-                <td>30/11/2026</td>
-                <td>36</td>
-                <td>Gabriela</td>
-                <td><span class="status yellow">Conferir</span></td>
-              </tr>
-              <tr>
-                <td><span class="cell-main">Refrigerante Cola 2L</span></td>
-                <td>7891000000035</td>
-                <td>REF0926</td>
-                <td>20/10/2026</td>
-                <td>12</td>
-                <td>Altino</td>
-                <td><span class="status red">Sinalizado</span></td>
-              </tr>
-              <tr>
-                <td><span class="cell-main">Biscoito Maisena 350g</span></td>
-                <td>7891000000042</td>
-                <td>BIS1126</td>
-                <td>18/01/2027</td>
-                <td>48</td>
-                <td>Ana Carolina</td>
-                <td><span class="status green">Aprovado</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="table-footer">
-          <span>Exibindo registros demonstrativos</span>
-          <span>Protótipo visual</span>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- MAPA DE VALIDADE -->
       <section class="page" id="page-mapa">
-        <div class="page-intro">
-          <h2>Mapa de Validade</h2>
-          <p>Visualize lotes, datas de validade e quantidades dos produtos.</p>
+        <div class="page-heading">
+          <div><h2>Mapa de Validade</h2><p>Visualização dos produtos por lote e data de vencimento.</p></div>
+          <button class="button button-primary" data-demo="Gerar mapa de validade"><i data-lucide="file-chart-column"></i> Gerar mapa</button>
         </div>
-
-        <div class="stats-grid">
-          <article class="stat-card">
-            <div class="stat-label">Lotes cadastrados</div>
-            <div class="stat-value">356</div>
-            <div class="stat-note">Exemplo de indicador</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Validade em até 7 dias</div>
-            <div class="stat-value">8</div>
-            <div class="stat-note">Acompanhamento prioritário</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Validade em até 30 dias</div>
-            <div class="stat-value">28</div>
-            <div class="stat-note">Exige monitoramento</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Lotes vencidos</div>
-            <div class="stat-value">12</div>
-            <div class="stat-note">Verificar situação</div>
-          </article>
+        <div class="notice">Os registros abaixo são demonstrativos. A geração de relatórios será conectada ao banco de dados na próxima etapa.</div>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Produtos mapeados</span><strong>156</strong></div>
+          <div class="mini-stat"><span>Lotes identificados</span><strong>213</strong></div>
+          <div class="mini-stat"><span>Validades neste mês</span><strong>18</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <h3>Lotes por produto</h3>
-              <p>Dados fictícios para demonstração</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Café Tradicional 500g</td><td>CAF1026</td><td>15/12/2026</td><td>24</td><td><span class="status green">Dentro da validade</span></td></tr>
-                <tr><td>Leite Integral 1L</td><td>LEI0826</td><td>30/11/2026</td><td>36</td><td><span class="status yellow">Acompanhar</span></td></tr>
-                <tr><td>Refrigerante Cola 2L</td><td>REF0926</td><td>20/10/2026</td><td>12</td><td><span class="status red">Vencido</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto ou lote..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Dentro da validade</option><option>Próximo do vencimento</option><option>Vencido</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Código</th><th>Produto</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td>PR001</td><td class="cell-primary">Leite Integral 1L</td><td>LT1026</td><td>25/10/2026</td><td>24</td><td>15/10/2026</td><td><span class="badge badge-warning">Próximo do vencimento</span></td></tr>
+              <tr><td>PR002</td><td class="cell-primary">Café Tradicional 500g</td><td>CF1026</td><td>10/03/2027</td><td>48</td><td>20/10/2026</td><td><span class="badge badge-success">Dentro da validade</span></td></tr>
+              <tr><td>PR003</td><td class="cell-primary">Biscoito Cream Cracker</td><td>BC0926</td><td>18/10/2026</td><td>12</td><td>10/10/2026</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+              <tr><td>PR004</td><td class="cell-primary">Refrigerante Cola 2L</td><td>RC1126</td><td>12/11/2026</td><td>36</td><td>20/10/2026</td><td><span class="badge badge-success">Dentro da validade</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- CONTROLE DE VALIDADE -->
       <section class="page" id="page-controle-validade">
-        <div class="page-intro">
-          <h2>Controle de Validade</h2>
-          <p>Acompanhe produtos próximos ao vencimento e organize as conferências.</p>
+        <div class="page-heading">
+          <div><h2>Controle de Validade</h2><p>Acompanhe os itens vencidos e aqueles que estão próximos do vencimento.</p></div>
+          <button class="button button-primary" data-demo="Atualizar controle de validade"><i data-lucide="refresh-cw"></i> Atualizar controle</button>
         </div>
-
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <input class="search-input" data-search="validadeTable" placeholder="Buscar produto ou lote...">
-          </div>
-          <button class="secondary-button" onclick="showDemoAlert()">⇩ Exportar relatório</button>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-top"><span class="stat-label">Dentro da validade</span><div class="stat-icon green"><i data-lucide="check-circle"></i></div></div><div class="stat-value">1.076</div><div class="stat-footer">Itens regulares</div></div>
+          <div class="stat-card"><div class="stat-top"><span class="stat-label">Vencem em 7 dias</span><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div></div><div class="stat-value">23</div><div class="stat-footer">Requerem atenção</div></div>
+          <div class="stat-card"><div class="stat-top"><span class="stat-label">Vencidos</span><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div></div><div class="stat-value">7</div><div class="stat-footer">Requerem conferência</div></div>
+          <div class="stat-card"><div class="stat-top"><span class="stat-label">Sem validade</span><div class="stat-icon purple"><i data-lucide="calendar-x"></i></div></div><div class="stat-value">4</div><div class="stat-footer">Dados a revisar</div></div>
         </div>
-
-        <div class="panel">
-          <div class="table-wrap">
-            <table id="validadeTable">
-              <thead>
-                <tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Dias restantes</th><th>Situação</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Café Tradicional 500g</td><td>CAF1026</td><td>15/12/2026</td><td>24</td><td>55</td><td><span class="status green">Regular</span></td></tr>
-                <tr><td>Leite Integral 1L</td><td>LEI0826</td><td>30/11/2026</td><td>36</td><td>40</td><td><span class="status yellow">Monitorar</span></td></tr>
-                <tr><td>Refrigerante Cola 2L</td><td>REF0926</td><td>20/10/2026</td><td>12</td><td>Vencido</td><td><span class="status red">Vencido</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Controle de vencimentos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Dentro da validade</option><option>Próximo do vencimento</option><option>Vencido</option><option>Sem validade</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Dias restantes</th><th>Quantidade</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-primary">Leite Integral 1L</td><td>LT1026</td><td>25/10/2026</td><td>3 dias</td><td>24</td><td><span class="badge badge-warning">Próximo do vencimento</span></td></tr>
+              <tr><td class="cell-primary">Biscoito Cream Cracker</td><td>BC0926</td><td>18/10/2026</td><td>-4 dias</td><td>12</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+              <tr><td class="cell-primary">Café Tradicional 500g</td><td>CF1026</td><td>10/03/2027</td><td>139 dias</td><td>48</td><td><span class="badge badge-success">Dentro da validade</span></td></tr>
+              <tr><td class="cell-primary">Produto sem identificação</td><td>SL0001</td><td>—</td><td>—</td><td>2</td><td><span class="badge badge-neutral">Sem validade</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- PRODUTOS VENCIDOS -->
       <section class="page" id="page-vencidos">
-        <div class="page-intro">
-          <h2>Produtos Vencidos</h2>
-          <p>Consulte os produtos cuja validade já expirou.</p>
+        <div class="page-heading">
+          <div><h2>Produtos Vencidos</h2><p>Consulte os produtos com validade anterior à data atual.</p></div>
+          <button class="button button-danger" data-demo="Revisar produtos vencidos"><i data-lucide="alert-triangle"></i> Revisar vencidos</button>
         </div>
-
-        <div class="stats-grid">
-          <article class="stat-card">
-            <div class="stat-label">Produtos vencidos</div>
-            <div class="stat-value">12</div>
-            <div class="stat-note">Registros demonstrativos</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Lotes identificados</div>
-            <div class="stat-value">9</div>
-            <div class="stat-note">Exemplo de indicador</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Quantidade total</div>
-            <div class="stat-value">84</div>
-            <div class="stat-note">Unidades demonstrativas</div>
-          </article>
-          <article class="stat-card">
-            <div class="stat-label">Para verificação</div>
-            <div class="stat-value">12</div>
-            <div class="stat-note">Necessita de conferência</div>
-          </article>
+        <div class="notice">Importante: os dados desta página são apenas exemplos. A identificação automática dos vencidos será implementada com a integração do sistema.</div>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Produtos vencidos</span><strong>7</strong></div>
+          <div class="mini-stat"><span>Quantidade total</span><strong>42</strong></div>
+          <div class="mini-stat"><span>Pendentes de revisão</span><strong>5</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <h3>Lista de produtos vencidos</h3>
-              <p>Exemplo de dados — não representa um inventário real.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>10025</td><td>Refrigerante Cola 2L</td><td>REF0926</td><td>20/10/2026</td><td>12</td><td>21/10/2026</td></tr>
-                <tr><td>10048</td><td>Biscoito Recheado</td><td>BIS0726</td><td>10/10/2026</td><td>24</td><td>21/10/2026</td></tr>
-                <tr><td>10072</td><td>Molho de Tomate</td><td>MOL0826</td><td>18/10/2026</td><td>48</td><td>21/10/2026</td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Lista de produtos vencidos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar código ou descrição..."></div><button class="button" data-demo="Exportar produtos vencidos"><i data-lucide="download"></i> Exportar</button></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td>PR003</td><td class="cell-primary">Biscoito Cream Cracker</td><td>BC0926</td><td>18/10/2026</td><td>12</td><td>10/10/2026</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+              <tr><td>PR007</td><td class="cell-primary">Iogurte Natural</td><td>IG1026</td><td>19/10/2026</td><td>18</td><td>12/10/2026</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+              <tr><td>PR011</td><td class="cell-primary">Pão de Forma</td><td>PF1026</td><td>20/10/2026</td><td>12</td><td>15/10/2026</td><td><span class="badge badge-danger">Vencido</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- TRANSFERÊNCIAS -->
       <section class="page" id="page-transferencias">
-        <div class="page-intro">
-          <h2>Transferências</h2>
-          <p>Consulte as movimentações de produtos entre setores.</p>
+        <div class="page-heading">
+          <div><h2>Transferências</h2><p>Acompanhe movimentações de produtos entre setores ou locais.</p></div>
+          <button class="button button-primary" data-demo="Nova transferência"><i data-lucide="plus"></i> Nova transferência</button>
         </div>
-
-        <div class="toolbar">
-          <input class="search-input" data-search="transferenciasTable" placeholder="Buscar transferência...">
-          <button class="primary-button" onclick="showDemoAlert()">＋ Nova transferência</button>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Transferências totais</span><strong>84</strong></div>
+          <div class="mini-stat"><span>Concluídas</span><strong>71</strong></div>
+          <div class="mini-stat"><span>Pendentes</span><strong>13</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="table-wrap">
-            <table id="transferenciasTable">
-              <thead>
-                <tr><th>Protocolo</th><th>Produto</th><th>Origem</th><th>Destino</th><th>Quantidade</th><th>Responsável</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>TR-00125</td><td>Café Tradicional 500g</td><td>Depósito A</td><td>Setor B</td><td>24</td><td>Alice</td><td><span class="status green">Concluída</span></td></tr>
-                <tr><td>TR-00124</td><td>Leite Integral 1L</td><td>Depósito B</td><td>Setor A</td><td>36</td><td>Gabriela</td><td><span class="status yellow">Pendente</span></td></tr>
-                <tr><td>TR-00123</td><td>Biscoito Maisena 350g</td><td>Depósito A</td><td>Setor C</td><td>48</td><td>Altino</td><td><span class="status green">Concluída</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Histórico de transferências</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar transferência..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Concluída</option><option>Pendente</option><option>Cancelada</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Identificação</th><th>Produto</th><th>Origem</th><th>Destino</th><th>Quantidade</th><th>Data</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td>TRF-0084</td><td class="cell-primary">Café Tradicional 500g</td><td>Depósito A</td><td>Setor B</td><td>24</td><td>22/10/2026</td><td><span class="badge badge-success">Concluída</span></td></tr>
+              <tr><td>TRF-0083</td><td class="cell-primary">Leite Integral 1L</td><td>Depósito A</td><td>Setor C</td><td>36</td><td>22/10/2026</td><td><span class="badge badge-warning">Pendente</span></td></tr>
+              <tr><td>TRF-0082</td><td class="cell-primary">Arroz Tipo 1 5kg</td><td>Setor B</td><td>Depósito A</td><td>18</td><td>21/10/2026</td><td><span class="badge badge-success">Concluída</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
-        <div class="page-intro">
-          <h2>Controle de Estoque</h2>
-          <p>Visualize quantidades disponíveis e acompanhe os níveis de estoque.</p>
+        <div class="page-heading">
+          <div><h2>Controle de Estoque</h2><p>Consulte saldos e quantidades de produtos registrados.</p></div>
+          <button class="button button-primary" data-demo="Registrar movimentação de estoque"><i data-lucide="plus"></i> Movimentação</button>
         </div>
-
-        <div class="stats-grid">
-          <article class="stat-card"><div class="stat-label">Itens em estoque</div><div class="stat-value">1.240</div><div class="stat-note">Dados demonstrativos</div></article>
-          <article class="stat-card"><div class="stat-label">Estoque baixo</div><div class="stat-value">18</div><div class="stat-note">Necessitam de atenção</div></article>
-          <article class="stat-card"><div class="stat-label">Sem estoque</div><div class="stat-value">4</div><div class="stat-note">Exemplo de indicador</div></article>
-          <article class="stat-card"><div class="stat-label">Categorias</div><div class="stat-value">18</div><div class="stat-note">Categorias demonstrativas</div></article>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Produtos em estoque</span><strong>1.248</strong></div>
+          <div class="mini-stat"><span>Unidades registradas</span><strong>18.642</strong></div>
+          <div class="mini-stat"><span>Estoque baixo</span><strong>16</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="panel-header"><div><h3>Posição de estoque</h3><p>Exemplo de inventário</p></div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Quantidade</th><th>Estoque mínimo</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr><td>10025</td><td>Café Tradicional 500g</td><td>Bebidas</td><td>240</td><td>50</td><td><span class="status green">Normal</span></td></tr>
-                <tr><td>10026</td><td>Leite Integral 1L</td><td>Laticínios</td><td>36</td><td>60</td><td><span class="status yellow">Estoque baixo</span></td></tr>
-                <tr><td>10027</td><td>Refrigerante Cola 2L</td><td>Bebidas</td><td>120</td><td>30</td><td><span class="status green">Normal</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Posição de estoque</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Normal</option><option>Estoque baixo</option><option>Sem estoque</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Código</th><th>Produto</th><th>EAN</th><th>Quantidade</th><th>Unidade</th><th>Última movimentação</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td>PR001</td><td class="cell-primary">Leite Integral 1L</td><td>7890000000012</td><td>240</td><td>Unidade</td><td>22/10/2026</td><td><span class="badge badge-success">Normal</span></td></tr>
+              <tr><td>PR002</td><td class="cell-primary">Café Tradicional 500g</td><td>7890000000043</td><td>84</td><td>Pacote</td><td>22/10/2026</td><td><span class="badge badge-success">Normal</span></td></tr>
+              <tr><td>PR003</td><td class="cell-primary">Biscoito Cream Cracker</td><td>7890000000029</td><td>8</td><td>Pacote</td><td>21/10/2026</td><td><span class="badge badge-warning">Estoque baixo</span></td></tr>
+              <tr><td>PR004</td><td class="cell-primary">Refrigerante Cola 2L</td><td>7890000000036</td><td>0</td><td>Unidade</td><td>20/10/2026</td><td><span class="badge badge-danger">Sem estoque</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- PRODUTOS -->
       <section class="page" id="page-produtos">
-        <div class="page-intro">
-          <h2>Produtos</h2>
-          <p>Consulte o catálogo de produtos, códigos EAN, categorias e status cadastral.</p>
+        <div class="page-heading">
+          <div><h2>Produtos</h2><p>Cadastro e consulta do catálogo de produtos.</p></div>
+          <button class="button button-primary" data-demo="Cadastrar produto"><i data-lucide="plus"></i> Adicionar produto</button>
         </div>
-
-        <div class="stats-grid">
-          <article class="stat-card">
-            <div class="stat-top">
-              <span class="stat-label">Total de produtos</span>
-              <span class="stat-icon">▣</span>
-            </div>
-            <div class="stat-value">1.240</div>
-            <div class="stat-note">Produtos no catálogo demonstrativo</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span class="stat-label">Produtos ativos</span>
-              <span class="stat-icon green">✓</span>
-            </div>
-            <div class="stat-value">1.215</div>
-            <div class="stat-note">Disponíveis para consulta</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span class="stat-label">Produtos sinalizados</span>
-              <span class="stat-icon yellow">⚑</span>
-            </div>
-            <div class="stat-value">25</div>
-            <div class="stat-note">Precisam de verificação</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span class="stat-label">Categorias</span>
-              <span class="stat-icon">▤</span>
-            </div>
-            <div class="stat-value">18</div>
-            <div class="stat-note">Categorias demonstrativas</div>
-          </article>
+        <div class="notice">O catálogo abaixo é demonstrativo. O cadastro real de código, EAN, descrição e categoria será implementado na integração com o banco de dados.</div>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Total de produtos</span><strong>1.248</strong></div>
+          <div class="mini-stat"><span>Ativos</span><strong>1.231</strong></div>
+          <div class="mini-stat"><span>Inativos</span><strong>17</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="toolbar">
-            <div>
-              <h3>Catálogo de produtos</h3>
-              <p style="margin-top:5px;color:var(--muted);font-size:12px">
-                Pesquise por código, EAN, descrição ou categoria.
-              </p>
-            </div>
-            <div class="toolbar-right">
-              <button class="secondary-button" onclick="showDemoAlert()">⇩ Exportar</button>
-              <button class="primary-button" onclick="showDemoAlert()">＋ Novo produto</button>
-            </div>
-          </div>
-
-          <div class="toolbar">
-            <div class="toolbar-left">
-              <input class="search-input" data-search="produtosTable" placeholder="Buscar produto, EAN ou código...">
-              <select class="filter-select" id="categoryFilter" aria-label="Filtrar categoria">
-                <option value="">Todas as categorias</option>
-                <option value="Bebidas">Bebidas</option>
-                <option value="Laticínios">Laticínios</option>
-                <option value="Mercearia">Mercearia</option>
-                <option value="Biscoitos">Biscoitos</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="table-wrap">
-            <table id="produtosTable">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>EAN</th>
-                  <th>Descrição</th>
-                  <th>Categoria</th>
-                  <th>Status</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr data-category="Bebidas">
-                  <td>10025</td>
-                  <td>7891000000011</td>
-                  <td><span class="cell-main">Café Tradicional 500g</span></td>
-                  <td>Bebidas</td>
-                  <td><span class="status green">Ativo</span></td>
-                  <td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td>
-                </tr>
-                <tr data-category="Laticínios">
-                  <td>10026</td>
-                  <td>7891000000028</td>
-                  <td><span class="cell-main">Leite Integral 1L</span></td>
-                  <td>Laticínios</td>
-                  <td><span class="status green">Ativo</span></td>
-                  <td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td>
-                </tr>
-                <tr data-category="Bebidas">
-                  <td>10027</td>
-                  <td>7891000000035</td>
-                  <td><span class="cell-main">Refrigerante Cola 2L</span></td>
-                  <td>Bebidas</td>
-                  <td><span class="status yellow">Sinalizado</span></td>
-                  <td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td>
-                </tr>
-                <tr data-category="Biscoitos">
-                  <td>10028</td>
-                  <td>7891000000042</td>
-                  <td><span class="cell-main">Biscoito Maisena 350g</span></td>
-                  <td>Biscoitos</td>
-                  <td><span class="status green">Ativo</span></td>
-                  <td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td>
-                </tr>
-                <tr data-category="Mercearia">
-                  <td>10029</td>
-                  <td>7891000000059</td>
-                  <td><span class="cell-main">Molho de Tomate 300g</span></td>
-                  <td>Mercearia</td>
-                  <td><span class="status green">Ativo</span></td>
-                  <td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="table-footer">
-            <span id="productsCount">5 produtos demonstrativos</span>
-            <span>Catálogo fictício</span>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Catálogo de produtos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar código, EAN ou descrição..."></div><select class="filter-select table-filter"><option value="">Todos os status</option><option>Ativo</option><option>Inativo</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Código</th><th>EAN</th><th>Descrição</th><th>Categoria</th><th>Unidade</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>
+              <tr><td>PR001</td><td>7890000000012</td><td class="cell-primary">Leite Integral 1L</td><td>Laticínios</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR001">Editar</button></td></tr>
+              <tr><td>PR002</td><td>7890000000043</td><td class="cell-primary">Café Tradicional 500g</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR002">Editar</button></td></tr>
+              <tr><td>PR003</td><td>7890000000029</td><td class="cell-primary">Biscoito Cream Cracker</td><td>Biscoitos</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR003">Editar</button></td></tr>
+              <tr><td>PR004</td><td>7890000000036</td><td class="cell-primary">Refrigerante Cola 2L</td><td>Bebidas</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR004">Editar</button></td></tr>
+              <tr><td>PR005</td><td>7890000000050</td><td class="cell-primary">Arroz Tipo 1 5kg</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-neutral">Inativo</span></td><td><button class="button" data-demo="Editar produto PR005">Editar</button></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum produto encontrado.</div>
         </div>
       </section>
 
       <!-- SINALIZADOS -->
       <section class="page" id="page-sinalizados">
-        <div class="page-intro">
-          <h2>Sinalizados</h2>
-          <p>Consulte os registros que precisam de atenção ou revisão.</p>
+        <div class="page-heading">
+          <div><h2>Produtos Sinalizados</h2><p>Itens que precisam de verificação ou acompanhamento.</p></div>
+          <button class="button button-primary" data-demo="Sinalizar produto"><i data-lucide="flag"></i> Sinalizar produto</button>
         </div>
-
-        <div class="panel">
-          <div class="panel-header"><div><h3>Registros sinalizados</h3><p>Dados de exemplo para visualização</p></div></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Produto</th><th>Lote</th><th>Motivo</th><th>Responsável</th><th>Data</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr><td>Refrigerante Cola 2L</td><td>REF0926</td><td>Validade vencida</td><td>Altino</td><td>21/10/2026</td><td><span class="status red">Pendente</span></td></tr>
-                <tr><td>Leite Integral 1L</td><td>LEI0826</td><td>Conferir lote</td><td>Gabriela</td><td>21/10/2026</td><td><span class="status yellow">Em análise</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Total sinalizado</span><strong>14</strong></div>
+          <div class="mini-stat"><span>Em aberto</span><strong>9</strong></div>
+          <div class="mini-stat"><span>Resolvidos</span><strong>5</strong></div>
+        </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Lista de sinalizações</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Em aberto</option><option>Resolvido</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Produto</th><th>Lote</th><th>Motivo</th><th>Responsável</th><th>Data</th><th>Situação</th><th>Ações</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-primary">Leite Integral 1L</td><td>LT1026</td><td>Próximo do vencimento</td><td>Gabriela</td><td>22/10/2026</td><td><span class="badge badge-warning">Em aberto</span></td><td><button class="button" data-demo="Ver sinalização do Leite Integral">Ver</button></td></tr>
+              <tr><td class="cell-primary">Biscoito Cream Cracker</td><td>BC0926</td><td>Validade vencida</td><td>Alice</td><td>21/10/2026</td><td><span class="badge badge-warning">Em aberto</span></td><td><button class="button" data-demo="Ver sinalização do Biscoito">Ver</button></td></tr>
+              <tr><td class="cell-primary">Arroz Tipo 1 5kg</td><td>AR0826</td><td>Divergência de quantidade</td><td>Altino</td><td>20/10/2026</td><td><span class="badge badge-success">Resolvido</span></td><td><button class="button" data-demo="Ver sinalização do Arroz">Ver</button></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- HISTÓRICO -->
       <section class="page" id="page-historico">
-        <div class="page-intro">
-          <h2>Histórico</h2>
-          <p>Acompanhe as atividades realizadas no sistema.</p>
+        <div class="page-heading">
+          <div><h2>Histórico</h2><p>Consulte os eventos e as movimentações registrados no painel.</p></div>
+          <button class="button" data-demo="Exportar histórico"><i data-lucide="download"></i> Exportar histórico</button>
         </div>
-
-        <div class="toolbar">
-          <input class="search-input" data-search="historicoTable" placeholder="Buscar no histórico...">
-          <button class="secondary-button" onclick="showDemoAlert()">⇩ Exportar histórico</button>
-        </div>
-
-        <div class="panel">
-          <div class="table-wrap">
-            <table id="historicoTable">
-              <thead><tr><th>Data e hora</th><th>Atividade</th><th>Descrição</th><th>Usuário</th><th>Resultado</th></tr></thead>
-              <tbody>
-                <tr><td>21/10/2026 10:42</td><td>Lançamento</td><td>Café Tradicional 500g</td><td>Alice</td><td><span class="status green">Concluído</span></td></tr>
-                <tr><td>21/10/2026 10:18</td><td>Transferência</td><td>Movimentação entre setores</td><td>Gabriela</td><td><span class="status green">Concluído</span></td></tr>
-                <tr><td>21/10/2026 09:56</td><td>Validade</td><td>Conferência de lote</td><td>Altino</td><td><span class="status yellow">Pendente</span></td></tr>
-                <tr><td>21/10/2026 09:31</td><td>Sinalização</td><td>Refrigerante Cola 2L</td><td>Ana Carolina</td><td><span class="status red">Sinalizado</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="notice">O histórico real deverá registrar quem realizou cada operação, a data, o horário e os detalhes da alteração.</div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Registro de atividades</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar atividade..."></div><select class="filter-select table-filter"><option value="">Todos os eventos</option><option>Lançamento</option><option>Transferência</option><option>Produto</option><option>Validade</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Data e horário</th><th>Usuário</th><th>Evento</th><th>Descrição</th><th>Identificação</th><th>Situação</th></tr></thead>
+            <tbody>
+              <tr><td>22/10/2026 09:42</td><td>Alice</td><td><span class="badge badge-info">Lançamento</span></td><td>Registro de lote de café</td><td>LAN-1284</td><td><span class="badge badge-success">Concluído</span></td></tr>
+              <tr><td>22/10/2026 09:18</td><td>Gabriela</td><td><span class="badge badge-purple">Transferência</span></td><td>Movimentação entre setores</td><td>TRF-0084</td><td><span class="badge badge-success">Concluído</span></td></tr>
+              <tr><td>22/10/2026 08:56</td><td>Altino</td><td><span class="badge badge-warning">Validade</span></td><td>Produto sinalizado</td><td>SIN-0014</td><td><span class="badge badge-warning">Em aberto</span></td></tr>
+              <tr><td>22/10/2026 08:31</td><td>Ana Carolina</td><td><span class="badge badge-info">Produto</span></td><td>Cadastro de produto</td><td>PR-1248</td><td><span class="badge badge-success">Concluído</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhuma atividade encontrada.</div>
         </div>
       </section>
 
       <!-- FUNCIONÁRIOS -->
       <section class="page" id="page-funcionarios">
-        <div class="page-intro">
-          <h2>Funcionários</h2>
-          <p>Consulte a equipe e visualize as informações dos funcionários cadastrados.</p>
+        <div class="page-heading">
+          <div><h2>Funcionários</h2><p>Visualize os usuários que terão acesso ao sistema.</p></div>
+          <button class="button button-primary" data-demo="Adicionar funcionário"><i data-lucide="user-plus"></i> Adicionar funcionário</button>
         </div>
-
-        <div class="stats-grid">
-          <article class="stat-card"><div class="stat-label">Total de funcionários</div><div class="stat-value">12</div><div class="stat-note">Equipe demonstrativa</div></article>
-          <article class="stat-card"><div class="stat-label">Ativos</div><div class="stat-value">11</div><div class="stat-note">Disponíveis para operação</div></article>
-          <article class="stat-card"><div class="stat-label">Administradores</div><div class="stat-value">1</div><div class="stat-note">Acesso administrativo</div></article>
-          <article class="stat-card"><div class="stat-label">Em conferência</div><div class="stat-value">4</div><div class="stat-note">Indicador ilustrativo</div></article>
+        <div class="notice">Esta é uma lista demonstrativa. Cadastro de usuários, senhas, permissões e desativação de contas serão implementados com autenticação e banco de dados.</div>
+        <div class="mini-stats">
+          <div class="mini-stat"><span>Total de funcionários</span><strong>18</strong></div>
+          <div class="mini-stat"><span>Ativos</span><strong>16</strong></div>
+          <div class="mini-stat"><span>Administradores</span><strong>2</strong></div>
         </div>
-
-        <div class="panel">
-          <div class="toolbar">
-            <div>
-              <h3>Equipe</h3>
-              <p style="margin-top:5px;color:var(--muted);font-size:12px">Lista demonstrativa de funcionários.</p>
-            </div>
-            <div class="toolbar-right">
-              <input class="search-input" data-search="funcionariosTable" placeholder="Buscar funcionário...">
-              <button class="primary-button" onclick="showDemoAlert()">＋ Novo funcionário</button>
-            </div>
-          </div>
-
-          <div class="table-wrap">
-            <table id="funcionariosTable">
-              <thead><tr><th>Funcionário</th><th>Usuário</th><th>Função</th><th>Status</th><th>Ações</th></tr></thead>
-              <tbody>
-                <tr><td><span class="cell-main">Alice</span></td><td>alice</td><td>Conferente</td><td><span class="status green">Ativo</span></td><td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td></tr>
-                <tr><td><span class="cell-main">Altino</span></td><td>altino</td><td>Conferente</td><td><span class="status green">Ativo</span></td><td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td></tr>
-                <tr><td><span class="cell-main">Ana Carolina</span></td><td>ana.carolina</td><td>Conferente</td><td><span class="status green">Ativo</span></td><td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td></tr>
-                <tr><td><span class="cell-main">Gabriela</span></td><td>gabriela</td><td>Conferente</td><td><span class="status green">Ativo</span></td><td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td></tr>
-                <tr><td><span class="cell-main">Conferente Admin</span></td><td>admin</td><td>Administrador</td><td><span class="status blue">Administrador</span></td><td><button class="text-button" onclick="showDemoAlert()">Visualizar</button></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-panel">
+          <div class="table-toolbar"><div class="panel-title">Equipe e acessos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar funcionário..."></div><select class="filter-select table-filter"><option value="">Todos os status</option><option>Ativo</option><option>Inativo</option></select></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Funcionário</th><th>Usuário</th><th>Perfil de acesso</th><th>Último acesso</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>
+              <tr><td><div class="cell-primary">Alice</div></td><td>alice</td><td><span class="badge badge-purple">Administrador</span></td><td>22/10/2026 09:42</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Alice">Editar</button></td></tr>
+              <tr><td><div class="cell-primary">Altino</div></td><td>altino</td><td><span class="badge badge-info">Conferente</span></td><td>22/10/2026 09:18</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Altino">Editar</button></td></tr>
+              <tr><td><div class="cell-primary">Ana Carolina</div></td><td>ana.carolina</td><td><span class="badge badge-info">Conferente</span></td><td>22/10/2026 08:56</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Ana Carolina">Editar</button></td></tr>
+              <tr><td><div class="cell-primary">Gabriela</div></td><td>gabriela</td><td><span class="badge badge-info">Conferente</span></td><td>21/10/2026 22:12</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Gabriela">Editar</button></td></tr>
+              <tr><td><div class="cell-primary">Anielle</div></td><td>anielle</td><td><span class="badge badge-info">Conferente</span></td><td>21/10/2026 20:45</td><td><span class="badge badge-neutral">Inativo</span></td><td><button class="button" data-demo="Editar funcionário Anielle">Editar</button></td></tr>
+            </tbody>
+          </table></div>
+          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum funcionário encontrado.</div>
         </div>
       </section>
 
-      <div class="footer-note">
-        Painel do Conferente · Protótipo visual · Os dados apresentados são fictícios
-      </div>
+      <div class="footer">Painel do Conferente · Protótipo demonstrativo · Os dados exibidos são fictícios.</div>
     </div>
   </main>
 </div>
 
 <script>
-  const app = document.getElementById("app");
-  const sidebar = document.getElementById("sidebar");
-  const toggleSidebar = document.getElementById("toggleSidebar");
-  const mobileOverlay = document.getElementById("mobileOverlay");
-  const pageTitle = document.getElementById("pageTitle");
-
-  const pageTitles = {
-    dashboard: "Dashboard",
-    lancamentos: "Lançamentos",
-    mapa: "Mapa de Validade",
-    "controle-validade": "Controle de Validade",
-    vencidos: "Produtos Vencidos",
-    transferencias: "Transferências",
-    estoque: "Controle de Estoque",
-    produtos: "Produtos",
-    sinalizados: "Sinalizados",
-    historico: "Histórico",
-    funcionarios: "Funcionários"
+  const pageNames = {
+    dashboard: ["Dashboard", "Visão geral das operações"],
+    lancamentos: ["Lançamentos", "Consulta e registro de lançamentos"],
+    mapa: ["Mapa de Validade", "Produtos organizados por lote e vencimento"],
+    "controle-validade": ["Controle de Validade", "Acompanhamento dos vencimentos"],
+    vencidos: ["Produtos Vencidos", "Consulta de produtos vencidos"],
+    transferencias: ["Transferências", "Movimentações entre setores"],
+    estoque: ["Controle de Estoque", "Consulta de saldos e quantidades"],
+    produtos: ["Produtos", "Cadastro e consulta do catálogo"],
+    sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
+    historico: ["Histórico", "Registro das atividades do sistema"],
+    funcionarios: ["Funcionários", "Gestão dos usuários e permissões"]
   };
 
-  function navigateTo(pageId) {
-    const targetPage = document.getElementById("page-" + pageId);
+  function navigate(pageName) {
+    const pageId = "page-" + pageName;
+    const page = document.getElementById(pageId);
 
-    if (!targetPage) return;
+    if (!page) return;
 
-    document.querySelectorAll(".page").forEach(page => {
-      page.classList.toggle("active", page === targetPage);
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    page.classList.add("active");
+
+    document.querySelectorAll(".nav-item").forEach(item => {
+      item.classList.toggle("active", item.dataset.page === pageName);
     });
 
-    document.querySelectorAll(".menu-item[data-page]").forEach(button => {
-      button.classList.toggle("active", button.dataset.page === pageId);
-    });
+    const names = pageNames[pageName] || ["Painel", "Gestão de operações"];
+    document.getElementById("topTitle").textContent = names[0];
+    document.querySelector(".page-subtitle").textContent = names[1];
 
-    pageTitle.textContent = pageTitles[pageId] || "Painel do Conferente";
-
-    const subtitle = document.querySelector(".topbar p");
-    if (subtitle) {
-      subtitle.textContent = pageId === "dashboard"
-        ? "Visão geral das operações"
-        : "Painel do Conferente · " + pageTitle.textContent;
-    }
-
-    app.classList.remove("mobile-open");
+    document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  document.querySelectorAll("[data-page]").forEach(button => {
-    button.addEventListener("click", () => navigateTo(button.dataset.page));
+  document.querySelectorAll(".nav-item").forEach(item => {
+    item.addEventListener("click", () => navigate(item.dataset.page));
   });
 
   document.querySelectorAll("[data-go]").forEach(button => {
-    button.addEventListener("click", () => navigateTo(button.dataset.go));
+    button.addEventListener("click", () => navigate(button.dataset.go));
   });
 
-  toggleSidebar.addEventListener("click", () => {
-    if (window.innerWidth <= 760) {
-      app.classList.toggle("mobile-open");
-    } else {
-      app.classList.toggle("collapsed");
-    }
+  document.getElementById("menuToggle").addEventListener("click", () => {
+    document.getElementById("sidebar").classList.toggle("open");
   });
 
-  mobileOverlay.addEventListener("click", () => {
-    app.classList.remove("mobile-open");
+  document.getElementById("refreshButton").addEventListener("click", () => {
+    const button = document.getElementById("refreshButton");
+    button.innerHTML = '<i data-lucide="check"></i>';
+    lucide.createIcons();
+
+    setTimeout(() => {
+      button.innerHTML = '<i data-lucide="refresh-cw"></i>';
+      lucide.createIcons();
+    }, 900);
   });
 
-  document.getElementById("logoutButton").addEventListener("click", () => {
-    const confirmed = confirm("Deseja realmente sair do Painel do Conferente?");
-
-    if (confirmed) {
-      alert("Este é um protótipo visual. Configure o destino de saída para usar o login real.");
-    }
+  document.querySelectorAll("[data-demo]").forEach(button => {
+    button.addEventListener("click", () => {
+      alert(
+        button.dataset.demo +
+        "\n\nEsta ação ainda é demonstrativa. Vamos implementar sua funcionalidade real nas próximas etapas."
+      );
+    });
   });
 
-  function updateRing(name, approved, launched) {
-    launched = Math.max(0, Number(launched) || 0);
-    approved = Math.max(0, Math.min(Number(approved) || 0, launched));
+  // Pesquisa por texto e filtro dentro de cada tabela.
+  document.querySelectorAll(".table-panel").forEach(panel => {
+    const search = panel.querySelector(".table-search");
+    const filter = panel.querySelector(".table-filter");
+    const rows = Array.from(panel.querySelectorAll("tbody tr"));
+    const empty = panel.querySelector(".empty-state");
 
-    const percentage = launched > 0
-      ? Math.round((approved / launched) * 100)
-      : 0;
+    function applyFilters() {
+      const query = (search?.value || "").toLocaleLowerCase("pt-BR").trim();
+      const selected = (filter?.value || "").toLocaleLowerCase("pt-BR");
+      let visible = 0;
 
-    const ring = document.getElementById(name + "Ring");
-    const percent = document.getElementById(name + "Percent");
-    const counts = document.getElementById(name + "Counts");
+      rows.forEach(row => {
+        const text = row.innerText.toLocaleLowerCase("pt-BR");
+        const matchesText = text.includes(query);
+        const matchesFilter = !selected || text.includes(selected);
 
-    if (!ring || !percent || !counts) return;
+        const show = matchesText && matchesFilter;
+        row.style.display = show ? "" : "none";
 
-    ring.style.setProperty("--progress", percentage + "%");
-    ring.style.setProperty("--total-progress", launched > 0 ? "100%" : "0%");
-    percent.textContent = percentage + "%";
-    counts.textContent = approved.toLocaleString("pt-BR") +
-      " de " + launched.toLocaleString("pt-BR") + " produtos";
-  }
-
-  // Valores fictícios dos gráficos:
-  // updateRing("month", aprovados, totalLançado);
-  updateRing("month", 50, 100);
-  updateRing("general", 300, 400);
-
-  // Data atual do computador.
-  const currentDate = document.getElementById("currentDate");
-  currentDate.textContent = new Date().toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric"
-  });
-
-  // Pesquisa simples nas tabelas.
-  document.querySelectorAll("[data-search]").forEach(input => {
-    input.addEventListener("input", () => {
-      const table = document.getElementById(input.dataset.search);
-      if (!table) return;
-
-      const query = input.value.trim().toLocaleLowerCase("pt-BR");
-
-      table.querySelectorAll("tbody tr").forEach(row => {
-        const text = row.textContent.toLocaleLowerCase("pt-BR");
-        row.style.display = text.includes(query) ? "" : "none";
+        if (show) visible++;
       });
 
-      if (input.dataset.search === "produtosTable") {
-        filterProducts();
+      if (empty) {
+        empty.style.display = rows.length && visible === 0 ? "block" : "none";
       }
-    });
-  });
-
-  // Filtro por categoria na página Produtos.
-  const categoryFilter = document.getElementById("categoryFilter");
-
-  function filterProducts() {
-    const table = document.getElementById("produtosTable");
-    const searchInput = document.querySelector('[data-search="produtosTable"]');
-    if (!table) return;
-
-    const query = searchInput.value.trim().toLocaleLowerCase("pt-BR");
-    const category = categoryFilter.value;
-    let visible = 0;
-
-    table.querySelectorAll("tbody tr").forEach(row => {
-      const matchesText = row.textContent.toLocaleLowerCase("pt-BR").includes(query);
-      const matchesCategory = !category || row.dataset.category === category;
-      const show = matchesText && matchesCategory;
-
-      row.style.display = show ? "" : "none";
-      if (show) visible++;
-    });
-
-    document.getElementById("productsCount").textContent =
-      visible + (visible === 1 ? " produto exibido" : " produtos exibidos");
-  }
-
-  categoryFilter.addEventListener("change", filterProducts);
-
-  function showDemoAlert() {
-    alert("Esta função é apenas demonstrativa. Para cadastrar, editar, excluir ou exportar dados reais, será necessário implementar a integração com o banco de dados.");
-  }
-
-  // Fecha o menu móvel ao mudar para uma janela maior.
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 760) {
-      app.classList.remove("mobile-open");
     }
+
+    search?.addEventListener("input", applyFilters);
+    filter?.addEventListener("change", applyFilters);
   });
+
+  const today = new Date();
+  document.getElementById("currentDate").textContent =
+    today.toLocaleDateString("pt-BR", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+
+  lucide.createIcons();
 </script>
 </body>
 </html>
