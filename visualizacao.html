@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -41,13 +42,8 @@
       --shadow: none;
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    [hidden] {
-      display: none !important;
-    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
 
     body {
       margin: 0;
@@ -62,16 +58,8 @@
       padding: 18px;
     }
 
-    header h1 {
-      margin: 0;
-      font-size: 20px;
-    }
-
-    header p {
-      margin: 4px 0 0;
-      color: #c5d4df;
-      font-size: 13px;
-    }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; color: #c5d4df; font-size: 13px; }
 
     main {
       width: min(100% - 24px, 1000px);
@@ -121,10 +109,7 @@
       font-weight: 600;
     }
 
-    input,
-    select,
-    button,
-    textarea {
+    input, select, button {
       width: 100%;
       min-height: 44px;
       border: 1px solid var(--line);
@@ -133,15 +118,9 @@
       font: inherit;
     }
 
-    input,
-    select,
-    textarea {
+    input, select {
       color: var(--ink);
       background: var(--surface);
-    }
-
-    textarea {
-      resize: vertical;
     }
 
     button {
@@ -152,10 +131,7 @@
       font-weight: 700;
     }
 
-    button:disabled {
-      opacity: .6;
-      cursor: wait;
-    }
+    button:disabled { opacity: .6; cursor: wait; }
 
     .resumo {
       display: grid;
@@ -169,10 +145,7 @@
       overflow-wrap: anywhere;
     }
 
-    .legenda {
-      color: var(--muted);
-      font-size: 12px;
-    }
+    .legenda { color: var(--muted); font-size: 12px; }
 
     #mensagem {
       padding: 12px;
@@ -183,14 +156,8 @@
       overflow-wrap: anywhere;
     }
 
-    .grupo {
-      margin-bottom: 18px;
-    }
-
-    .grupo h2 {
-      font-size: 17px;
-      margin: 0 0 10px;
-    }
+    .grupo { margin-bottom: 18px; }
+    .grupo h2 { font-size: 17px; margin: 0 0 10px; }
 
     .tabela-wrap {
       overflow-x: auto;
@@ -205,20 +172,11 @@
       background: var(--surface);
     }
 
-    table.larga {
-      min-width: 780px;
-    }
+    table.larga { min-width: 830px; }
+    table.transferencias { min-width: 1000px; }
+    table.validade-transferencias { min-width: 1100px; }
 
-    table.transferencias {
-      min-width: 950px;
-    }
-
-    table.validade-transferencias {
-      min-width: 1050px;
-    }
-
-    th,
-    td {
+    th, td {
       text-align: left;
       vertical-align: top;
       padding: 10px;
@@ -231,28 +189,12 @@
       font-size: 12px;
     }
 
-    td {
-      overflow-wrap: anywhere;
-    }
+    td { overflow-wrap: anywhere; }
+    tbody tr:last-child td { border-bottom: 0; }
 
-    tbody tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .descricao {
-      font-weight: 700;
-    }
-
-    .ean {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .quantidade {
-      font-weight: 800;
-      white-space: nowrap;
-    }
+    .descricao { font-weight: 700; }
+    .ean { display: block; color: var(--muted); font-size: 12px; }
+    .quantidade { font-weight: 800; white-space: nowrap; }
 
     .selo {
       display: inline-block;
@@ -263,20 +205,9 @@
       white-space: nowrap;
     }
 
-    .selo.vencido {
-      background: var(--err-bg);
-      color: var(--err);
-    }
-
-    .selo.avencer {
-      background: var(--warn-bg);
-      color: var(--warn);
-    }
-
-    .selo.vendavel {
-      background: var(--ok-bg);
-      color: var(--ok);
-    }
+    .selo.vencido { background: var(--err-bg); color: var(--err); }
+    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
+    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
 
     .acoes {
       display: flex;
@@ -297,97 +228,50 @@
       font-weight: 700;
     }
 
-    .vazio {
-      padding: 20px;
-      text-align: center;
-      color: var(--muted);
+    .vazio { padding: 20px; text-align: center; color: var(--muted); }
+    .acoes-lancamento {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      min-width: 150px;
     }
 
-    .acao-sinalizar {
+    .acoes-lancamento button {
+      flex: 0 0 42px;
       width: 42px;
+      min-width: 42px;
       min-height: 38px;
-      padding: 6px;
-      background: #a15c07;
-      font-size: 20px;
-    }
-
-    .modal-fundo {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      background: rgba(0,0,0,.55);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-
-    .modal {
-      width: min(100%, 520px);
-      max-height: 90vh;
-      overflow: auto;
-      background: var(--surface);
-      color: var(--ink);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 20px;
-      box-shadow: 0 12px 40px rgba(0,0,0,.25);
-    }
-
-    .modal h2 {
-      margin: 0 0 6px;
-      font-size: 20px;
-    }
-
-    .modal p {
-      color: var(--muted);
-      margin: 0 0 16px;
-    }
-
-    .modal .campo {
-      margin: 14px 0;
-    }
-
-    .modal .botoes {
-      display: flex;
-      gap: 10px;
-      margin-top: 18px;
-    }
-
-    .modal .secundario {
-      background: var(--line);
-      color: var(--ink);
-    }
-
-    .motivo-opcao {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 9px 0;
-      color: var(--ink);
-    }
-
-    .motivo-opcao input {
-      width: 18px;
-      min-height: 18px;
-    }
-
-    .detalhe-item {
-      padding: 10px;
+      height: 38px;
+      padding: 5px;
       border-radius: 8px;
-      background: var(--bg);
-      margin-bottom: 14px;
-      overflow-wrap: anywhere;
+      font-size: 17px;
+      line-height: 1;
     }
+
+    .acao-editar { background: #1769aa; }
+    .acao-excluir { background: #b3261e; }
+    .acao-sinalizar { background: #a15c07; }
+
+    .acoes-lancamento button:hover { filter: brightness(.92); }
+    .acoes-lancamento button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .modal-fundo { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { width: min(100%, 520px); max-height: 90vh; overflow: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+    .modal h2 { margin: 0 0 6px; font-size: 20px; }
+    .modal p { color: var(--muted); margin: 0 0 16px; }
+    .modal .campo { margin: 14px 0; }
+    .modal .botoes { display: flex; gap: 10px; margin-top: 18px; }
+    .modal .secundario { background: var(--line); color: var(--ink); }
+    .motivo-opcao { display: flex; align-items: center; gap: 9px; padding: 9px 0; color: var(--ink); }
+    .motivo-opcao input { width: 18px; min-height: 18px; }
+    .detalhe-item { padding: 10px; border-radius: 8px; background: var(--bg); margin-bottom: 14px; overflow-wrap: anywhere; }
 
     @media (max-width: 620px) {
-      .filtros {
-        grid-template-columns: 1fr;
-      }
-
-      .resumo {
-        grid-template-columns: 1fr 1fr;
-      }
+      .filtros { grid-template-columns: 1fr; }
+      .resumo { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -405,21 +289,10 @@
 
   <section class="card">
     <div class="modos">
-      <button
-        id="btnModoMes"
-        class="modo"
-        type="button"
-        aria-pressed="true"
-      >
+      <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
         Por mês de lançamento
       </button>
-
-      <button
-        id="btnModoValidade"
-        class="modo"
-        type="button"
-        aria-pressed="false"
-      >
+      <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
         Validade (a vencer)
       </button>
     </div>
@@ -480,12 +353,10 @@
         <div id="totalRegistros" class="numero">0</div>
         <div class="legenda">Lançamentos</div>
       </div>
-
       <div>
         <div id="totalUnidades" class="numero">0</div>
         <div class="legenda">Unidades lançadas</div>
       </div>
-
       <div>
         <div id="totalFuncionarios" class="numero">0</div>
         <div class="legenda">Funcionários</div>
@@ -496,102 +367,54 @@
   <div id="resultado"></div>
 </main>
 
+<div id="modalEdicao" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloEdicao">
+    <h2 id="tituloEdicao">Editar lançamento</h2>
+    <p>Altere os dados do lançamento e salve.</p>
+    <div id="itemEdicao" class="detalhe-item"></div>
+    <form id="formEdicao">
+      <div class="campo"><label for="loteEdicao">Lote</label><input id="loteEdicao" maxlength="100" required></div>
+      <div class="campo"><label for="validadeEdicao">Validade</label><input id="validadeEdicao" type="date" required></div>
+      <div class="campo"><label for="quantidadeEdicao">Quantidade</label><input id="quantidadeEdicao" type="number" min="1" step="1" required></div>
+      <div id="mensagemEdicao" role="status" aria-live="polite"></div>
+      <div class="botoes">
+        <button id="btnSalvarEdicao" type="submit">Salvar alterações</button>
+        <button id="btnCancelarEdicao" class="secundario" type="button">Cancelar</button>
+      </div>
+    </form>
+  </section>
+</div>
+
 <div id="modalSinalizacao" class="modal-fundo" hidden>
-  <section
-    class="modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="tituloSinalizacao"
-  >
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloSinalizacao">
     <h2 id="tituloSinalizacao">Sinalizar lançamento</h2>
     <p>Selecione seu nome e informe o motivo da sinalização.</p>
-
     <div id="itemSinalizacao" class="detalhe-item"></div>
-
     <form id="formSinalizacao">
       <div class="campo">
         <label for="funcionarioSinalizacao">Funcionário</label>
-
         <select id="funcionarioSinalizacao" required>
           <option value="">Selecione seu nome</option>
-          <option>Alice</option>
-          <option>Altino</option>
-          <option>Ana Carolina</option>
-          <option>Anielle</option>
-          <option>Gabriela</option>
-          <option>Gabriele</option>
-          <option>Isabela</option>
-          <option>Livia</option>
-          <option>Paola</option>
-          <option>Rafaela</option>
-          <option>Ramon</option>
-          <option>Rillary</option>
-          <option>Sulaima</option>
-          <option>Thomaz</option>
+          <option>Alice</option><option>Altino</option><option>Ana Carolina</option><option>Anielle</option>
+          <option>Gabriela</option><option>Gabriele</option><option>Isabela</option><option>Livia</option>
+          <option>Paola</option><option>Rafaela</option><option>Ramon</option><option>Rillary</option>
+          <option>Sulaima</option><option>Thomaz</option>
         </select>
       </div>
-
       <div class="campo">
         <label>Motivo da sinalização</label>
-
-        <label class="motivo-opcao">
-          <input
-            type="radio"
-            name="motivoSinalizacao"
-            value="Não Entrou no Queima"
-            required
-          >
-          Não Entrou no Queima
-        </label>
-
-        <label class="motivo-opcao">
-          <input
-            type="radio"
-            name="motivoSinalizacao"
-            value="Muita Quantidade"
-          >
-          Muita Quantidade
-        </label>
-
-        <label class="motivo-opcao">
-          <input
-            type="radio"
-            name="motivoSinalizacao"
-            value="Outras"
-          >
-          Outras
-        </label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Não Entrou no Queima" required> Não Entrou no Queima</label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Muita Quantidade"> Muita Quantidade</label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Outras"> Outras</label>
       </div>
-
       <div class="campo" id="campoOutrasSinalizacao" hidden>
         <label for="outrasSinalizacao">Descreva o motivo</label>
-
-        <textarea
-          id="outrasSinalizacao"
-          rows="3"
-          maxlength="500"
-          placeholder="Digite o motivo da sinalização"
-        ></textarea>
+        <textarea id="outrasSinalizacao" rows="3" maxlength="500" placeholder="Digite o motivo da sinalização"></textarea>
       </div>
-
-      <div
-        id="mensagemSinalizacao"
-        role="status"
-        aria-live="polite"
-      ></div>
-
+      <div id="mensagemSinalizacao" role="status" aria-live="polite"></div>
       <div class="botoes">
-        <button id="btnSalvarSinalizacao" type="submit">
-          Salvar sinalização
-        </button>
-
-        <button
-          id="btnCancelarSinalizacao"
-          class="secundario"
-          type="button"
-        >
-          Cancelar
-        </button>
+        <button id="btnSalvarSinalizacao" type="submit">Salvar sinalização</button>
+        <button id="btnCancelarSinalizacao" class="secundario" type="button">Cancelar</button>
       </div>
     </form>
   </section>
@@ -861,44 +684,150 @@ function consultar() {
 /* =========================
    SINALIZAÇÃO DE LANÇAMENTOS
    ========================= */
-
 let registroParaSinalizar = null;
 
-function criarBotaoSinalizar(registro) {
+let registroParaEditar = null;
+
+function dataParaISO(dataTexto) {
+  const texto = String(dataTexto || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+  return br ? br[3] + "-" + br[2] + "-" + br[1] : "";
+}
+
+function criarCelulaAcoes(registro) {
   const td = document.createElement("td");
-  const botao = document.createElement("button");
+  const grupo = document.createElement("div");
+  grupo.className = "acoes-lancamento";
 
-  botao.type = "button";
-  botao.className = "acao-sinalizar";
-  botao.title = "Sinalizar este lançamento";
-  botao.setAttribute("aria-label", "Sinalizar este lançamento");
-  botao.textContent = "⚑";
+  const editar = document.createElement("button");
+  editar.type = "button";
+  editar.className = "acao-editar";
+  editar.textContent = "✏️";
+  editar.title = "Editar lançamento";
+  editar.setAttribute("aria-label", "Editar lançamento");
+  editar.addEventListener("click", () => abrirEdicao(registro));
 
-  botao.addEventListener("click", () => abrirSinalizacao(registro));
+  const excluir = document.createElement("button");
+  excluir.type = "button";
+  excluir.className = "acao-excluir";
+  excluir.textContent = "🗑️";
+  excluir.title = "Excluir lançamento";
+  excluir.setAttribute("aria-label", "Excluir lançamento");
+  excluir.addEventListener("click", () => excluirRegistro(registro));
 
-  td.appendChild(botao);
+  const sinalizar = document.createElement("button");
+  sinalizar.type = "button";
+  sinalizar.className = "acao-sinalizar";
+  sinalizar.textContent = "⚑";
+  sinalizar.title = "Sinalizar lançamento";
+  sinalizar.setAttribute("aria-label", "Sinalizar lançamento");
+  sinalizar.addEventListener("click", () => abrirSinalizacao(registro));
 
+  grupo.append(editar, excluir, sinalizar);
+  td.appendChild(grupo);
   return td;
+}
+
+function abrirEdicao(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
+    return;
+  }
+  if (registro.especial) {
+    alert("Esta aba agrupa quantidades de vários lançamentos. A edição individual não está disponível.");
+    return;
+  }
+
+  registroParaEditar = registro;
+  $("itemEdicao").textContent = "Produto: " + obterDescricao(registro.codigo) +
+    " | EAN: " + (registro.codigo || "") + " | Funcionário: " + (registro.funcionario || "");
+  $("loteEdicao").value = registro.lote || "";
+  $("validadeEdicao").value = dataParaISO(registro.validadeISO || registro.validade);
+  $("quantidadeEdicao").value = Number(registro.quantidade || 1);
+  $("mensagemEdicao").textContent = "";
+  $("modalEdicao").hidden = false;
+}
+
+function fecharEdicao() {
+  $("modalEdicao").hidden = true;
+  registroParaEditar = null;
+}
+
+$("btnCancelarEdicao").addEventListener("click", fecharEdicao);
+$("modalEdicao").addEventListener("click", evento => {
+  if (evento.target === $("modalEdicao")) fecharEdicao();
+});
+
+$("formEdicao").addEventListener("submit", evento => {
+  evento.preventDefault();
+  if (!registroParaEditar) return;
+
+  const botao = $("btnSalvarEdicao");
+  botao.disabled = true;
+  botao.textContent = "Salvando...";
+
+  chamarApps("editarLancamento", "__editarCb", {
+    chaveUnica: String(registroParaEditar.chaveUnica),
+    lote: $("loteEdicao").value.trim(),
+    validade: $("validadeEdicao").value,
+    quantidade: $("quantidadeEdicao").value
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) throw new Error(resposta && resposta.mensagem || "Não foi possível editar o lançamento.");
+    alert(resposta.mensagem);
+    fecharEdicao();
+    mesCarregado = false;
+    validadeCarregada = false;
+    consultar();
+  }).catch(erro => {
+    $("mensagemEdicao").textContent = erro.message || "Erro ao editar o lançamento.";
+  }).finally(() => {
+    botao.disabled = false;
+    botao.textContent = "Salvar alterações";
+  });
+});
+
+function excluirRegistro(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
+    return;
+  }
+  if (registro.especial) {
+    alert("Esta aba agrupa quantidades de vários lançamentos. A exclusão individual não está disponível.");
+    return;
+  }
+
+  const detalhes = obterDescricao(registro.codigo) +
+    "\nLote: " + (registro.lote || "") +
+    "\nValidade: " + (registro.validade || "") +
+    "\nQuantidade: " + (registro.quantidade || 0);
+
+  if (!confirm("Deseja realmente excluir este lançamento?\n\n" + detalhes)) return;
+
+  chamarApps("excluirLancamento", "__excluirCb", {
+    chaveUnica: String(registro.chaveUnica)
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) throw new Error(resposta && resposta.mensagem || "Não foi possível excluir o lançamento.");
+    alert(resposta.mensagem);
+    mesCarregado = false;
+    validadeCarregada = false;
+    consultar();
+  }).catch(erro => alert(erro.message || "Erro ao excluir o lançamento."));
 }
 
 function abrirSinalizacao(registro) {
   if (!registro || !String(registro.chaveUnica || "").trim()) {
-    alert(
-      "Não foi possível identificar a chave única deste lançamento. " +
-      "Atualize o Code.gs e implante uma nova versão."
-    );
+    alert("Não foi possível identificar a chave única deste lançamento. Atualize o Code.gs e implante uma nova versão.");
     return;
   }
-
   registroParaSinalizar = registro;
-
   $("itemSinalizacao").textContent =
     "Produto: " + obterDescricao(registro.codigo) +
     " | EAN: " + (registro.codigo || "") +
     " | Lote: " + (registro.lote || "") +
     " | Validade: " + (registro.validade || "") +
     " | Funcionário da aba: " + (registro.funcionario || "");
-
+  $("funcionarioSinalizacao").value = "";
   $("formSinalizacao").reset();
   $("campoOutrasSinalizacao").hidden = true;
   $("outrasSinalizacao").required = false;
@@ -911,97 +840,62 @@ function fecharSinalizacao() {
   registroParaSinalizar = null;
 }
 
-document.querySelectorAll('input[name="motivoSinalizacao"]')
-  .forEach(campo => {
-    campo.addEventListener("change", () => {
-      const outras =
-        document.querySelector(
-          'input[name="motivoSinalizacao"]:checked'
-        )?.value === "Outras";
-
-      $("campoOutrasSinalizacao").hidden = !outras;
-      $("outrasSinalizacao").required = outras;
-    });
+document.querySelectorAll('input[name="motivoSinalizacao"]').forEach(campo => {
+  campo.addEventListener("change", () => {
+    const outras = document.querySelector('input[name="motivoSinalizacao"]:checked')?.value === "Outras";
+    $("campoOutrasSinalizacao").hidden = !outras;
+    $("outrasSinalizacao").required = outras;
   });
+});
 
-$("btnCancelarSinalizacao").addEventListener(
-  "click",
-  fecharSinalizacao
-);
-
+$("btnCancelarSinalizacao").addEventListener("click", fecharSinalizacao);
 $("modalSinalizacao").addEventListener("click", evento => {
-  if (evento.target === $("modalSinalizacao")) {
-    fecharSinalizacao();
-  }
+  if (evento.target === $("modalSinalizacao")) fecharSinalizacao();
 });
 
 $("formSinalizacao").addEventListener("submit", evento => {
   evento.preventDefault();
-
   if (!registroParaSinalizar) return;
 
   const funcionario = $("funcionarioSinalizacao").value.trim();
-
-  const selecionado = document.querySelector(
-    'input[name="motivoSinalizacao"]:checked'
-  );
-
+  const selecionado = document.querySelector('input[name="motivoSinalizacao"]:checked');
   if (!funcionario || !selecionado) {
-    $("mensagemSinalizacao").textContent =
-      "Selecione o funcionário e o motivo.";
+    $("mensagemSinalizacao").textContent = "Selecione o funcionário e o motivo.";
     return;
   }
 
   let motivo = selecionado.value;
-
   if (motivo === "Outras") {
     const detalhe = $("outrasSinalizacao").value.trim();
-
     if (!detalhe) {
-      $("mensagemSinalizacao").textContent =
-        "Descreva o motivo em Outras.";
+      $("mensagemSinalizacao").textContent = "Descreva o motivo em Outras.";
       return;
     }
-
     motivo += ": " + detalhe;
   }
 
   const botao = $("btnSalvarSinalizacao");
-
   botao.disabled = true;
   botao.textContent = "Salvando...";
-
-  $("mensagemSinalizacao").textContent =
-    "Registrando sinalização...";
+  $("mensagemSinalizacao").textContent = "Registrando sinalização...";
 
   chamarApps("sinalizarLancamento", "__sinalizacaoCb", {
     chaveUnica: String(registroParaSinalizar.chaveUnica),
     funcionario: funcionario,
     motivo: motivo
-  })
-    .then(resposta => {
-      if (!resposta || !resposta.sucesso) {
-        throw new Error(
-          resposta && resposta.mensagem ||
-          "Não foi possível salvar a sinalização."
-        );
-      }
-
-      $("mensagemSinalizacao").textContent =
-        "Sinalização registrada com sucesso.";
-
-      alert("Sinalização registrada com sucesso na aba Sinalizacao.");
-
-      fecharSinalizacao();
-    })
-    .catch(erro => {
-      $("mensagemSinalizacao").textContent =
-        erro.message || "Erro ao salvar sinalização.";
-    })
-    .finally(() => {
-      botao.disabled = false;
-      botao.textContent = "Salvar sinalização";
-    });
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta && resposta.mensagem || "Não foi possível salvar a sinalização.");
+    }
+    $("mensagemSinalizacao").textContent = "Sinalização registrada com sucesso.";
+    alert("Sinalização registrada com sucesso na aba Sinalizacao.");
+    fecharSinalizacao();
+  }).catch(erro => {
+    $("mensagemSinalizacao").textContent = erro.message || "Erro ao salvar sinalização.";
+  }).finally(() => {
+    botao.disabled = false;
+    botao.textContent = "Salvar sinalização";
+  });
 });
 
 /* =========================
@@ -1020,7 +914,6 @@ function diasAte(iso) {
   );
 
   const agora = new Date();
-
   const hoje = new Date(
     agora.getFullYear(),
     agora.getMonth(),
@@ -1120,8 +1013,7 @@ function atualizarResumo(registros) {
     registros.length.toLocaleString("pt-BR");
 
   $("totalUnidades").textContent = registros.reduce(
-    (total, registro) =>
-      total + (Number(registro.quantidade) || 0),
+    (total, registro) => total + (Number(registro.quantidade) || 0),
     0
   ).toLocaleString("pt-BR");
 
@@ -1149,8 +1041,7 @@ function renderizarMes() {
 
   const registros = todosRegistros.filter(registro =>
     !funcionarioSelecionado ||
-    normalizar(registro.funcionario) ===
-      normalizar(funcionarioSelecionado)
+    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
   );
 
   atualizarResumo(registros);
@@ -1208,9 +1099,7 @@ function renderizarMes() {
 
     const tabela = document.createElement("table");
 
-    if (transferencia) {
-      tabela.classList.add("transferencias");
-    }
+    if (transferencia) tabela.classList.add("transferencias");
 
     const colunas = [
       "Produto / EAN",
@@ -1220,16 +1109,11 @@ function renderizarMes() {
     ];
 
     if (transferencia) {
-      colunas.push(
-        "Loja de Origem",
-        "Romaneio",
-        "Mês de Lançamento"
-      );
+      colunas.push("Loja de Origem", "Romaneio", "Mês de Lançamento");
     } else {
       colunas.push("Data do lançamento");
     }
-
-    colunas.push("Sinalizar");
+    colunas.push("Ações");
 
     tabela.appendChild(criarCabecalho(colunas));
 
@@ -1253,15 +1137,13 @@ function renderizarMes() {
         if (transferencia) {
           tr.appendChild(criarCelula(registro.lojaOrigem || ""));
           tr.appendChild(criarCelula(registro.romaneio || ""));
-
           tr.appendChild(criarCelula(
             registro.mesLancamento || registro.dataLancamento || ""
           ));
         } else {
           tr.appendChild(criarCelula(registro.dataLancamento));
         }
-
-        tr.appendChild(criarBotaoSinalizar(registro));
+        tr.appendChild(criarCelulaAcoes(registro));
 
         tbody.appendChild(tr);
       });
@@ -1281,8 +1163,7 @@ function renderizarValidade() {
   registrosValidade.forEach(registro => {
     if (
       funcionarioSelecionado &&
-      normalizar(registro.funcionario) !==
-        normalizar(funcionarioSelecionado)
+      normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
     ) {
       return;
     }
@@ -1294,9 +1175,7 @@ function renderizarValidade() {
     const secao = obterSecao(registro.codigo);
     const sit = situacao(dias, secao);
 
-    if (filtro === "criticos" && sit.chave === "vendavel") {
-      return;
-    }
+    if (filtro === "criticos" && sit.chave === "vendavel") return;
 
     if (
       filtro !== "criticos" &&
@@ -1351,7 +1230,6 @@ function renderizarValidade() {
   wrap.className = "tabela-wrap";
 
   const tabela = document.createElement("table");
-
   tabela.className = mostrarColunasTransferencia
     ? "validade-transferencias"
     : "larga";
@@ -1368,8 +1246,7 @@ function renderizarValidade() {
   if (mostrarColunasTransferencia) {
     colunas.push("Loja de Origem", "Romaneio");
   }
-
-  colunas.push("Sinalizar");
+  colunas.push("Ações");
 
   tabela.appendChild(criarCabecalho(colunas));
 
@@ -1399,11 +1276,15 @@ function renderizarValidade() {
     tr.appendChild(criarCelula(item.registro.funcionario));
 
     if (mostrarColunasTransferencia) {
-      tr.appendChild(criarCelula(item.registro.lojaOrigem || ""));
-      tr.appendChild(criarCelula(item.registro.romaneio || ""));
-    }
+      tr.appendChild(criarCelula(
+        item.registro.lojaOrigem || ""
+      ));
 
-    tr.appendChild(criarBotaoSinalizar(item.registro));
+      tr.appendChild(criarCelula(
+        item.registro.romaneio || ""
+      ));
+    }
+    tr.appendChild(criarCelulaAcoes(item.registro));
 
     tbody.appendChild(tr);
   });
@@ -1450,16 +1331,8 @@ function definirModo(novoModo) {
   }
 }
 
-$("btnModoMes").addEventListener(
-  "click",
-  () => definirModo("mes")
-);
-
-$("btnModoValidade").addEventListener(
-  "click",
-  () => definirModo("validade")
-);
-
+$("btnModoMes").addEventListener("click", () => definirModo("mes"));
+$("btnModoValidade").addEventListener("click", () => definirModo("validade"));
 $("btnBuscar").addEventListener("click", consultar);
 $("funcionario").addEventListener("change", renderizar);
 $("statusValidade").addEventListener("change", renderizar);
