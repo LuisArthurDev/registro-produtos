@@ -1377,43 +1377,138 @@
         </div>
       </section>
 
+      
       <!-- QUEIMA DE ESTOQUE -->
       <section class="page" id="page-lancamentos">
         <div class="page-heading">
-          <div><h2>Queima de estoque</h2><p>Consulte os registros de produtos destinados à queima de estoque, incluindo lotes, validades e quantidades.</p></div>
-          <button class="button button-primary" data-demo="Novo registro de queima de estoque"><i data-lucide="plus"></i> Novo registro</button>
+          <div>
+            <h2>Queima de estoque</h2>
+            <p>Gerencie os lançamentos, aprove registros e relance itens pendentes de meses anteriores.</p>
+          </div>
+          <button class="button" type="button" onclick="carregarQueima()">
+            <i data-lucide="refresh-cw"></i> Atualizar
+          </button>
         </div>
-
+      
         <div class="mini-stats">
-          <div class="mini-stat"><span>Total de registros</span><strong>1.284</strong></div>
-          <div class="mini-stat"><span>Registros hoje</span><strong>128</strong></div>
-          <div class="mini-stat"><span>Itens sinalizados</span><strong>14</strong></div>
+          <div class="mini-stat">
+            <span>Pendentes do mês</span>
+            <strong id="queimaPendentesTotal">0</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Aprovados</span>
+            <strong id="queimaAprovadosTotal">0</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Relançar</span>
+            <strong id="queimaRelancarTotal">0</strong>
+          </div>
         </div>
-
+      
+        <div id="queimaNotice" class="notice" style="display:none"></div>
+      
         <div class="table-panel">
           <div class="table-toolbar">
-            <div class="panel-title">Registros de queima de estoque</div>
+            <div>
+              <div class="panel-title">Pendentes de aprovação</div>
+              <div class="panel-subtitle">Registros ainda não aprovados no mês atual.</div>
+            </div>
             <div class="toolbar-actions">
-              <div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar registro..."></div>
-              <select class="filter-select table-filter"><option value="">Todas as situações</option><option>Registrado</option><option>Sinalizado</option><option>Pendente</option></select>
-              <button class="button" data-demo="Exportar registros de queima de estoque"><i data-lucide="download"></i> Exportar</button>
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input id="queimaBuscaPendentes" placeholder="Buscar código, lote ou produto...">
+              </div>
             </div>
           </div>
+      
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Produto</th><th>EAN</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Conferente</th><th>Situação</th></tr></thead>
-              <tbody>
-                <tr><td class="cell-primary">Café Tradicional 500g</td><td>7890000000043</td><td>CF1026</td><td>10/03/2027</td><td>24</td><td>Alice</td><td><span class="badge badge-success">Registrado</span></td></tr>
-                <tr><td class="cell-primary">Leite Integral 1L</td><td>7890000000012</td><td>LT1026</td><td>25/10/2026</td><td>36</td><td>Gabriela</td><td><span class="badge badge-warning">Sinalizado</span></td></tr>
-                <tr><td class="cell-primary">Arroz Tipo 1 5kg</td><td>7890000000050</td><td>AR0826</td><td>10/08/2027</td><td>18</td><td>Altino</td><td><span class="badge badge-success">Registrado</span></td></tr>
-                <tr><td class="cell-primary">Biscoito Cream Cracker</td><td>7890000000029</td><td>BC0926</td><td>18/10/2026</td><td>12</td><td>Ana Carolina</td><td><span class="badge badge-danger">Pendente</span></td></tr>
-                <tr><td class="cell-primary">Refrigerante Cola 2L</td><td>7890000000036</td><td>RC1126</td><td>12/11/2026</td><td>36</td><td>Anielle</td><td><span class="badge badge-success">Registrado</span></td></tr>
-              </tbody>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Lote</th>
+                  <th>Validade</th>
+                  <th>Quantidade</th>
+                  <th>Mês de lançamento</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="queimaPendentesTbody"></tbody>
             </table>
           </div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
+          <div class="empty-state" id="queimaPendentesEmpty">
+            Nenhum produto pendente.
+          </div>
+        </div>
+      
+        <div class="table-panel">
+          <div class="table-toolbar">
+            <div>
+              <div class="panel-title">Produtos aprovados</div>
+              <div class="panel-subtitle">Registros cujo campo Aprovado contém exatamente Sim.</div>
+            </div>
+            <div class="toolbar-actions">
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input id="queimaBuscaAprovados" placeholder="Buscar código ou lote...">
+              </div>
+            </div>
+          </div>
+      
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Lote</th>
+                  <th>Validade</th>
+                  <th>Quantidade</th>
+                  <th>Mês de aprovação</th>
+                </tr>
+              </thead>
+              <tbody id="queimaAprovadosTbody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="queimaAprovadosEmpty">
+            Nenhum produto aprovado.
+          </div>
+        </div>
+      
+        <div class="table-panel">
+          <div class="table-toolbar">
+            <div>
+              <div class="panel-title">Relançar produtos</div>
+              <div class="panel-subtitle">Itens de meses anteriores que continuam sem aprovação.</div>
+            </div>
+            <div class="toolbar-actions">
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input id="queimaBuscaRelancar" placeholder="Buscar código ou lote...">
+              </div>
+            </div>
+          </div>
+      
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Lote</th>
+                  <th>Validade</th>
+                  <th>Quantidade</th>
+                  <th>Mês de lançamento</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="queimaRelancarTbody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="queimaRelancarEmpty">
+            Nenhum produto precisa ser relançado.
+          </div>
         </div>
       </section>
+
 
       <!-- MAPA DE VALIDADE -->
       <section class="page" id="page-mapa">
@@ -1626,6 +1721,7 @@
     document.querySelector(".page-subtitle").textContent = names[1];
 
     if(pageName==='transferencias') renderTransferencias();
+    if (pageName === 'lancamentos') carregarQueima();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1714,20 +1810,71 @@
   let mapaDescricoes = {};
   async function carregarDescricoesProdutos() { try { const controlador = new AbortController(); const limite = setTimeout(() => controlador.abort(), 2500); try { const r = await fetch('./produtos_ean.json', {cache:'no-store', signal:controlador.signal}); if (r.ok) mapaDescricoes = await r.json(); } finally { clearTimeout(limite); } } catch (_) { mapaDescricoes = mapaDescricoes || {}; } }
   function descricaoProduto(r) { const p=mapaDescricoes[String(r.codigo || '').trim()]; return r.descricao || r.produto || (p && typeof p==='object' ? p.produto : p) || r.codigo || ''; }
+  
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
-      const callbackMap = { sinalizados: '__sinalizadosCb', atualizarSinalizado: '__atualizarSinalizadoCb', validade: '__validadeCb', historico: '__historicoCb', sinalizacao: '__sinalizacaoCb', editar: '__editarCb', excluir: '__excluirCb', subirVencidos: '__subirVencidosCb', dashboard: '__dashboardPainelCb', vencidos: '__vencidosPainelCb', danificado: '__adicionarDanificadoCb', retirar: '__retirarDeLojaCb' };
+      const callbackMap = {
+        sinalizados: '__sinalizadosCb',
+        atualizarSinalizado: '__atualizarSinalizadoCb',
+        validade: '__validadeCb',
+        historico: '__historicoCb',
+        sinalizacao: '__sinalizacaoCb',
+        editar: '__editarCb',
+        excluir: '__excluirCb',
+        subirVencidos: '__subirVencidosCb',
+        dashboard: '__dashboardPainelCb',
+        vencidos: '__vencidosPainelCb',
+        danificado: '__adicionarDanificadoCb',
+        retirar: '__retirarDeLojaCb',
+  
+        // Ações da Queima
+        consultarQueima: '__consultarQueimaCb',
+        aprovarQueima: '__aprovarQueimaCb',
+        relancarQueima: '__relancarQueimaCb',
+        adicionarQueima: '__adicionarAoQueimaCb'
+      };
+  
       const cbName = callbackMap[callback] || callback;
-      const params = new URLSearchParams({ action, callback: cbName, ...extra });
+      const params = new URLSearchParams({
+        action,
+        callback: cbName,
+        ...extra
+      });
+  
       const script = document.createElement('script');
-      const timeout = setTimeout(() => { cleanup(); reject(new Error('Tempo esgotado ao consultar ' + action)); }, 20000);
-      function cleanup() { clearTimeout(timeout); try { delete window[cbName]; } catch (_) { window[cbName] = undefined; } script.remove(); }
-      window[cbName] = data => { cleanup(); resolve(data); };
-      script.onerror = () => { cleanup(); reject(new Error('Falha ao consultar ' + action)); };
+  
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Tempo esgotado ao consultar ' + action));
+      }, 20000);
+  
+      function cleanup() {
+        clearTimeout(timeout);
+  
+        try {
+          delete window[cbName];
+        } catch (_) {
+          window[cbName] = undefined;
+        }
+  
+        script.remove();
+      }
+  
+      window[cbName] = data => {
+        cleanup();
+        resolve(data);
+      };
+  
+      script.onerror = () => {
+        cleanup();
+        reject(new Error('Falha ao consultar ' + action));
+      };
+  
       script.src = API_URL + '?' + params.toString();
       document.head.appendChild(script);
     });
   }
+
   function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function parseDataBR(s) { if (!s) return null; if (s instanceof Date) return s; const m=String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m) return new Date(+m[3],+m[2]-1,+m[1]); const d=new Date(s); return isNaN(d) ? null : d; }
   function fmtData(s) { const d=parseDataBR(s); return d ? d.toLocaleDateString('pt-BR') : (s || '—'); }
@@ -1760,7 +1907,60 @@
     const names=nomesCategoria.filter(n=>todos.some(r=>String(r.funcionario||'').trim()===n));
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
-    document.getElementById('mapaTbody').innerHTML=rows.filter(r=>!func||r.funcionario===func).map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')" title="Editar lote, validade e quantidade" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
+    
+    document.getElementById('mapaTbody').innerHTML = rows
+      .filter(r => !func || r.funcionario === func)
+      .map(r => {
+        const st = situacaoPainel(r);
+        const badge = st === 'Vencido'
+          ? 'badge-danger'
+          : st === 'A Vencer'
+            ? 'badge-warning'
+            : 'badge-success';
+    
+        return `<tr>
+          <td>${escHtml(r.funcionario)}</td>
+          <td>${escHtml(r.codigo)}</td>
+          <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
+          <td>${escHtml(r.lote)}</td>
+          <td>${escHtml(fmtData(r.validade))}</td>
+          <td>${escHtml(r.quantidade)}</td>
+          <td>${escHtml(fmtData(dataRegistro(r)))}</td>
+          <td><span class="badge ${badge}">${st}</span></td>
+          <td>
+            <button class="button"
+              onclick="editarMapa('${escHtml(r.chaveUnica || '')}','${escHtml(r.lote || '')}','${escHtml(r.validadeISO || '')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')"
+              title="Editar lote, validade e quantidade"
+              aria-label="Editar">
+              <i data-lucide="pencil"></i>
+            </button>
+    
+            <button class="button button-danger"
+              onclick="excluirMapa('${escHtml(r.chaveUnica || '')}')"
+              title="Excluir"
+              aria-label="Excluir">
+              <i data-lucide="trash-2"></i>
+            </button>
+    
+            <button class="button button-primary"
+              onclick="lancarMapaParaQueima('${escHtml(r.chaveUnica || '')}')"
+              title="Lançar para o Queima"
+              aria-label="Lançar para o Queima">
+              <i data-lucide="package-check"></i>
+            </button>
+    
+            ${st === 'Vencido' ? `
+              <button class="button"
+                onclick="moverVencido('${escHtml(r.chaveUnica || '')}')"
+                title="Mover para Vencidos"
+                aria-label="Mover para Vencidos">
+                <i data-lucide="archive"></i>
+              </button>
+            ` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+
     document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
     document.querySelectorAll('.mapa-tab').forEach(b=>{const active=b.dataset.mapaTipo===tipoMapaAtivo;b.classList.toggle('active',active);b.classList.toggle('button-primary',active);b.setAttribute('aria-selected',String(active));});
     renderPainelIcons();
@@ -1797,6 +1997,244 @@
   async function adicionarDanificado(){const codigo=prompt('Código do produto (EAN/código):');if(codigo===null)return;const descricao=prompt('Descrição do produto:');if(descricao===null)return;const lote=prompt('Lote:');if(lote===null)return;const validade=prompt('Validade (DD/MM/AAAA):');if(validade===null)return;const quantidade=prompt('Quantidade:');if(quantidade===null)return;if(!codigo.trim()||!descricao.trim()||!validade.trim()||!quantidade.trim()){alert('Preencha código, descrição, validade e quantidade.');return;}try{const d=await jsonpPainel('adicionarDanificado','danificado',{codigo:codigo.trim(),descricao:descricao.trim(),lote:lote.trim(),validade:validade.trim(),quantidade:quantidade.trim()});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
   async function retirarDanificado(chave){if(!chave)return alert('Não foi possível identificar este registro. Atualize a página.');if(!confirm('Confirmar retirada deste produto da loja? A linha correspondente à Chave Única será excluída da aba Vencidos.'))return;try{const d=await jsonpPainel('retirarDeLoja','retirar',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
   async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
+  
+  let queimaCache = {
+    pendentes: [],
+    aprovados: [],
+    relancar: []
+  };
+  
+  function mostrarAvisoQueima(mensagem, erro = false) {
+    const el = document.getElementById('queimaNotice');
+    el.textContent = mensagem;
+    el.style.display = 'block';
+  
+    el.style.borderColor = erro ? '#fecaca' : '#bfdbfe';
+    el.style.background = erro ? '#fef2f2' : '#eff6ff';
+    el.style.color = erro ? '#b91c1c' : '#1e40af';
+  }
+  
+  function mesAtualQueima() {
+    const agora = new Date();
+    return String(agora.getMonth() + 1).padStart(2, '0')
+      + '/' + agora.getFullYear();
+  }
+  
+  function valorCampoQueima(registro, ...nomes) {
+    for (const nome of nomes) {
+      if (registro[nome] !== undefined && registro[nome] !== null) {
+        return registro[nome];
+      }
+    }
+    return '';
+  }
+  
+  function filtrarQueima(registros, busca) {
+    const q = String(busca || '').trim().toLocaleLowerCase('pt-BR');
+  
+    if (!q) return registros;
+  
+    return registros.filter(r => {
+      const texto = [
+        r.codigo,
+        r.descricao,
+        r.lote,
+        r.validade,
+        r.mesLancamento,
+        r.mesAprovado
+      ].join(' ').toLocaleLowerCase('pt-BR');
+  
+      return texto.includes(q);
+    });
+  }
+  
+  function renderQueima() {
+    const pendentes = filtrarQueima(
+      queimaCache.pendentes,
+      document.getElementById('queimaBuscaPendentes').value
+    );
+  
+    const aprovados = filtrarQueima(
+      queimaCache.aprovados,
+      document.getElementById('queimaBuscaAprovados').value
+    );
+  
+    const relancar = filtrarQueima(
+      queimaCache.relancar,
+      document.getElementById('queimaBuscaRelancar').value
+    );
+  
+    document.getElementById('queimaPendentesTotal').textContent =
+      queimaCache.pendentes.length;
+  
+    document.getElementById('queimaAprovadosTotal').textContent =
+      queimaCache.aprovados.length;
+  
+    document.getElementById('queimaRelancarTotal').textContent =
+      queimaCache.relancar.length;
+  
+    const esc = v => escHtml(v == null ? '' : String(v));
+  
+    document.getElementById('queimaPendentesTbody').innerHTML =
+      pendentes.map(r => `
+        <tr>
+          <td>${esc(r.codigo)}</td>
+          <td>${esc(r.lote)}</td>
+          <td>${esc(fmtData(r.validade))}</td>
+          <td>${esc(r.quantidade)}</td>
+          <td>${esc(r.mesLancamento)}</td>
+          <td>
+            <button class="button button-primary"
+              type="button"
+              onclick="aprovarProdutoQueima(${Number(r.linha)})">
+              <i data-lucide="check"></i> Aprovar
+            </button>
+          </td>
+        </tr>
+      `).join('');
+  
+    document.getElementById('queimaAprovadosTbody').innerHTML =
+      aprovados.map(r => `
+        <tr>
+          <td>${esc(r.codigo)}</td>
+          <td>${esc(r.lote)}</td>
+          <td>${esc(fmtData(r.validade))}</td>
+          <td>${esc(r.quantidade)}</td>
+          <td>${esc(r.mesAprovado)}</td>
+        </tr>
+      `).join('');
+  
+    document.getElementById('queimaRelancarTbody').innerHTML =
+      relancar.map(r => `
+        <tr>
+          <td>${esc(r.codigo)}</td>
+          <td>${esc(r.lote)}</td>
+          <td>${esc(fmtData(r.validade))}</td>
+          <td>${esc(r.quantidade)}</td>
+          <td>${esc(r.mesLancamento)}</td>
+          <td>
+            <button class="button button-primary"
+              type="button"
+              onclick="relancarProdutoQueima(${Number(r.linha)})">
+              <i data-lucide="rotate-cw"></i> Relançar
+            </button>
+          </td>
+        </tr>
+      `).join('');
+  
+    document.getElementById('queimaPendentesEmpty').style.display =
+      pendentes.length ? 'none' : 'block';
+  
+    document.getElementById('queimaAprovadosEmpty').style.display =
+      aprovados.length ? 'none' : 'block';
+  
+    document.getElementById('queimaRelancarEmpty').style.display =
+      relancar.length ? 'none' : 'block';
+  
+    renderPainelIcons();
+  }
+  
+  async function carregarQueima() {
+    mostrarAvisoQueima('Carregando registros da Queima...');
+  
+    try {
+      const dados = await jsonpPainel(
+        'consultarQueima',
+        'consultarQueima'
+      );
+  
+      if (!dados || dados.sucesso !== true) {
+        throw new Error(dados?.mensagem || 'Não foi possível consultar a Queima.');
+      }
+  
+      queimaCache.pendentes = dados.pendentes || [];
+      queimaCache.aprovados = dados.aprovados || [];
+      queimaCache.relancar = dados.relancar || [];
+  
+      renderQueima();
+  
+      const aviso = document.getElementById('queimaNotice');
+      aviso.textContent = 'Queima atualizada com sucesso.';
+      aviso.style.display = 'block';
+      aviso.style.borderColor = '#bbf7d0';
+      aviso.style.background = '#f0fdf4';
+      aviso.style.color = '#166534';
+  
+    } catch (e) {
+      mostrarAvisoQueima(
+        'Erro ao carregar a Queima: ' + e.message,
+        true
+      );
+    }
+  }
+  
+  async function aprovarProdutoQueima(linha) {
+    if (!Number.isInteger(linha) || linha < 2) {
+      alert('Não foi possível identificar a linha do registro.');
+      return;
+    }
+  
+    if (!confirm('Deseja aprovar este produto para a Queima?')) return;
+  
+    try {
+      const dados = await jsonpPainel(
+        'aprovarQueima',
+        'aprovarQueima',
+        { linha: String(linha) }
+      );
+  
+      if (!dados || !dados.sucesso) {
+        throw new Error(dados?.mensagem || 'Não foi possível aprovar.');
+      }
+  
+      mostrarAvisoQueima(dados.mensagem || 'Produto aprovado.');
+      await carregarQueima();
+      await carregarDashboard();
+  
+    } catch (e) {
+      mostrarAvisoQueima('Erro ao aprovar: ' + e.message, true);
+    }
+  }
+  
+  async function relancarProdutoQueima(linha) {
+    if (!Number.isInteger(linha) || linha < 2) {
+      alert('Não foi possível identificar a linha do registro.');
+      return;
+    }
+  
+    if (!confirm(
+      'Relançar este produto no mês atual? O registro anterior será preservado.'
+    )) return;
+  
+    try {
+      const dados = await jsonpPainel(
+        'relancarQueima',
+        'relancarQueima',
+        { linha: String(linha) }
+      );
+  
+      if (!dados || !dados.sucesso) {
+        throw new Error(dados?.mensagem || 'Não foi possível relançar.');
+      }
+  
+      mostrarAvisoQueima(dados.mensagem || 'Produto relançado.');
+      await carregarQueima();
+      await carregarDashboard();
+  
+    } catch (e) {
+      mostrarAvisoQueima('Erro ao relançar: ' + e.message, true);
+    }
+  }
+  
+  document.getElementById('queimaBuscaPendentes')
+    ?.addEventListener('input', renderQueima);
+  
+  document.getElementById('queimaBuscaAprovados')
+    ?.addEventListener('input', renderQueima);
+  
+  document.getElementById('queimaBuscaRelancar')
+    ?.addEventListener('input', renderQueima);
+
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   function atualizarProdutosAtencao(registros){const tbody=document.getElementById('dashboardAttentionTbody');const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const rows=registros.filter(r=>{const p=mapaDescricoes[String(r.codigo||'').trim()]||{};const sec=norm(p.secao||r.secao||'');const dias=diasAte(r.validadeISO||r.validade);return (sec.includes('nutricao')||sec.includes('conveniencia'))&&dias!==null&&dias>=0&&dias<=40;}).sort((a,b)=>diasAte(a.validadeISO||a.validade)-diasAte(b.validadeISO||b.validade));tbody.innerHTML=rows.length?rows.map(r=>`<tr><td><div class="cell-primary">${escHtml(descricaoProduto(r))}</div><div class="cell-secondary">Código: ${escHtml(r.codigo)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td><span class="badge badge-warning">Vence em ${diasAte(r.validadeISO||r.validade)} dias</span></td></tr>`).join(''):'<tr><td colspan="5" class="attention-empty">Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.</td></tr>';}
   async function carregarDashboard() {
@@ -1857,6 +2295,51 @@
   }
   renderPainelIcons();
   atualizarPainel();
+  async function lancarMapaParaQueima(chave) {
+  if (!chave) {
+    alert('Este lançamento não possui Chave Única.');
+    return;
+  }
+
+  const registro = (painelCache.validades || []).find(
+    r => String(r.chaveUnica || '') === String(chave)
+  );
+
+  if (!registro) {
+    alert('Registro não encontrado. Atualize o Mapa de Validade.');
+    return;
+  }
+
+  if (!confirm(
+    'Lançar este produto para a Queima? O registro original será mantido.'
+  )) return;
+
+  try {
+    const dados = await jsonpPainel(
+      'adicionarAoQueima',
+      'adicionarQueima',
+      {
+        chaveUnica: registro.chaveUnica,
+        funcionario: registro.funcionario || '',
+        descricao: descricaoProduto(registro)
+      }
+    );
+
+    if (!dados || !dados.sucesso) {
+      throw new Error(
+        dados?.mensagem || 'Não foi possível lançar o produto.'
+      );
+    }
+
+    alert(dados.mensagem || 'Produto lançado para a Queima.');
+
+    await carregarQueima();
+    await carregarDashboard();
+
+  } catch (e) {
+    alert('Erro ao lançar para a Queima: ' + e.message);
+  }
+}
 </script>
 </body>
 </html>
