@@ -1419,6 +1419,11 @@
       <section class="page" id="page-mapa">
         <div class="page-heading"><div><h2>Mapa de Validade</h2><p>Todos os mapas de validade reunidos em uma única consulta.</p></div><button class="button" id="refreshMapa" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div>
         <div class="notice" id="mapaNotice">Carregando dados reais das abas de lançamento...</div>
+        <div class="mapa-tabs" role="tablist" aria-label="Categoria de mapas" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
+          <button type="button" class="button button-primary mapa-tab active" data-mapa-tipo="funcionarios" role="tab" aria-selected="true">Funcionários</button>
+          <button type="button" class="button mapa-tab" data-mapa-tipo="controlados" role="tab" aria-selected="false">Controlados</button>
+          <button type="button" class="button mapa-tab" data-mapa-tipo="todos" role="tab" aria-selected="false">Todos os mapas</button>
+        </div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="mapaTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="mapaLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="mapaMes">—</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><select class="filter-select" id="mapaFuncionario"><option value="">Todos os funcionários</option></select><input class="filter-select" id="mapaProduto" placeholder="Produto / código"><input class="filter-select" id="mapaLote" placeholder="Lote"><input class="filter-select" id="mapaValidade" type="date" aria-label="Filtrar validade"><select class="filter-select" id="mapaSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
         <div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
@@ -1729,20 +1734,36 @@
   function diasAte(s) { const d=parseDataBR(s); if(!d) return null; const hoje=new Date(); hoje.setHours(0,0,0,0); d.setHours(0,0,0,0); return Math.round((d-hoje)/86400000); }
   function situacaoPainel(r) { const dias=diasAte(r.validadeISO || r.validade); if(dias===null) return 'Sem validade'; if(dias<0) return 'Vencido'; if(dias<=160) return 'A Vencer'; return 'Vendável'; }
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
+  let tipoMapaAtivo = 'funcionarios';
+  const FUNCIONARIOS_MAPA = ['Alice','Altino','Ana Carolina','Anielle','Gabriela','Gabriele','Isabela','Livia','Paola','Rafaela','Ramon','Rillary','Sulaima','Thomaz'];
+  const CONTROLADOS_MAPA = ['Termolabil','Psicotropicos','Antibioticos'];
   function renderMapa() {
     const q=(document.getElementById('mapaProduto').value||'').toLocaleLowerCase('pt-BR').trim();
     const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
     const func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
     const sit=document.getElementById('mapaSituacao').value;
-    const all=painelCache.validades.filter(r=>!['Transferencias','Termolabil','Psicotropicos','Antibioticos'].includes(String(r.funcionario||'')));
-    const rows=all.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||(r.validadeISO||'')===validade) && (!sit||situacaoPainel(r)===sit));
-    document.getElementById('mapaTotal').textContent=all.length;
-    document.getElementById('mapaLotes').textContent=new Set(all.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
-    const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
-    const sel=document.getElementById('mapaFuncionario'); const prior=sel.value; const names=[...new Set(all.map(r=>r.funcionario).filter(Boolean))].sort(); sel.innerHTML='<option value="">Todos os funcionários</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join(''); if(names.includes(prior))sel.value=prior;
-    document.getElementById('mapaTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
+    const todos=(painelCache.validades||[]).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
+    const categoria = r => {
+      const nome=String(r.funcionario||'').trim();
+      if (FUNCIONARIOS_MAPA.includes(nome)) return 'funcionarios';
+      if (CONTROLADOS_MAPA.includes(nome)) return 'controlados';
+      return 'outros';
+    };
+    const base=todos.filter(r=> tipoMapaAtivo==='todos' ? true : categoria(r)===tipoMapaAtivo);
+    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'').slice(0,10)===validade) && (!sit||situacaoPainel(r)===sit));
+    document.getElementById('mapaTotal').textContent=base.length;
+    document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
+    const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
+    const sel=document.getElementById('mapaFuncionario'); const prior=sel.value;
+    const nomesCategoria=tipoMapaAtivo==='funcionarios'?FUNCIONARIOS_MAPA:tipoMapaAtivo==='controlados'?CONTROLADOS_MAPA:[...FUNCIONARIOS_MAPA,...CONTROLADOS_MAPA];
+    const names=nomesCategoria.filter(n=>todos.some(r=>String(r.funcionario||'').trim()===n));
+    sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+    if(names.includes(prior))sel.value=prior;
+    document.getElementById('mapaTbody').innerHTML=rows.filter(r=>!func||r.funcionario===func).map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')" title="Editar lote, validade e quantidade" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
     document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
+    document.querySelectorAll('.mapa-tab').forEach(b=>{const active=b.dataset.mapaTipo===tipoMapaAtivo;b.classList.toggle('active',active);b.classList.toggle('button-primary',active);b.setAttribute('aria-selected',String(active));});
+    renderPainelIcons();
   }
   function renderTransferencias() {
     const all=(painelCache.validades||[]).filter(r=>String(r.funcionario||'')==='Transferencias');
@@ -1809,7 +1830,9 @@
     const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
     await Promise.allSettled(tarefas);
   }
-  ['mapaProduto','mapaLote','mapaValidade','mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
+  ['mapaProduto','mapaLote','mapaValidade'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
+  ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
+  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
   document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
   ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
