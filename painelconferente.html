@@ -2056,7 +2056,51 @@
     document.getElementById('transferenciasEmpty').style.display=rows.length?'none':'block';
     renderPainelIcons();
   }
-  async function carregarMapa() { const n=document.getElementById('mapaNotice'); n.textContent='Carregando dados das abas...'; try { const d=await jsonpPainel('validades','validade'); if(!d.sucesso) throw new Error(d.mensagem||'Consulta não concluída'); painelCache.validades=d.registros||[]; renderMapa(); renderTransferencias(); atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); n.textContent=`Dados atualizados. ${painelCache.validades.length} registros encontrados.`; n.style.display=painelCache.validades.length?'block':'block'; } catch(e) { n.textContent='Não foi possível carregar o Mapa de Validade: '+e.message; } }
+  
+  async function carregarMapa() {
+    const n = document.getElementById('mapaNotice');
+  
+    if (n) {
+      n.textContent = 'Carregando dados das abas...';
+      n.style.display = 'block';
+    }
+  
+    try {
+      const d = await jsonpPainel('validades', 'validade');
+  
+      if (!d || d.sucesso !== true) {
+        throw new Error(
+          (d && d.mensagem) || 'Consulta não concluída.'
+        );
+      }
+  
+      painelCache.validades = Array.isArray(d.registros)
+        ? d.registros
+        : [];
+  
+      renderMapa();
+      renderTransferencias();
+  
+      atualizarResumoValidade(painelCache.validades);
+      atualizarProdutosAtencao(painelCache.validades);
+  
+      if (n) {
+        n.textContent =
+          `Dados atualizados. ${painelCache.validades.length} registros encontrados.`;
+        n.style.display = 'block';
+      }
+  
+    } catch (e) {
+      console.error('Erro ao carregar o Mapa de Validade:', e);
+  
+      if (n) {
+        n.textContent =
+          'Não foi possível carregar o Mapa de Validade: ' + e.message;
+        n.style.display = 'block';
+      }
+    }
+  }
+
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
@@ -2313,8 +2357,70 @@
     ?.addEventListener('input', renderQueima);
 
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
-  function atualizarProdutosAtencao(registros){const tbody=document.getElementById('dashboardAttentionTbody');const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const rows=registros.filter(r=>{const p=mapaDescricoes[String(r.codigo||'').trim()]||{};const sec=norm(p.secao||r.secao||'');const dias=diasAte(r.validadeISO||r.validade);return (sec.includes('nutricao')||sec.includes('conveniencia'))&&dias!==null&&dias>=0&&dias<=40;}).sort((a,b)=>diasAte(a.validadeISO||a.validade)-diasAte(b.validadeISO||b.validade));tbody.innerHTML=rows.length?rows.map(r=>`<tr><td><div class="cell-primary">${escHtml(descricaoProduto(r))}</div><div class="cell-secondary">Código: ${escHtml(r.codigo)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td><span class="badge badge-warning">Vence em ${diasAte(r.validadeISO||r.validade)} dias</span></td></tr>`).join(''):'<tr><td colspan="5" class="attention-empty">Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.</td></tr>';}
   
+  function atualizarProdutosAtencao(registros) {
+    const tbody = document.getElementById('dashboardAttentionTbody');
+  
+    if (!tbody) {
+      console.warn('Tabela Produtos que Exigem Atenção não encontrada.');
+      return;
+    }
+  
+    const norm = s => String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  
+    const dados = Array.isArray(registros) ? registros : [];
+  
+    const rows = dados.filter(r => {
+      const produto = mapaDescricoes[String(r.codigo || '').trim()] || {};
+      const secao = norm(produto.secao || r.secao || '');
+      const dias = diasAte(r.validadeISO || r.validade);
+  
+      return (
+        (secao.includes('nutricao') || secao.includes('conveniencia')) &&
+        dias !== null &&
+        dias >= 0 &&
+        dias <= 40
+      );
+    }).sort((a, b) => {
+      return diasAte(a.validadeISO || a.validade) -
+             diasAte(b.validadeISO || b.validade);
+    });
+  
+    tbody.innerHTML = rows.length
+      ? rows.map(r => {
+          const dias = diasAte(r.validadeISO || r.validade);
+  
+          return `
+            <tr>
+              <td>
+                <div class="cell-primary">${escHtml(descricaoProduto(r))}</div>
+                <div class="cell-secondary">Código: ${escHtml(r.codigo)}</div>
+              </td>
+              <td>${escHtml(r.lote || '—')}</td>
+              <td>${escHtml(fmtData(r.validade))}</td>
+              <td>${escHtml(r.quantidade)}</td>
+              <td>
+                <span class="badge badge-warning">
+                  ${dias === 0 ? 'Vence hoje' : `Vence em ${dias} dias`}
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('')
+      : `
+        <tr>
+          <td colspan="5" class="attention-empty">
+            Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
+          </td>
+        </tr>
+      `;
+  
+    renderPainelIcons();
+  }
+
   async function carregarDashboard() {
     const banner = document.getElementById('dashboardLoading');
   
@@ -2342,7 +2448,7 @@
         dashLancamentos: x.lancamentos,
         dashQueimaTotal: x.queimaTotal,
         dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
-        dashAVencer: `À VENCER - ${x.aVencer ?? 0} dias`,
+        dashAVencer: x.aVencer,
         dashVencidos:
           (Number(x.vencidosRetirados) || 0) +
           (Number(x.vencidosSalao) || 0),
