@@ -1958,12 +1958,42 @@
     document.getElementById('mapaTbody').innerHTML = rows
       .filter(r => !func || r.funcionario === func)
       .map(r => {
-        const st = situacaoPainel(r);
-        const badge = st === 'Vencido'
-          ? 'badge-danger'
-          : st === 'A Vencer'
-            ? 'badge-warning'
-            : 'badge-success';
+        
+      const situacao = situacaoPainel(r);
+      const diasRestantes = (() => {
+        const valor = String(r.validadeISO || '').slice(0, 10);
+        const match = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      
+        if (!match) return null;
+      
+        const validade = Date.UTC(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3])
+        );
+      
+        const hoje = new Date();
+        const hojeUTC = Date.UTC(
+          hoje.getFullYear(),
+          hoje.getMonth(),
+          hoje.getDate()
+        );
+      
+        return Math.round((validade - hojeUTC) / 86400000);
+      })();
+      
+      const st = situacao === 'A Vencer' && diasRestantes !== null
+        ? `À VENCER - ${diasRestantes} dias`
+        : situacao === 'Vencido' && diasRestantes !== null
+          ? `VENCIDO - ${Math.abs(diasRestantes)} dias`
+          : situacao;
+      
+      const badge = situacao === 'Vencido'
+        ? 'badge-danger'
+        : situacao === 'A Vencer'
+          ? 'badge-warning'
+          : 'badge-success';
+
     
         return `<tr>
           <td>${escHtml(r.funcionario)}</td>
@@ -2312,7 +2342,7 @@
         dashLancamentos: x.lancamentos,
         dashQueimaTotal: x.queimaTotal,
         dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
-        dashAVencer: x.aVencer,
+        dashAVencer: `À VENCER - ${x.aVencer ?? 0} dias`,
         dashVencidos:
           (Number(x.vencidosRetirados) || 0) +
           (Number(x.vencidosSalao) || 0),
@@ -2475,6 +2505,48 @@
     alert('Erro ao lançar para a Queima: ' + e.message);
   }
 }
+
+  
+function calcularSituacaoValidade(dataValidade) {
+  if (!dataValidade) return 'Sem validade';
+
+  let validade;
+
+  if (dataValidade instanceof Date) {
+    validade = new Date(dataValidade);
+  } else {
+    const texto = String(dataValidade).trim();
+
+    // Trata datas no formato dd/MM/yyyy.
+    const brasileira = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+    if (brasileira) {
+      validade = new Date(
+        Number(brasileira[3]),
+        Number(brasileira[2]) - 1,
+        Number(brasileira[1])
+      );
+    } else {
+      validade = new Date(texto);
+    }
+  }
+
+  if (isNaN(validade.getTime())) return 'Data inválida';
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  validade.setHours(0, 0, 0, 0);
+
+  const dias = Math.round(
+    (validade.getTime() - hoje.getTime()) / 86400000
+  );
+
+  if (dias < 0) return `Vencido - ${Math.abs(dias)} dias`;
+  if (dias === 0) return 'Vence hoje';
+
+  return `À VENCER - ${dias} dias`;
+}
+
 </script>
 </body>
 </html>
