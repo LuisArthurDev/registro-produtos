@@ -588,15 +588,26 @@
 
     .table-wrap {
       overflow-x: auto;
+      overflow-y: auto;
       width: 100%;
+      max-width: 100%;
+      max-height: 68vh;
+      scrollbar-gutter: stable;
     }
 
     table {
       border-collapse: collapse;
-      width: 100%;
-      min-width: 720px;
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+      table-layout: auto;
       text-align: left;
     }
+
+    th, td { white-space: nowrap; }
+    td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+    .table-panel { max-width: 100%; min-width: 0; }
+    .page { max-width: 100%; min-width: 0; overflow-x: hidden; }
 
     th {
       background: #f8fafc;
@@ -1269,8 +1280,8 @@
             <article class="burn-card">
               <div class="burn-card-title">Geral</div>
               <div class="burn-chart-wrap">
-                <div class="burn-chart burn-chart-general" role="img" aria-label="Geral: 248 produtos lançados e 196 aprovados">
-                  <div class="burn-inner burn-inner-general"><div><strong>196</strong><span>Aprovados</span></div></div>
+                <div class="burn-chart burn-chart-general" id="queimaGeralChart" role="img" aria-label="Indicadores gerais de Queima">
+                  <div class="burn-inner burn-inner-general" id="queimaGeralInner"><div><strong id="queimaGeralAprovadosCentro">—</strong><span>Aprovados</span></div></div>
                 </div>
               </div>
               <div class="burn-total"><strong id="queimaGeralLancados">—</strong><span>produtos lançados no total</span></div>
@@ -1482,7 +1493,7 @@
       <section class="page" id="page-vencidos">
         <div class="page-heading"><div><h2>Produtos Vencidos</h2><p>Separação entre itens retirados do salão e itens vencidos que ainda permanecem nos mapas.</p></div><button class="button" id="refreshVencidos"><i data-lucide="refresh-cw"></i> Atualizar</button></div>
         <div class="mini-stats"><div class="mini-stat"><span>Retirados (aba Vencidos)</span><strong id="vencidosRetiradosTotal">—</strong></div><div class="mini-stat"><span>Vencidos no salão</span><strong id="vencidosSalaoTotal">—</strong></div><div class="mini-stat"><span>Quantidade total vencida</span><strong id="vencidosQuantidadeTotal">—</strong></div></div>
-        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos Retirado</div><div class="panel-subtitle">Registros já movidos para a aba Vencidos</div></div><div class="toolbar-actions"><input class="filter-select" id="retiradosBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Aba de origem</th><th>Data de coleta</th><th>Ação</th></tr></thead><tbody id="retiradosTbody"></tbody></table></div><div class="empty-state" id="retiradosEmpty">Nenhum produto retirado encontrado.</div></div>
+        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos Retirado</div><div class="panel-subtitle">Registros já movidos para a aba Vencidos</div></div><div class="toolbar-actions"><input class="filter-select" id="retiradosBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Aba de origem (inicial)</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Aba de origem</th><th>Data de coleta</th><th>Data de registro / mês de lançamento</th><th>Ação</th></tr></thead><tbody id="retiradosTbody"></tbody></table></div><div class="empty-state" id="retiradosEmpty">Nenhum produto retirado encontrado.</div></div>
         <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos no Salão</div><div class="panel-subtitle">Itens vencidos que continuam nas abas dos mapas</div></div><div class="toolbar-actions"><input class="filter-select" id="salaoBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Ação</th></tr></thead><tbody id="salaoTbody"></tbody></table></div><div class="empty-state" id="salaoEmpty">Nenhum produto vencido no salão.</div></div>
       </section>
 
@@ -1750,7 +1761,7 @@
   function descricaoProduto(r) { const found=mapaDescricoes[String(r.codigo || '').trim()]; return r.descricao || r.produto || (typeof found==='string'?found:(found&&found.produto)) || r.codigo || ''; }
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
-      const callbackMap = { validade: '__validadeCb', historico: '__historicoCb', sinalizacao: '__sinalizacaoCb', editar: '__editarCb', excluir: '__excluirCb', subirVencidos: '__subirVencidosCb', dashboard: '__dashboardPainelCb', vencidos: '__vencidosPainelCb', catalogoProdutos: '__catalogoProdutosCb', adicionarProduto: '__adicionarProdutoCb', retirarDeLoja: '__retirarDeLojaCb' };
+      const callbackMap = { validade: '__validadeCb', historico: '__historicoCb', sinalizacao: '__sinalizacaoCb', editar: '__editarCb', excluir: '__excluirCb', subirVencidos: '__subirVencidosCb', dashboard: '__dashboardPainelCb', vencidos: '__vencidosPainelCb', catalogoProdutos: '__catalogoProdutosCb', adicionarProduto: '__adicionarProdutoCb', retirarDeLoja: '__retirarDeLojaCb', adicionarAoQueima: '__adicionarAoQueimaCb' };
       const cbName = callbackMap[callback] || callback;
       const params = new URLSearchParams({ action, callback: cbName, ...extra });
       const script = document.createElement('script');
@@ -1780,23 +1791,24 @@
     document.getElementById('mapaLotes').textContent=new Set(all.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value; const names=[...new Set(all.map(r=>r.funcionario).filter(Boolean))].sort(); sel.innerHTML='<option value="">Todos os funcionários</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join(''); if(names.includes(prior))sel.value=prior;
-    document.getElementById('mapaTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')">Editar</button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')">Excluir</button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')">Mover para Vencidos</button>`:''}</td></tr>`}).join('');
+    document.getElementById('mapaTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')">Editar</button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')">Excluir</button> <button class="button button-primary" onclick="adicionarAoQueima('${escHtml(r.chaveUnica||'')}','${escHtml(r.funcionario||'')}','${escHtml(descricaoProduto(r))}')">Adicionar ao Queima</button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')">Mover para Vencidos</button>`:''}</td></tr>`}).join('');
     document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
   }
   async function carregarMapa() { const n=document.getElementById('mapaNotice'); n.textContent='Carregando dados das abas...'; try { const d=await jsonpPainel('validades','validade'); if(!d.sucesso) throw new Error(d.mensagem||'Consulta não concluída'); painelCache.validades=d.registros||[]; renderMapa(); n.textContent=`Dados atualizados. ${painelCache.validades.length} registros encontrados.`; n.style.display=painelCache.validades.length?'block':'block'; } catch(e) { n.textContent='Não foi possível carregar o Mapa de Validade: '+e.message; } }
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
+  async function adicionarAoQueima(chave,funcionario,descricao) { if(!chave){alert('Este registro não possui Chave Única e não pode ser adicionado ao Queima.');return;} if(!confirm('Adicionar este item à aba Queima? O registro original será mantido no Mapa de Validade.'))return; try {const d=await jsonpPainel('adicionarAoQueima','adicionarAoQueima',{chaveUnica:chave,funcionario,descricao});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert('Não foi possível adicionar ao Queima: '+e.message);} }
   function renderVencidos(data) {
     const retirados=data.retirados||[]; const salao=data.salao||[]; painelCache.vencidos=data;
     document.getElementById('vencidosRetiradosTotal').textContent=retirados.length; document.getElementById('vencidosSalaoTotal').textContent=salao.length; document.getElementById('vencidosQuantidadeTotal').textContent=[...retirados,...salao].reduce((a,r)=>a+(Number(r.quantidade)||0),0);
     const desc=r=>descricaoProduto(r)||r.codigo||'';
-    document.getElementById('retiradosTbody').innerHTML=retirados.map(r=>`<tr><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(r.abaOrigem||'')}</td><td>${escHtml(fmtData(r.dataColeta))}</td><td><button class="button button-danger" onclick="retirarDeLoja('${escHtml(r.chaveUnica||'')}')">Retirado de Loja</button></td></tr>`).join('');
+    document.getElementById('retiradosTbody').innerHTML=retirados.map(r=>`<tr><td>${escHtml(r.abaOrigemInicial||'')}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(r.descricao||desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(r.abaOrigem||'')}</td><td>${escHtml(fmtData(r.dataColeta))}</td><td>${escHtml(fmtData(r.dataRegistro||r.mesLancamento||''))}</td><td><button class="button button-danger" onclick="retirarDeLoja('${escHtml(r.chaveUnica||'')}')">Retirado de Loja</button></td></tr>`).join('');
     document.getElementById('salaoTbody').innerHTML=salao.map(r=>`<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')">Mover para Vencidos</button></td></tr>`).join('');
     document.getElementById('retiradosEmpty').style.display=retirados.length?'none':'block'; document.getElementById('salaoEmpty').style.display=salao.length?'none':'block';
   }
   async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
-  async function carregarDashboard() { try {const d=await jsonpPainel('dashboardPainel','dashboard');if(!d.sucesso)throw new Error(d.mensagem||'Falha');const x=d.indicadores||{}; for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal}))document.getElementById(id).textContent=v??0; setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes);setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal); document.getElementById('avisoAVencer').textContent=(x.aVencer||0)+' itens precisam ser conferidos e acompanhados.';document.getElementById('avisoVencidos').textContent=((x.vencidosRetirados||0)+(x.vencidosSalao||0))+' itens vencidos registrados no sistema.';document.getElementById('avisoQueima').textContent=(x.queimaAprovadosMes||0)+' de '+(x.queimaMes||0)+' produtos lançados no mês estão aprovados.'; }catch(e){console.error('Dashboard:',e);} }
+  async function carregarDashboard() { try {const d=await jsonpPainel('dashboardPainel','dashboard');if(!d.sucesso)throw new Error(d.mensagem||'Falha');const x=d.indicadores||{}; for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal}))document.getElementById(id).textContent=v??0; setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes);setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal);document.getElementById('queimaGeralAprovadosCentro').textContent=x.queimaAprovadosTotal??0; document.getElementById('avisoAVencer').textContent=(x.aVencer||0)+' itens precisam ser conferidos e acompanhados.';document.getElementById('avisoVencidos').textContent=((x.vencidosRetirados||0)+(x.vencidosSalao||0))+' itens vencidos registrados no sistema.';document.getElementById('avisoQueima').textContent=(x.queimaAprovadosMes||0)+' de '+(x.queimaMes||0)+' produtos lançados no mês estão aprovados.'; }catch(e){console.error('Dashboard:',e);} }
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let catalogoProdutos = [];
   function renderProdutos() {
