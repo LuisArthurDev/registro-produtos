@@ -1854,10 +1854,100 @@
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
   const painelCache = { validades: [], vencidos: [], queima: [] };
+ 
   let mapaDescricoes = {};
-  async function carregarDescricoesProdutos() { try { const controlador = new AbortController(); const limite = setTimeout(() => controlador.abort(), 2500); try { const r = await fetch('./produtos_ean.json', {cache:'no-store', signal:controlador.signal}); if (r.ok) mapaDescricoes = await r.json(); } finally { clearTimeout(limite); } } catch (_) { mapaDescricoes = mapaDescricoes || {}; } }
-  function descricaoProduto(r) { const p=mapaDescricoes[String(r.codigo || '').trim()]; return r.descricao || r.produto || (p && typeof p==='object' ? p.produto : p) || r.codigo || ''; }
   
+  function normalizarCodigo(valor) {
+    return String(valor ?? "").trim();
+  }
+  
+  async function carregarDescricoesProdutos() {
+    try {
+      const resposta = await fetch("./produtos_ean.json", {
+        cache: "no-store"
+      });
+  
+      if (!resposta.ok) {
+        throw new Error(
+          `Não foi possível carregar produtos_ean.json: HTTP ${resposta.status}`
+        );
+      }
+  
+      const dados = await resposta.json();
+  
+      // Aceita JSON no formato { "EAN": {...} }
+      // ou no formato { "produtos": [...] }.
+      mapaDescricoes = {};
+  
+      if (Array.isArray(dados)) {
+        dados.forEach(produto => {
+          const ean = normalizarCodigo(
+            produto.ean ?? produto.EAN ?? produto.codigo
+          );
+  
+          if (ean) mapaDescricoes[ean] = produto;
+        });
+      } else if (Array.isArray(dados.produtos)) {
+        dados.produtos.forEach(produto => {
+          const ean = normalizarCodigo(
+            produto.ean ?? produto.EAN ?? produto.codigo
+          );
+  
+          if (ean) mapaDescricoes[ean] = produto;
+        });
+      } else if (dados && typeof dados === "object") {
+        mapaDescricoes = dados;
+      }
+  
+      console.info(
+        "Catálogo carregado:",
+        Object.keys(mapaDescricoes).length,
+        "produtos"
+      );
+  
+    } catch (erro) {
+      console.error("Erro ao carregar produtos_ean.json:", erro);
+      mapaDescricoes = {};
+    }
+  }
+  
+  function dadosProduto(r) {
+    const codigo = normalizarCodigo(r.codigo);
+    const encontrado = mapaDescricoes[codigo];
+  
+    if (typeof encontrado === "string") {
+      return {
+        descricao: encontrado,
+        secao: ""
+      };
+    }
+  
+    return {
+      descricao:
+        r.descricao ||
+        r.produto ||
+        encontrado?.descricao ||
+        encontrado?.Descrição ||
+        encontrado?.produto ||
+        encontrado?.nome ||
+        r.codigo ||
+        "",
+  
+      secao:
+        r.secao ||
+        r.seção ||
+        encontrado?.secao ||
+        encontrado?.seção ||
+        encontrado?.Secao ||
+        encontrado?.Seção ||
+        ""
+    };
+  }
+  
+  function descricaoProduto(r) {
+    return dadosProduto(r).descricao;
+  }
+
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
       const callbackMap = {
@@ -2358,68 +2448,89 @@
 
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   
-  function atualizarProdutosAtencao(registros) {
-    const tbody = document.getElementById('dashboardAttentionTbody');
-  
-    if (!tbody) {
-      console.warn('Tabela Produtos que Exigem Atenção não encontrada.');
-      return;
-    }
-  
-    const norm = s => String(s || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-  
-    const dados = Array.isArray(registros) ? registros : [];
-  
-    const rows = dados.filter(r => {
-      const produto = mapaDescricoes[String(r.codigo || '').trim()] || {};
-      const secao = norm(produto.secao || r.secao || '');
-      const dias = diasAte(r.validadeISO || r.validade);
-  
-      return (
-        (secao.includes('nutricao') || secao.includes('conveniencia')) &&
-        dias !== null &&
-        dias >= 0 &&
-        dias <= 40
-      );
-    }).sort((a, b) => {
-      return diasAte(a.validadeISO || a.validade) -
-             diasAte(b.validadeISO || b.validade);
-    });
-  
-    tbody.innerHTML = rows.length
-      ? rows.map(r => {
-          const dias = diasAte(r.validadeISO || r.validade);
-  
-          return `
-            <tr>
-              <td>
-                <div class="cell-primary">${escHtml(descricaoProduto(r))}</div>
-                <div class="cell-secondary">Código: ${escHtml(r.codigo)}</div>
-              </td>
-              <td>${escHtml(r.lote || '—')}</td>
-              <td>${escHtml(fmtData(r.validade))}</td>
-              <td>${escHtml(r.quantidade)}</td>
-              <td>
-                <span class="badge badge-warning">
-                  ${dias === 0 ? 'Vence hoje' : `Vence em ${dias} dias`}
-                </span>
-              </td>
-            </tr>
-          `;
-        }).join('')
-      : `
-        <tr>
-          <td colspan="5" class="attention-empty">
-            Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
-          </td>
-        </tr>
-      `;
-  
-    renderPainelIcons();
+
+function atualizarProdutosAtencao(registros) {
+  const tbody = document.getElementById('dashboardAttentionTbody');
+
+  if (!tbody) {
+    console.warn('Tabela Produtos que Exigem Atenção não encontrada.');
+    return;
   }
+
+  const norm = s => String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+  const dados = Array.isArray(registros) ? registros : [];
+
+  const rows = dados.filter(r => {
+    const codigo = String(r.codigo || '').trim();
+    const encontrado = mapaDescricoes[codigo];
+
+    // Aceita diferentes nomes de campos no JSON.
+    const produto = typeof encontrado === 'string'
+      ? { descricao: encontrado }
+      : (encontrado || {});
+
+    const secao = norm(
+      produto.secao ||
+      produto.Seção ||
+      produto.Seção ||
+      produto.seção ||
+      produto.Secao ||
+      produto.departamento ||
+      r.secao ||
+      r.seção ||
+      ''
+    );
+
+    const dias = diasAte(r.validadeISO || r.validade);
+
+    return (
+      (secao.includes('nutricao') || secao.includes('conveniencia')) &&
+      dias !== null &&
+      dias >= 0 &&
+      dias <= 40
+    );
+  }).sort((a, b) => {
+    return diasAte(a.validadeISO || a.validade) -
+           diasAte(b.validadeISO || b.validade);
+  });
+
+  tbody.innerHTML = rows.length
+    ? rows.map(r => {
+        const dias = diasAte(r.validadeISO || r.validade);
+
+        return `
+          <tr>
+            <td>
+              <div class="cell-primary">${escHtml(descricaoProduto(r))}</div>
+              <div class="cell-secondary">Código: ${escHtml(r.codigo)}</div>
+            </td>
+            <td>${escHtml(r.lote || '—')}</td>
+            <td>${escHtml(fmtData(r.validade))}</td>
+            <td>${escHtml(r.quantidade)}</td>
+            <td>
+              <span class="badge badge-warning">
+                ${dias === 0 ? 'Vence hoje' : `Vence em ${dias} dias`}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('')
+    : `
+      <tr>
+        <td colspan="5" class="attention-empty">
+          Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
+        </td>
+      </tr>
+    `;
+
+  renderPainelIcons();
+}
+
 
   async function carregarDashboard() {
     const banner = document.getElementById('dashboardLoading');
