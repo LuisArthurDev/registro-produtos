@@ -1618,12 +1618,14 @@
         <div class="table-panel">
           <div class="table-toolbar">
             <div>
-              <div class="panel-title">Elegíveis a Tentativa de Venda / Prevenção</div>
+              <div class="panel-title">
+                Elegíveis a Tentativa de Venda / Prevenção
+              </div>
               <div class="panel-subtitle">
                 Produtos com validade entre 3 e 9 meses a partir da data atual
               </div>
             </div>
-        
+          
             <div class="toolbar-actions">
               <div class="search-box">
                 <i data-lucide="search"></i>
@@ -1632,12 +1634,43 @@
                   placeholder="Buscar produto, código ou lote..."
                 >
               </div>
+          
               <button class="button" id="cvAtualizarElegiveis">
-                <i data-lucide="refresh-cw"></i> Atualizar
+                <i data-lucide="refresh-cw"></i>
+                Atualizar
+              </button>
+          
+              <button class="button" id="cvExportarElegiveis">
+                <i data-lucide="download"></i>
+                Exportar CSV
               </button>
             </div>
           </div>
-        
+          <div class="pagination" id="cvElegiveisPaginacao">
+            <span id="cvElegiveisInfo">Mostrando 0 de 0 itens</span>
+          
+            <div class="pagination-actions">
+              <button
+                class="button"
+                id="cvElegiveisAnterior"
+                type="button"
+                disabled
+              >
+                Anterior
+              </button>
+          
+              <span id="cvElegiveisPagina">Página 1 de 1</span>
+          
+              <button
+                class="button"
+                id="cvElegiveisProxima"
+                type="button"
+                disabled
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -2127,66 +2160,105 @@
            data <= adicionarMeses(hoje, 9);
   }
   
-  function renderControleValidade() {
-    const registros = painelCache.validades || [];
-  
-    const dentro = registros.filter(r => {
-      const dias = diasAte(r.validadeISO || r.validade);
-      return dias !== null && dias > 7;
-    });
-  
-    const vencem7Dias = registros.filter(r => {
-      const dias = diasAte(r.validadeISO || r.validade);
-      return dias !== null && dias >= 0 && dias <= 7;
-    });
-  
-    const vencidos = registros.filter(r => {
-      const dias = diasAte(r.validadeISO || r.validade);
-      return dias !== null && dias < 0;
-    });
-  
-    const elegiveis = registros.filter(estaEntre3e9Meses);
-  
-    document.getElementById("cvDentroValidade").textContent = dentro.length;
-    document.getElementById("cvVencem7Dias").textContent = vencem7Dias.length;
-    document.getElementById("cvVencidos").textContent = vencidos.length;
-    document.getElementById("cvElegiveis").textContent = elegiveis.length;
-  
-    const busca = (
-      document.getElementById("cvElegiveisBusca")?.value || ""
-    ).toLocaleLowerCase("pt-BR").trim();
-  
-    const filtrados = elegiveis.filter(r => {
-      const texto = [
-        r.codigo,
-        descricaoProduto(r),
-        r.lote,
-        r.funcionario
-      ].join(" ").toLocaleLowerCase("pt-BR");
-  
-      return texto.includes(busca);
-    });
-  
-    document.getElementById("cvElegiveisTbody").innerHTML =
-      filtrados.map(r => {
-        const dias = diasAte(r.validadeISO || r.validade);
-  
-        return `
-          <tr>
-            <td>${escHtml(r.codigo || "")}</td>
-            <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
-            <td>${escHtml(r.lote || "")}</td>
-            <td>${escHtml(fmtData(r.validadeISO || r.validade))}</td>
-            <td>${dias}</td>
-            <td>${escHtml(r.quantidade ?? "")}</td>
-            <td>${escHtml(r.funcionario || "")}</td>
-          </tr>
-        `;
-      }).join("");
-  
-    document.getElementById("cvElegiveisEmpty").style.display =
-      filtrados.length ? "none" : "block";
-  }
+  let cvElegiveisPaginaAtual = 1;
+const CV_ELEGIVEIS_POR_PAGINA = 25;
+
+function renderControleValidade() {
+  const registros = painelCache.validades || [];
+
+  const dentro = registros.filter(r => {
+    const dias = diasAte(r.validadeISO || r.validade);
+    return dias !== null && dias > 7;
+  });
+
+  const vencem7Dias = registros.filter(r => {
+    const dias = diasAte(r.validadeISO || r.validade);
+    return dias !== null && dias >= 0 && dias <= 7;
+  });
+
+  const vencidos = registros.filter(r => {
+    const dias = diasAte(r.validadeISO || r.validade);
+    return dias !== null && dias < 0;
+  });
+
+  const elegiveis = registros.filter(estaEntre3e9Meses);
+
+  document.getElementById("cvDentroValidade").textContent = dentro.length;
+  document.getElementById("cvVencem7Dias").textContent = vencem7Dias.length;
+  document.getElementById("cvVencidos").textContent = vencidos.length;
+  document.getElementById("cvElegiveis").textContent = elegiveis.length;
+
+  const busca = (
+    document.getElementById("cvElegiveisBusca")?.value || ""
+  ).toLocaleLowerCase("pt-BR").trim();
+
+  const filtrados = elegiveis.filter(r => {
+    const texto = [
+      r.codigo,
+      descricaoProduto(r),
+      r.lote,
+      r.funcionario
+    ].join(" ").toLocaleLowerCase("pt-BR");
+
+    return texto.includes(busca);
+  });
+
+  const total = filtrados.length;
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(total / CV_ELEGIVEIS_POR_PAGINA)
+  );
+
+  // Mantém a página atual dentro do intervalo válido.
+  cvElegiveisPaginaAtual = Math.min(
+    Math.max(1, cvElegiveisPaginaAtual),
+    totalPaginas
+  );
+
+  const inicio = (cvElegiveisPaginaAtual - 1) * CV_ELEGIVEIS_POR_PAGINA;
+  const pagina = filtrados.slice(
+    inicio,
+    inicio + CV_ELEGIVEIS_POR_PAGINA
+  );
+
+  const tbody = document.getElementById("cvElegiveisTbody");
+
+  tbody.innerHTML = pagina.map(r => {
+    const dias = diasAte(r.validadeISO || r.validade);
+
+    return `
+      <tr>
+        <td>${escHtml(r.codigo || "")}</td>
+        <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
+        <td>${escHtml(r.lote || "")}</td>
+        <td>${escHtml(fmtData(r.validadeISO || r.validade))}</td>
+        <td>${dias}</td>
+        <td>${escHtml(r.quantidade ?? "")}</td>
+        <td>${escHtml(r.funcionario || "")}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const vazio = document.getElementById("cvElegiveisEmpty");
+  vazio.style.display = total ? "none" : "block";
+
+  document.getElementById("cvElegiveisInfo").textContent =
+    total === 0
+      ? "Mostrando 0 de 0 itens"
+      : `Mostrando ${inicio + 1}–${Math.min(
+          inicio + pagina.length,
+          total
+        )} de ${total} itens`;
+
+  document.getElementById("cvElegiveisPagina").textContent =
+    `Página ${cvElegiveisPaginaAtual} de ${totalPaginas}`;
+
+  document.getElementById("cvElegiveisAnterior").disabled =
+    cvElegiveisPaginaAtual <= 1;
+
+  document.getElementById("cvElegiveisProxima").disabled =
+    cvElegiveisPaginaAtual >= totalPaginas;
+}
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
   let tipoMapaAtivo = 'funcionarios';
   const FUNCIONARIOS_MAPA = ['Alice','Altino','Ana Carolina','Anielle','Gabriela','Gabriele','Isabela','Livia','Paola','Rafaela','Ramon','Rillary','Sulaima','Thomaz'];
@@ -2947,6 +3019,105 @@ function calcularSituacaoValidade(dataValidade) {
 document.getElementById("cvAtualizarElegiveis")
   ?.addEventListener("click", carregarMapa);
 
+function exportarElegiveisCSV() {
+  const registros = painelCache.validades || [];
+
+  const busca = (
+    document.getElementById("cvElegiveisBusca")?.value || ""
+  ).toLocaleLowerCase("pt-BR").trim();
+
+  const elegiveis = registros
+    .filter(estaEntre3e9Meses)
+    .filter(r => {
+      const texto = [
+        r.codigo,
+        descricaoProduto(r),
+        r.lote,
+        r.funcionario
+      ].join(" ").toLocaleLowerCase("pt-BR");
+
+      return texto.includes(busca);
+    });
+
+  if (elegiveis.length === 0) {
+    alert("Não há produtos elegíveis para exportar.");
+    return;
+  }
+
+  const colunas = [
+    "Código",
+    "Descrição",
+    "Lote",
+    "Validade",
+    "Dias restantes",
+    "Quantidade",
+    "Funcionário / Aba"
+  ];
+
+  const linhas = elegiveis.map(r => [
+    r.codigo || "",
+    descricaoProduto(r),
+    r.lote || "",
+    fmtData(r.validadeISO || r.validade),
+    diasAte(r.validadeISO || r.validade),
+    r.quantidade ?? "",
+    r.funcionario || ""
+  ]);
+
+  // Escapa aspas e separa as colunas com ponto e vírgula,
+  // facilitando a abertura no Excel em português.
+  const csv = [colunas, ...linhas]
+    .map(linha =>
+      linha.map(valor =>
+        `"${String(valor ?? "").replace(/"/g, '""')}"`
+      ).join(";")
+    )
+    .join("\r\n");
+
+  // BOM UTF-8 para preservar acentos no Excel.
+  const blob = new Blob(
+    ["\uFEFF" + csv],
+    { type: "text/csv;charset=utf-8;" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "elegiveis_tentativa_venda.csv";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+  document.getElementById("cvElegiveisBusca")
+  ?.addEventListener("input", () => {
+    cvElegiveisPaginaAtual = 1;
+    renderControleValidade();
+  });
+
+document.getElementById("cvElegiveisAnterior")
+  ?.addEventListener("click", () => {
+    if (cvElegiveisPaginaAtual > 1) {
+      cvElegiveisPaginaAtual--;
+      renderControleValidade();
+    }
+  });
+
+document.getElementById("cvElegiveisProxima")
+  ?.addEventListener("click", () => {
+    cvElegiveisPaginaAtual++;
+    renderControleValidade();
+  });
+
+document.getElementById("cvAtualizarElegiveis")
+  ?.addEventListener("click", carregarMapa);
+
+document.getElementById("cvExportarElegiveis")
+  ?.addEventListener("click", exportarElegiveisCSV);
 </script>
 </body>
 </html>
