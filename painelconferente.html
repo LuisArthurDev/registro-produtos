@@ -202,12 +202,17 @@
     body.sidebar-collapsed .brand > div:last-child,
     body.sidebar-collapsed .nav-label,
     body.sidebar-collapsed .nav-item { font-size: 0; }
+    body.sidebar-collapsed .brand { justify-content:center; padding:0; gap:0; }
+    body.sidebar-collapsed .brand-icon { width:42px; height:42px; flex:0 0 42px; }
     body.sidebar-collapsed .nav-item { justify-content: center; padding: 13px 8px; gap: 0; }
     body.sidebar-collapsed .nav-item svg { width: 20px; height: 20px; }
     body.sidebar-collapsed .profile > div:last-child { display: none; }
     body.sidebar-collapsed .sidebar-bottom { padding: 12px; }
     body.sidebar-collapsed .profile { justify-content: center; }
-    .sidebar-collapse { margin: 8px; border: 1px solid #344258; color: #d6deeb; background: transparent; border-radius: 8px; padding: 9px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+    .sidebar-collapse { margin: 10px 12px 8px; border: 1px solid #344258; color: #d6deeb; background: linear-gradient(135deg,#202d42,#172235); border-radius: 12px; min-height:42px; padding: 9px 12px; display: flex; gap: 10px; align-items: center; justify-content: flex-start; box-shadow:0 4px 12px #0002; transition:background .2s,transform .2s,border-color .2s; font-size:12px; font-weight:650; }
+    .sidebar-collapse:hover { background:#263b5b; border-color:#60a5fa; transform:translateY(-1px); }
+    .sidebar-collapse svg { width:18px;height:18px;flex-shrink:0; }
+    body.sidebar-collapsed .sidebar-collapse { margin:10px 12px 8px; padding:10px 0; justify-content:center; }
     body.sidebar-collapsed .sidebar-collapse span { display: none; }
     .loading-banner { display:flex; align-items:center; gap:10px; padding:12px 15px; margin:0 0 16px; border:1px solid #cfe0fb; background:#eff6ff; color:#1d4ed8; border-radius:10px; font-size:13px; }
     .loading-spinner { width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite; }
@@ -1643,7 +1648,15 @@
   });
 
   document.getElementById("menuToggle").addEventListener("click", () => { document.getElementById("sidebar").classList.toggle("open"); });
-  document.getElementById("sidebarCollapse")?.addEventListener("click",()=>{document.body.classList.toggle("sidebar-collapsed"); const b=document.getElementById("sidebarCollapse"); b.title=document.body.classList.contains("sidebar-collapsed")?"Expandir menu":"Recolher menu"; });
+  document.getElementById("sidebarCollapse")?.addEventListener("click",()=>{
+    document.body.classList.toggle("sidebar-collapsed");
+    const collapsed=document.body.classList.contains("sidebar-collapsed");
+    const b=document.getElementById("sidebarCollapse");
+    b.title=collapsed?"Expandir menu":"Recolher menu";
+    b.setAttribute("aria-label",b.title);
+    b.innerHTML=`<i data-lucide="${collapsed?'panel-left-open':'panel-left-close'}"></i><span>${collapsed?'Expandir menu':'Recolher menu'}</span>`;
+    if(window.lucide) lucide.createIcons(); else b.querySelector('i').textContent=collapsed?'»':'«';
+  });
 
   document.getElementById("refreshButton").addEventListener("click", () => {
     const button = document.getElementById("refreshButton");
@@ -1697,6 +1710,12 @@
     filter?.addEventListener("change", applyFilters);
   });
 
+
+  // Fallback local: os ícones continuam visíveis mesmo se a CDN Lucide não carregar.
+  if (!window.lucide || typeof window.lucide.createIcons !== 'function') {
+    const glyphs = { eye:'◉', pencil:'✎', 'trash-2':'⌫', archive:'▣', check:'✓', 'refresh-cw':'↻', 'panel-left-close':'⇤', 'panel-left-open':'⇥', 'scan-barcode':'▦', 'layout-dashboard':'▥', 'clipboard-list':'☷', 'check-circle':'✓', x:'×', 'circle-check':'✓', search:'⌕', 'circle-x':'×' };
+    window.lucide = { createIcons: function(){ document.querySelectorAll('i[data-lucide]').forEach(function(el){ if(el.querySelector('svg')) return; el.textContent = glyphs[el.getAttribute('data-lucide')] || '•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; }); } };
+  }
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
   const painelCache = { validades: [], vencidos: [], queima: [] };
@@ -1758,7 +1777,22 @@
   async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   function atualizarProdutosAtencao(registros){const tbody=document.getElementById('dashboardAttentionTbody');const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const rows=registros.filter(r=>{const p=mapaDescricoes[String(r.codigo||'').trim()]||{};const sec=norm(p.secao||r.secao||'');const dias=diasAte(r.validadeISO||r.validade);return (sec.includes('nutricao')||sec.includes('conveniencia'))&&dias!==null&&dias>=0&&dias<=40;}).sort((a,b)=>diasAte(a.validadeISO||a.validade)-diasAte(b.validadeISO||b.validade));tbody.innerHTML=rows.length?rows.map(r=>`<tr><td><div class="cell-primary">${escHtml(descricaoProduto(r))}</div><div class="cell-secondary">Código: ${escHtml(r.codigo)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td><span class="badge badge-warning">Vence em ${diasAte(r.validadeISO||r.validade)} dias</span></td></tr>`).join(''):'<tr><td colspan="5" class="attention-empty">Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.</td></tr>';}
-  async function carregarDashboard() { try {const d=await jsonpPainel('dashboardPainel','dashboard');if(!d.sucesso)throw new Error(d.mensagem||'Falha');const x=d.indicadores||{};for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal}))document.getElementById(id).textContent=v??0;setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes);setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal);atualizarResumoValidade(painelCache.validades);atualizarProdutosAtencao(painelCache.validades);document.getElementById('dashboardLoading').style.display='none';}catch(e){console.error('Dashboard:',e);document.getElementById('dashboardLoading').innerHTML='<span>Não foi possível carregar os indicadores. Use Atualizar para tentar novamente.</span>';}}
+  async function carregarDashboard() {
+    const banner=document.getElementById('dashboardLoading');
+    try {
+      const d=await jsonpPainel('dashboardPainel','dashboard');
+      if(!d || d.sucesso!==true) throw new Error((d&&d.mensagem)||'O servidor não confirmou a consulta dos indicadores.');
+      const x=d.indicadores||{};
+      for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal})) { const el=document.getElementById(id); if(el) el.textContent=v??0; }
+      try { setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes); setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal); } catch(chartError) { console.warn('Não foi possível atualizar os gráficos do Dashboard:',chartError); }
+      atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]);
+      banner.style.display='none'; banner.innerHTML='<span class="loading-spinner"></span><span>Carregando indicadores...</span>';
+    } catch(e) {
+      console.error('Dashboard:',e);
+      banner.style.display='flex';
+      banner.innerHTML='<span>Indicadores temporariamente indisponíveis. Os demais dados podem ter sido carregados. Clique em Atualizar para tentar novamente.</span>';
+    }
+  }
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let sinalizadosCache=[]; let sinalizadoAtual=null;
   function carregarSinalizados(){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados').then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
@@ -1783,7 +1817,11 @@
       year: "numeric"
     });
 
-  lucide.createIcons();
+  if(window.lucide && typeof lucide.createIcons==='function') { lucide.createIcons(); }
+  else {
+    const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','x':'×'};
+    document.querySelectorAll('[data-lucide]').forEach(el=>{el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•';el.style.fontStyle='normal';el.style.fontSize='18px';});
+  }
   atualizarPainel();
 </script>
 </body>
