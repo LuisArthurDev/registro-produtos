@@ -113,7 +113,7 @@
 
     
     .navigation {
-      overflow-y: hidden;
+      overflow-y: auto;
       overflow-x: hidden;
       padding: 0 8px 12px;
       flex: 1;
@@ -774,6 +774,206 @@
       padding: 10px 0 0;
     }
 
+
+    .burn-section {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 22px;
+      overflow: hidden;
+    }
+
+    .burn-header {
+      padding: 19px 21px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .burn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      padding: 20px;
+    }
+
+    .burn-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .burn-card-title {
+      font-size: 13px;
+      font-weight: 750;
+      align-self: flex-start;
+    }
+
+    .burn-chart-wrap {
+      display: grid;
+      place-items: center;
+      padding: 20px 0 15px;
+    }
+
+    .burn-chart {
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: conic-gradient(#facc15 0 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 0 0 1px #eab30822;
+    }
+
+    .burn-chart-general {
+      background: conic-gradient(#facc15 0 100%);
+    }
+
+    .burn-inner {
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 75%, #dcfce7 75% 100%);
+      display: grid;
+      place-items: center;
+      border: 7px solid #fff;
+      box-shadow: 0 0 0 1px #e2e8f0;
+    }
+
+    .burn-inner-general {
+      background: radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 79%, #dcfce7 79% 100%);
+    }
+
+    .burn-inner > div {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .burn-inner strong {
+      font-size: 28px;
+      color: #15803d;
+      line-height: 1;
+    }
+
+    .burn-inner span {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .burn-total {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 14px;
+    }
+
+    .burn-total strong {
+      font-size: 22px;
+      color: #ca8a04;
+    }
+
+    .burn-total span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .burn-legend {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      color: #64748b;
+      font-size: 10px;
+    }
+
+    .burn-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .legend-dot.yellow { background: #facc15; }
+    .legend-dot.green-dot { background: #22c55e; }
+
+    .system-notices {
+      margin-bottom: 22px;
+    }
+
+    .notice-header-icon {
+      width: 19px;
+      height: 19px;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    .notice-list {
+      padding: 8px 20px 15px;
+    }
+
+    .system-notice {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid #f0f2f6;
+    }
+
+    .system-notice:last-child {
+      border-bottom: 0;
+    }
+
+    .notice-icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      flex-shrink: 0;
+    }
+
+    .notice-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .system-notice strong {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+
+    .system-notice p {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .system-notice > .badge {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .notice-orange .notice-icon { background: #fff3df; color: #c16a05; }
+    .notice-red .notice-icon { background: #ffebeb; color: #dc2626; }
+    .notice-blue .notice-icon { background: #eaf2ff; color: #2563eb; }
+
     @media (max-width: 1200px) {
       .stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -920,7 +1120,7 @@
       </button>
 
       <button class="nav-item" data-page="lancamentos">
-        <i data-lucide="clipboard-list"></i> Lançamentos
+        <i data-lucide="clipboard-list"></i> Queima
       </button>
 
       <button class="nav-item" data-page="mapa">
@@ -1012,25 +1212,25 @@
         <div class="stats">
           <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Lançamentos hoje</span>
+              <span class="stat-label">Lançamentos</span>
               <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
             </div>
-            <div class="stat-value">128</div>
-            <div class="stat-footer"><strong>+12%</strong> em relação ao período anterior</div>
+            <div class="stat-value">1.284</div>
+            <div class="stat-footer">Total de lançamentos registrados</div>
           </div>
 
           <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Produtos cadastrados</span>
-              <div class="stat-icon green"><i data-lucide="package"></i></div>
+              <span class="stat-label">Produtos Queima</span>
+              <div class="stat-icon green"><i data-lucide="flame"></i></div>
             </div>
-            <div class="stat-value">1.248</div>
-            <div class="stat-footer">Produtos no cadastro demonstrativo</div>
+            <div class="stat-value">248</div>
+            <div class="stat-footer"><strong>32 neste mês</strong> · total geral de produtos</div>
           </div>
 
           <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Próximos do vencimento</span>
+              <span class="stat-label">Próximos do Vencimento</span>
               <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
             </div>
             <div class="stat-value">23</div>
@@ -1039,11 +1239,70 @@
 
           <div class="stat-card">
             <div class="stat-top">
-              <span class="stat-label">Produtos vencidos</span>
+              <span class="stat-label">Vencidos</span>
               <div class="stat-icon red"><i data-lucide="package-x"></i></div>
             </div>
             <div class="stat-value">7</div>
             <div class="stat-footer">Itens pendentes de verificação</div>
+          </div>
+        </div>
+
+        <div class="burn-section">
+          <div class="burn-header">
+            <div>
+              <div class="panel-title">Conferência de Queima</div>
+              <div class="panel-subtitle">Produtos lançados e aprovados — dados demonstrativos</div>
+            </div>
+            <span class="badge badge-warning">Acompanhamento</span>
+          </div>
+          <div class="burn-grid">
+            <article class="burn-card">
+              <div class="burn-card-title">Mês atual</div>
+              <div class="burn-chart-wrap">
+                <div class="burn-chart" role="img" aria-label="Mês atual: 32 produtos lançados e 24 aprovados">
+                  <div class="burn-inner"><div><strong>24</strong><span>Aprovados</span></div></div>
+                </div>
+              </div>
+              <div class="burn-total"><strong>32</strong><span>produtos lançados no mês</span></div>
+              <div class="burn-legend"><span><i class="legend-dot yellow"></i> Lançados</span><span><i class="legend-dot green-dot"></i> Aprovados</span></div>
+            </article>
+            <article class="burn-card">
+              <div class="burn-card-title">Geral</div>
+              <div class="burn-chart-wrap">
+                <div class="burn-chart burn-chart-general" role="img" aria-label="Geral: 248 produtos lançados e 196 aprovados">
+                  <div class="burn-inner burn-inner-general"><div><strong>196</strong><span>Aprovados</span></div></div>
+                </div>
+              </div>
+              <div class="burn-total"><strong>248</strong><span>produtos lançados no total</span></div>
+              <div class="burn-legend"><span><i class="legend-dot yellow"></i> Lançados</span><span><i class="legend-dot green-dot"></i> Aprovados</span></div>
+            </article>
+          </div>
+        </div>
+
+        <div class="panel system-notices">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Avisos do Sistema</div>
+              <div class="panel-subtitle">Alertas importantes para acompanhamento</div>
+            </div>
+            <i data-lucide="bell-ring" class="notice-header-icon"></i>
+          </div>
+          <div class="notice-list">
+            <div class="system-notice notice-orange">
+              <span class="notice-icon"><i data-lucide="calendar-clock"></i></span>
+              <div><strong>Produtos próximos do vencimento</strong><p>23 itens precisam ser conferidos e acompanhados.</p></div>
+              <span class="badge badge-warning">Atenção</span>
+            </div>
+            <div class="system-notice notice-red">
+              <span class="notice-icon"><i data-lucide="package-x"></i></span>
+              <div><strong>Produtos vencidos</strong><p>Existem 7 itens pendentes de verificação.</p></div>
+              <span class="badge badge-danger">Urgente</span>
+            </div>
+            <div class="system-notice notice-blue">
+              <span class="notice-icon"><i data-lucide="flame"></i></span>
+              <div><strong>Conferência de Queima</strong><p>24 de 32 produtos lançados neste mês aparecem como aprovados no exemplo.</p></div>
+              <span class="badge badge-info">Informativo</span>
+            </div>
           </div>
         </div>
 
