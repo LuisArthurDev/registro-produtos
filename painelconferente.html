@@ -200,6 +200,7 @@
     body.sidebar-collapsed { --sidebar-width: 76px; }
     body.sidebar-collapsed .brand { padding: 0 17px; }
     body.sidebar-collapsed .brand > div:last-child,
+    body.sidebar-collapsed .sidebar-collapse span,
     body.sidebar-collapsed .nav-label,
     body.sidebar-collapsed .nav-item { font-size: 0; }
     body.sidebar-collapsed .brand { justify-content:center; padding:0; gap:0; }
@@ -212,7 +213,7 @@
     .sidebar-collapse { margin: 10px 12px 8px; border: 1px solid #344258; color: #d6deeb; background: linear-gradient(135deg,#202d42,#172235); border-radius: 12px; min-height:42px; padding: 9px 12px; display: flex; gap: 10px; align-items: center; justify-content: flex-start; box-shadow:0 4px 12px #0002; transition:background .2s,transform .2s,border-color .2s; font-size:12px; font-weight:650; }
     .sidebar-collapse:hover { background:#263b5b; border-color:#60a5fa; transform:translateY(-1px); }
     .sidebar-collapse svg { width:18px;height:18px;flex-shrink:0; }
-    body.sidebar-collapsed .sidebar-collapse { margin:10px 12px 8px; padding:10px 0; justify-content:center; }
+    body.sidebar-collapsed .sidebar-collapse { margin:10px 12px 8px; padding:10px 0; width:52px; justify-content:center; }
     body.sidebar-collapsed .sidebar-collapse span { display: none; }
     .loading-banner { display:flex; align-items:center; gap:10px; padding:12px 15px; margin:0 0 16px; border:1px solid #cfe0fb; background:#eff6ff; color:#1d4ed8; border-radius:10px; font-size:13px; }
     .loading-spinner { width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite; }
@@ -1461,27 +1462,11 @@
 
       <!-- TRANSFERÊNCIAS -->
       <section class="page" id="page-transferencias">
-        <div class="page-heading">
-          <div><h2>Transferências</h2><p>Acompanhe movimentações de produtos entre setores ou locais.</p></div>
-          <button class="button button-primary" data-demo="Nova transferência"><i data-lucide="plus"></i> Nova transferência</button>
-        </div>
-        <div class="mini-stats">
-          <div class="mini-stat"><span>Transferências totais</span><strong>84</strong></div>
-          <div class="mini-stat"><span>Concluídas</span><strong>71</strong></div>
-          <div class="mini-stat"><span>Pendentes</span><strong>13</strong></div>
-        </div>
-        <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Histórico de transferências</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar transferência..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Concluída</option><option>Pendente</option><option>Cancelada</option></select></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Identificação</th><th>Produto</th><th>Origem</th><th>Destino</th><th>Quantidade</th><th>Data</th><th>Situação</th></tr></thead>
-            <tbody>
-              <tr><td>TRF-0084</td><td class="cell-primary">Café Tradicional 500g</td><td>Depósito A</td><td>Setor B</td><td>24</td><td>22/10/2026</td><td><span class="badge badge-success">Concluída</span></td></tr>
-              <tr><td>TRF-0083</td><td class="cell-primary">Leite Integral 1L</td><td>Depósito A</td><td>Setor C</td><td>36</td><td>22/10/2026</td><td><span class="badge badge-warning">Pendente</span></td></tr>
-              <tr><td>TRF-0082</td><td class="cell-primary">Arroz Tipo 1 5kg</td><td>Setor B</td><td>Depósito A</td><td>18</td><td>21/10/2026</td><td><span class="badge badge-success">Concluída</span></td></tr>
-            </tbody>
-          </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
-        </div>
+        <div class="page-heading"><div><h2>Transferências</h2><p>Mapa de validade filtrado exclusivamente para a aba Transferencias.</p></div><button class="button" id="refreshTransferencias" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="notice" id="transferenciasNotice">Carregando transferências...</div>
+        <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="transferenciasTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="transferenciasLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="transferenciasMes">—</strong></div></div>
+        <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa de transferências por lote</div><div class="toolbar-actions"><input class="filter-select" id="transferenciasProduto" placeholder="Produto / código"><input class="filter-select" id="transferenciasLote" placeholder="Lote"><input class="filter-select" id="transferenciasValidade" type="date" aria-label="Filtrar validade"><select class="filter-select" id="transferenciasSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="transferenciasTbody"></tbody></table></div><div class="empty-state" id="transferenciasEmpty">Nenhuma transferência encontrada.</div></div>
       </section>
 
       <!-- CONTROLE DE ESTOQUE -->
@@ -1635,6 +1620,7 @@
     document.getElementById("topTitle").textContent = names[0];
     document.querySelector(".page-subtitle").textContent = names[1];
 
+    if(pageName==='transferencias') renderTransferencias();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1711,10 +1697,50 @@
   });
 
 
-  // Fallback local: os ícones continuam visíveis mesmo se a CDN Lucide não carregar.
-  if (!window.lucide || typeof window.lucide.createIcons !== 'function') {
-    const glyphs = { eye:'◉', pencil:'✎', 'trash-2':'⌫', archive:'▣', check:'✓', 'refresh-cw':'↻', 'panel-left-close':'⇤', 'panel-left-open':'⇥', 'scan-barcode':'▦', 'layout-dashboard':'▥', 'clipboard-list':'☷', 'check-circle':'✓', x:'×', 'circle-check':'✓', search:'⌕', 'circle-x':'×' };
-    window.lucide = { createIcons: function(){ document.querySelectorAll('i[data-lucide]').forEach(function(el){ if(el.querySelector('svg')) return; el.textContent = glyphs[el.getAttribute('data-lucide')] || '•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; }); } };
+  // Ícones resilientes: processa também os botões inseridos dinamicamente nas tabelas.
+  const painelIconGlyphs = {
+    eye:'◉', pencil:'✎', 'trash-2':'⌫', archive:'▣', check:'✓',
+    'refresh-cw':'↻', 'panel-left-close':'⇤', 'panel-left-open':'⇥',
+    'scan-barcode':'▦', 'layout-dashboard':'▥', 'clipboard-list':'☷',
+    'check-circle':'✓', x:'×', 'circle-check':'✓', search:'⌕',
+    'circle-x':'×', plus:'+', download:'↓', 'arrow-left-right':'⇄',
+    'calendar-days':'▦', 'calendar-check':'✓', 'package-x':'▣',
+    boxes:'▤', package:'▣', flag:'⚑', history:'↶', users:'♙',
+    menu:'☰', 'clipboard-check':'✓', flame:'♨', 'calendar-clock':'◷',
+    'alert-triangle':'⚠', 'calendar-x':'×', 'search-x':'⌕',
+    'panel-left':'⇤', 'chevron-left':'‹', 'chevron-right':'›',
+    'external-link':'↗', save:'✓', 'x-circle':'×'
+  };
+  function renderPainelIcons(root=document) {
+    try {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons({ attrs: { 'stroke-width': 2 } });
+      }
+    } catch (e) { console.warn('Lucide indisponível; usando símbolos alternativos.', e); }
+    root.querySelectorAll('[data-lucide]').forEach(function(el) {
+      if (el.querySelector('svg')) return;
+      const name = el.getAttribute('data-lucide');
+      el.textContent = painelIconGlyphs[name] || '•';
+      el.style.fontFamily = 'system-ui, sans-serif';
+      el.style.fontStyle = 'normal';
+      el.style.fontWeight = '700';
+      el.style.fontSize = '16px';
+      el.style.lineHeight = '1';
+      el.style.display = 'inline-flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.minWidth = '1em';
+    });
+  }
+  // A biblioteca pode carregar depois do HTML; observa também linhas/tabelas criadas por JS.
+  renderPainelIcons();
+  if (document.body && window.MutationObserver) {
+    const painelIconObserver = new MutationObserver(function(mutations) {
+      if (mutations.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.matches?.('[data-lucide]') || n.querySelector?.('[data-lucide]'))))) {
+        renderPainelIcons();
+      }
+    });
+    painelIconObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
@@ -1748,16 +1774,30 @@
     const func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
     const sit=document.getElementById('mapaSituacao').value;
-    const all=painelCache.validades;
+    const all=painelCache.validades.filter(r=>!['Transferencias','Termolabil','Psicotropicos','Antibioticos'].includes(String(r.funcionario||'')));
     const rows=all.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||(r.validadeISO||'')===validade) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=all.length;
     document.getElementById('mapaLotes').textContent=new Set(all.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value; const names=[...new Set(all.map(r=>r.funcionario).filter(Boolean))].sort(); sel.innerHTML='<option value="">Todos os funcionários</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join(''); if(names.includes(prior))sel.value=prior;
     document.getElementById('mapaTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
-    document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
+    document.getElementById('mapaEmpty').style.display=rows.length?'none':'block'; renderPainelIcons();
   }
-  async function carregarMapa() { const n=document.getElementById('mapaNotice'); n.textContent='Carregando dados das abas...'; try { const d=await jsonpPainel('validades','validade'); if(!d.sucesso) throw new Error(d.mensagem||'Consulta não concluída'); painelCache.validades=d.registros||[]; renderMapa(); atualizarResumoValidade(painelCache.validades); atualizarProdutosAtencao(painelCache.validades); n.textContent=`Dados atualizados. ${painelCache.validades.length} registros encontrados.`; n.style.display=painelCache.validades.length?'block':'block'; } catch(e) { n.textContent='Não foi possível carregar o Mapa de Validade: '+e.message; } }
+  function renderTransferencias() {
+    const all=(painelCache.validades||[]).filter(r=>String(r.funcionario||'')==='Transferencias');
+    const q=(document.getElementById('transferenciasProduto').value||'').toLocaleLowerCase('pt-BR').trim();
+    const lote=(document.getElementById('transferenciasLote').value||'').toLocaleLowerCase('pt-BR').trim();
+    const validade=document.getElementById('transferenciasValidade').value;
+    const sit=document.getElementById('transferenciasSituacao').value;
+    const rows=all.filter(r=>(!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q))&&(!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote))&&(!validade||(r.validadeISO||'')===validade)&&(!sit||situacaoPainel(r)===sit));
+    document.getElementById('transferenciasTotal').textContent=all.length;
+    document.getElementById('transferenciasLotes').textContent=new Set(all.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
+    const ym=new Date().toISOString().slice(0,7);document.getElementById('transferenciasMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
+    document.getElementById('transferenciasTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r);const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success';return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','Transferencias')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
+    document.getElementById('transferenciasEmpty').style.display=rows.length?'none':'block';
+    if(window.lucide)lucide.createIcons();
+  }
+  async function carregarMapa() { const n=document.getElementById('mapaNotice'); n.textContent='Carregando dados das abas...'; try { const d=await jsonpPainel('validades','validade'); if(!d.sucesso) throw new Error(d.mensagem||'Consulta não concluída'); painelCache.validades=d.registros||[]; renderMapa(); renderTransferencias(); atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); n.textContent=`Dados atualizados. ${painelCache.validades.length} registros encontrados.`; n.style.display=painelCache.validades.length?'block':'block'; } catch(e) { n.textContent='Não foi possível carregar o Mapa de Validade: '+e.message; } }
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
@@ -1804,6 +1844,8 @@
   document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
   async function atualizarPainel(){await carregarDescricoesProdutos();await Promise.all([carregarDashboard(),carregarMapa(),carregarVencidos(),carregarSinalizados()]);}
   ['mapaProduto','mapaLote','mapaValidade','mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
+  ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
+  document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
   ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
   document.getElementById('addDamagedBtn')?.addEventListener('click',adicionarDanificado); document.getElementById('danificadosBusca')?.addEventListener('input',()=>{const q=document.getElementById('danificadosBusca').value.toLocaleLowerCase('pt-BR');document.querySelectorAll('#danificadosTbody tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');});
   document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
@@ -1817,11 +1859,7 @@
       year: "numeric"
     });
 
-  if(window.lucide && typeof lucide.createIcons==='function') { lucide.createIcons(); }
-  else {
-    const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','x':'×'};
-    document.querySelectorAll('[data-lucide]').forEach(el=>{el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•';el.style.fontStyle='normal';el.style.fontSize='18px';});
-  }
+  renderPainelIcons();
   atualizarPainel();
 </script>
 </body>
