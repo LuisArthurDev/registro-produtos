@@ -1577,12 +1577,90 @@
           <div><h2>Controle de Validade</h2><p>Acompanhe os itens vencidos e aqueles que estão próximos do vencimento.</p></div>
           <button class="button button-primary" data-demo="Atualizar controle de validade"><i data-lucide="refresh-cw"></i> Atualizar controle</button>
         </div>
-        <div class="stats">
-          <div class="stat-card"><div class="stat-top"><span class="stat-label">Dentro da validade</span><div class="stat-icon green"><i data-lucide="check-circle"></i></div></div><div class="stat-value">1.076</div><div class="stat-footer">Itens regulares</div></div>
-          <div class="stat-card"><div class="stat-top"><span class="stat-label">Vencem em 7 dias</span><div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div></div><div class="stat-value">23</div><div class="stat-footer">Requerem atenção</div></div>
-          <div class="stat-card"><div class="stat-top"><span class="stat-label">Vencidos</span><div class="stat-icon red"><i data-lucide="alert-triangle"></i></div></div><div class="stat-value">7</div><div class="stat-footer">Requerem conferência</div></div>
-          <div class="stat-card"><div class="stat-top"><span class="stat-label">Sem validade</span><div class="stat-icon purple"><i data-lucide="calendar-x"></i></div></div><div class="stat-value">4</div><div class="stat-footer">Dados a revisar</div></div>
+         <div class="stats">
+          <div class="stat-card">
+            <div class="stat-top">
+              <span class="stat-label">Dentro da validade</span>
+              <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+            </div>
+            <div class="stat-value" id="cvDentroValidade">0</div>
+            <div class="stat-footer">Produtos dentro do prazo</div>
+          </div>
+        
+          <div class="stat-card">
+            <div class="stat-top">
+              <span class="stat-label">Vencem em 7 dias</span>
+              <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+            </div>
+            <div class="stat-value" id="cvVencem7Dias">0</div>
+            <div class="stat-footer">Requerem atenção imediata</div>
+          </div>
+        
+          <div class="stat-card">
+            <div class="stat-top">
+              <span class="stat-label">Vencidos</span>
+              <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+            </div>
+            <div class="stat-value" id="cvVencidos">0</div>
+            <div class="stat-footer">Produtos vencidos nos mapas</div>
+          </div>
+        
+          <div class="stat-card">
+            <div class="stat-top">
+              <span class="stat-label">Elegíveis</span>
+              <div class="stat-icon purple"><i data-lucide="calendar-check"></i></div>
+            </div>
+            <div class="stat-value" id="cvElegiveis">0</div>
+            <div class="stat-footer">Validade entre 3 e 9 meses</div>
+          </div>
         </div>
+
+        <div class="table-panel">
+          <div class="table-toolbar">
+            <div>
+              <div class="panel-title">Elegíveis a Tentativa de Venda / Prevenção</div>
+              <div class="panel-subtitle">
+                Produtos com validade entre 3 e 9 meses a partir da data atual
+              </div>
+            </div>
+        
+            <div class="toolbar-actions">
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input
+                  id="cvElegiveisBusca"
+                  placeholder="Buscar produto, código ou lote..."
+                >
+              </div>
+              <button class="button" id="cvAtualizarElegiveis">
+                <i data-lucide="refresh-cw"></i> Atualizar
+              </button>
+            </div>
+          </div>
+        
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Descrição</th>
+                  <th>Lote</th>
+                  <th>Validade</th>
+                  <th>Dias restantes</th>
+                  <th>Quantidade</th>
+                  <th>Funcionário / Aba</th>
+                </tr>
+              </thead>
+              <tbody id="cvElegiveisTbody"></tbody>
+            </table>
+          </div>
+        
+          <div class="empty-state" id="cvElegiveisEmpty">
+            <i data-lucide="search-x"></i>
+            Nenhum produto elegível encontrado.
+          </div>
+        </div>
+        
         <div class="table-panel">
           <div class="table-toolbar"><div class="panel-title">Controle de vencimentos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Dentro da validade</option><option>Próximo do vencimento</option><option>Vencido</option><option>Sem validade</option></select></div></div>
           <div class="table-wrap"><table>
@@ -2017,6 +2095,98 @@
   function fmtData(s) { const d=parseDataBR(s); return d ? d.toLocaleDateString('pt-BR') : (s || '—'); }
   function diasAte(s) { const d=parseDataBR(s); if(!d) return null; const hoje=new Date(); hoje.setHours(0,0,0,0); d.setHours(0,0,0,0); return Math.round((d-hoje)/86400000); }
   function situacaoPainel(r) { const dias=diasAte(r.validadeISO || r.validade); if(dias===null) return 'Sem validade'; if(dias<0) return 'Vencido'; if(dias<=160) return 'A Vencer'; return 'Vendável'; }
+  function adicionarMeses(data, meses) {
+    const resultado = new Date(data);
+    const diaOriginal = resultado.getDate();
+  
+    resultado.setDate(1);
+    resultado.setMonth(resultado.getMonth() + meses);
+  
+    const ultimoDia = new Date(
+      resultado.getFullYear(),
+      resultado.getMonth() + 1,
+      0
+    ).getDate();
+  
+    resultado.setDate(Math.min(diaOriginal, ultimoDia));
+    resultado.setHours(0, 0, 0, 0);
+  
+    return resultado;
+  }
+  
+  function estaEntre3e9Meses(registro) {
+    const data = parseDataBR(registro.validadeISO || registro.validade);
+    if (!data) return false;
+  
+    data.setHours(0, 0, 0, 0);
+  
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+  
+    return data >= adicionarMeses(hoje, 3) &&
+           data <= adicionarMeses(hoje, 9);
+  }
+  
+  function renderControleValidade() {
+    const registros = painelCache.validades || [];
+  
+    const dentro = registros.filter(r => {
+      const dias = diasAte(r.validadeISO || r.validade);
+      return dias !== null && dias > 7;
+    });
+  
+    const vencem7Dias = registros.filter(r => {
+      const dias = diasAte(r.validadeISO || r.validade);
+      return dias !== null && dias >= 0 && dias <= 7;
+    });
+  
+    const vencidos = registros.filter(r => {
+      const dias = diasAte(r.validadeISO || r.validade);
+      return dias !== null && dias < 0;
+    });
+  
+    const elegiveis = registros.filter(estaEntre3e9Meses);
+  
+    document.getElementById("cvDentroValidade").textContent = dentro.length;
+    document.getElementById("cvVencem7Dias").textContent = vencem7Dias.length;
+    document.getElementById("cvVencidos").textContent = vencidos.length;
+    document.getElementById("cvElegiveis").textContent = elegiveis.length;
+  
+    const busca = (
+      document.getElementById("cvElegiveisBusca")?.value || ""
+    ).toLocaleLowerCase("pt-BR").trim();
+  
+    const filtrados = elegiveis.filter(r => {
+      const texto = [
+        r.codigo,
+        descricaoProduto(r),
+        r.lote,
+        r.funcionario
+      ].join(" ").toLocaleLowerCase("pt-BR");
+  
+      return texto.includes(busca);
+    });
+  
+    document.getElementById("cvElegiveisTbody").innerHTML =
+      filtrados.map(r => {
+        const dias = diasAte(r.validadeISO || r.validade);
+  
+        return `
+          <tr>
+            <td>${escHtml(r.codigo || "")}</td>
+            <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
+            <td>${escHtml(r.lote || "")}</td>
+            <td>${escHtml(fmtData(r.validadeISO || r.validade))}</td>
+            <td>${dias}</td>
+            <td>${escHtml(r.quantidade ?? "")}</td>
+            <td>${escHtml(r.funcionario || "")}</td>
+          </tr>
+        `;
+      }).join("");
+  
+    document.getElementById("cvElegiveisEmpty").style.display =
+      filtrados.length ? "none" : "block";
+  }
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
   let tipoMapaAtivo = 'funcionarios';
   const FUNCIONARIOS_MAPA = ['Alice','Altino','Ana Carolina','Anielle','Gabriela','Gabriele','Isabela','Livia','Paola','Rafaela','Ramon','Rillary','Sulaima','Thomaz'];
@@ -2168,7 +2338,15 @@
         ? d.registros
         : [];
   
+      // Atualiza o Mapa de Validade.
       renderMapa();
+  
+      // Atualiza os indicadores e a seção de elegíveis.
+      if (typeof renderControleValidade === 'function') {
+        renderControleValidade();
+      }
+  
+      // Mantém as demais funcionalidades existentes.
       renderTransferencias();
   
       atualizarResumoValidade(painelCache.validades);
@@ -2190,7 +2368,6 @@
       }
     }
   }
-
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
@@ -2763,6 +2940,12 @@ function calcularSituacaoValidade(dataValidade) {
 
   return `À VENCER - ${dias} dias`;
 }
+
+  document.getElementById("cvElegiveisBusca")
+  ?.addEventListener("input", renderControleValidade);
+
+document.getElementById("cvAtualizarElegiveis")
+  ?.addEventListener("click", carregarMapa);
 
 </script>
 </body>
