@@ -1641,17 +1641,18 @@
     b.title=collapsed?"Expandir menu":"Recolher menu";
     b.setAttribute("aria-label",b.title);
     b.innerHTML=`<i data-lucide="${collapsed?'panel-left-open':'panel-left-close'}"></i><span>${collapsed?'Expandir menu':'Recolher menu'}</span>`;
-    if(window.lucide) lucide.createIcons(); else b.querySelector('i').textContent=collapsed?'»':'«';
+    if(window.lucide && typeof window.lucide.createIcons==='function') { try { window.lucide.createIcons(); } catch (_) { renderPainelIcons(); } } else renderPainelIcons();
   });
 
   document.getElementById("refreshButton").addEventListener("click", () => {
     const button = document.getElementById("refreshButton");
     button.innerHTML = '<i data-lucide="check"></i>';
-    lucide.createIcons();
+    if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
 
     setTimeout(() => {
       button.innerHTML = '<i data-lucide="refresh-cw"></i>';
-      lucide.createIcons();
+      if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
+      else renderPainelIcons();
     }, 900);
   });
 
@@ -1697,56 +1698,16 @@
   });
 
 
-  // Ícones resilientes: processa também os botões inseridos dinamicamente nas tabelas.
-  const painelIconGlyphs = {
-    eye:'◉', pencil:'✎', 'trash-2':'⌫', archive:'▣', check:'✓',
-    'refresh-cw':'↻', 'panel-left-close':'⇤', 'panel-left-open':'⇥',
-    'scan-barcode':'▦', 'layout-dashboard':'▥', 'clipboard-list':'☷',
-    'check-circle':'✓', x:'×', 'circle-check':'✓', search:'⌕',
-    'circle-x':'×', plus:'+', download:'↓', 'arrow-left-right':'⇄',
-    'calendar-days':'▦', 'calendar-check':'✓', 'package-x':'▣',
-    boxes:'▤', package:'▣', flag:'⚑', history:'↶', users:'♙',
-    menu:'☰', 'clipboard-check':'✓', flame:'♨', 'calendar-clock':'◷',
-    'alert-triangle':'⚠', 'calendar-x':'×', 'search-x':'⌕',
-    'panel-left':'⇤', 'chevron-left':'‹', 'chevron-right':'›',
-    'external-link':'↗', save:'✓', 'x-circle':'×'
-  };
-  function renderPainelIcons(root=document) {
-    try {
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons({ attrs: { 'stroke-width': 2 } });
-      }
-    } catch (e) { console.warn('Lucide indisponível; usando símbolos alternativos.', e); }
-    root.querySelectorAll('[data-lucide]').forEach(function(el) {
-      if (el.querySelector('svg')) return;
-      const name = el.getAttribute('data-lucide');
-      el.textContent = painelIconGlyphs[name] || '•';
-      el.style.fontFamily = 'system-ui, sans-serif';
-      el.style.fontStyle = 'normal';
-      el.style.fontWeight = '700';
-      el.style.fontSize = '16px';
-      el.style.lineHeight = '1';
-      el.style.display = 'inline-flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.minWidth = '1em';
-    });
-  }
-  // A biblioteca pode carregar depois do HTML; observa também linhas/tabelas criadas por JS.
-  renderPainelIcons();
-  if (document.body && window.MutationObserver) {
-    const painelIconObserver = new MutationObserver(function(mutations) {
-      if (mutations.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.matches?.('[data-lucide]') || n.querySelector?.('[data-lucide]'))))) {
-        renderPainelIcons();
-      }
-    });
-    painelIconObserver.observe(document.body, { childList: true, subtree: true });
+  // Fallback local: os ícones continuam visíveis mesmo se a CDN Lucide não carregar.
+  if (!window.lucide || typeof window.lucide.createIcons !== 'function') {
+    const glyphs = { eye:'◉', pencil:'✎', 'trash-2':'⌫', archive:'▣', check:'✓', 'refresh-cw':'↻', 'panel-left-close':'⇤', 'panel-left-open':'⇥', 'scan-barcode':'▦', 'layout-dashboard':'▥', 'clipboard-list':'☷', 'check-circle':'✓', x:'×', 'circle-check':'✓', search:'⌕', 'circle-x':'×' };
+    window.lucide = { createIcons: function(){ document.querySelectorAll('i[data-lucide]').forEach(function(el){ if(el.querySelector('svg')) return; el.textContent = glyphs[el.getAttribute('data-lucide')] || '•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; }); } };
   }
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
   const painelCache = { validades: [], vencidos: [], queima: [] };
   let mapaDescricoes = {};
-  async function carregarDescricoesProdutos() { try { const r = await fetch('./produtos_ean.json', {cache:'no-store'}); if (r.ok) mapaDescricoes = await r.json(); } catch (_) {} }
+  async function carregarDescricoesProdutos() { try { const controlador = new AbortController(); const limite = setTimeout(() => controlador.abort(), 2500); try { const r = await fetch('./produtos_ean.json', {cache:'no-store', signal:controlador.signal}); if (r.ok) mapaDescricoes = await r.json(); } finally { clearTimeout(limite); } } catch (_) { mapaDescricoes = mapaDescricoes || {}; } }
   function descricaoProduto(r) { const p=mapaDescricoes[String(r.codigo || '').trim()]; return r.descricao || r.produto || (p && typeof p==='object' ? p.produto : p) || r.codigo || ''; }
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
@@ -1781,7 +1742,7 @@
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value; const names=[...new Set(all.map(r=>r.funcionario).filter(Boolean))].sort(); sel.innerHTML='<option value="">Todos os funcionários</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join(''); if(names.includes(prior))sel.value=prior;
     document.getElementById('mapaTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r); const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success'; return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
-    document.getElementById('mapaEmpty').style.display=rows.length?'none':'block'; renderPainelIcons();
+    document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
   }
   function renderTransferencias() {
     const all=(painelCache.validades||[]).filter(r=>String(r.funcionario||'')==='Transferencias');
@@ -1795,7 +1756,7 @@
     const ym=new Date().toISOString().slice(0,7);document.getElementById('transferenciasMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
     document.getElementById('transferenciasTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r);const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success';return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','Transferencias')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
     document.getElementById('transferenciasEmpty').style.display=rows.length?'none':'block';
-    if(window.lucide)lucide.createIcons();
+    renderPainelIcons();
   }
   async function carregarMapa() { const n=document.getElementById('mapaNotice'); n.textContent='Carregando dados das abas...'; try { const d=await jsonpPainel('validades','validade'); if(!d.sucesso) throw new Error(d.mensagem||'Consulta não concluída'); painelCache.validades=d.registros||[]; renderMapa(); renderTransferencias(); atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); n.textContent=`Dados atualizados. ${painelCache.validades.length} registros encontrados.`; n.style.display=painelCache.validades.length?'block':'block'; } catch(e) { n.textContent='Não foi possível carregar o Mapa de Validade: '+e.message; } }
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
@@ -1836,13 +1797,18 @@
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let sinalizadosCache=[]; let sinalizadoAtual=null;
   function carregarSinalizados(){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados').then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
-  function renderSinalizados(){const q=(document.getElementById('sinalizadosBusca').value||'').toLocaleLowerCase('pt-BR');const filtro=document.getElementById('sinalizadosFiltro').value;const norm=s=>String(s||'').toLocaleLowerCase('pt-BR');const rows=sinalizadosCache.filter(r=>(!filtro||r.acaoTomada===filtro)&&(!q||norm([r.codigo,r.descricao,r.lote,r.motivo,r.funcionario].join(' ')).includes(q)));document.getElementById('sinalizadosTotal').textContent=sinalizadosCache.length;document.getElementById('sinalizadosAbertos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Em Aberto').length;document.getElementById('sinalizadosResolvidos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Resolvido').length;document.getElementById('sinalizadosNegados').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Negado').length;document.getElementById('sinalizadosTbody').innerHTML=rows.map((r,i)=>{const status=r.acaoTomada||'Em Aberto', cls=status==='Resolvido'?'badge-success':status==='Negado'?'badge-danger':'badge-warning';return `<tr><td class="cell-primary">${escHtml(r.descricao||r.codigo||'Produto não localizado')}<div class="cell-secondary">${escHtml(r.codigo||'')} · ${escHtml(r.chaveUnica)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade)||'—')}</td><td>${escHtml(r.quantidade||'—')}</td><td>${escHtml(r.motivo||'—')}</td><td>${escHtml(r.funcionario||'—')}</td><td>${escHtml(r.dataRegistro||'—')}</td><td><span class="badge ${cls}">${escHtml(status)}</span></td><td><button class="button" title="Ver / resolver" aria-label="Ver / resolver" onclick="abrirSinalizado('${escHtml(r.chaveUnica)}')"><i data-lucide="eye"></i></button></td></tr>`}).join('');document.getElementById('sinalizadosEmpty').style.display=rows.length?'none':'block';document.getElementById('sinalizadosNotice').style.display=sinalizadosCache.length?'none':'block';lucide.createIcons();}
-  function abrirSinalizado(chave){sinalizadoAtual=sinalizadosCache.find(r=>r.chaveUnica===chave);if(!sinalizadoAtual)return;const r=sinalizadoAtual;document.getElementById('sinalizadoDetalhes').innerHTML=`<p><b>Produto:</b> ${escHtml(r.descricao||r.codigo||'Não localizado')}</p><p><b>Código:</b> ${escHtml(r.codigo||'—')}</p><p><b>Lote:</b> ${escHtml(r.lote||'—')}</p><p><b>Validade:</b> ${escHtml(fmtData(r.validade)||'—')}</p><p><b>Quantidade:</b> ${escHtml(r.quantidade||'—')}</p><p><b>Funcionário:</b> ${escHtml(r.funcionario||'—')}</p><p><b>Motivo atual:</b> ${escHtml(r.motivo||'—')}</p><p><b>Situação:</b> ${escHtml(r.acaoTomada||'Em Aberto')}</p>`;document.getElementById('sinalizadoStatus').value=['Resolvido','Negado'].includes(r.acaoTomada)?r.acaoTomada:'Resolvido';document.getElementById('sinalizadoMotivo').value='';document.getElementById('sinalizadoMotivoWrap').style.display=document.getElementById('sinalizadoStatus').value==='Resolvido'?'block':'none';document.getElementById('sinalizadoModal').style.display='flex';lucide.createIcons();}
+  function renderSinalizados(){const q=(document.getElementById('sinalizadosBusca').value||'').toLocaleLowerCase('pt-BR');const filtro=document.getElementById('sinalizadosFiltro').value;const norm=s=>String(s||'').toLocaleLowerCase('pt-BR');const rows=sinalizadosCache.filter(r=>(!filtro||r.acaoTomada===filtro)&&(!q||norm([r.codigo,r.descricao,r.lote,r.motivo,r.funcionario].join(' ')).includes(q)));document.getElementById('sinalizadosTotal').textContent=sinalizadosCache.length;document.getElementById('sinalizadosAbertos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Em Aberto').length;document.getElementById('sinalizadosResolvidos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Resolvido').length;document.getElementById('sinalizadosNegados').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Negado').length;document.getElementById('sinalizadosTbody').innerHTML=rows.map((r,i)=>{const status=r.acaoTomada||'Em Aberto', cls=status==='Resolvido'?'badge-success':status==='Negado'?'badge-danger':'badge-warning';return `<tr><td class="cell-primary">${escHtml(r.descricao||r.codigo||'Produto não localizado')}<div class="cell-secondary">${escHtml(r.codigo||'')} · ${escHtml(r.chaveUnica)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade)||'—')}</td><td>${escHtml(r.quantidade||'—')}</td><td>${escHtml(r.motivo||'—')}</td><td>${escHtml(r.funcionario||'—')}</td><td>${escHtml(r.dataRegistro||'—')}</td><td><span class="badge ${cls}">${escHtml(status)}</span></td><td><button class="button" title="Ver / resolver" aria-label="Ver / resolver" onclick="abrirSinalizado('${escHtml(r.chaveUnica)}')"><i data-lucide="eye"></i></button></td></tr>`}).join('');document.getElementById('sinalizadosEmpty').style.display=rows.length?'none':'block';document.getElementById('sinalizadosNotice').style.display=sinalizadosCache.length?'none':'block';renderPainelIcons();}
+  function abrirSinalizado(chave){sinalizadoAtual=sinalizadosCache.find(r=>r.chaveUnica===chave);if(!sinalizadoAtual)return;const r=sinalizadoAtual;document.getElementById('sinalizadoDetalhes').innerHTML=`<p><b>Produto:</b> ${escHtml(r.descricao||r.codigo||'Não localizado')}</p><p><b>Código:</b> ${escHtml(r.codigo||'—')}</p><p><b>Lote:</b> ${escHtml(r.lote||'—')}</p><p><b>Validade:</b> ${escHtml(fmtData(r.validade)||'—')}</p><p><b>Quantidade:</b> ${escHtml(r.quantidade||'—')}</p><p><b>Funcionário:</b> ${escHtml(r.funcionario||'—')}</p><p><b>Motivo atual:</b> ${escHtml(r.motivo||'—')}</p><p><b>Situação:</b> ${escHtml(r.acaoTomada||'Em Aberto')}</p>`;document.getElementById('sinalizadoStatus').value=['Resolvido','Negado'].includes(r.acaoTomada)?r.acaoTomada:'Resolvido';document.getElementById('sinalizadoMotivo').value='';document.getElementById('sinalizadoMotivoWrap').style.display=document.getElementById('sinalizadoStatus').value==='Resolvido'?'block':'none';document.getElementById('sinalizadoModal').style.display='flex';renderPainelIcons();}
   function fecharSinalizadoModal(){document.getElementById('sinalizadoModal').style.display='none';sinalizadoAtual=null;}
   document.getElementById('sinalizadoStatus').addEventListener('change',e=>{document.getElementById('sinalizadoMotivoWrap').style.display=e.target.value==='Resolvido'?'block':'none';});
   async function salvarSinalizado(){if(!sinalizadoAtual)return;const status=document.getElementById('sinalizadoStatus').value,motivoResolucao=document.getElementById('sinalizadoMotivo').value.trim();if(status==='Resolvido'&&!motivoResolucao){alert('Informe o motivo da resolução.');return;}try{const d=await jsonpPainel('atualizarSinalizado','atualizarSinalizado',{chaveUnica:sinalizadoAtual.chaveUnica,status,motivoResolucao});alert(d.mensagem||'Resposta recebida');if(d.sucesso){fecharSinalizadoModal();await carregarSinalizados();}}catch(e){alert(e.message);}}
   document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
-  async function atualizarPainel(){await carregarDescricoesProdutos();await Promise.all([carregarDashboard(),carregarMapa(),carregarVencidos(),carregarSinalizados()]);}
+  async function atualizarPainel(){
+    // Não deixar o carregamento do catálogo bloquear as consultas principais do painel.
+    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); });
+    const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
+    await Promise.allSettled(tarefas);
+  }
   ['mapaProduto','mapaLote','mapaValidade','mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
   document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
@@ -1859,6 +1825,13 @@
       year: "numeric"
     });
 
+  function renderPainelIcons(root=document) {
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      try { window.lucide.createIcons({root}); return; } catch (_) { /* usa glifos abaixo */ }
+    }
+    const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','circle-check':'✓','x':'×','search':'⌕','circle-x':'×','rotate-cw':'↻','arrow-left-right':'↔','package-check':'▣'};
+    root.querySelectorAll('[data-lucide]').forEach(el=>{ if(el.querySelector('svg')) return; el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; });
+  }
   renderPainelIcons();
   atualizarPainel();
 </script>
