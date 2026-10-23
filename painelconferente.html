@@ -1297,34 +1297,81 @@
           </div>
         </div>
 
-        <div class="burn-section">
+       <div class="burn-section">
           <div class="burn-header">
             <div>
               <div class="panel-title">Conferência de Queima</div>
-              <div class="panel-subtitle">Produtos lançados e aprovados na planilha Queima</div>
+              <div class="panel-subtitle">
+                Produtos lançados e aprovados na planilha Queima
+              </div>
             </div>
             <span class="badge badge-warning">Acompanhamento</span>
           </div>
+        
           <div class="burn-grid">
+            <!-- MÊS ATUAL -->
             <article class="burn-card">
               <div class="burn-card-title">Mês atual</div>
+        
               <div class="burn-chart-wrap">
-                <div class="burn-chart" role="img" id="queimaMesChart" role="img" aria-label="Indicadores do mês atual de Queima">
-                  <div class="burn-inner" id="queimaMesInner"><div><strong id="queimaMesAprovados">—</strong><span>Aprovados</span></div></div>
+                <div
+                  class="burn-chart"
+                  id="queimaMesChart"
+                  role="img"
+                  aria-label="Indicadores do mês atual de Queima"
+                >
+                  <div class="burn-inner" id="queimaMesInner">
+                    <div>
+                      <strong id="queimaMesAprovados">0</strong>
+                      <span>Aprovados</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="burn-total"><strong id="queimaMesLancados">—</strong><span>produtos lançados no mês</span></div>
-              <div class="burn-legend"><span><i class="legend-dot yellow"></i> Lançados</span><span><i class="legend-dot green-dot"></i> Aprovados</span></div>
+        
+              <div class="burn-total">
+                <strong id="queimaMesLancados">0</strong>
+                <span>produtos lançados no mês</span>
+              </div>
+        
+              <div class="burn-legend">
+                <span><i class="legend-dot yellow"></i> Lançados</span>
+                <span><i class="legend-dot green-dot"></i> Aprovados</span>
+              </div>
             </article>
+        
+            <!-- GERAL -->
             <article class="burn-card">
               <div class="burn-card-title">Geral</div>
+        
               <div class="burn-chart-wrap">
-                <div class="burn-chart burn-chart-general" role="img" aria-label="Geral: 248 produtos lançados e 196 aprovados">
-                  <div class="burn-inner burn-inner-general"><div><strong>196</strong><span>Aprovados</span></div></div>
+                <div
+                  class="burn-chart burn-chart-general"
+                  id="queimaGeralChart"
+                  role="img"
+                  aria-label="Indicadores gerais de Queima"
+                >
+                  <div
+                    class="burn-inner burn-inner-general"
+                    id="queimaGeralInner"
+                  >
+                    <div>
+                      <strong id="queimaGeralAprovados">0</strong>
+                      <span>Aprovados</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="burn-total"><strong id="queimaGeralLancados">—</strong><span>produtos lançados no total</span></div>
-              <div class="burn-legend"><span><i class="legend-dot yellow"></i> Lançados</span><span><i class="legend-dot green-dot"></i> Aprovados</span></div>
+        
+              <div class="burn-total">
+                <strong id="queimaGeralLancados">0</strong>
+                <span>produtos lançados no total</span>
+              </div>
+        
+              <div class="burn-legend">
+                <span><i class="legend-dot yellow"></i> Lançados</span>
+                <span><i class="legend-dot green-dot"></i> Aprovados</span>
+              </div>
             </article>
           </div>
         </div>
@@ -2237,22 +2284,110 @@
 
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   function atualizarProdutosAtencao(registros){const tbody=document.getElementById('dashboardAttentionTbody');const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const rows=registros.filter(r=>{const p=mapaDescricoes[String(r.codigo||'').trim()]||{};const sec=norm(p.secao||r.secao||'');const dias=diasAte(r.validadeISO||r.validade);return (sec.includes('nutricao')||sec.includes('conveniencia'))&&dias!==null&&dias>=0&&dias<=40;}).sort((a,b)=>diasAte(a.validadeISO||a.validade)-diasAte(b.validadeISO||b.validade));tbody.innerHTML=rows.length?rows.map(r=>`<tr><td><div class="cell-primary">${escHtml(descricaoProduto(r))}</div><div class="cell-secondary">Código: ${escHtml(r.codigo)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td><span class="badge badge-warning">Vence em ${diasAte(r.validadeISO||r.validade)} dias</span></td></tr>`).join(''):'<tr><td colspan="5" class="attention-empty">Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.</td></tr>';}
+  
   async function carregarDashboard() {
-    const banner=document.getElementById('dashboardLoading');
+    const banner = document.getElementById('dashboardLoading');
+  
     try {
-      const d=await jsonpPainel('dashboardPainel','dashboard');
-      if(!d || d.sucesso!==true) throw new Error((d&&d.mensagem)||'O servidor não confirmou a consulta dos indicadores.');
-      const x=d.indicadores||{};
-      for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal})) { const el=document.getElementById(id); if(el) el.textContent=v??0; }
-      try { setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes); setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal); } catch(chartError) { console.warn('Não foi possível atualizar os gráficos do Dashboard:',chartError); }
-      atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]);
-      banner.style.display='none'; banner.innerHTML='<span class="loading-spinner"></span><span>Carregando indicadores...</span>';
-    } catch(e) {
-      console.error('Dashboard:',e);
-      banner.style.display='flex';
-      banner.innerHTML='<span>Indicadores temporariamente indisponíveis. Os demais dados podem ter sido carregados. Clique em Atualizar para tentar novamente.</span>';
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.innerHTML =
+          '<span class="loading-spinner"></span>' +
+          '<span>Carregando indicadores...</span>';
+      }
+  
+      const d = await jsonpPainel('dashboardPainel', 'dashboard');
+  
+      if (!d || d.sucesso !== true) {
+        throw new Error(
+          (d && d.mensagem) ||
+          'O servidor não confirmou a consulta dos indicadores.'
+        );
+      }
+  
+      const x = d.indicadores || {};
+  
+      // Atualiza os indicadores do Dashboard.
+      const indicadores = {
+        dashLancamentos: x.lancamentos,
+        dashQueimaTotal: x.queimaTotal,
+        dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
+        dashAVencer: x.aVencer,
+        dashVencidos:
+          (Number(x.vencidosRetirados) || 0) +
+          (Number(x.vencidosSalao) || 0),
+  
+        // Gráfico de Queima do mês atual.
+        queimaMesLancados: x.queimaMes,
+        queimaMesAprovados: x.queimaAprovadosMes,
+  
+        // Gráfico geral de Queima.
+        queimaGeralLancados: x.queimaTotal,
+        queimaGeralAprovados: x.queimaAprovadosTotal
+      };
+  
+      for (const [id, valor] of Object.entries(indicadores)) {
+        const elemento = document.getElementById(id);
+  
+        if (elemento) {
+          elemento.textContent = valor ?? 0;
+        }
+      }
+  
+      // Atualiza os gráficos sem impedir os demais indicadores
+      // caso algum elemento do gráfico esteja ausente.
+      try {
+        setDonut(
+          'queimaMesChart',
+          'queimaMesInner',
+          x.queimaMes,
+          x.queimaAprovadosMes
+        );
+  
+        setDonut(
+          'queimaGeralChart',
+          'queimaGeralInner',
+          x.queimaTotal,
+          x.queimaAprovadosTotal
+        );
+      } catch (erroGrafico) {
+        console.warn(
+          'Não foi possível atualizar os gráficos de Queima:',
+          erroGrafico
+        );
+      }
+  
+      // Atualiza os resumos de validade.
+      if (typeof atualizarResumoValidade === 'function') {
+        atualizarResumoValidade(
+          painelCache.validades || []
+        );
+      }
+  
+      if (typeof atualizarProdutosAtencao === 'function') {
+        atualizarProdutosAtencao(
+          painelCache.validades || []
+        );
+      }
+  
+      // Oculta o banner após o carregamento bem-sucedido.
+      if (banner) {
+        banner.style.display = 'none';
+      }
+  
+    } catch (erro) {
+      console.error('Erro ao carregar o Dashboard:', erro);
+  
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.innerHTML =
+          '<span>Indicadores temporariamente indisponíveis. ' +
+          'Os demais dados podem ter sido carregados. ' +
+          'Clique em Atualizar para tentar novamente.</span>';
+      }
     }
   }
+
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let sinalizadosCache=[]; let sinalizadoAtual=null;
   function carregarSinalizados(){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados').then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
