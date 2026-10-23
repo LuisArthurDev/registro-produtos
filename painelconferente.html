@@ -1290,17 +1290,17 @@
           <div class="notice-list">
             <div class="system-notice notice-orange">
               <span class="notice-icon"><i data-lucide="calendar-clock"></i></span>
-              <div><strong>Produtos próximos do vencimento</strong><p>23 itens precisam ser conferidos e acompanhados.</p></div>
+              <div><strong>Produtos próximos do vencimento</strong><p><span id="avisoAVencer">Carregando...</span></p></div>
               <span class="badge badge-warning">Atenção</span>
             </div>
             <div class="system-notice notice-red">
               <span class="notice-icon"><i data-lucide="package-x"></i></span>
-              <div><strong>Produtos vencidos</strong><p>Existem 7 itens pendentes de verificação.</p></div>
+              <div><strong>Produtos vencidos</strong><p><span id="avisoVencidos">Carregando...</span></p></div>
               <span class="badge badge-danger">Urgente</span>
             </div>
             <div class="system-notice notice-blue">
               <span class="notice-icon"><i data-lucide="flame"></i></span>
-              <div><strong>Conferência de Queima</strong><p>24 de 32 produtos lançados neste mês aparecem como aprovados no exemplo.</p></div>
+              <div><strong>Conferência de Queima</strong><p><span id="avisoQueima">Carregando dados de conferência.</span></p></div>
               <span class="badge badge-info">Informativo</span>
             </div>
           </div>
@@ -1482,7 +1482,7 @@
       <section class="page" id="page-vencidos">
         <div class="page-heading"><div><h2>Produtos Vencidos</h2><p>Separação entre itens retirados do salão e itens vencidos que ainda permanecem nos mapas.</p></div><button class="button" id="refreshVencidos"><i data-lucide="refresh-cw"></i> Atualizar</button></div>
         <div class="mini-stats"><div class="mini-stat"><span>Retirados (aba Vencidos)</span><strong id="vencidosRetiradosTotal">—</strong></div><div class="mini-stat"><span>Vencidos no salão</span><strong id="vencidosSalaoTotal">—</strong></div><div class="mini-stat"><span>Quantidade total vencida</span><strong id="vencidosQuantidadeTotal">—</strong></div></div>
-        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos Retirado</div><div class="panel-subtitle">Registros já movidos para a aba Vencidos</div></div><div class="toolbar-actions"><input class="filter-select" id="retiradosBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Aba de origem</th><th>Data de coleta</th></tr></thead><tbody id="retiradosTbody"></tbody></table></div><div class="empty-state" id="retiradosEmpty">Nenhum produto retirado encontrado.</div></div>
+        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos Retirado</div><div class="panel-subtitle">Registros já movidos para a aba Vencidos</div></div><div class="toolbar-actions"><input class="filter-select" id="retiradosBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Aba de origem</th><th>Data de coleta</th><th>Ação</th></tr></thead><tbody id="retiradosTbody"></tbody></table></div><div class="empty-state" id="retiradosEmpty">Nenhum produto retirado encontrado.</div></div>
         <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Produtos Vencidos no Salão</div><div class="panel-subtitle">Itens vencidos que continuam nas abas dos mapas</div></div><div class="toolbar-actions"><input class="filter-select" id="salaoBusca" placeholder="Buscar código, descrição ou lote"></div></div><div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Ação</th></tr></thead><tbody id="salaoTbody"></tbody></table></div><div class="empty-state" id="salaoEmpty">Nenhum produto vencido no salão.</div></div>
       </section>
 
@@ -1537,34 +1537,30 @@
         </div>
       </section>
 
-      <!-- PRODUTOS -->
+      <!-- PRODUTOS: catálogo real vindo de produtos_ean.json + registros salvos na planilha -->
       <section class="page" id="page-produtos">
         <div class="page-heading">
-          <div><h2>Produtos</h2><p>Cadastro e consulta do catálogo de produtos.</p></div>
-          <button class="button button-primary" data-demo="Cadastrar produto"><i data-lucide="plus"></i> Adicionar produto</button>
+          <div><h2>Produtos</h2><p>Catálogo de EAN, descrição e seção dos produtos.</p></div>
+          <button class="button button-primary" id="abrirAdicionarProduto"><i data-lucide="plus"></i> Adicionar Item</button>
         </div>
-        <div class="notice">O catálogo abaixo é demonstrativo. O cadastro real de código, EAN, descrição e categoria será implementado na integração com o banco de dados.</div>
+        <div class="notice" id="produtosNotice">Carregando catálogo de produtos...</div>
         <div class="mini-stats">
-          <div class="mini-stat"><span>Total de produtos</span><strong>1.248</strong></div>
-          <div class="mini-stat"><span>Ativos</span><strong>1.231</strong></div>
-          <div class="mini-stat"><span>Inativos</span><strong>17</strong></div>
+          <div class="mini-stat"><span>Total de produtos</span><strong id="produtosTotal">—</strong></div>
+          <div class="mini-stat"><span>Com seção</span><strong id="produtosComSecao">—</strong></div>
+          <div class="mini-stat"><span>Sem seção</span><strong id="produtosSemSecao">—</strong></div>
         </div>
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Catálogo de produtos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar código, EAN ou descrição..."></div><select class="filter-select table-filter"><option value="">Todos os status</option><option>Ativo</option><option>Inativo</option></select></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Código</th><th>EAN</th><th>Descrição</th><th>Categoria</th><th>Unidade</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody>
-              <tr><td>PR001</td><td>7890000000012</td><td class="cell-primary">Leite Integral 1L</td><td>Laticínios</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR001">Editar</button></td></tr>
-              <tr><td>PR002</td><td>7890000000043</td><td class="cell-primary">Café Tradicional 500g</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR002">Editar</button></td></tr>
-              <tr><td>PR003</td><td>7890000000029</td><td class="cell-primary">Biscoito Cream Cracker</td><td>Biscoitos</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR003">Editar</button></td></tr>
-              <tr><td>PR004</td><td>7890000000036</td><td class="cell-primary">Refrigerante Cola 2L</td><td>Bebidas</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR004">Editar</button></td></tr>
-              <tr><td>PR005</td><td>7890000000050</td><td class="cell-primary">Arroz Tipo 1 5kg</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-neutral">Inativo</span></td><td><button class="button" data-demo="Editar produto PR005">Editar</button></td></tr>
-            </tbody>
-          </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum produto encontrado.</div>
+          <div class="table-toolbar"><div class="panel-title">Catálogo completo</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="produtosBusca" placeholder="Buscar EAN, descrição ou seção..."></div></div></div>
+          <div class="table-wrap"><table><thead><tr><th>EAN</th><th>Descrição</th><th>Seção</th></tr></thead><tbody id="produtosTbody"></tbody></table></div>
+          <div class="empty-state" id="produtosEmpty">Nenhum produto encontrado.</div>
         </div>
       </section>
-
+      <div id="produtoModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:#0008;z-index:9999;align-items:center;justify-content:center;padding:20px">
+        <div class="panel" style="width:min(480px,100%);padding:24px;background:#fff;border-radius:16px">
+          <div class="panel-header"><div><div class="panel-title">Adicionar Item</div><div class="panel-subtitle">O novo produto será salvo na planilha.</div></div><button class="button" id="fecharProdutoModal" type="button">Fechar</button></div>
+          <form id="produtoForm"><label for="novoProdutoEan">EAN</label><input id="novoProdutoEan" required inputmode="numeric" maxlength="32" style="width:100%;margin:8px 0 16px;padding:12px;border:1px solid #ccd5df;border-radius:8px"><label for="novoProdutoDescricao">Descrição</label><input id="novoProdutoDescricao" required maxlength="250" style="width:100%;margin:8px 0 16px;padding:12px;border:1px solid #ccd5df;border-radius:8px"><label for="novoProdutoSecao">Seção</label><input id="novoProdutoSecao" maxlength="120" placeholder="Opcional" style="width:100%;margin:8px 0 20px;padding:12px;border:1px solid #ccd5df;border-radius:8px"><div style="display:flex;gap:10px;justify-content:flex-end"><button class="button" type="button" id="cancelarProduto">Cancelar</button><button class="button button-primary" id="salvarProduto" type="submit">Salvar Item</button></div></form>
+        </div>
+      </div>
       <!-- SINALIZADOS -->
       <section class="page" id="page-sinalizados">
         <div class="page-heading">
@@ -1751,10 +1747,10 @@
   const painelCache = { validades: [], vencidos: [], queima: [] };
   let mapaDescricoes = {};
   async function carregarDescricoesProdutos() { try { const r = await fetch('./produtos_ean.json', {cache:'no-store'}); if (r.ok) mapaDescricoes = await r.json(); } catch (_) {} }
-  function descricaoProduto(r) { return r.descricao || r.produto || mapaDescricoes[String(r.codigo || '').trim()] || r.codigo || ''; }
+  function descricaoProduto(r) { const found=mapaDescricoes[String(r.codigo || '').trim()]; return r.descricao || r.produto || (typeof found==='string'?found:(found&&found.produto)) || r.codigo || ''; }
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
-      const callbackMap = { validade: '__validadeCb', historico: '__historicoCb', sinalizacao: '__sinalizacaoCb', editar: '__editarCb', excluir: '__excluirCb', subirVencidos: '__subirVencidosCb', dashboard: '__dashboardPainelCb', vencidos: '__vencidosPainelCb' };
+      const callbackMap = { validade: '__validadeCb', historico: '__historicoCb', sinalizacao: '__sinalizacaoCb', editar: '__editarCb', excluir: '__excluirCb', subirVencidos: '__subirVencidosCb', dashboard: '__dashboardPainelCb', vencidos: '__vencidosPainelCb', catalogoProdutos: '__catalogoProdutosCb', adicionarProduto: '__adicionarProdutoCb', retirarDeLoja: '__retirarDeLojaCb' };
       const cbName = callbackMap[callback] || callback;
       const params = new URLSearchParams({ action, callback: cbName, ...extra });
       const script = document.createElement('script');
@@ -1795,14 +1791,57 @@
     const retirados=data.retirados||[]; const salao=data.salao||[]; painelCache.vencidos=data;
     document.getElementById('vencidosRetiradosTotal').textContent=retirados.length; document.getElementById('vencidosSalaoTotal').textContent=salao.length; document.getElementById('vencidosQuantidadeTotal').textContent=[...retirados,...salao].reduce((a,r)=>a+(Number(r.quantidade)||0),0);
     const desc=r=>descricaoProduto(r)||r.codigo||'';
-    document.getElementById('retiradosTbody').innerHTML=retirados.map(r=>`<tr><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(r.abaOrigem||'')}</td><td>${escHtml(fmtData(r.dataColeta))}</td></tr>`).join('');
+    document.getElementById('retiradosTbody').innerHTML=retirados.map(r=>`<tr><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(r.abaOrigem||'')}</td><td>${escHtml(fmtData(r.dataColeta))}</td><td><button class="button button-danger" onclick="retirarDeLoja('${escHtml(r.chaveUnica||'')}')">Retirado de Loja</button></td></tr>`).join('');
     document.getElementById('salaoTbody').innerHTML=salao.map(r=>`<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')">Mover para Vencidos</button></td></tr>`).join('');
     document.getElementById('retiradosEmpty').style.display=retirados.length?'none':'block'; document.getElementById('salaoEmpty').style.display=salao.length?'none':'block';
   }
   async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
-  async function carregarDashboard() { try {const d=await jsonpPainel('dashboardPainel','dashboard');if(!d.sucesso)throw new Error(d.mensagem||'Falha');const x=d.indicadores||{}; for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal}))document.getElementById(id).textContent=v??0; setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes);setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal); }catch(e){console.error('Dashboard:',e);} }
+  async function carregarDashboard() { try {const d=await jsonpPainel('dashboardPainel','dashboard');if(!d.sucesso)throw new Error(d.mensagem||'Falha');const x=d.indicadores||{}; for(const [id,v] of Object.entries({dashLancamentos:x.lancamentos,dashQueimaTotal:x.queimaTotal,dashQueimaMes:(x.queimaMes??0)+' neste mês',dashAVencer:x.aVencer,dashVencidos:(x.vencidosRetirados||0)+(x.vencidosSalao||0),queimaMesLancados:x.queimaMes,queimaMesAprovados:x.queimaAprovadosMes,queimaGeralLancados:x.queimaTotal,queimaGeralAprovados:x.queimaAprovadosTotal}))document.getElementById(id).textContent=v??0; setDonut('queimaMesChart','queimaMesInner',x.queimaMes,x.queimaAprovadosMes);setDonut('queimaGeralChart','queimaGeralInner',x.queimaTotal,x.queimaAprovadosTotal); document.getElementById('avisoAVencer').textContent=(x.aVencer||0)+' itens precisam ser conferidos e acompanhados.';document.getElementById('avisoVencidos').textContent=((x.vencidosRetirados||0)+(x.vencidosSalao||0))+' itens vencidos registrados no sistema.';document.getElementById('avisoQueima').textContent=(x.queimaAprovadosMes||0)+' de '+(x.queimaMes||0)+' produtos lançados no mês estão aprovados.'; }catch(e){console.error('Dashboard:',e);} }
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
-  async function atualizarPainel(){await carregarDescricoesProdutos();await Promise.all([carregarDashboard(),carregarMapa(),carregarVencidos()]);}
+  let catalogoProdutos = [];
+  function renderProdutos() {
+    const q=(document.getElementById('produtosBusca')?.value||'').trim().toLocaleLowerCase('pt-BR');
+    const rows=catalogoProdutos.filter(p=>(String(p.ean)+' '+String(p.produto)+' '+String(p.secao||'')).toLocaleLowerCase('pt-BR').includes(q));
+    document.getElementById('produtosTotal').textContent=catalogoProdutos.length;
+    document.getElementById('produtosComSecao').textContent=catalogoProdutos.filter(p=>String(p.secao||'').trim()).length;
+    document.getElementById('produtosSemSecao').textContent=catalogoProdutos.filter(p=>!String(p.secao||'').trim()).length;
+    document.getElementById('produtosTbody').innerHTML=rows.map(p=>`<tr><td>${escHtml(p.ean)}</td><td class="cell-primary">${escHtml(p.produto)}</td><td>${escHtml(p.secao||'')}</td></tr>`).join('');
+    document.getElementById('produtosEmpty').style.display=rows.length?'none':'block';
+  }
+  async function carregarProdutos() {
+    const notice=document.getElementById('produtosNotice');
+    try {
+      let base={};
+      const r=await fetch('./produtos_ean.json',{cache:'no-store'});
+      if(!r.ok) throw new Error('Não foi possível carregar produtos_ean.json. Confira se ele está na mesma pasta do HTML.');
+      base=await r.json();
+      const lista=Object.entries(base).map(([ean,obj])=>({ean:String(ean),produto:String(obj?.produto||''),secao:String(obj?.secao||'')})).filter(p=>p.ean && p.produto);
+      // O backend retorna produtos adicionados pela tela, guardados na planilha.
+      const d=await jsonpPainel('catalogoProdutos','catalogoProdutos');
+      if(!d.sucesso) throw new Error(d.mensagem||'Não foi possível consultar os produtos adicionados.');
+      const mapa=new Map(lista.map(p=>[p.ean,p]));
+      (d.produtos||[]).forEach(p=>mapa.set(String(p.ean),{ean:String(p.ean),produto:String(p.produto||''),secao:String(p.secao||'')}));
+      catalogoProdutos=[...mapa.values()].sort((a,b)=>a.produto.localeCompare(b.produto,'pt-BR'));
+      mapaDescricoes={...base,...Object.fromEntries(catalogoProdutos.map(p=>[p.ean,{produto:p.produto,secao:p.secao}]))};
+      renderProdutos(); notice.textContent=`Catálogo carregado: ${catalogoProdutos.length} produtos.`;
+    } catch(e) { notice.textContent=e.message+' Os itens do JSON não foram alterados.'; console.error(e); }
+  }
+  function abrirModalProduto(){document.getElementById('produtoModal').style.display='flex';document.getElementById('novoProdutoEan').focus();}
+  function fecharModalProduto(){document.getElementById('produtoModal').style.display='none';document.getElementById('produtoForm').reset();}
+  document.getElementById('abrirAdicionarProduto')?.addEventListener('click',abrirModalProduto);
+  document.getElementById('fecharProdutoModal')?.addEventListener('click',fecharModalProduto);
+  document.getElementById('cancelarProduto')?.addEventListener('click',fecharModalProduto);
+  document.getElementById('produtosBusca')?.addEventListener('input',renderProdutos);
+  document.getElementById('produtoForm')?.addEventListener('submit',async ev=>{
+    ev.preventDefault(); const ean=document.getElementById('novoProdutoEan').value.trim(); const produto=document.getElementById('novoProdutoDescricao').value.trim(); const secao=document.getElementById('novoProdutoSecao').value.trim();
+    if(!ean||!produto){alert('Informe o EAN e a descrição.');return;}
+    if(catalogoProdutos.some(p=>p.ean===ean)){alert('Esse EAN já existe no catálogo.');return;}
+    const btn=document.getElementById('salvarProduto'); btn.disabled=true; btn.textContent='Salvando...';
+    try {const d=await jsonpPainel('adicionarProduto','adicionarProduto',{ean,produto,secao});if(!d.sucesso)throw new Error(d.mensagem||'Falha ao salvar');catalogoProdutos.push({ean,produto,secao});catalogoProdutos.sort((a,b)=>a.produto.localeCompare(b.produto,'pt-BR'));mapaDescricoes[ean]={produto,secao};renderProdutos();fecharModalProduto();document.getElementById('produtosNotice').textContent=d.mensagem||'Produto salvo com sucesso.';}
+    catch(e){alert('Não foi possível salvar o produto: '+e.message);}finally{btn.disabled=false;btn.textContent='Salvar Item';}
+  });
+  async function retirarDeLoja(chave) { if(!chave){alert('Este registro não possui Chave Única.');return;} if(!confirm('Confirma que o produto foi retirado da loja? O registro será removido da aba Vencidos.'))return; try {const d=await jsonpPainel('retirarDeLoja','retirarDeLoja',{chaveUnica:chave});alert(d.mensagem||'Operação concluída.');if(d.sucesso)await atualizarPainel();}catch(e){alert('Não foi possível retirar o registro: '+e.message);} }
+  async function atualizarPainel(){await carregarDescricoesProdutos();await Promise.all([carregarDashboard(),carregarMapa(),carregarVencidos(),carregarProdutos()]);}
   ['mapaProduto','mapaLote','mapaValidade','mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
   document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
