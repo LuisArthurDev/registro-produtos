@@ -1724,7 +1724,25 @@
         <div class="notice" id="transferenciasNotice">Carregando transferências...</div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="transferenciasTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="transferenciasLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="transferenciasMes">—</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa de transferências por lote</div><div class="toolbar-actions"><input class="filter-select" id="transferenciasProduto" placeholder="Produto / código"><input class="filter-select" id="transferenciasLote" placeholder="Lote"><input class="filter-select" id="transferenciasValidade" type="date" aria-label="Filtrar validade"><select class="filter-select" id="transferenciasSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
-        <div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="transferenciasTbody"></tbody></table></div><div class="empty-state" id="transferenciasEmpty">Nenhuma transferência encontrada.</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Loja de Origem</th>
+                <th>Romaneio</th>
+                <th>Código</th>
+                <th>Descrição</th>
+                <th>Lote</th>
+                <th>Validade</th>
+                <th>Quantidade</th>
+                <th>Data de registro</th>
+                <th>Situação</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="transferenciasTbody"></tbody>
+          </table>
+        </div>  
       </section>
 
       <!-- CONTROLE DE ESTOQUE -->
@@ -2375,19 +2393,122 @@ function renderControleValidade() {
     renderPainelIcons();
   }
   function renderTransferencias() {
-    const all=(painelCache.validades||[]).filter(r=>String(r.funcionario||'')==='Transferencias');
-    const q=(document.getElementById('transferenciasProduto').value||'').toLocaleLowerCase('pt-BR').trim();
-    const lote=(document.getElementById('transferenciasLote').value||'').toLocaleLowerCase('pt-BR').trim();
-    const validade=document.getElementById('transferenciasValidade').value;
-    const sit=document.getElementById('transferenciasSituacao').value;
-    const rows=all.filter(r=>(!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q))&&(!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote))&&(!validade||(r.validadeISO||'')===validade)&&(!sit||situacaoPainel(r)===sit));
-    document.getElementById('transferenciasTotal').textContent=all.length;
-    document.getElementById('transferenciasLotes').textContent=new Set(all.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
-    const ym=new Date().toISOString().slice(0,7);document.getElementById('transferenciasMes').textContent=all.filter(r=>(r.validadeISO||'').slice(0,7)===ym).length;
-    document.getElementById('transferenciasTbody').innerHTML=rows.map(r=>{const st=situacaoPainel(r);const badge=st==='Vencido'?'badge-danger':st==='A Vencer'?'badge-warning':'badge-success';return `<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(descricaoProduto(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><span class="badge ${badge}">${st}</span></td><td><button class="button" onclick="editarMapa('${escHtml(r.chaveUnica||'')}','${escHtml(r.lote||'')}','${escHtml(r.validadeISO||'')}','${escHtml(r.quantidade)}','Transferencias')" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button> <button class="button button-danger" onclick="excluirMapa('${escHtml(r.chaveUnica||'')}')" title="Excluir" aria-label="Excluir"><i data-lucide="trash-2"></i></button> ${st==='Vencido'?`<button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button>`:''}</td></tr>`}).join('');
-    document.getElementById('transferenciasEmpty').style.display=rows.length?'none':'block';
+    const all = (painelCache.validades || []).filter(
+      r => String(r.funcionario || '') === 'Transferencias'
+    );
+  
+    const q = (
+      document.getElementById('transferenciasProduto').value || ''
+    ).toLocaleLowerCase('pt-BR').trim();
+  
+    const lote = (
+      document.getElementById('transferenciasLote').value || ''
+    ).toLocaleLowerCase('pt-BR').trim();
+  
+    const validade = document.getElementById('transferenciasValidade').value;
+    const sit = document.getElementById('transferenciasSituacao').value;
+  
+    const rows = all.filter(r =>
+      (
+        !q ||
+        (String(r.codigo) + ' ' + descricaoProduto(r))
+          .toLocaleLowerCase('pt-BR')
+          .includes(q)
+      ) &&
+      (
+        !lote ||
+        String(r.lote || '').toLocaleLowerCase('pt-BR').includes(lote)
+      ) &&
+      (!validade || (r.validadeISO || '') === validade) &&
+      (!sit || situacaoPainel(r) === sit)
+    );
+  
+    // Indicadores
+    document.getElementById('transferenciasTotal').textContent = all.length;
+  
+    document.getElementById('transferenciasLotes').textContent =
+      new Set(
+        all.map(r => String(r.lote || '').trim()).filter(Boolean)
+      ).size;
+  
+    const ym = new Date().toISOString().slice(0, 7);
+  
+    document.getElementById('transferenciasMes').textContent =
+      all.filter(r => (r.validadeISO || '').slice(0, 7) === ym).length;
+  
+    // Tabela
+    document.getElementById('transferenciasTbody').innerHTML = rows.map(r => {
+      const st = situacaoPainel(r);
+  
+      const badge =
+        st === 'Vencido'
+          ? 'badge-danger'
+          : st === 'A Vencer'
+            ? 'badge-warning'
+            : 'badge-success';
+  
+      return `
+        <tr>
+          <td>${escHtml(r.lojaOrigem || '')}</td>
+          <td>${escHtml(r.romaneio || '')}</td>
+          <td>${escHtml(r.codigo || '')}</td>
+          <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
+          <td>${escHtml(r.lote || '')}</td>
+          <td>${escHtml(fmtData(r.validade))}</td>
+          <td>${escHtml(r.quantidade ?? '')}</td>
+          <td>${escHtml(fmtData(dataRegistro(r)))}</td>
+          <td>
+            <span class="badge ${badge}">${escHtml(st)}</span>
+          </td>
+          <td>
+            <button
+              class="button"
+              onclick="editarMapa(
+                '${escHtml(r.chaveUnica || '')}',
+                '${escHtml(r.lote || '')}',
+                '${escHtml(r.validadeISO || '')}',
+                '${escHtml(r.quantidade ?? '')}',
+                'Transferencias'
+              )"
+              title="Editar"
+              aria-label="Editar"
+            >
+              <i data-lucide="pencil"></i>
+            </button>
+  
+            <button
+              class="button button-danger"
+              onclick="excluirMapa('${escHtml(r.chaveUnica || '')}')"
+              title="Excluir"
+              aria-label="Excluir"
+            >
+              <i data-lucide="trash-2"></i>
+            </button>
+  
+            ${
+              st === 'Vencido'
+                ? `
+                  <button
+                    class="button"
+                    onclick="moverVencido('${escHtml(r.chaveUnica || '')}')"
+                    title="Mover para Vencidos"
+                    aria-label="Mover para Vencidos"
+                  >
+                    <i data-lucide="archive"></i>
+                  </button>
+                `
+                : ''
+            }
+          </td>
+        </tr>
+      `;
+    }).join('');
+  
+    document.getElementById('transferenciasEmpty').style.display =
+      rows.length ? 'none' : 'block';
+  
     renderPainelIcons();
-  }
+}
   
   async function carregarMapa() {
     const n = document.getElementById('mapaNotice');
