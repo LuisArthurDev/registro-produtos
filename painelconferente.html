@@ -1553,9 +1553,11 @@
               <thead>
                 <tr>
                   <th>Código</th>
+                  <th>Descrição</th>
                   <th>Lote</th>
                   <th>Validade</th>
                   <th>Quantidade</th>
+                  <th>Situação</th>
                   <th>Mês de lançamento</th>
                   <th>Ações</th>
                 </tr>
@@ -1587,9 +1589,11 @@
               <thead>
                 <tr>
                   <th>Código</th>
+                  <th>Descrição</th>
                   <th>Lote</th>
                   <th>Validade</th>
                   <th>Quantidade</th>
+                  <th>Situação</th>
                   <th>Mês de aprovação</th>
                 </tr>
               </thead>
@@ -1620,9 +1624,11 @@
               <thead>
                 <tr>
                   <th>Código</th>
+                  <th>Descrição</th>
                   <th>Lote</th>
                   <th>Validade</th>
                   <th>Quantidade</th>
+                  <th>Situação</th>
                   <th>Mês de lançamento</th>
                   <th>Ação</th>
                 </tr>
@@ -2469,6 +2475,32 @@
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
   const painelCache = { validades: [], vencidos: [], queima: [] };
+
+  // Controle visual local: não altera nem exclui dados das planilhas.
+  // A lista fica salva neste navegador por meio do localStorage.
+  const CHAVES_QUEIMA_HTML = 'painelConferente_chavesQueimaHTML_v1';
+  function obterChavesQueimaHTML() {
+    try {
+      const dados = JSON.parse(localStorage.getItem(CHAVES_QUEIMA_HTML) || '[]');
+      return new Set(Array.isArray(dados) ? dados.map(String) : []);
+    } catch (_) { return new Set(); }
+  }
+  function foiParaQueimaHTML(registro) {
+    const chave = String(registro?.chaveUnica || '').trim();
+    return Boolean(chave) && obterChavesQueimaHTML().has(chave);
+  }
+  function marcarComoQueimaHTML(chave) {
+    const valor = String(chave || '').trim();
+    if (!valor) return;
+    const chaves = obterChavesQueimaHTML();
+    chaves.add(valor);
+    try { localStorage.setItem(CHAVES_QUEIMA_HTML, JSON.stringify([...chaves])); }
+    catch (e) { console.warn('Não foi possível salvar o controle local do Queima.', e); }
+  }
+  function registrosVisiveisHTML(registros) {
+    return (Array.isArray(registros) ? registros : []).filter(r => !foiParaQueimaHTML(r));
+  }
+
  
   let mapaDescricoes = {};
   
@@ -2669,7 +2701,7 @@
 const CV_ELEGIVEIS_POR_PAGINA = 25;
 
 function renderControleValidade() {
-  const registros = painelCache.validades || [];
+  const registros = registrosVisiveisHTML(painelCache.validades);
 
   const dentro = registros.filter(r => {
     const dias = diasAte(r.validadeISO || r.validade);
@@ -2774,7 +2806,7 @@ function renderControleValidade() {
     const func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
     const sit=document.getElementById('mapaSituacao').value;
-    const todos=(painelCache.validades||[]).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
+    const todos=registrosVisiveisHTML(painelCache.validades).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
     const categoria = r => {
       const nome=String(r.funcionario||'').trim();
       if (FUNCIONARIOS_MAPA.includes(nome)) return 'funcionarios';
@@ -3033,12 +3065,12 @@ function renderControleValidade() {
       renderTransferencias();
       if (typeof renderPaginasGestao === 'function') renderPaginasGestao();
   
-      atualizarResumoValidade(painelCache.validades);
-      atualizarProdutosAtencao(painelCache.validades);
+      atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
+      atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
   
       if (n) {
         n.textContent =
-          `Dados atualizados. ${painelCache.validades.length} registros encontrados.`;
+          `Dados atualizados. ${registrosVisiveisHTML(painelCache.validades).length} registros encontrados.`;
         n.style.display = 'block';
       }
   
@@ -3147,13 +3179,23 @@ function renderControleValidade() {
   
     const esc = v => escHtml(v == null ? '' : String(v));
   
+    const celulaSituacao = r => {
+      const situacao = calcularSituacaoValidade(r.validadeISO || r.validade);
+      const vencido = /^Vencido/i.test(situacao);
+      const cls = vencido ? 'badge-danger' : /^À VENCER/i.test(situacao) ? 'badge-warning' : 'badge-success';
+      return `<span class="badge ${cls}">${esc(situacao)}</span>`;
+    };
+    const descricaoQueima = r => r.descricao || descricaoProduto(r) || r.codigo || '—';
+  
     document.getElementById('queimaPendentesTbody').innerHTML =
       pendentes.map(r => `
         <tr>
           <td>${esc(r.codigo)}</td>
+          <td class="cell-primary">${esc(descricaoQueima(r))}</td>
           <td>${esc(r.lote)}</td>
           <td>${esc(fmtData(r.validade))}</td>
           <td>${esc(r.quantidade)}</td>
+          <td>${celulaSituacao(r)}</td>
           <td>${esc(r.mesLancamento)}</td>
           <td>
             <button class="button button-primary"
@@ -3169,9 +3211,11 @@ function renderControleValidade() {
       aprovados.map(r => `
         <tr>
           <td>${esc(r.codigo)}</td>
+          <td class="cell-primary">${esc(descricaoQueima(r))}</td>
           <td>${esc(r.lote)}</td>
           <td>${esc(fmtData(r.validade))}</td>
           <td>${esc(r.quantidade)}</td>
+          <td>${celulaSituacao(r)}</td>
           <td>${esc(r.mesAprovado)}</td>
         </tr>
       `).join('');
@@ -3180,9 +3224,11 @@ function renderControleValidade() {
       relancar.map(r => `
         <tr>
           <td>${esc(r.codigo)}</td>
+          <td class="cell-primary">${esc(descricaoQueima(r))}</td>
           <td>${esc(r.lote)}</td>
           <td>${esc(fmtData(r.validade))}</td>
           <td>${esc(r.quantidade)}</td>
+          <td>${celulaSituacao(r)}</td>
           <td>${esc(r.mesLancamento)}</td>
           <td>
             <button class="button button-primary"
@@ -3307,7 +3353,7 @@ function renderControleValidade() {
   document.getElementById('queimaBuscaRelancar')
     ?.addEventListener('input', renderQueima);
 
-  function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
+  function atualizarResumoValidade(registros){registros = registrosVisiveisHTML(registros);const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   
 
 
@@ -3415,16 +3461,20 @@ function atualizarProdutosAtencao(registros) {
       }
   
       const x = d.indicadores || {};
+      const ocultosQueima = (painelCache.validades || []).filter(foiParaQueimaHTML);
+      const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
+      const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
+      const ocultosVencidos = diasOcultos.filter(dias => dias !== null && dias < 0).length;
   
-      // Atualiza os indicadores do Dashboard.
+      // Os totais de validade/lancamentos são ajustados visualmente no HTML.
       const indicadores = {
-        dashLancamentos: x.lancamentos,
+        dashLancamentos: Math.max(0, (Number(x.lancamentos) || 0) - ocultosQueima.length),
         dashQueimaTotal: x.queimaTotal,
         dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
-        dashAVencer: x.aVencer,
-        dashVencidos:
+        dashAVencer: Math.max(0, (Number(x.aVencer) || 0) - ocultosAVencer),
+        dashVencidos: Math.max(0,
           (Number(x.vencidosRetirados) || 0) +
-          (Number(x.vencidosSalao) || 0),
+          (Number(x.vencidosSalao) || 0) - ocultosVencidos),
   
         // Gráfico de Queima do mês atual.
         queimaMesLancados: x.queimaMes,
@@ -3469,13 +3519,13 @@ function atualizarProdutosAtencao(registros) {
       // Atualiza os resumos de validade.
       if (typeof atualizarResumoValidade === 'function') {
         atualizarResumoValidade(
-          painelCache.validades || []
+          registrosVisiveisHTML(painelCache.validades)
         );
       }
   
       if (typeof atualizarProdutosAtencao === 'function') {
         atualizarProdutosAtencao(
-          painelCache.validades || []
+          registrosVisiveisHTML(painelCache.validades)
         );
       }
   
@@ -3508,7 +3558,7 @@ function atualizarProdutosAtencao(registros) {
   document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
   async function atualizarPainel(){
     // Não deixar o carregamento do catálogo bloquear as consultas principais do painel.
-    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); if (typeof renderPaginasGestao === 'function') renderPaginasGestao(); });
+    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades)); atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades)); if (typeof renderPaginasGestao === 'function') renderPaginasGestao(); });
     const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
     await Promise.allSettled(tarefas);
   }
@@ -3574,6 +3624,12 @@ function atualizarProdutosAtencao(registros) {
         dados?.mensagem || 'Não foi possível lançar o produto.'
       );
     }
+
+    // Registra somente no navegador para ocultar este lote no Mapa/Dashboard.
+    marcarComoQueimaHTML(registro.chaveUnica);
+    renderMapa();
+    atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
+    atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
 
     alert(dados.mensagem || 'Produto lançado para a Queima.');
 
@@ -4259,20 +4315,23 @@ configurarEnterDigitacaoManualMapa();
 
 
   
-
 function limparFormularioMapaManterFuncionario() {
   const modal = document.getElementById("modalDigitacaoManualMapa");
   if (!modal) return;
 
-  // Guarda o funcionário selecionado.
-  const campoFuncionario = document.getElementById("manualFuncionario");
+  // Guarda o funcionário selecionado antes de limpar os campos.
+  const campoFuncionario = modal.querySelector(
+    "#funcionarioManualMapa, #funcionarioDigitacaoManualMapa, select[name='funcionario'], input[name='funcionario']"
+  );
+
   const funcionarioSelecionado = campoFuncionario
     ? campoFuncionario.value
     : "";
 
-  // Limpa os campos de texto, mantendo o funcionário.
+  // Limpa os campos do formulário, exceto Funcionário.
   modal.querySelectorAll("input, textarea").forEach(campo => {
     if (
+      campo === campoFuncionario ||
       campo.type === "hidden" ||
       campo.type === "button" ||
       campo.type === "submit" ||
@@ -4285,37 +4344,40 @@ function limparFormularioMapaManterFuncionario() {
     campo.value = "";
   });
 
-  // Limpa os demais selects, preservando o funcionário.
+  // Limpa os selects, exceto o campo Funcionário.
   modal.querySelectorAll("select").forEach(campo => {
-    if (campo.id === "manualFuncionario") return;
+    if (campo === campoFuncionario) return;
     campo.selectedIndex = 0;
   });
 
-  // Restaura o funcionário selecionado.
+  // Mantém o funcionário selecionado.
   if (campoFuncionario) {
     campoFuncionario.value = funcionarioSelecionado;
   }
 
-  // Limpa mensagens e estados de confirmação.
-  const status = document.getElementById("manualMapaStatus");
-  if (status) {
-    status.textContent = "";
-    status.style.color = "";
+  // Limpa o estado do produto encontrado, se utilizado pelo modal.
+  if (typeof produtoManualMapaAtual !== "undefined") {
+    produtoManualMapaAtual = null;
   }
 
-  const confirmacao = document.getElementById(
-    "modalConfirmarCodigoManualMapa"
+  if (typeof produtoManualMapaEncontrado !== "undefined") {
+    produtoManualMapaEncontrado = false;
+  }
+
+  if (typeof confirmacaoManualMapaPendente !== "undefined") {
+    confirmacaoManualMapaPendente = false;
+  }
+
+  // Restaura o botão Salvar.
+  const botaoSalvar = modal.querySelector(
+    "#btnSalvarDigitacaoManualMapa"
   );
 
-  if (confirmacao) {
-    confirmacao.style.display = "none";
-  }
-
-  if (typeof renderPainelIcons === "function") {
-    renderPainelIcons(modal);
+  if (botaoSalvar) {
+    botaoSalvar.disabled = false;
+    botaoSalvar.innerHTML = "Salvar Lançamento";
   }
 }
-
 
 </script>
 <script>
@@ -4563,148 +4625,78 @@ function limparFormularioMapaManterFuncionario() {
 }
 
   /* ---------- Cadastro de produto no produtos_ean.json via Apps Script/GitHub ---------- */
-  let modoProdutoJson = "adicionar";
-
-function abrirModalNovoProdutoJson() {
-  const modal = gProdutoJson("modalNovoProdutoJson");
-  if (!modal) return;
-
-  modoProdutoJson = "adicionar";
-
-  gProdutoJson("formNovoProdutoJson").reset();
-  gProdutoJson("novoProdutoEan").readOnly = false;
-  gProdutoJson("tituloModalNovoProduto").textContent = "Adicionar produto";
-  gProdutoJson("btnSalvarNovoProdutoJson").innerHTML =
-    '<i data-lucide="save"></i> Salvar produto';
-
-  const status = gProdutoJson("novoProdutoJsonStatus");
-  status.textContent = "";
-  status.className = "produto-json-status";
-
-  modal.style.display = "flex";
-  setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
-  renderPainelIcons(modal);
-}
-
-function preencherProdutoParaEdicao(ean, produto) {
-  modoProdutoJson = "editar";
-
-  gProdutoJson("novoProdutoCodigo").value =
-    produto.codigoInterno || "";
-  gProdutoJson("novoProdutoEan").value = ean;
-  gProdutoJson("novoProdutoEan").readOnly = true;
-  gProdutoJson("novoProdutoDescricao").value =
-    typeof produto === "string"
-      ? produto
-      : produto.produto || produto.descricao || "";
-  gProdutoJson("novoProdutoSecao").value =
-    produto.secao || produto.Seção || produto["Seção"] || "";
-
-  gProdutoJson("tituloModalNovoProduto").textContent = "Editar produto";
-  gProdutoJson("btnSalvarNovoProdutoJson").innerHTML =
-    '<i data-lucide="save"></i> Salvar alterações';
-
-  const status = gProdutoJson("novoProdutoJsonStatus");
-  status.className = "produto-json-status info";
-  status.textContent =
-    "EAN existente. Corrija os campos necessários e salve.";
-
-  gProdutoJson("modalNovoProdutoJson").style.display = "flex";
-  renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
-}
-
-async function salvarNovoProdutoJson(event) {
-  event.preventDefault();
-
-  const btn = gProdutoJson("btnSalvarNovoProdutoJson");
-  const status = gProdutoJson("novoProdutoJsonStatus");
-
-  const codigoInterno = gProdutoJson("novoProdutoCodigo").value.trim();
-  const ean = gProdutoJson("novoProdutoEan").value.trim();
-  const produto = gProdutoJson("novoProdutoDescricao").value.trim();
-  const secao = gProdutoJson("novoProdutoSecao").value.trim();
-
-  if (!codigoInterno || !ean || !produto || !secao) {
-    status.className = "produto-json-status error";
-    status.textContent = "Preencha todos os campos.";
-    return;
+  function abrirModalNovoProdutoJson() {
+    const modal = gProdutoJson("modalNovoProdutoJson");
+    if (!modal) return;
+    gProdutoJson("formNovoProdutoJson").reset();
+    const status = gProdutoJson("novoProdutoJsonStatus");
+    status.textContent = "";
+    status.className = "produto-json-status";
+    modal.style.display = "flex";
+    setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
+    renderPainelIcons(modal);
   }
-
-  if (!/^\d{8,14}$/.test(ean)) {
-    status.className = "produto-json-status error";
-    status.textContent = "O EAN deve conter de 8 a 14 dígitos.";
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = "Salvando...";
-  status.className = "produto-json-status info";
-  status.textContent = "Salvando alterações no GitHub...";
-
-  try {
-    const resposta = await jsonpPainel(
-      "adicionarProdutoJson",
-      "__adicionarProdutoJsonCb",
-      {
-        modo: modoProdutoJson,
-        codigoInterno,
-        ean,
-        produto,
-        secao
-      }
-    );
-
-    if (!resposta || resposta.sucesso !== true) {
-      if (resposta?.duplicado && resposta.produto) {
-        const escolha = confirm(
-          "Este EAN já está cadastrado.\n\n" +
-          "Descrição: " + (resposta.produto.produto || "") + "\n" +
-          "Seção: " + (resposta.produto.secao || "") + "\n\n" +
-          "Deseja editar este produto?"
-        );
-
-        if (escolha) {
-          preencherProdutoParaEdicao(ean, resposta.produto);
-        }
-
-        return;
-      }
-
-      throw new Error(
-        resposta?.mensagem || "Não foi possível salvar o produto."
-      );
-    }
-
-    status.className = "produto-json-status success";
-    status.textContent = resposta.mensagem;
-
-    await carregarDescricoesProdutos();
-    renderProdutos();
-
-    setTimeout(() => {
-      fecharModalNovoProdutoJson();
-      abrirModalNovoProdutoJson();
-    }, 1000);
-
-  } catch (erro) {
-    status.className = "produto-json-status error";
-    status.textContent = "Erro ao salvar: " + (erro.message || erro);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML =
-      modoProdutoJson === "editar"
-        ? '<i data-lucide="save"></i> Salvar alterações'
-        : '<i data-lucide="save"></i> Salvar produto';
-
-    renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
-  }
-}
 
   function fecharModalNovoProdutoJson() {
     const modal = gProdutoJson("modalNovoProdutoJson");
     if (modal) modal.style.display = "none";
   }
 
+  async function salvarNovoProdutoJson(event) {
+    event.preventDefault();
+    const btn = gProdutoJson("btnSalvarNovoProdutoJson");
+    const status = gProdutoJson("novoProdutoJsonStatus");
+    const codigoInterno = gProdutoJson("novoProdutoCodigo").value.trim();
+    const ean = gProdutoJson("novoProdutoEan").value.trim();
+    const produto = gProdutoJson("novoProdutoDescricao").value.trim();
+    const secao = gProdutoJson("novoProdutoSecao").value.trim();
+
+    if (!codigoInterno || !ean || !produto || !secao) {
+      status.className = "produto-json-status error";
+      status.textContent = "Preencha todos os campos.";
+      return;
+    }
+    if (mapaDescricoes[ean]) {
+      status.className = "produto-json-status error";
+      status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Salvando...";
+    status.className = "produto-json-status info";
+    status.textContent = "Enviando cadastro ao GitHub...";
+
+    try {
+      const resposta = await jsonpPainel("adicionarProdutoJson", "__adicionarProdutoJsonCb", {
+        codigoInterno, ean, produto, secao
+      });
+      if (!resposta || resposta.sucesso !== true) {
+        throw new Error((resposta && (resposta.mensagem || resposta.erro)) || "Não foi possível salvar o produto.");
+      }
+
+      status.className = "produto-json-status success";
+      status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
+      gProdutoJson("formNovoProdutoJson").reset();
+
+      setTimeout(async () => {
+        try {
+          await carregarDescricoesProdutos();
+          renderProdutos();
+        } catch (erroAtualizacao) {
+          console.warn("Produto salvo; catálogo visual será atualizado quando a publicação terminar.", erroAtualizacao);
+        }
+      }, 1500);
+    } catch (erro) {
+      status.className = "produto-json-status error";
+      status.textContent = "Erro ao salvar: " + (erro.message || erro) +
+        "\nVerifique a rota adicionarProdutoJson no Code.gs e as Propriedades do script do GitHub.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
+      renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
+    }
+  }
 
   gProdutoJson("modalNovoProdutoJson")?.addEventListener("click", event => {
     if (event.target === gProdutoJson("modalNovoProdutoJson")) fecharModalNovoProdutoJson();
