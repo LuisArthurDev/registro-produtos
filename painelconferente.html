@@ -1147,6 +1147,72 @@
         display: none;
       }
     }
+
+    
+    /* Paginação dos produtos elegíveis */
+    #cvElegiveisPaginacao {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border, #e5e7eb);
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    #cvElegiveisInfo {
+      font-size: 13px;
+      color: var(--muted, #64748b);
+    }
+    
+    #cvElegiveisPaginacao .pagination-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+    
+    #cvElegiveisPagina {
+      min-width: 105px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink, #1e293b);
+    }
+    
+    #cvElegiveisPaginacao button {
+      white-space: nowrap;
+    }
+    
+    #cvElegiveisPaginacao button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    
+    @media (max-width: 640px) {
+      #cvElegiveisPaginacao {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    
+      #cvElegiveisInfo {
+        text-align: center;
+      }
+    
+      #cvElegiveisPaginacao .pagination-actions {
+        justify-content: center;
+        margin-left: 0;
+      }
+    
+      #cvElegiveisPagina {
+        min-width: 90px;
+      }
+    }
+
   </style>
 </head>
 
@@ -1693,19 +1759,71 @@
           </div>
         </div>
         
-        <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Controle de vencimentos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Dentro da validade</option><option>Próximo do vencimento</option><option>Vencido</option><option>Sem validade</option></select></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Dias restantes</th><th>Quantidade</th><th>Situação</th></tr></thead>
-            <tbody>
-              <tr><td class="cell-primary">Leite Integral 1L</td><td>LT1026</td><td>25/10/2026</td><td>3 dias</td><td>24</td><td><span class="badge badge-warning">Próximo do vencimento</span></td></tr>
-              <tr><td class="cell-primary">Biscoito Cream Cracker</td><td>BC0926</td><td>18/10/2026</td><td>-4 dias</td><td>12</td><td><span class="badge badge-danger">Vencido</span></td></tr>
-              <tr><td class="cell-primary">Café Tradicional 500g</td><td>CF1026</td><td>10/03/2027</td><td>139 dias</td><td>48</td><td><span class="badge badge-success">Dentro da validade</span></td></tr>
-              <tr><td class="cell-primary">Produto sem identificação</td><td>SL0001</td><td>—</td><td>—</td><td>2</td><td><span class="badge badge-neutral">Sem validade</span></td></tr>
-            </tbody>
-          </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
+        
+        <div class="table-panel" id="cvPainelVencimentos">
+          <div class="table-toolbar">
+            <div>
+              <div class="panel-title">Controle de Vencimentos</div>
+              <div class="panel-subtitle">
+                Acompanhe os produtos vencidos, próximos do vencimento e dentro da validade.
+              </div>
+            </div>
+        
+            <div class="toolbar-actions">
+              <div class="search-box">
+                <i data-lucide="search"></i>
+                <input
+                  id="cvVencimentosBusca"
+                  type="search"
+                  placeholder="Buscar produto, código ou lote..."
+                  aria-label="Buscar produtos por nome, código ou lote"
+                >
+              </div>
+        
+              <select
+                class="filter-select"
+                id="cvVencimentosSituacao"
+                aria-label="Filtrar por situação"
+              >
+                <option value="">Todas as situações</option>
+                <option value="Dentro da validade">Dentro da validade</option>
+                <option value="Próximo do vencimento">Próximo do vencimento</option>
+                <option value="Vencido">Vencido</option>
+                <option value="Sem validade">Sem validade</option>
+              </select>
+        
+              <button class="button" id="cvAtualizarVencimentos" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Atualizar
+              </button>
+            </div>
+          </div>
+        
+          <div class="table-wrap">
+            <table id="cvTabelaVencimentos">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Lote</th>
+                  <th>Validade</th>
+                  <th>Dias restantes</th>
+                  <th>Quantidade</th>
+                  <th>Situação</th>
+                </tr>
+              </thead>
+        
+              <tbody id="cvVencimentosTbody">
+                <!-- Os registros serão preenchidos pelo JavaScript. -->
+              </tbody>
+            </table>
+          </div>
+        
+          <div class="empty-state" id="cvVencimentosEmpty" style="display: none;">
+            <i data-lucide="search-x"></i>
+            Nenhum produto encontrado para os filtros selecionados.
+          </div>
         </div>
+
       </section>
 
       <!-- PRODUTOS VENCIDOS -->
@@ -3310,7 +3428,7 @@ document.getElementById("cvExportarElegiveis")
     setText("funcionariosVencidos", todos.filter(o => o.venc > 0).length);
     g("funcionariosTbody").innerHTML = rows.map(o => {
       const k = norm(o.nome);
-      const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Conferente", "badge-info");
+      const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div></td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
         (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")) + '</td><td><a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' +
