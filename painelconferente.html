@@ -2111,6 +2111,7 @@
                   inputmode="numeric"
                   maxlength="10"
                   placeholder="MM/AAAA ou DD/MM/AAAA"
+                  oninput="formatarValidadeManualMapa(this)"
                   style="
                     width:100%;
                     height:42px;
@@ -4039,12 +4040,27 @@ async function enviarLancamentoManualMapa(dados) {
   status.style.color = "#64748b";
 
   try {
+    // O Código Interno identifica o produto,
+    // enquanto o EAN é enviado para gravação na planilha.
+    const ean = String(dados.ean || "").trim();
+    const codigoInterno = String(dados.codigoInterno || "").trim();
+
+    if (!codigoInterno) {
+      throw new Error("Informe o Código Interno do produto.");
+    }
+
+    if (!ean) {
+      throw new Error(
+        "EAN não encontrado para este produto. Confira o cadastro antes de salvar."
+      );
+    }
+
     const resposta = await jsonpPainel(
       "adicionarValidadeManual",
       "validade",
       {
-        codigo: dados.codigoInterno,
-        codigoInterno: dados.codigoInterno,
+        codigo: ean,
+        codigoInterno: codigoInterno,
         descricao: dados.descricao || "Produto não cadastrado",
         lote: dados.lote,
         validade: dados.validadeISO,
@@ -4062,17 +4078,16 @@ async function enviarLancamentoManualMapa(dados) {
       );
     }
 
-    status.textContent = resposta.mensagem || "Lançamento salvo com sucesso.";
+    status.textContent =
+      resposta.mensagem || "Lançamento salvo com sucesso.";
     status.style.color = "#15803d";
+
+    limparDigitacaoManualMapa();
 
     alert(resposta.mensagem || "Lançamento salvo com sucesso.");
 
     fecharModalDigitacaoManualMapa();
 
-    /*
-     * Atualiza a consulta do mapa depois da gravação.
-     * A função carregarValidades precisa existir no painel.
-     */
     if (typeof carregarValidades === "function") {
       await carregarValidades();
     } else if (typeof carregarMapa === "function") {
@@ -4085,7 +4100,8 @@ async function enviarLancamentoManualMapa(dados) {
 
   } catch (erro) {
     status.textContent =
-      "Não foi possível salvar: " + (erro.message || "erro desconhecido.");
+      "Não foi possível salvar: " +
+      (erro.message || "erro desconhecido.");
 
     status.style.color = "#b91c1c";
 
@@ -4098,7 +4114,10 @@ async function enviarLancamentoManualMapa(dados) {
     enviandoManualMapa = false;
     botao.disabled = false;
     botao.innerHTML = '<i data-lucide="save"></i> Salvar lançamento';
-    renderPainelIcons();
+
+    if (typeof renderPainelIcons === "function") {
+      renderPainelIcons();
+    }
   }
 }
 
@@ -4124,6 +4143,80 @@ document.addEventListener("keydown", evento => {
     fecharModalDigitacaoManualMapa();
   }
 });
+
+  function formatarValidadeManualMapa(input) {
+  let valor = input.value.replace(/\D/g, "").slice(0, 8);
+
+  if (valor.length > 4) {
+    valor = valor.replace(/^(\d{2})(\d{2})(\d{1,4})$/, "$1/$2/$3");
+  } else if (valor.length > 2) {
+    valor = valor.replace(/^(\d{2})(\d{1,2})$/, "$1/$2");
+  }
+
+  input.value = valor;
+}
+  function configurarEnterDigitacaoManualMapa() {
+  const modal = document.getElementById("modalDigitacaoManualMapa");
+  if (!modal) return;
+
+  modal.addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+
+    const campo = event.target;
+
+    if (
+      campo.tagName === "TEXTAREA" ||
+      campo.tagName === "BUTTON"
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const campos = Array.from(
+      modal.querySelectorAll(
+        "input:not([type='hidden']):not([type='checkbox']):not([disabled]), select:not([disabled])"
+      )
+    ).filter(el => el.offsetParent !== null);
+
+    const indice = campos.indexOf(campo);
+
+    if (indice >= 0 && indice < campos.length - 1) {
+      campos[indice + 1].focus();
+    } else {
+      const botaoSalvar = modal.querySelector(
+        "#btnSalvarDigitacaoManualMapa"
+      );
+
+      if (botaoSalvar) botaoSalvar.focus();
+    }
+  });
+}
+
+configurarEnterDigitacaoManualMapa();
+  
+  function limparDigitacaoManualMapa() {
+  const modal = document.getElementById("modalDigitacaoManualMapa");
+  if (!modal) return;
+
+  modal.querySelectorAll("input").forEach(input => {
+    if (input.type === "checkbox") {
+      input.checked = false;
+    } else if (input.type !== "hidden") {
+      input.value = "";
+    }
+  });
+
+  modal.querySelectorAll("select").forEach(select => {
+    select.selectedIndex = 0;
+  });
+
+  const codigo = document.getElementById("codigoInternoManualMapa");
+
+  if (codigo) {
+    codigo.focus();
+  }
+}
 </script>
 <script>
 /* ===== Páginas de gestão com dados reais (Funcionários, Estoque, Produtos e Histórico) =====
@@ -4349,6 +4442,22 @@ document.addEventListener("keydown", evento => {
 
   renderPaginasGestao();
 })();
+
+  function buscarProdutoPorCodigoInterno(codigoInterno) {
+  const codigo = String(codigoInterno).trim();
+
+  for (const [ean, produto] of Object.entries(produtosEAN)) {
+    if (String(produto.codigoInterno).trim() === codigo) {
+      return {
+        ean: ean,
+        codigoInterno: produto.codigoInterno,
+        descricao: produto.produto || ""
+      };
+    }
+  }
+
+  return null;
+}
 </script>
 </body>
 </html>
