@@ -1624,7 +1624,36 @@
 
       <!-- MAPA DE VALIDADE -->
       <section class="page" id="page-mapa">
-        <div class="page-heading"><div><h2>Mapa de Validade</h2><p>Todos os mapas de validade reunidos em uma única consulta.</p></div><button class="button" id="refreshMapa" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div>
+        <div class="page-heading">
+          <div>
+            <h2>Mapa de Validade</h2>
+            <p>Todos os mapas de validade reunidos em uma única consulta.</p>
+          </div>
+        
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button
+              type="button"
+              class="button"
+              id="btnDigitacaoManualMapa"
+              title="Digitação Manual de Mapa"
+              aria-label="Digitação Manual de Mapa"
+              onclick="abrirModalDigitacaoManualMapa()"
+            >
+              <i data-lucide="keyboard"></i>
+              <span>Digitação Manual de Mapa</span>
+            </button>
+        
+            <button
+              type="button"
+              class="button"
+              id="refreshMapa"
+              title="Atualizar"
+              aria-label="Atualizar"
+            >
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+        </div>
         <div class="notice" id="mapaNotice">Carregando dados reais das abas de lançamento...</div>
         <div class="mapa-tabs" role="tablist" aria-label="Categoria de mapas" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
           <button type="button" class="button button-primary mapa-tab active" data-mapa-tipo="funcionarios" role="tab" aria-selected="true">Funcionários</button>
@@ -1942,6 +1971,334 @@
         </div>
       </section>
 
+      <!-- MODAL: DIGITAÇÃO MANUAL DE MAPA -->
+      <div
+        id="modalDigitacaoManualMapa"
+        class="modal-overlay"
+        style="
+          display:none;
+          position:fixed;
+          inset:0;
+          background:rgba(15,23,42,.65);
+          z-index:10000;
+          align-items:center;
+          justify-content:center;
+          padding:16px;
+        "
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tituloDigitacaoManualMapa"
+      >
+        <div
+          class="panel"
+          style="
+            background:white;
+            width:min(560px,100%);
+            padding:24px;
+            border-radius:16px;
+            max-height:92vh;
+            overflow-y:auto;
+            box-shadow:0 20px 60px rgba(0,0,0,.25);
+          "
+        >
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div>
+              <h2 id="tituloDigitacaoManualMapa" style="margin:0">
+                Digitação Manual de Mapa
+              </h2>
+              <p style="margin-top:6px;color:#64748b;font-size:13px">
+                Informe o código interno e os dados do lote.
+              </p>
+            </div>
+      
+            <button
+              type="button"
+              class="button"
+              onclick="fecharModalDigitacaoManualMapa()"
+              aria-label="Fechar"
+              title="Fechar"
+            >
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+      
+          <form id="formDigitacaoManualMapa" style="margin-top:22px">
+      
+            <label for="manualCodigoInterno">Código Interno *</label>
+            <div style="display:flex;gap:8px;margin:7px 0 6px">
+              <input
+                id="manualCodigoInterno"
+                name="codigoInterno"
+                type="text"
+                autocomplete="off"
+                required
+                maxlength="80"
+                placeholder="Digite o código interno"
+                style="
+                  width:100%;
+                  min-width:0;
+                  height:42px;
+                  padding:0 12px;
+                  border:1px solid #dbe2ea;
+                  border-radius:8px;
+                "
+              >
+      
+              <button
+                type="button"
+                class="button"
+                onclick="consultarProdutoManualMapa()"
+                title="Consultar produto"
+                aria-label="Consultar produto"
+              >
+                <i data-lucide="search"></i>
+              </button>
+            </div>
+      
+            <div
+              id="manualProdutoStatus"
+              role="status"
+              style="font-size:12px;color:#64748b;margin-bottom:16px"
+            >
+              Digite o código interno para consultar a descrição.
+            </div>
+      
+            <label for="manualDescricao">Descrição do produto</label>
+            <input
+              id="manualDescricao"
+              type="text"
+              readonly
+              placeholder="Descrição preenchida pela consulta"
+              style="
+                width:100%;
+                height:42px;
+                padding:0 12px;
+                margin:7px 0 16px;
+                border:1px solid #dbe2ea;
+                border-radius:8px;
+                background:#f8fafc;
+                color:#334155;
+              "
+            >
+      
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div>
+                <label for="manualLote">Lote *</label>
+                <input
+                  id="manualLote"
+                  type="text"
+                  required
+                  maxlength="100"
+                  autocomplete="off"
+                  placeholder="Número do lote"
+                  style="
+                    width:100%;
+                    height:42px;
+                    padding:0 12px;
+                    margin-top:7px;
+                    border:1px solid #dbe2ea;
+                    border-radius:8px;
+                  "
+                >
+              </div>
+      
+              <div>
+                <label for="manualValidade">Validade *</label>
+                <input
+                  id="manualValidade"
+                  type="text"
+                  required
+                  inputmode="numeric"
+                  maxlength="10"
+                  placeholder="MM/AAAA ou DD/MM/AAAA"
+                  style="
+                    width:100%;
+                    height:42px;
+                    padding:0 12px;
+                    margin-top:7px;
+                    border:1px solid #dbe2ea;
+                    border-radius:8px;
+                  "
+                >
+              </div>
+            </div>
+      
+            <div style="margin-top:16px">
+              <label for="manualQuantidade">Quantidade *</label>
+              <input
+                id="manualQuantidade"
+                type="number"
+                required
+                min="1"
+                step="1"
+                inputmode="numeric"
+                placeholder="Quantidade de unidades"
+                style="
+                  width:100%;
+                  height:42px;
+                  padding:0 12px;
+                  margin-top:7px;
+                  border:1px solid #dbe2ea;
+                  border-radius:8px;
+                "
+              >
+            </div>
+      
+            <div style="margin-top:16px">
+              <label for="manualFuncionario">Funcionário / Aba *</label>
+              <select
+                id="manualFuncionario"
+                required
+                style="
+                  width:100%;
+                  height:42px;
+                  padding:0 12px;
+                  margin-top:7px;
+                  border:1px solid #dbe2ea;
+                  border-radius:8px;
+                  background:white;
+                "
+              >
+                <option value="">Selecione o funcionário ou mapa</option>
+                <option value="Alice">Alice</option>
+                <option value="Altino">Altino</option>
+                <option value="Ana Carolina">Ana Carolina</option>
+                <option value="Anielle">Anielle</option>
+                <option value="Gabriela">Gabriela</option>
+                <option value="Gabriele">Gabriele</option>
+                <option value="Isabela">Isabela</option>
+                <option value="Livia">Livia</option>
+                <option value="Paola">Paola</option>
+                <option value="Rafaela">Rafaela</option>
+                <option value="Ramon">Ramon</option>
+                <option value="Rillary">Rillary</option>
+                <option value="Sulaima">Sulaima</option>
+                <option value="Thomaz">Thomaz</option>
+                <option value="Termolabil">Termolabil</option>
+                <option value="Psicotropicos">Psicotropicos</option>
+                <option value="Antibioticos">Antibioticos</option>
+                <option value="Transferencias">Transferencias</option>
+              </select>
+            </div>
+      
+            <div
+              id="manualAvisoNaoEncontrado"
+              style="
+                display:none;
+                margin-top:16px;
+                padding:12px;
+                border-radius:8px;
+                background:#fff7ed;
+                border:1px solid #fed7aa;
+                color:#9a3412;
+                font-size:13px;
+              "
+            >
+              <strong>Código não encontrado.</strong>
+              <p style="margin-top:5px">
+                Confira o código interno. Se estiver correto, você poderá escolher
+                lançar mesmo assim.
+              </p>
+            </div>
+      
+            <div
+              id="manualMapaStatus"
+              role="status"
+              style="margin-top:14px;font-size:13px"
+            ></div>
+      
+            <div
+              style="
+                display:flex;
+                justify-content:flex-end;
+                flex-wrap:wrap;
+                gap:8px;
+                margin-top:22px;
+              "
+            >
+              <button
+                type="button"
+                class="button"
+                onclick="fecharModalDigitacaoManualMapa()"
+              >
+                Cancelar
+              </button>
+      
+              <button
+                type="submit"
+                class="button button-primary"
+                id="btnSalvarDigitacaoManualMapa"
+              >
+                <i data-lucide="save"></i>
+                Salvar lançamento
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- MODAL: CONFIRMAR CÓDIGO NÃO CADASTRADO -->
+      <div
+        id="modalConfirmarCodigoManualMapa"
+        class="modal-overlay"
+        style="
+          display:none;
+          position:fixed;
+          inset:0;
+          background:rgba(15,23,42,.65);
+          z-index:10001;
+          align-items:center;
+          justify-content:center;
+          padding:16px;
+        "
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tituloConfirmarCodigoManualMapa"
+      >
+        <div
+          class="panel"
+          style="
+            background:white;
+            width:min(440px,100%);
+            padding:24px;
+            border-radius:16px;
+            max-height:90vh;
+            overflow:auto;
+          "
+        >
+          <h2 id="tituloConfirmarCodigoManualMapa" style="margin:0">
+            Produto não cadastrado
+          </h2>
+      
+          <p id="detalhesCodigoManualMapa" style="margin-top:14px;color:#475569">
+            O código informado não foi encontrado.
+          </p>
+      
+          <p style="margin-top:12px;color:#9a3412;font-size:13px">
+            Confira o código antes de continuar. Se estiver correto, você poderá
+            solicitar o lançamento mesmo sem a descrição cadastrada.
+          </p>
+      
+          <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:22px">
+            <button
+              type="button"
+              class="button"
+              onclick="revisarCodigoManualMapa()"
+            >
+              Revisar código
+            </button>
+      
+            <button
+              type="button"
+              class="button button-primary"
+              onclick="confirmarSalvarCodigoManualMapa()"
+            >
+              Lançar mesmo assim
+            </button>
+          </div>
+        </div>
+      </div>
+      
       <div id="sinalizadoModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center;padding:18px"><div class="panel" style="background:white;width:min(560px,100%);padding:24px;border-radius:16px;max-height:90vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">Ver sinalização</h2><button class="button" title="Fechar" aria-label="Fechar" onclick="fecharSinalizadoModal()"><i data-lucide="x"></i></button></div><div id="sinalizadoDetalhes" style="margin:18px 0"></div><label for="sinalizadoStatus">Ação tomada</label><select id="sinalizadoStatus" class="filter-select" style="width:100%;margin:8px 0 14px"><option value="Resolvido">Resolvido</option><option value="Negado">Negado</option></select><div id="sinalizadoMotivoWrap"><label for="sinalizadoMotivo">Motivo da resolução</label><textarea id="sinalizadoMotivo" rows="3" style="width:100%;margin-top:8px" placeholder="Descreva o que foi resolvido..."></textarea></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button class="button" title="Cancelar" aria-label="Cancelar" onclick="fecharSinalizadoModal()"><i data-lucide="x"></i></button><button class="button button-primary" title="Salvar" aria-label="Salvar" onclick="salvarSinalizado()"><i data-lucide="check"></i></button></div></div></div>
       <div class="footer">Painel do Conferente · Dados integrados à planilha de validade e ao catálogo de produtos.</div>
     </div>
@@ -3329,6 +3686,445 @@ document.getElementById("cvAtualizarElegiveis")
 
 document.getElementById("cvExportarElegiveis")
   ?.addEventListener("click", exportarElegiveisCSV);
+
+  /* =========================================================
+   DIGITAÇÃO MANUAL DE MAPA DE VALIDADE
+   ========================================================= */
+
+let produtoManualMapaEncontrado = false;
+let confirmacaoManualMapaPendente = false;
+let enviandoManualMapa = false;
+
+function abrirModalDigitacaoManualMapa() {
+  const modal = document.getElementById("modalDigitacaoManualMapa");
+  const form = document.getElementById("formDigitacaoManualMapa");
+
+  form.reset();
+
+  document.getElementById("manualProdutoStatus").textContent =
+    "Digite o código interno para consultar a descrição.";
+
+  document.getElementById("manualProdutoStatus").style.color = "#64748b";
+  document.getElementById("manualAvisoNaoEncontrado").style.display = "none";
+  document.getElementById("manualMapaStatus").textContent = "";
+
+  document.getElementById("btnSalvarDigitacaoManualMapa").disabled = false;
+
+  produtoManualMapaEncontrado = false;
+  confirmacaoManualMapaPendente = false;
+  enviandoManualMapa = false;
+
+  modal.style.display = "flex";
+
+  renderPainelIcons();
+
+  setTimeout(() => {
+    document.getElementById("manualCodigoInterno").focus();
+  }, 100);
+}
+
+function fecharModalDigitacaoManualMapa() {
+  if (enviandoManualMapa) return;
+
+  document.getElementById("modalDigitacaoManualMapa").style.display = "none";
+  document.getElementById("modalConfirmarCodigoManualMapa").style.display = "none";
+
+  confirmacaoManualMapaPendente = false;
+}
+
+function normalizarCodigoManualMapa(valor) {
+  return String(valor || "").trim().replace(/\s+/g, "");
+}
+
+/*
+ * Consulta a base produtos_ean.json.
+ * Aceita registros no formato:
+ * {
+ *   "7890000000012": {
+ *     "codigoInterno": "12345",
+ *     "produto": "Leite Integral 1L",
+ *     "secao": "Mercearia"
+ *   }
+ * }
+ */
+async function consultarProdutoManualMapa() {
+  const codigoInterno = normalizarCodigoManualMapa(
+    document.getElementById("manualCodigoInterno").value
+  );
+
+  const status = document.getElementById("manualProdutoStatus");
+  const descricao = document.getElementById("manualDescricao");
+  const aviso = document.getElementById("manualAvisoNaoEncontrado");
+
+  descricao.value = "";
+  aviso.style.display = "none";
+  produtoManualMapaEncontrado = false;
+
+  if (!codigoInterno) {
+    status.textContent = "Digite um código interno.";
+    status.style.color = "#b91c1c";
+    return false;
+  }
+
+  status.textContent = "Consultando produto...";
+  status.style.color = "#64748b";
+
+  try {
+    const resposta = await fetch("./produtos_ean.json?v=" + Date.now(), {
+      cache: "no-store"
+    });
+
+    if (!resposta.ok) {
+      throw new Error("Não foi possível carregar a base de produtos.");
+    }
+
+    const base = await resposta.json();
+    let produtoEncontrado = null;
+
+    for (const [ean, registro] of Object.entries(base || {})) {
+      if (!registro || typeof registro !== "object") continue;
+
+      const codigo = normalizarCodigoManualMapa(
+        registro.codigoInterno || registro.codigo || ""
+      );
+
+      if (codigo === codigoInterno) {
+        produtoEncontrado = {
+          ean,
+          codigoInterno: codigo,
+          descricao: String(
+            registro.produto ||
+            registro.descricao ||
+            registro.nome ||
+            ""
+          ).trim()
+        };
+
+        break;
+      }
+    }
+
+    if (!produtoEncontrado) {
+      status.textContent = "Código interno não encontrado na base.";
+      status.style.color = "#b91c1c";
+      aviso.style.display = "block";
+      return false;
+    }
+
+    descricao.value = produtoEncontrado.descricao;
+    produtoManualMapaEncontrado = true;
+
+    status.textContent = produtoEncontrado.descricao
+      ? "Produto encontrado."
+      : "Código encontrado, mas sem descrição cadastrada.";
+
+    status.style.color = "#15803d";
+
+    aviso.style.display = "none";
+
+    return true;
+
+  } catch (erro) {
+    status.textContent = erro.message || "Erro ao consultar o produto.";
+    status.style.color = "#b91c1c";
+    return false;
+  }
+}
+
+document
+  .getElementById("manualCodigoInterno")
+  .addEventListener("change", consultarProdutoManualMapa);
+
+document
+  .getElementById("manualCodigoInterno")
+  .addEventListener("keydown", evento => {
+    if (evento.key === "Enter") {
+      evento.preventDefault();
+      consultarProdutoManualMapa();
+    }
+  });
+
+function validarValidadeManualMapa(valor) {
+  const texto = String(valor || "").trim();
+  let partes;
+  let dia;
+  let mes;
+  let ano;
+
+  partes = texto.match(/^(\d{2})\/(\d{2}|\d{4})$/);
+
+  if (partes) {
+    mes = Number(partes[1]);
+    ano = Number(partes[2]);
+
+    if (partes[2].length === 2) ano += 2000;
+
+    if (mes < 1 || mes > 12 || ano < 1900 || ano > 2200) {
+      throw new Error("Informe uma validade válida, como 05/2027.");
+    }
+
+    dia = new Date(ano, mes, 0).getDate();
+
+  } else {
+    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
+
+    if (!partes) {
+      throw new Error(
+        "Use MM/AA, MM/AAAA, DD/MM/AA ou DD/MM/AAAA."
+      );
+    }
+
+    dia = Number(partes[1]);
+    mes = Number(partes[2]);
+    ano = Number(partes[3]);
+
+    if (partes[3].length === 2) ano += 2000;
+
+    const teste = new Date(ano, mes - 1, dia);
+
+    if (
+      ano < 1900 ||
+      ano > 2200 ||
+      teste.getFullYear() !== ano ||
+      teste.getMonth() !== mes - 1 ||
+      teste.getDate() !== dia
+    ) {
+      throw new Error("A data de validade informada não existe.");
+    }
+  }
+
+  return (
+    String(ano).padStart(4, "0") + "-" +
+    String(mes).padStart(2, "0") + "-" +
+    String(dia).padStart(2, "0")
+  );
+}
+
+function obterDadosFormularioManualMapa() {
+  const codigoInterno = normalizarCodigoManualMapa(
+    document.getElementById("manualCodigoInterno").value
+  );
+
+  const descricao = document.getElementById("manualDescricao").value.trim();
+  const lote = document.getElementById("manualLote").value.trim();
+  const validadeTexto = document.getElementById("manualValidade").value.trim();
+  const quantidade = Number(document.getElementById("manualQuantidade").value);
+  const funcionario = document.getElementById("manualFuncionario").value;
+
+  if (!codigoInterno) {
+    throw new Error("Informe o Código Interno.");
+  }
+
+  if (!lote) {
+    throw new Error("Informe o lote.");
+  }
+
+  if (!validadeTexto) {
+    throw new Error("Informe a validade.");
+  }
+
+  const validadeISO = validarValidadeManualMapa(validadeTexto);
+
+  if (!Number.isInteger(quantidade) || quantidade < 1) {
+    throw new Error("A quantidade deve ser um número inteiro maior que zero.");
+  }
+
+  if (!funcionario) {
+    throw new Error("Selecione o funcionário ou a aba.");
+  }
+
+  return {
+    codigoInterno,
+    descricao,
+    lote,
+    validade: validadeTexto,
+    validadeISO,
+    quantidade,
+    funcionario,
+    produtoEncontrado: produtoManualMapaEncontrado
+  };
+}
+
+document
+  .getElementById("manualValidade")
+  .addEventListener("blur", evento => {
+    const valor = evento.target.value.trim();
+
+    if (!valor) return;
+
+    try {
+      validarValidadeManualMapa(valor);
+      evento.target.style.borderColor = "#dbe2ea";
+    } catch (_) {
+      evento.target.style.borderColor = "#dc2626";
+    }
+  });
+
+document
+  .getElementById("formDigitacaoManualMapa")
+  .addEventListener("submit", async evento => {
+    evento.preventDefault();
+
+    if (enviandoManualMapa) return;
+
+    const status = document.getElementById("manualMapaStatus");
+
+    let dados;
+
+    try {
+      dados = obterDadosFormularioManualMapa();
+    } catch (erro) {
+      status.textContent = erro.message;
+      status.style.color = "#b91c1c";
+      return;
+    }
+
+    /*
+     * Se a consulta ainda não foi realizada ou o código não foi localizado,
+     * pede confirmação antes de enviar.
+     */
+    if (!produtoManualMapaEncontrado && !confirmacaoManualMapaPendente) {
+      document.getElementById("detalhesCodigoManualMapa").textContent =
+        "O Código Interno " + dados.codigoInterno +
+        " não foi encontrado na base de produtos. Deseja lançar mesmo assim?";
+
+      document.getElementById("modalConfirmarCodigoManualMapa").style.display = "flex";
+
+      return;
+    }
+
+    await enviarLancamentoManualMapa(dados);
+  });
+
+function revisarCodigoManualMapa() {
+  document.getElementById("modalConfirmarCodigoManualMapa").style.display = "none";
+  confirmacaoManualMapaPendente = false;
+
+  document.getElementById("manualCodigoInterno").focus();
+}
+
+async function confirmarSalvarCodigoManualMapa() {
+  document.getElementById("modalConfirmarCodigoManualMapa").style.display = "none";
+  confirmacaoManualMapaPendente = true;
+
+  let dados;
+
+  try {
+    dados = obterDadosFormularioManualMapa();
+  } catch (erro) {
+    document.getElementById("manualMapaStatus").textContent = erro.message;
+    document.getElementById("manualMapaStatus").style.color = "#b91c1c";
+    confirmacaoManualMapaPendente = false;
+    return;
+  }
+
+  await enviarLancamentoManualMapa(dados);
+}
+
+/*
+ * ATENÇÃO:
+ * Esta função chama uma ação específica do Apps Script.
+ * O Code.gs precisa implementar a ação "adicionarValidadeManual".
+ */
+async function enviarLancamentoManualMapa(dados) {
+  if (enviandoManualMapa) return;
+
+  enviandoManualMapa = true;
+
+  const botao = document.getElementById("btnSalvarDigitacaoManualMapa");
+  const status = document.getElementById("manualMapaStatus");
+
+  botao.disabled = true;
+  botao.textContent = "Salvando...";
+  status.textContent = "Enviando lançamento...";
+  status.style.color = "#64748b";
+
+  try {
+    const resposta = await jsonpPainel(
+      "adicionarValidadeManual",
+      "validade",
+      {
+        codigo: dados.codigoInterno,
+        codigoInterno: dados.codigoInterno,
+        descricao: dados.descricao || "Produto não cadastrado",
+        lote: dados.lote,
+        validade: dados.validadeISO,
+        quantidade: String(dados.quantidade),
+        funcionario: dados.funcionario,
+        origem: "digitacao-manual"
+      }
+    );
+
+    if (!resposta || resposta.sucesso !== true) {
+      throw new Error(
+        resposta && resposta.mensagem
+          ? resposta.mensagem
+          : "O servidor não confirmou o lançamento."
+      );
+    }
+
+    status.textContent = resposta.mensagem || "Lançamento salvo com sucesso.";
+    status.style.color = "#15803d";
+
+    alert(resposta.mensagem || "Lançamento salvo com sucesso.");
+
+    fecharModalDigitacaoManualMapa();
+
+    /*
+     * Atualiza a consulta do mapa depois da gravação.
+     * A função carregarValidades precisa existir no painel.
+     */
+    if (typeof carregarValidades === "function") {
+      await carregarValidades();
+    } else if (typeof carregarMapa === "function") {
+      await carregarMapa();
+    }
+
+    if (typeof renderMapa === "function") {
+      renderMapa();
+    }
+
+  } catch (erro) {
+    status.textContent =
+      "Não foi possível salvar: " + (erro.message || "erro desconhecido.");
+
+    status.style.color = "#b91c1c";
+
+    alert(
+      "Não foi possível salvar o lançamento.\n\n" +
+      (erro.message || "Erro desconhecido.")
+    );
+
+  } finally {
+    enviandoManualMapa = false;
+    botao.disabled = false;
+    botao.innerHTML = '<i data-lucide="save"></i> Salvar lançamento';
+    renderPainelIcons();
+  }
+}
+
+document
+  .getElementById("modalDigitacaoManualMapa")
+  .addEventListener("click", evento => {
+    if (evento.target.id === "modalDigitacaoManualMapa") {
+      fecharModalDigitacaoManualMapa();
+    }
+  });
+
+document
+  .getElementById("modalConfirmarCodigoManualMapa")
+  .addEventListener("click", evento => {
+    if (evento.target.id === "modalConfirmarCodigoManualMapa") {
+      document.getElementById("modalConfirmarCodigoManualMapa").style.display = "none";
+      confirmacaoManualMapaPendente = false;
+    }
+  });
+
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape") {
+    fecharModalDigitacaoManualMapa();
+  }
+});
 </script>
 <script>
 /* ===== Páginas de gestão com dados reais (Funcionários, Estoque, Produtos e Histórico) =====
