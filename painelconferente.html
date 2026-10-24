@@ -4090,11 +4090,9 @@ async function enviarLancamentoManualMapa(dados) {
       resposta.mensagem || "Lançamento salvo com sucesso.";
     status.style.color = "#15803d";
 
-    limparDigitacaoManualMapa();
-
     alert(resposta.mensagem || "Lançamento salvo com sucesso.");
-
-    fecharModalDigitacaoManualMapa();
+    limparFormularioMapaManterFuncionario();
+    
 
     if (typeof carregarValidades === "function") {
       await carregarValidades();
@@ -4191,7 +4189,7 @@ document.addEventListener("keydown", evento => {
       // Ignora o campo Descrição
       if (
         el.id.toLowerCase().includes("descricao") ||
-        el.name.toLowerCase().includes("descricao")
+        el.name.toLowerCase().includes("descricao") || el.id.toLowerCase().includes("manualFuncionario") || el.name.toLowerCase().includes("manualFuncionario")
       ) {
         return false;
       }
@@ -4214,29 +4212,73 @@ document.addEventListener("keydown", evento => {
 }
 
 configurarEnterDigitacaoManualMapa();
+
+
   
-  function limparDigitacaoManualMapa() {
+function limparFormularioMapaManterFuncionario() {
   const modal = document.getElementById("modalDigitacaoManualMapa");
   if (!modal) return;
 
-  modal.querySelectorAll("input").forEach(input => {
-    if (input.type === "checkbox") {
-      input.checked = false;
-    } else if (input.type !== "hidden") {
-      input.value = "";
+  // Guarda o funcionário selecionado antes de limpar os campos.
+  const campoFuncionario = modal.querySelector(
+    "#funcionarioManualMapa, #funcionarioDigitacaoManualMapa, select[name='funcionario'], input[name='funcionario']"
+  );
+
+  const funcionarioSelecionado = campoFuncionario
+    ? campoFuncionario.value
+    : "";
+
+  // Limpa os campos do formulário, exceto Funcionário.
+  modal.querySelectorAll("input, textarea").forEach(campo => {
+    if (
+      campo === campoFuncionario ||
+      campo.type === "hidden" ||
+      campo.type === "button" ||
+      campo.type === "submit" ||
+      campo.type === "checkbox" ||
+      campo.type === "radio"
+    ) {
+      return;
     }
+
+    campo.value = "";
   });
 
-  modal.querySelectorAll("select").forEach(select => {
-    select.selectedIndex = 0;
+  // Limpa os selects, exceto o campo Funcionário.
+  modal.querySelectorAll("select").forEach(campo => {
+    if (campo === campoFuncionario) return;
+    campo.selectedIndex = 0;
   });
 
-  const codigo = document.getElementById("codigoInternoManualMapa");
+  // Mantém o funcionário selecionado.
+  if (campoFuncionario) {
+    campoFuncionario.value = funcionarioSelecionado;
+  }
 
-  if (codigo) {
-    codigo.focus();
+  // Limpa o estado do produto encontrado, se utilizado pelo modal.
+  if (typeof produtoManualMapaAtual !== "undefined") {
+    produtoManualMapaAtual = null;
+  }
+
+  if (typeof produtoManualMapaEncontrado !== "undefined") {
+    produtoManualMapaEncontrado = false;
+  }
+
+  if (typeof confirmacaoManualMapaPendente !== "undefined") {
+    confirmacaoManualMapaPendente = false;
+  }
+
+  // Restaura o botão Salvar.
+  const botaoSalvar = modal.querySelector(
+    "#btnSalvarDigitacaoManualMapa"
+  );
+
+  if (botaoSalvar) {
+    botaoSalvar.disabled = false;
+    botaoSalvar.innerHTML = "Salvar Lançamento";
   }
 }
+
 </script>
 <script>
 /* ===== Páginas de gestão com dados reais (Funcionários, Estoque, Produtos e Histórico) =====
