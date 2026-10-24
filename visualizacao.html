@@ -1,10 +1,19 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f2a3d">
+  <meta name="theme-color" content="#101827">
+  <script>
+    (function () {
+      var t;
+      try { t = localStorage.getItem("tema"); } catch (e) {}
+      if (t !== "light" && t !== "dark") {
+        t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
   <title>Visualização dos Lançamentos</title>
 
   <style>
@@ -434,6 +443,51 @@
 }
    
   </style>
+<style id="tema-painel">
+/* ===== Visual do Painel do Conferente (mesma paleta, fonte, bordas e sombras) ===== */
+:root{
+  --bg:#f3f6fb;--surface:#ffffff;--ink:#172033;--muted:#788399;--line:#e6eaf0;
+  --brand:#101827;--accent:#3b82f6;--accent-dark:#2563eb;
+  --ok:#16a34a;--ok-bg:#e7f8ed;--err:#dc2626;--err-bg:#fdecec;
+  --warn:#d97706;--warn-bg:#fff4e0;--info-bg:#eaf2ff;
+  --shadow:0 1px 2px rgba(16,24,39,.06),0 6px 16px rgba(16,24,39,.04);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0c1320;--surface:#141d2e;--ink:#e6ebf5;--muted:#8f9bb3;--line:#26324a;
+  --brand:#0a101c;--accent:#3b82f6;--accent-dark:#93c5fd;
+  --ok:#4ade80;--ok-bg:#12301f;--err:#f87171;--err-bg:#3a1714;
+  --warn:#fbbf24;--warn-bg:#36270f;--info-bg:#172a4a;
+  --shadow:none;color-scheme:dark;
+}
+body{font-family:Inter,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+.topbar,header{background:var(--brand);border-bottom:1px solid #263246}
+.topbar h1,header h1{font-weight:750;letter-spacing:-.4px}
+.topbar p,header p{color:#91a0b7}
+.card{border-radius:12px;border:1px solid var(--line);box-shadow:var(--shadow)}
+h2{font-weight:750;letter-spacing:-.2px}
+label{font-weight:650}
+input,select,textarea{border-radius:9px;border-color:var(--line)}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid rgba(59,130,246,.35);outline-offset:1px;border-color:var(--accent)}
+button{border-radius:9px;font-weight:650}
+.btn-camera:hover:not(:disabled){background:#2563eb}
+:root[data-theme="dark"] .btn-camera:hover:not(:disabled){background:#2563eb}
+.modal{border-radius:14px}
+
+/* Informações da Queima */
+.btn-informacoes{border-color:var(--accent)!important;color:var(--accent)!important}
+.info-queima-ean{margin:2px 0 8px;color:var(--muted);font-size:13px}
+.info-queima-mensagem{margin:0 0 10px;font-weight:600}
+.info-queima-lista{display:grid;gap:8px;max-height:50vh;overflow:auto;margin-bottom:12px}
+.info-queima-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.info-queima-topo{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.info-queima-detalhes{margin-top:4px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.info-queima-selo{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700}
+.info-queima-selo.ok{background:var(--ok-bg);color:var(--ok)}
+.info-queima-selo.aviso{background:var(--warn-bg);color:var(--warn)}
+.info-queima-selo.erro{background:var(--err-bg);color:var(--err)}
+.info-queima-igual{margin-top:6px;font-size:12px;font-weight:700;color:var(--accent)}
+</style>
 </head>
 
 <body>
@@ -476,7 +530,6 @@
             Todos os meses
           </label>
         </div>
-      </div>
 
       <div id="campoStatus" hidden>
         <label for="statusValidade">Situação da validade</label>
@@ -642,6 +695,18 @@
         <button id="btnCancelarSinalizacao" class="secundario" type="button">Cancelar</button>
       </div>
     </form>
+  </section>
+</div>
+
+<div id="modalInfoQueima" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="infoQueimaProduto">
+    <h2 id="infoQueimaProduto">Produto</h2>
+    <p id="infoQueimaEAN" class="info-queima-ean"></p>
+    <p id="infoQueimaMensagem" class="info-queima-mensagem" role="status" aria-live="polite"></p>
+    <div id="infoQueimaLista" class="info-queima-lista"></div>
+    <div class="botoes">
+      <button id="btnFecharInfoQueima" class="secundario" type="button">Fechar</button>
+    </div>
   </section>
 </div>
 
@@ -969,7 +1034,7 @@ function criarCelulaAcoes(registro, opcoes = {}) {
   informacoes.type = "button";
   informacoes.className = "btn-informacoes";
   informacoes.textContent = "ⓘ";
-  informacoes.title = "Informações deste lançamento";
+  informacoes.title = "Ver lançamentos deste produto na Queima";
   informacoes.setAttribute(
     "aria-label",
     "Informações deste lançamento"
@@ -1391,10 +1456,10 @@ function criarCelulaProduto(codigo, registro) {
   informacoes.type = "button";
   informacoes.className = "btn-informacoes";
   informacoes.textContent = "i";
-  informacoes.title = "Informações do lançamento";
+  informacoes.title = "Ver lançamentos deste produto na Queima";
   informacoes.setAttribute(
     "aria-label",
-    "Informações do lançamento"
+    "Ver lançamentos deste produto na Queima"
   );
 
   informacoes.addEventListener("click", () => {
@@ -1836,13 +1901,128 @@ $("todosMeses").addEventListener("change", () => {
   }
 });
 
-$("btnInformacoes").addEventListener("click", () => {
-  alert("O sistema de informações dos mapas será implementado posteriormente.");
-});
+/* =========================
+   INFORMAÇÕES DO PRODUTO NA QUEIMA
+   (botão "i" ao lado do produto: mostra quando o item foi lançado na Queima)
+   ========================= */
+let queimaCache = null;
+let pedidoInfoQueima = 0;
+const TEMPO_CACHE_QUEIMA = 60000;
 
-  function mostrarInformacoesRegistro(registro) {
-  alert("Funcionalidade de informações do lançamento ainda está em desenvolvimento.");
+function consultarQueimaTodos() {
+  if (queimaCache && Date.now() - queimaCache.t < TEMPO_CACHE_QUEIMA) {
+    return Promise.resolve(queimaCache.registros);
+  }
+
+  return chamarApps("consultarQueima", "__consultarQueimaCb", {}).then(resposta => {
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta && resposta.mensagem ? resposta.mensagem : "Não foi possível consultar a Queima.");
+    }
+
+    const marcar = (lista, situacao) =>
+      (Array.isArray(lista) ? lista : []).map(r => Object.assign({}, r, { situacaoQueima: situacao }));
+
+    const registros = [].concat(
+      marcar(resposta.pendentes, "Em aberto"),
+      marcar(resposta.aprovados, "Aprovado"),
+      marcar(resposta.relancar, "Relançar")
+    );
+
+    queimaCache = { t: Date.now(), registros: registros };
+    return registros;
+  });
 }
+
+function criarItemQueima(r, registroAtual) {
+  const item = document.createElement("div");
+  item.className = "info-queima-item";
+
+  const topo = document.createElement("div");
+  topo.className = "info-queima-topo";
+
+  const data = document.createElement("strong");
+  data.textContent = "Lançado em " + (r.mesLancamento || "—");
+
+  const selo = document.createElement("span");
+  const aprovado = r.situacaoQueima === "Aprovado";
+  selo.className = "info-queima-selo " + (aprovado ? "ok" : r.situacaoQueima === "Relançar" ? "erro" : "aviso");
+  selo.textContent = aprovado
+    ? "Aprovado" + (r.mesAprovado ? " em " + r.mesAprovado : "")
+    : r.situacaoQueima === "Relançar" ? "Mês anterior: relançar" : "Em aberto";
+
+  topo.append(data, selo);
+
+  const detalhes = document.createElement("div");
+  detalhes.className = "info-queima-detalhes";
+  detalhes.textContent =
+    "Lote: " + (r.lote || "—") +
+    " · Validade: " + (r.validade || "—") +
+    " · Quantidade: " + (r.quantidade === "" || r.quantidade == null ? "—" : r.quantidade) +
+    (r.abaOrigem ? " · Origem: " + r.abaOrigem : "");
+
+  item.append(topo, detalhes);
+
+  if (registroAtual && normalizar(registroAtual.lote) && normalizar(registroAtual.lote) === normalizar(r.lote)) {
+    const igual = document.createElement("div");
+    igual.className = "info-queima-igual";
+    igual.textContent = "Mesmo lote do lançamento selecionado";
+    item.appendChild(igual);
+  }
+
+  return item;
+}
+
+function fecharInfoQueima() {
+  pedidoInfoQueima++;
+  $("modalInfoQueima").hidden = true;
+}
+
+function mostrarInformacoesRegistro(registro) {
+  const codigo = String((registro && registro.codigo) || "").trim();
+  const lista = $("infoQueimaLista");
+  const pedido = ++pedidoInfoQueima;
+
+  $("infoQueimaProduto").textContent = obterDescricao(codigo);
+  $("infoQueimaEAN").textContent = "EAN: " + codigo;
+  $("infoQueimaMensagem").textContent = "Consultando a Queima...";
+  lista.replaceChildren();
+  $("modalInfoQueima").hidden = false;
+
+  const candidatos = candidatosEAN(codigo);
+
+  consultarQueimaTodos()
+    .then(registros => {
+      if (pedido !== pedidoInfoQueima) return;
+
+      const doProduto = registros
+        .filter(r => candidatos.includes(String(r.codigo || "").trim()))
+        .sort((a, b) => (Number(b.linha) || 0) - (Number(a.linha) || 0));
+
+      if (!doProduto.length) {
+        $("infoQueimaMensagem").textContent = "Este produto ainda não foi lançado na Queima.";
+        return;
+      }
+
+      $("infoQueimaMensagem").textContent =
+        doProduto.length === 1
+          ? "1 lançamento deste produto na Queima."
+          : doProduto.length + " lançamentos deste produto na Queima.";
+
+      doProduto.forEach(r => lista.appendChild(criarItemQueima(r, registro)));
+    })
+    .catch(erro => {
+      if (pedido !== pedidoInfoQueima) return;
+      $("infoQueimaMensagem").textContent = mensagemDeErroConsulta(erro);
+    });
+}
+
+$("btnFecharInfoQueima").addEventListener("click", fecharInfoQueima);
+$("modalInfoQueima").addEventListener("click", evento => {
+  if (evento.target === $("modalInfoQueima")) fecharInfoQueima();
+});
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape" && !$("modalInfoQueima").hidden) fecharInfoQueima();
+});
 
 </script>
 </body>
