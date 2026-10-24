@@ -15,7 +15,7 @@ if os.environ.get("GITHUB_WORKSPACE"):
 else:
     ROOT = Path(__file__).resolve().parents[1]
 
-ITEMS_PATH = ROOT / "Items.xls"
+ITEMS_PATH = ROOT / "Items.XLS"
 JSON_PATH = ROOT / "produtos_ean.json"
 
 
