@@ -7,6 +7,7 @@
   <title>Painel do Conferente</title>
 
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
   <style>
     :root {
@@ -1914,21 +1915,13 @@
 
       <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
-        <div class="page-heading">
-          <div><h2>Controle de Estoque</h2><p>Saldo por produto, somando os lançamentos do Mapa de Validade.</p></div>
-          <button class="button" id="refreshEstoque" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
-        </div>
-        <div class="notice" id="estoqueNotice">Carregando dados...</div>
-        <div class="mini-stats"><div class="mini-stat"><span>Produtos no mapa</span><strong id="estoqueProdutos">—</strong></div><div class="mini-stat"><span>Unidades registradas</span><strong id="estoqueUnidades">—</strong></div><div class="mini-stat"><span>Produtos vencidos</span><strong id="estoqueVencidos">—</strong></div></div>
-        <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Posição por produto</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou seção..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>EAN</th><th>Produto</th><th>Lotes</th><th>Quantidade</th><th>Próxima validade</th><th>Último lançamento</th><th>Situação</th></tr></thead>
-            <tbody id="estoqueTbody"></tbody>
-          </table></div>
-          <div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
-        </div>
+        <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="refreshEstoque" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
+        <div class="notice" id="estoqueNotice">Selecione o arquivo .ods para importar o estoque.</div>
+        <div class="mini-stats"><div class="mini-stat"><span>Produtos no arquivo</span><strong id="estoqueProdutos">0</strong></div><div class="mini-stat"><span>Unidades em estoque</span><strong id="estoqueUnidades">0</strong></div><div class="mini-stat"><span>Produtos mapeados</span><strong id="estoqueVencidos">0</strong></div></div>
+        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Posição por produto</div><div class="panel-subtitle" id="estoqueUltimaImportacao">Nenhum arquivo importado.</div></div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou código interno..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todos</option><option value="Sim">Mapeada</option><option value="Não">Não mapeada</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>EAN</th><th>Produto</th><th>Quantidade</th><th>Próxima Validade</th><th>Mapeada</th><th>Ação</th></tr></thead><tbody id="estoqueTbody"></tbody></table></div><div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado. Importe um arquivo .ods ou altere a busca.</div></div>
       </section>
+      <div id="estoqueMapasModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:12000;align-items:center;justify-content:center;padding:16px" role="dialog" aria-modal="true" aria-labelledby="estoqueMapasTitulo"><div class="panel" style="background:white;width:min(900px,100%);padding:22px;border-radius:16px;max-height:90vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2 id="estoqueMapasTitulo">Mapas do produto</h2><p id="estoqueMapasSubtitulo" style="color:#64748b;font-size:13px;margin-top:5px"></p></div><button class="button" type="button" onclick="fecharModalMapasEstoque()">Fechar</button></div><div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Mapa / Funcionário</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead><tbody id="estoqueMapasTbody"></tbody></table></div><div class="empty-state" id="estoqueMapasEmpty" style="display:none">Este produto não consta em nenhum mapa.</div></div></div>
 
       <!-- PRODUTOS -->
       <section class="page" id="page-produtos">
@@ -3064,6 +3057,8 @@ function renderControleValidade() {
       // Mantém as demais funcionalidades existentes.
       renderTransferencias();
       if (typeof renderPaginasGestao === 'function') renderPaginasGestao();
+      // Recalcula os indicadores depois que o mapa chegou, evitando a corrida de carregamento.
+      if (typeof carregarDashboard === 'function') carregarDashboard();
   
       atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
       atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
@@ -3268,6 +3263,23 @@ function renderControleValidade() {
       queimaCache.pendentes = dados.pendentes || [];
       queimaCache.aprovados = dados.aprovados || [];
       queimaCache.relancar = dados.relancar || [];
+
+      // Reconcilia itens já existentes na Queima com o mapa, inclusive registros enviados antes desta versão.
+      const itensQueima = [...queimaCache.pendentes, ...queimaCache.aprovados, ...queimaCache.relancar];
+      const chavesLocais = obterChavesQueimaHTML();
+      const normalizar = v => String(v ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+      (painelCache.validades || []).forEach(mapa => {
+        const chave = String(mapa.chaveUnica || '').trim();
+        if (!chave || chavesLocais.has(chave)) return;
+        const correspondente = itensQueima.some(q => {
+          if (q.chaveUnica && String(q.chaveUnica).trim() === chave) return true;
+          return normalizar(q.codigo) === normalizar(mapa.codigo) &&
+            normalizar(q.lote) === normalizar(mapa.lote) &&
+            normalizar(q.validadeISO || q.validade) === normalizar(mapa.validadeISO || mapa.validade) &&
+            (!q.quantidade || !mapa.quantidade || normalizar(q.quantidade) === normalizar(mapa.quantidade));
+        });
+        if (correspondente) marcarComoQueimaHTML(chave);
+      });
   
       renderQueima();
   
@@ -3634,6 +3646,7 @@ function atualizarProdutosAtencao(registros) {
     alert(dados.mensagem || 'Produto lançado para a Queima.');
 
     await carregarQueima();
+    await carregarMapa();
     await carregarDashboard();
 
   } catch (e) {
@@ -4222,7 +4235,13 @@ async function enviarLancamentoManualMapa(dados) {
     botao.innerHTML = '<i data-lucide="save"></i> Salvar lançamento';
 
     if (typeof renderPainelIcons === "function") {
-      renderPainelIcons();
+      document.getElementById('btnImportarEstoqueOds')?.addEventListener('click',()=>g('estoqueArquivoOds')?.click());
+  document.getElementById('estoqueArquivoOds')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importarEstoqueOds(f);e.target.value='';});
+  document.getElementById('estoqueBusca')?.addEventListener('input',renderEstoque);
+  document.getElementById('estoqueFiltro')?.addEventListener('change',renderEstoque);
+  document.getElementById('refreshEstoque')?.addEventListener('click',renderEstoque);
+  carregarEstoqueOdsSalvo();
+  renderPainelIcons();
     }
   }
 }
@@ -4489,41 +4508,42 @@ function limparFormularioMapaManterFuncionario() {
     renderPainelIcons(g("page-funcionarios"));
   }
 
-  /* ---------- Estoque (saldo por produto, a partir dos lançamentos) ---------- */
-  function dadosProdutos() {
-    const m = new Map();
-    registros().forEach(r => {
-      const c = String(r.codigo || "").trim();
-      if (!c) return;
-      let o = m.get(c);
-      if (!o) { o = { codigo: c, lanc: 0, un: 0, lotes: new Set(), prox: null, ult: 0 }; m.set(c, o); }
-      o.lanc++; o.un += Number(r.quantidade) || 0;
-      if (r.lote) o.lotes.add(String(r.lote).trim());
-      const iso = r.validadeISO || "";
-      if (iso && (!o.prox || iso < (o.prox.validadeISO || ""))) o.prox = r;
-      o.ult = Math.max(o.ult, tsReg(r));
-    });
-    return m;
+  /* ---------- Controle de Estoque: importação ODS ---------- */
+  const ESTOQUE_ODS_STORAGE_KEY = 'painelConferente_estoqueOds_v1';
+  let estoqueOdsRegistros = [];
+  let estoqueOdsAtualizadoEm = '';
+  function chaveEstoque(v) { return String(v ?? '').trim().replace(/\.0$/, '').toLocaleLowerCase('pt-BR'); }
+  function carregarEstoqueOdsSalvo() { try { const x=JSON.parse(localStorage.getItem(ESTOQUE_ODS_STORAGE_KEY)||'null'); if(x&&Array.isArray(x.registros)){estoqueOdsRegistros=x.registros;estoqueOdsAtualizadoEm=x.atualizadoEm||'';} } catch(e) { console.warn(e); } }
+  function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
+  async function importarEstoqueOds(arquivo) {
+    if(!arquivo)return;
+    if(!window.XLSX){alert('A biblioteca de leitura de planilhas não carregou. Atualize a página e tente novamente.');return;}
+    setText('estoqueNotice','Lendo '+arquivo.name+'...'); mostrar('estoqueNotice',true);
+    try {
+      const wb=XLSX.read(await arquivo.arrayBuffer(),{type:'array'}); const nomeAba=wb.SheetNames[0]; if(!nomeAba)throw new Error('O arquivo não possui abas.');
+      const linhas=XLSX.utils.sheet_to_json(wb.Sheets[nomeAba],{header:1,defval:'',raw:false}); const lista=[];
+      for(const linha of linhas){const ci=String(linha?.[1]??'').trim(), desc=String(linha?.[2]??'').trim(), sec=String(linha?.[3]??'').trim(), qb=String(linha?.[7]??'').trim(); if(!ci||/c[oó]digo.*interno/i.test(ci)||/^descri[cç][aã]o$/i.test(desc))continue; const p=buscarProdutoPorCodigoInterno(ci); let qtd=Number(qb.replace(/\./g,'').replace(',','.')); if(!Number.isFinite(qtd))qtd=0; lista.push({codigoInterno:ci,ean:p?.ean||'',produto:p?.produto?.produto||p?.produto?.descricao||desc||'Produto sem descrição',secao:p?.produto?.secao||p?.produto?.seção||sec,quantidade:qtd,encontradoNoJson:!!p});}
+      if(!lista.length)throw new Error('Não encontrei dados com Código Interno na coluna B.');
+      estoqueOdsRegistros=lista; estoqueOdsAtualizadoEm=new Date().toLocaleString('pt-BR');
+      localStorage.setItem(ESTOQUE_ODS_STORAGE_KEY,JSON.stringify({registros:lista,atualizadoEm:estoqueOdsAtualizadoEm,nomeArquivo:arquivo.name}));
+      renderEstoque(); setText('estoqueNotice',`Importação concluída: ${lista.length} produtos. ${lista.filter(x=>!x.encontradoNoJson).length} sem correspondência no JSON.`); mostrar('estoqueNotice',true);
+    } catch(e){setText('estoqueNotice','Falha na importação: '+e.message);mostrar('estoqueNotice',true);alert('Não foi possível importar o .ods: '+e.message);}
   }
+  function abrirModalMapasEstoque(ean,codigoInterno,descricao){
+    const registros=registrosVisiveisHTML(painelCache.validades||[]).filter(r=>String(r.codigo||'').trim()===String(ean||'').trim()||( !ean && String(r.codigo||'').trim()===String(codigoInterno||'').trim())).sort((a,b)=>String(a.validadeISO||a.validade||'9999').localeCompare(String(b.validadeISO||b.validade||'9999')));
+    setText('estoqueMapasTitulo','Mapas do produto'); setText('estoqueMapasSubtitulo',`${descricao||'Produto'} · EAN ${ean||'não encontrado'} · Código interno ${codigoInterno||'não informado'}`);
+    g('estoqueMapasTbody').innerHTML=registros.map(r=>{const dias=diasAte(r.validadeISO||r.validade);const sit=situacao(dias);return `<tr><td>${esc(r.funcionario||'—')}</td><td>${esc(r.lote||'—')}</td><td>${esc(fmtData(r.validade||r.validadeISO)||'—')}</td><td>${esc(r.quantidade??'—')}</td><td>${badge(sit[0],sit[1])}</td></tr>`;}).join(''); mostrar('estoqueMapasEmpty',!registros.length); g('estoqueMapasModal').style.display='flex'; renderPainelIcons(g('estoqueMapasModal'));
+  }
+  function fecharModalMapasEstoque(){g('estoqueMapasModal').style.display='none';}
   function renderEstoque() {
-    if (!g("estoqueTbody")) return;
-    const q = norm(g("estoqueBusca").value), f = g("estoqueFiltro").value;
-    const todos = [...dadosProdutos().values()].map(o => {
-      const i = info(o.codigo), s = situacao(o.prox ? diasRegistro(o.prox) : null);
-      return Object.assign(o, { descricao: i.descricao, secao: i.secao, sit: s[0], cls: s[1] });
-    });
-    const rows = todos.filter(o => (!q || norm(o.codigo + " " + o.descricao + " " + o.secao).includes(q)) && (!f || o.sit === f))
-      .sort((a, b) => (a.prox ? a.prox.validadeISO : "9999").localeCompare(b.prox ? b.prox.validadeISO : "9999"));
-    setText("estoqueProdutos", num(todos.length));
-    setText("estoqueUnidades", num(todos.reduce((t, o) => t + o.un, 0)));
-    setText("estoqueVencidos", num(todos.filter(o => o.sit === "Vencido").length));
-    g("estoqueTbody").innerHTML = rows.slice(0, MAX).map(o =>
-      '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + (o.secao ? '<div class="cell-secondary">' + esc(o.secao) + '</div>' : '') + '</td><td>' +
-      num(o.lotes.size) + '</td><td>' + num(o.un) + '</td><td>' + esc(o.prox ? fmtData(o.prox.validade || o.prox.validadeISO) : "—") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' + badge(o.sit, o.cls) + '</td></tr>').join("");
-    mostrar("estoqueEmpty", rows.length === 0);
-    setText("estoqueNotice", rows.length > MAX ? "Mostrando " + MAX + " de " + num(rows.length) + " produtos. Use a busca para refinar." : "Saldo calculado a partir dos lançamentos do Mapa de Validade (" + num(registros().length) + " registro(s)).");
-    mostrar("estoqueNotice", true);
-    renderPainelIcons(g("page-estoque"));
+    if(!g('estoqueTbody'))return;
+    const q=norm(g('estoqueBusca')?.value||''), filtro=g('estoqueFiltro')?.value||'';
+    const mapas=registrosVisiveisHTML(painelCache.validades||[]);
+    const todos=estoqueOdsRegistros.map(o=>{const matches=mapas.filter(r=>String(r.codigo||'').trim()===String(o.ean||'').trim()||(!o.ean&&String(r.codigo||'').trim()===String(o.codigoInterno||'').trim()));const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
+    const rows=todos.filter(o=>(!q||norm([o.ean,o.codigoInterno,o.produto,o.secao].join(' ')).includes(q))&&(!filtro||(filtro==='Sim'?o.mapeada:!o.mapeada)));
+    setText('estoqueProdutos',num(todos.length));setText('estoqueUnidades',num(todos.reduce((t,o)=>t+(Number(o.quantidade)||0),0)));setText('estoqueVencidos',num(todos.filter(o=>o.mapeada).length));
+    g('estoqueTbody').innerHTML=rows.slice(0,MAX).map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
+    mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',estoqueOdsRegistros.length?`${estoqueOdsRegistros.length} produtos importados; ${estoqueOdsRegistros.filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
   }
 
   /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
