@@ -3692,6 +3692,7 @@ document.getElementById("cvExportarElegiveis")
    ========================================================= */
 
 let produtoManualMapaEncontrado = false;
+let produtoManualMapaAtual = null;
 let confirmacaoManualMapaPendente = false;
 let enviandoManualMapa = false;
 
@@ -3711,6 +3712,7 @@ function abrirModalDigitacaoManualMapa() {
   document.getElementById("btnSalvarDigitacaoManualMapa").disabled = false;
 
   produtoManualMapaEncontrado = false;
+  produtoManualMapaAtual = null;
   confirmacaoManualMapaPendente = false;
   enviandoManualMapa = false;
 
@@ -3759,6 +3761,7 @@ async function consultarProdutoManualMapa() {
   descricao.value = "";
   aviso.style.display = "none";
   produtoManualMapaEncontrado = false;
+  produtoManualMapaAtual = null;
 
   if (!codigoInterno) {
     status.textContent = "Digite um código interno.";
@@ -3812,6 +3815,7 @@ async function consultarProdutoManualMapa() {
     }
 
     descricao.value = produtoEncontrado.descricao;
+    produtoManualMapaAtual = produtoEncontrado;
     produtoManualMapaEncontrado = true;
 
     status.textContent = produtoEncontrado.descricao
@@ -3935,6 +3939,9 @@ function obterDadosFormularioManualMapa() {
 
   return {
     codigoInterno,
+    ean: produtoManualMapaAtual
+      ? String(produtoManualMapaAtual.ean || "").trim()
+      : "",
     descricao,
     lote,
     validade: validadeTexto,
