@@ -3266,80 +3266,80 @@ function renderControleValidade() {
   function atualizarResumoValidade(registros){const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   
 
+
 function atualizarProdutosAtencao(registros) {
   const tbody = document.getElementById('dashboardAttentionTbody');
-
-  if (!tbody) {
-    console.warn('Tabela Produtos que Exigem Atenção não encontrada.');
-    return;
-  }
 
   const norm = s => String(s || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
+    .toLowerCase();
 
-  const dados = Array.isArray(registros) ? registros : [];
-
-  const rows = dados.filter(r => {
-    const codigo = String(r.codigo || '').trim();
-    const encontrado = mapaDescricoes[codigo];
-
-    // Aceita diferentes nomes de campos no JSON.
-    const produto = typeof encontrado === 'string'
-      ? { descricao: encontrado }
-      : (encontrado || {});
-
-    const secao = norm(
-      produto.secao ||
-      produto.Seção ||
-      produto.Seção ||
-      produto.seção ||
-      produto.Secao ||
-      produto.departamento ||
-      r.secao ||
-      r.seção ||
-      ''
-    );
-
+  const rows = registros.filter(r => {
+    const p = mapaDescricoes[String(r.codigo || '').trim()] || {};
+    const sec = norm(p.secao || r.secao || '');
     const dias = diasAte(r.validadeISO || r.validade);
 
     return (
-      (secao.includes('nutricao') || secao.includes('conveniencia')) &&
+      (sec.includes('nutricao') || sec.includes('conveniencia')) &&
       dias !== null &&
       dias >= 0 &&
       dias <= 40
     );
-  }).sort((a, b) => {
-    return diasAte(a.validadeISO || a.validade) -
-           diasAte(b.validadeISO || b.validade);
-  });
+  }).sort((a, b) =>
+    diasAte(a.validadeISO || a.validade) -
+    diasAte(b.validadeISO || b.validade)
+  );
 
   tbody.innerHTML = rows.length
     ? rows.map(r => {
+        const chave = escHtml(r.chaveUnica || '');
+        const lote = escHtml(r.lote || '');
+        const validade = escHtml(r.validadeISO || '');
+        const quantidade = escHtml(r.quantidade ?? '');
+        const funcionario = escHtml(r.funcionario || '');
+        const codigo = escHtml(r.codigo || '');
         const dias = diasAte(r.validadeISO || r.validade);
 
         return `
           <tr>
             <td>
               <div class="cell-primary">${escHtml(descricaoProduto(r))}</div>
-              <div class="cell-secondary">Código: ${escHtml(r.codigo)}</div>
+              <div class="cell-secondary">Código: ${codigo}</div>
             </td>
-            <td>${escHtml(r.lote || '—')}</td>
+            <td>${lote || '—'}</td>
             <td>${escHtml(fmtData(r.validade))}</td>
-            <td>${escHtml(r.quantidade)}</td>
+            <td>${quantidade}</td>
             <td>
               <span class="badge badge-warning">
-                ${dias === 0 ? 'Vence hoje' : `Vence em ${dias} dias`}
+                Vence em ${dias} dias
               </span>
+            </td>
+            <td>
+              <button
+                class="button button-danger"
+                onclick="excluirMapa('${chave}')"
+                title="Excluir lançamento"
+                aria-label="Excluir lançamento">
+                <i data-lucide="trash-2"></i>
+                Excluir
+              </button>
+
+              <button
+                class="button button-primary"
+                onclick="lancarMapaParaQueima('${chave}')"
+                title="Lançar no Queima"
+                aria-label="Lançar no Queima">
+                <i data-lucide="flame"></i>
+                Lançar no Queima
+              </button>
             </td>
           </tr>
         `;
       }).join('')
     : `
       <tr>
-        <td colspan="5" class="attention-empty">
+        <td colspan="6" class="attention-empty">
           Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
         </td>
       </tr>
@@ -3347,6 +3347,7 @@ function atualizarProdutosAtencao(registros) {
 
   renderPainelIcons();
 }
+
 
 
   async function carregarDashboard() {
