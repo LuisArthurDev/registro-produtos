@@ -1213,6 +1213,21 @@
       }
     }
 
+  
+    .produto-json-modal{position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.62);display:flex;align-items:center;justify-content:center;padding:18px}
+    .produto-json-card{width:min(100%,500px);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 25px 70px #0003;padding:22px}
+    .produto-json-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px}
+    .produto-json-header h3{font-size:18px;font-weight:800}
+    .produto-json-header p{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+    .produto-json-card form{display:flex;flex-direction:column;gap:8px}
+    .produto-json-card label{font-size:12px;font-weight:700;color:#334155;margin-top:5px}
+    .produto-json-card input{width:100%;height:42px;border:1px solid var(--border);border-radius:8px;padding:0 12px;outline:none;font-size:13px}
+    .produto-json-card input:focus{border-color:var(--primary);box-shadow:0 0 0 3px #3b82f61c}
+    .produto-json-status{font-size:12px;line-height:1.5;padding-top:5px;white-space:pre-wrap}
+    .produto-json-status.error{color:#b91c1c}.produto-json-status.success{color:#15803d}.produto-json-status.info{color:#1d4ed8}
+    .produto-json-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}
+    @media(max-width:560px){.produto-json-card{padding:17px}.produto-json-actions{flex-direction:column-reverse}.produto-json-actions button{width:100%}}
+
   </style>
 </head>
 
@@ -1913,7 +1928,10 @@
       <section class="page" id="page-produtos">
         <div class="page-heading">
           <div><h2>Produtos</h2><p>Catálogo produtos_ean.json e presença de cada item no mapa.</p></div>
-          <button class="button" id="refreshProdutos" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="button button-primary" id="btnNovoProdutoJson" type="button" onclick="abrirModalNovoProdutoJson()"><i data-lucide="plus"></i> Adicionar produto</button>
+            <button class="button" id="refreshProdutos" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
+          </div>
         </div>
         <div class="notice" id="produtosNotice">Carregando dados...</div>
         <div class="mini-stats"><div class="mini-stat"><span>Total de produtos</span><strong id="produtosTotal">—</strong></div><div class="mini-stat"><span>Seções</span><strong id="produtosSecoes">—</strong></div><div class="mini-stat"><span>Com lançamento no mapa</span><strong id="produtosNoMapa">—</strong></div></div>
@@ -2305,6 +2323,31 @@
   </main>
 </div>
 
+<!-- MODAL: ADICIONAR PRODUTO AO CATÁLOGO JSON -->
+<div id="modalNovoProdutoJson" class="produto-json-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tituloModalNovoProduto">
+  <div class="produto-json-card">
+    <div class="produto-json-header">
+      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p>O produto será incluído no catálogo produtos_ean.json do GitHub.</p></div>
+      <button type="button" class="icon-button" onclick="fecharModalNovoProdutoJson()" aria-label="Fechar">×</button>
+    </div>
+    <form id="formNovoProdutoJson" onsubmit="salvarNovoProdutoJson(event)">
+      <label for="novoProdutoCodigo">Código interno</label>
+      <input id="novoProdutoCodigo" autocomplete="off" required maxlength="80" placeholder="Ex.: 12345">
+      <label for="novoProdutoEan">EAN / código de barras</label>
+      <input id="novoProdutoEan" inputmode="numeric" autocomplete="off" required maxlength="32" placeholder="Ex.: 7890000000012">
+      <label for="novoProdutoDescricao">Descrição do produto</label>
+      <input id="novoProdutoDescricao" autocomplete="off" required maxlength="200" placeholder="Ex.: Leite Integral 1L">
+      <label for="novoProdutoSecao">Seção</label>
+      <input id="novoProdutoSecao" autocomplete="off" required maxlength="100" placeholder="Ex.: Mercearia">
+      <div id="novoProdutoJsonStatus" class="produto-json-status" role="status"></div>
+      <div class="produto-json-actions">
+        <button type="button" class="button" onclick="fecharModalNovoProdutoJson()">Cancelar</button>
+        <button type="submit" class="button button-primary" id="btnSalvarNovoProdutoJson"><i data-lucide="save"></i> Salvar produto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const pageNames = {
@@ -2540,7 +2583,8 @@
         consultarQueima: '__consultarQueimaCb',
         aprovarQueima: '__aprovarQueimaCb',
         relancarQueima: '__relancarQueimaCb',
-        adicionarQueima: '__adicionarAoQueimaCb'
+        adicionarQueima: '__adicionarAoQueimaCb',
+        adicionarProdutoJson: '__adicionarProdutoJsonCb'
       };
   
       const cbName = callbackMap[callback] || callback;
@@ -4520,6 +4564,90 @@ function limparFormularioMapaManterFuncionario() {
 
   return null;
 }
+
+  /* ---------- Cadastro de produto no produtos_ean.json via Apps Script/GitHub ---------- */
+  function abrirModalNovoProdutoJson() {
+    const modal = g("modalNovoProdutoJson");
+    if (!modal) return;
+    g("formNovoProdutoJson").reset();
+    const status = g("novoProdutoJsonStatus");
+    status.textContent = "";
+    status.className = "produto-json-status";
+    modal.style.display = "flex";
+    setTimeout(() => g("novoProdutoCodigo")?.focus(), 50);
+    renderPainelIcons(modal);
+  }
+
+  function fecharModalNovoProdutoJson() {
+    const modal = g("modalNovoProdutoJson");
+    if (modal) modal.style.display = "none";
+  }
+
+  async function salvarNovoProdutoJson(event) {
+    event.preventDefault();
+    const btn = g("btnSalvarNovoProdutoJson");
+    const status = g("novoProdutoJsonStatus");
+    const codigoInterno = g("novoProdutoCodigo").value.trim();
+    const ean = g("novoProdutoEan").value.trim();
+    const produto = g("novoProdutoDescricao").value.trim();
+    const secao = g("novoProdutoSecao").value.trim();
+
+    if (!codigoInterno || !ean || !produto || !secao) {
+      status.className = "produto-json-status error";
+      status.textContent = "Preencha todos os campos.";
+      return;
+    }
+    if (mapaDescricoes[ean]) {
+      status.className = "produto-json-status error";
+      status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Salvando...";
+    status.className = "produto-json-status info";
+    status.textContent = "Enviando cadastro ao GitHub...";
+
+    try {
+      const resposta = await jsonpPainel("adicionarProdutoJson", "__adicionarProdutoJsonCb", {
+        codigoInterno, ean, produto, secao
+      });
+      if (!resposta || resposta.sucesso !== true) {
+        throw new Error((resposta && (resposta.mensagem || resposta.erro)) || "Não foi possível salvar o produto.");
+      }
+
+      status.className = "produto-json-status success";
+      status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
+      g("formNovoProdutoJson").reset();
+
+      setTimeout(async () => {
+        try {
+          await carregarDescricoesProdutos();
+          renderProdutos();
+        } catch (erroAtualizacao) {
+          console.warn("Produto salvo; catálogo visual será atualizado quando a publicação terminar.", erroAtualizacao);
+        }
+      }, 1500);
+    } catch (erro) {
+      status.className = "produto-json-status error";
+      status.textContent = "Erro ao salvar: " + (erro.message || erro) +
+        "\nVerifique a rota adicionarProdutoJson no Code.gs e as Propriedades do script do GitHub.";
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
+      renderPainelIcons(g("modalNovoProdutoJson"));
+    }
+  }
+
+  g("modalNovoProdutoJson")?.addEventListener("click", event => {
+    if (event.target === g("modalNovoProdutoJson")) fecharModalNovoProdutoJson();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && g("modalNovoProdutoJson")?.style.display === "flex") {
+      fecharModalNovoProdutoJson();
+    }
+  });
+
 </script>
 </body>
 </html>
