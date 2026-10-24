@@ -4259,23 +4259,20 @@ configurarEnterDigitacaoManualMapa();
 
 
   
+
 function limparFormularioMapaManterFuncionario() {
   const modal = document.getElementById("modalDigitacaoManualMapa");
   if (!modal) return;
 
-  // Guarda o funcionário selecionado antes de limpar os campos.
-  const campoFuncionario = modal.querySelector(
-    "#funcionarioManualMapa, #funcionarioDigitacaoManualMapa, select[name='funcionario'], input[name='funcionario']"
-  );
-
+  // Guarda o funcionário selecionado.
+  const campoFuncionario = document.getElementById("manualFuncionario");
   const funcionarioSelecionado = campoFuncionario
     ? campoFuncionario.value
     : "";
 
-  // Limpa os campos do formulário, exceto Funcionário.
+  // Limpa os campos de texto, mantendo o funcionário.
   modal.querySelectorAll("input, textarea").forEach(campo => {
     if (
-      campo === campoFuncionario ||
       campo.type === "hidden" ||
       campo.type === "button" ||
       campo.type === "submit" ||
@@ -4288,40 +4285,37 @@ function limparFormularioMapaManterFuncionario() {
     campo.value = "";
   });
 
-  // Limpa os selects, exceto o campo Funcionário.
+  // Limpa os demais selects, preservando o funcionário.
   modal.querySelectorAll("select").forEach(campo => {
-    if (campo === campoFuncionario) return;
+    if (campo.id === "manualFuncionario") return;
     campo.selectedIndex = 0;
   });
 
-  // Mantém o funcionário selecionado.
+  // Restaura o funcionário selecionado.
   if (campoFuncionario) {
     campoFuncionario.value = funcionarioSelecionado;
   }
 
-  // Limpa o estado do produto encontrado, se utilizado pelo modal.
-  if (typeof produtoManualMapaAtual !== "undefined") {
-    produtoManualMapaAtual = null;
+  // Limpa mensagens e estados de confirmação.
+  const status = document.getElementById("manualMapaStatus");
+  if (status) {
+    status.textContent = "";
+    status.style.color = "";
   }
 
-  if (typeof produtoManualMapaEncontrado !== "undefined") {
-    produtoManualMapaEncontrado = false;
-  }
-
-  if (typeof confirmacaoManualMapaPendente !== "undefined") {
-    confirmacaoManualMapaPendente = false;
-  }
-
-  // Restaura o botão Salvar.
-  const botaoSalvar = modal.querySelector(
-    "#btnSalvarDigitacaoManualMapa"
+  const confirmacao = document.getElementById(
+    "modalConfirmarCodigoManualMapa"
   );
 
-  if (botaoSalvar) {
-    botaoSalvar.disabled = false;
-    botaoSalvar.innerHTML = "Salvar Lançamento";
+  if (confirmacao) {
+    confirmacao.style.display = "none";
+  }
+
+  if (typeof renderPainelIcons === "function") {
+    renderPainelIcons(modal);
   }
 }
+
 
 </script>
 <script>
