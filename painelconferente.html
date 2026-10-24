@@ -4569,78 +4569,148 @@ function limparFormularioMapaManterFuncionario() {
 }
 
   /* ---------- Cadastro de produto no produtos_ean.json via Apps Script/GitHub ---------- */
-  function abrirModalNovoProdutoJson() {
-    const modal = gProdutoJson("modalNovoProdutoJson");
-    if (!modal) return;
-    gProdutoJson("formNovoProdutoJson").reset();
-    const status = gProdutoJson("novoProdutoJsonStatus");
-    status.textContent = "";
-    status.className = "produto-json-status";
-    modal.style.display = "flex";
-    setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
-    renderPainelIcons(modal);
+  let modoProdutoJson = "adicionar";
+
+function abrirModalNovoProdutoJson() {
+  const modal = gProdutoJson("modalNovoProdutoJson");
+  if (!modal) return;
+
+  modoProdutoJson = "adicionar";
+
+  gProdutoJson("formNovoProdutoJson").reset();
+  gProdutoJson("novoProdutoEan").readOnly = false;
+  gProdutoJson("tituloModalNovoProduto").textContent = "Adicionar produto";
+  gProdutoJson("btnSalvarNovoProdutoJson").innerHTML =
+    '<i data-lucide="save"></i> Salvar produto';
+
+  const status = gProdutoJson("novoProdutoJsonStatus");
+  status.textContent = "";
+  status.className = "produto-json-status";
+
+  modal.style.display = "flex";
+  setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
+  renderPainelIcons(modal);
+}
+
+function preencherProdutoParaEdicao(ean, produto) {
+  modoProdutoJson = "editar";
+
+  gProdutoJson("novoProdutoCodigo").value =
+    produto.codigoInterno || "";
+  gProdutoJson("novoProdutoEan").value = ean;
+  gProdutoJson("novoProdutoEan").readOnly = true;
+  gProdutoJson("novoProdutoDescricao").value =
+    typeof produto === "string"
+      ? produto
+      : produto.produto || produto.descricao || "";
+  gProdutoJson("novoProdutoSecao").value =
+    produto.secao || produto.Seção || produto["Seção"] || "";
+
+  gProdutoJson("tituloModalNovoProduto").textContent = "Editar produto";
+  gProdutoJson("btnSalvarNovoProdutoJson").innerHTML =
+    '<i data-lucide="save"></i> Salvar alterações';
+
+  const status = gProdutoJson("novoProdutoJsonStatus");
+  status.className = "produto-json-status info";
+  status.textContent =
+    "EAN existente. Corrija os campos necessários e salve.";
+
+  gProdutoJson("modalNovoProdutoJson").style.display = "flex";
+  renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
+}
+
+async function salvarNovoProdutoJson(event) {
+  event.preventDefault();
+
+  const btn = gProdutoJson("btnSalvarNovoProdutoJson");
+  const status = gProdutoJson("novoProdutoJsonStatus");
+
+  const codigoInterno = gProdutoJson("novoProdutoCodigo").value.trim();
+  const ean = gProdutoJson("novoProdutoEan").value.trim();
+  const produto = gProdutoJson("novoProdutoDescricao").value.trim();
+  const secao = gProdutoJson("novoProdutoSecao").value.trim();
+
+  if (!codigoInterno || !ean || !produto || !secao) {
+    status.className = "produto-json-status error";
+    status.textContent = "Preencha todos os campos.";
+    return;
   }
+
+  if (!/^\d{8,14}$/.test(ean)) {
+    status.className = "produto-json-status error";
+    status.textContent = "O EAN deve conter de 8 a 14 dígitos.";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  status.className = "produto-json-status info";
+  status.textContent = "Salvando alterações no GitHub...";
+
+  try {
+    const resposta = await jsonpPainel(
+      "adicionarProdutoJson",
+      "__adicionarProdutoJsonCb",
+      {
+        modo: modoProdutoJson,
+        codigoInterno,
+        ean,
+        produto,
+        secao
+      }
+    );
+
+    if (!resposta || resposta.sucesso !== true) {
+      if (resposta?.duplicado && resposta.produto) {
+        const escolha = confirm(
+          "Este EAN já está cadastrado.\n\n" +
+          "Descrição: " + (resposta.produto.produto || "") + "\n" +
+          "Seção: " + (resposta.produto.secao || "") + "\n\n" +
+          "Deseja editar este produto?"
+        );
+
+        if (escolha) {
+          preencherProdutoParaEdicao(ean, resposta.produto);
+        }
+
+        return;
+      }
+
+      throw new Error(
+        resposta?.mensagem || "Não foi possível salvar o produto."
+      );
+    }
+
+    status.className = "produto-json-status success";
+    status.textContent = resposta.mensagem;
+
+    await carregarDescricoesProdutos();
+    renderProdutos();
+
+    setTimeout(() => {
+      fecharModalNovoProdutoJson();
+      abrirModalNovoProdutoJson();
+    }, 1000);
+
+  } catch (erro) {
+    status.className = "produto-json-status error";
+    status.textContent = "Erro ao salvar: " + (erro.message || erro);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML =
+      modoProdutoJson === "editar"
+        ? '<i data-lucide="save"></i> Salvar alterações'
+        : '<i data-lucide="save"></i> Salvar produto';
+
+    renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
+  }
+}
 
   function fecharModalNovoProdutoJson() {
     const modal = gProdutoJson("modalNovoProdutoJson");
     if (modal) modal.style.display = "none";
   }
 
-  async function salvarNovoProdutoJson(event) {
-    event.preventDefault();
-    const btn = gProdutoJson("btnSalvarNovoProdutoJson");
-    const status = gProdutoJson("novoProdutoJsonStatus");
-    const codigoInterno = gProdutoJson("novoProdutoCodigo").value.trim();
-    const ean = gProdutoJson("novoProdutoEan").value.trim();
-    const produto = gProdutoJson("novoProdutoDescricao").value.trim();
-    const secao = gProdutoJson("novoProdutoSecao").value.trim();
-
-    if (!codigoInterno || !ean || !produto || !secao) {
-      status.className = "produto-json-status error";
-      status.textContent = "Preencha todos os campos.";
-      return;
-    }
-    if (mapaDescricoes[ean]) {
-      status.className = "produto-json-status error";
-      status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = "Salvando...";
-    status.className = "produto-json-status info";
-    status.textContent = "Enviando cadastro ao GitHub...";
-
-    try {
-      const resposta = await jsonpPainel("adicionarProdutoJson", "__adicionarProdutoJsonCb", {
-        codigoInterno, ean, produto, secao
-      });
-      if (!resposta || resposta.sucesso !== true) {
-        throw new Error((resposta && (resposta.mensagem || resposta.erro)) || "Não foi possível salvar o produto.");
-      }
-
-      status.className = "produto-json-status success";
-      status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
-      gProdutoJson("formNovoProdutoJson").reset();
-
-      setTimeout(async () => {
-        try {
-          await carregarDescricoesProdutos();
-          renderProdutos();
-        } catch (erroAtualizacao) {
-          console.warn("Produto salvo; catálogo visual será atualizado quando a publicação terminar.", erroAtualizacao);
-        }
-      }, 1500);
-    } catch (erro) {
-      status.className = "produto-json-status error";
-      status.textContent = "Erro ao salvar: " + (erro.message || erro) +
-        "\nVerifique a rota adicionarProdutoJson no Code.gs e as Propriedades do script do GitHub.";
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
-      renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
-    }
-  }
 
   gProdutoJson("modalNovoProdutoJson")?.addEventListener("click", event => {
     if (event.target === gProdutoJson("modalNovoProdutoJson")) fecharModalNovoProdutoJson();
