@@ -1,37 +1,74 @@
-name: Atualiza produtos_ean
+
+name: Atualizar produtos EAN
 
 on:
   workflow_dispatch:
 
+  push:
+    paths:
+      - "Items.xls"
+      - "produtos_ean.json"
+      - "scripts/atualizar_produtos.py"
+      - ".github/workflows/atualizar-produtos.yml"
+
 permissions:
   contents: write
 
+concurrency:
+  group: atualizar-produtos-ean
+  cancel-in-progress: false
+
 jobs:
-  run-script:
+  atualizar:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do repositório
+      - name: Baixar repositório
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          ref: ${{ github.ref_name }}
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
-      - name: Executa conversão
-        run: python scripts/atualiza_produtos_ean.py
-
-      - name: Commit e push das mudanças
+      - name: Instalar dependências
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python -m pip install --upgrade pip
+          python -m pip install pandas xlrd
+
+      - name: Verificar arquivos necessários
+        run: |
+          test -f Items.xls || {
+            echo "ERRO: Items.xls não encontrado na raiz."
+            exit 1
+          }
+
+          test -f produtos_ean.json || {
+            echo "ERRO: produtos_ean.json não encontrado na raiz."
+            exit 1
+          }
+
+          test -f scripts/atualizar_produtos.py || {
+            echo "ERRO: script Python não encontrado."
+            exit 1
+          }
+
+      - name: Atualizar JSON
+        run: python scripts/atualizar_produtos.py
+
+      - name: Salvar alterações no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add produtos_ean.json
+
           if git diff --cached --quiet; then
-            echo "Nenhuma mudança para enviar."
-            exit 0
+            echo "Nenhuma alteração no JSON."
+          else
+            git commit -m "Atualiza dados dos produtos"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
-          git commit -m "Atualiza produtos_ean.json"
-          git push
