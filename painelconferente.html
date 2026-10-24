@@ -3599,6 +3599,23 @@ function atualizarProdutosAtencao(registros) {
     const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','circle-check':'✓','x':'×','search':'⌕','circle-x':'×','rotate-cw':'↻','arrow-left-right':'↔','package-check':'▣'};
     root.querySelectorAll('[data-lucide]').forEach(el=>{ if(el.querySelector('svg')) return; el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; });
   }
+  // Inicialização dos controles do Controle de Estoque
+  g('btnImportarEstoqueOds')?.addEventListener('click', () => {
+    const input = g('estoqueArquivoOds');
+    if (input) input.click();
+    else alert('Campo de seleção do arquivo não encontrado.');
+  });
+  g('estoqueArquivoOds')?.addEventListener('change', async e => {
+    const arquivo = e.target.files?.[0];
+    if (arquivo) await importarEstoqueOds(arquivo);
+    e.target.value = '';
+  });
+  g('estoqueBusca')?.addEventListener('input', renderEstoque);
+  g('estoqueFiltro')?.addEventListener('change', renderEstoque);
+  g('refreshEstoque')?.addEventListener('click', renderEstoque);
+  carregarEstoqueOdsSalvo();
+  renderEstoque();
+
   renderPainelIcons();
   atualizarPainel();
   async function lancarMapaParaQueima(chave) {
@@ -4235,13 +4252,7 @@ async function enviarLancamentoManualMapa(dados) {
     botao.innerHTML = '<i data-lucide="save"></i> Salvar lançamento';
 
     if (typeof renderPainelIcons === "function") {
-      document.getElementById('btnImportarEstoqueOds')?.addEventListener('click',()=>g('estoqueArquivoOds')?.click());
-  document.getElementById('estoqueArquivoOds')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importarEstoqueOds(f);e.target.value='';});
-  document.getElementById('estoqueBusca')?.addEventListener('input',renderEstoque);
-  document.getElementById('estoqueFiltro')?.addEventListener('change',renderEstoque);
-  document.getElementById('refreshEstoque')?.addEventListener('click',renderEstoque);
-  carregarEstoqueOdsSalvo();
-  renderPainelIcons();
+      renderPainelIcons();
     }
   }
 }
@@ -4517,100 +4528,39 @@ function limparFormularioMapaManterFuncionario() {
   function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
   async function importarEstoqueOds(arquivo) {
     if (!arquivo) return;
-  
     if (!window.XLSX) {
-      alert('A biblioteca de leitura de planilhas não carregou. Atualize a página e tente novamente.');
-      return;
+      const msg = 'A biblioteca de leitura de planilhas não carregou. Verifique sua conexão e atualize a página.';
+      setText('estoqueNotice', msg); mostrar('estoqueNotice', true); alert(msg); return;
     }
-  
-    setText('estoqueNotice', 'Lendo ' + arquivo.name + '...');
-    mostrar('estoqueNotice', true);
-  
+    setText('estoqueNotice', 'Lendo ' + arquivo.name + '...'); mostrar('estoqueNotice', true);
     try {
       const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array' });
       const nomeAba = wb.SheetNames[0];
-  
-      if (!nomeAba) {
-        throw new Error('O arquivo não possui abas.');
-      }
-  
-      const linhas = XLSX.utils.sheet_to_json(
-        wb.Sheets[nomeAba],
-        { header: 1, defval: '', raw: false }
-      );
-  
+      if (!nomeAba) throw new Error('O arquivo não possui abas.');
+      const linhas = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: false });
       const lista = [];
-  
       for (const linha of linhas) {
-        // Novas colunas da planilha
-        const produto = String(linha?.[2] ?? '').trim();       // C
-        const descricao = String(linha?.[3] ?? '').trim();    // D
-        const ean = String(linha?.[4] ?? '').trim();          // E
-        const secao = String(linha?.[6] ?? '').trim();        // G
-        const saldoTexto = String(linha?.[13] ?? '').trim();  // N
-  
-        // Ignora linhas vazias e cabeçalhos
-        if (
-          !ean ||
-          /^e?an$/i.test(ean) ||
-          /^descri[cç][aã]o$/i.test(descricao)
-        ) {
-          continue;
-        }
-  
-        // Procura o produto no JSON pelo EAN
-        const produtoJson = mapaDescricoes?.[ean];
-  
-        let quantidade = Number(
-          saldoTexto.replace(/\./g, '').replace(',', '.')
-        );
-  
-        if (!Number.isFinite(quantidade)) {
-          quantidade = 0;
-        }
-  
-        lista.push({
-          codigoInterno: produto,
-          ean: ean,
-          produto: descricao || produto || 'Produto sem descrição',
-          secao: secao,
-          quantidade: quantidade,
-          encontradoNoJson: !!produtoJson
-        });
+        const codigoInterno = String(linha?.[2] ?? '').trim(); // C - Produto/código
+        const descricao = String(linha?.[3] ?? '').trim();     // D - Descrição
+        const ean = String(linha?.[4] ?? '').trim();           // E - EAN
+        const secao = String(linha?.[6] ?? '').trim();         // G - Seção
+        const saldoTexto = String(linha?.[13] ?? '').trim();   // N - Saldo
+        if (!ean || /^e?an$/i.test(ean) || /^descri[cç][aã]o$/i.test(descricao) || /^(produto|c[oó]digo interno)$/i.test(codigoInterno)) continue;
+        const produtoJson = (typeof mapaDescricoes === 'object' && mapaDescricoes) ? mapaDescricoes[ean] : null;
+        let quantidade = Number(saldoTexto.replace(/\./g, '').replace(',', '.'));
+        if (!Number.isFinite(quantidade)) quantidade = 0;
+        lista.push({ codigoInterno, ean, produto: descricao || produtoJson?.produto || produtoJson?.descricao || codigoInterno || 'Produto sem descrição', secao: secao || produtoJson?.secao || produtoJson?.seção || '', quantidade, encontradoNoJson: !!produtoJson });
       }
-  
-      if (!lista.length) {
-        throw new Error(
-          'Nenhum produto encontrado. Confira se o EAN está na coluna E.'
-        );
-      }
-  
+      if (!lista.length) throw new Error('Nenhum produto encontrado. Confira se existem EANs na coluna E.');
       estoqueOdsRegistros = lista;
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
-  
-      localStorage.setItem(
-        ESTOQUE_ODS_STORAGE_KEY,
-        JSON.stringify({
-          registros: lista,
-          atualizadoEm: estoqueOdsAtualizadoEm,
-          nomeArquivo: arquivo.name
-        })
-      );
-  
+      localStorage.setItem(ESTOQUE_ODS_STORAGE_KEY, JSON.stringify({ registros: lista, atualizadoEm: estoqueOdsAtualizadoEm, nomeArquivo: arquivo.name }));
       renderEstoque();
-  
-      setText(
-        'estoqueNotice',
-        `Importação concluída: ${lista.length} produtos. ` +
-        `${lista.filter(x => !x.encontradoNoJson).length} sem correspondência no JSON.`
-      );
-  
+      setText('estoqueNotice', `Importação concluída: ${lista.length} produtos. ${lista.filter(x => !x.encontradoNoJson).length} sem correspondência no JSON.`);
       mostrar('estoqueNotice', true);
-  
     } catch (e) {
-      setText('estoqueNotice', 'Falha na importação: ' + e.message);
-      mostrar('estoqueNotice', true);
-      alert('Não foi possível importar o .ods: ' + e.message);
+      setText('estoqueNotice', 'Falha na importação: ' + (e.message || e)); mostrar('estoqueNotice', true);
+      alert('Não foi possível importar o .ods: ' + (e.message || e));
     }
   }
   function abrirModalMapasEstoque(ean,codigoInterno,descricao){
