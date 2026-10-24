@@ -1,15 +1,33 @@
 
 #!/usr/bin/env python3
+
 import json
+import os
+import sys
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
-items_path = root / "items.txt"
-json_path = root / "produtos_ean.json"
+import pandas as pd
 
 
-def normalize(value: str) -> str:
-    return " ".join((value or "").split()).strip()
+# Localiza a raiz do repositório no GitHub Actions ou localmente.
+if os.environ.get("GITHUB_WORKSPACE"):
+    ROOT = Path(os.environ["GITHUB_WORKSPACE"])
+else:
+    ROOT = Path(__file__).resolve().parents[1]
+
+ITEMS_PATH = ROOT / "Items.xls"
+JSON_PATH = ROOT / "produtos_ean.json"
+
+
+def normalize(value) -> str:
+    """Normaliza valores sem transformar valores vazios em 'nan'."""
+    if value is None or pd.isna(value):
+        return ""
+
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+
+    return " ".join(str(value).split()).strip()
 
 
 def normalize_key(value: str) -> str:
@@ -17,110 +35,131 @@ def normalize_key(value: str) -> str:
 
 
 def build_item_map() -> dict[str, dict[str, str]]:
-    item_map: dict[str, dict[str, str]] = {}
+    """Lê código interno, EAN, descrição e seção do arquivo Excel."""
+    if not ITEMS_PATH.exists():
+        raise FileNotFoundError(
+            f"Arquivo Excel não encontrado: {ITEMS_PATH}"
+        )
 
-    if not items_path.exists():
-        return item_map
+    df = pd.read_excel(
+        ITEMS_PATH,
+        header=None,
+        usecols="A:D",
+        dtype=str,
+        engine="xlrd",
+        keep_default_na=False,
+    )
 
-    with items_path.open("r", encoding="utf-8-sig") as f:
-        for line in f:
-            line = line.strip()
+    item_map = {}
 
-            if not line:
-                continue
+    for _, row in df.iterrows():
+        codigo_interno = normalize(row.iloc[0])
+        ean = normalize(row.iloc[1])
+        descricao = normalize(row.iloc[2])
+        secao = normalize(row.iloc[3])
 
-            # Formato:
-            # Codigo Interno | Ean | Desc | Seccao
-            parts = [normalize(p) for p in line.split("\t")]
+        if not any((codigo_interno, ean, descricao, secao)):
+            continue
 
-            # Ignora cabeçalho, se existir
-            if parts and normalize_key(parts[0]) in {
-                "CODIGO INTERNO",
-                "CÓDIGO INTERNO",
-            }:
-                continue
+        # Ignora o cabeçalho, caso exista.
+        if normalize_key(codigo_interno) in {
+            "CODIGO INTERNO",
+            "CÓDIGO INTERNO",
+        }:
+            continue
 
-            if len(parts) < 4:
-                continue
+        registro = {
+            "codigoInterno": codigo_interno,
+            "produto": descricao,
+            "secao": secao,
+        }
 
-            codigo_interno, ean, produto, secao = parts[:4]
-
-            registro = {
-                "codigoInterno": codigo_interno,
-                "ean": ean,
-                "produto": produto,
-                "secao": secao,
-            }
-
-            # Índice por EAN
-            if ean:
-                item_map[f"EAN:{normalize_key(ean)}"] = registro
-
-            # Índice por código interno
-            if codigo_interno:
-                item_map[f"CODIGO:{normalize_key(codigo_interno)}"] = registro
-
-            # Índice por descrição
-            if produto:
-                item_map[f"PRODUTO:{normalize_key(produto)}"] = registro
+        if ean:
+            # O JSON continuará sendo indexado pelo EAN.
+            item_map[normalize_key(ean)] = registro
 
     return item_map
 
 
-if not json_path.exists():
-    raise FileNotFoundError(
-        f"Arquivo JSON não encontrado: {json_path}"
-    )
-
-with json_path.open("r", encoding="utf-8-sig") as f:
-    original = json.load(f)
-
-if not isinstance(original, dict):
-    raise ValueError(
-        "O produtos_ean.json precisa conter um objeto JSON indexado por EAN."
-    )
-
-item_map = build_item_map()
-converted: dict[str, dict[str, str]] = {}
-
-for ean_original, value in original.items():
-    ean = normalize(str(ean_original))
-
-    if isinstance(value, dict):
-        produto = normalize(
-            str(value.get("produto") or value.get("nome") or "")
+def main():
+    if not JSON_PATH.exists():
+        raise FileNotFoundError(
+            f"Arquivo JSON não encontrado: {JSON_PATH}"
         )
 
-        secao = normalize(str(value.get("secao") or ""))
+    with JSON_PATH.open("r", encoding="utf-8-sig") as file:
+        original = json.load(file)
 
-        codigo_interno = normalize(
-            str(value.get("codigoInterno") or value.get("codigo_interno") or "")
+    if not isinstance(original, dict):
+        raise ValueError(
+            "O produtos_ean.json precisa ser um objeto JSON indexado por EAN."
         )
 
-    else:
-        produto = normalize(str(value))
-        secao = ""
-        codigo_interno = ""
+    item_map = build_item_map()
+    converted = {}
 
-    # Complementa os dados usando o items.txt
-    registro = item_map.get(f"EAN:{normalize_key(ean)}")
+    # Preserva os produtos que já existem no JSON.
+    for ean_original, value in original.items():
+        ean = normalize(ean_original)
 
-    if registro:
-        codigo_interno = codigo_interno or registro["codigoInterno"]
-        produto = produto or registro["produto"]
-        secao = secao or registro["secao"]
+        if isinstance(value, dict):
+            produto = normalize(
+                value.get("produto") or value.get("nome") or ""
+            )
+            secao = normalize(value.get("secao") or "")
+            codigo_interno = normalize(
+                value.get("codigoInterno")
+                or value.get("codigo_interno")
+                or ""
+            )
+        else:
+            produto = normalize(value)
+            secao = ""
+            codigo_interno = ""
 
-    converted[ean] = {
-        "codigoInterno": codigo_interno,
-        "produto": produto,
-        "secao": secao,
-    }
+        # O Excel complementa os dados do JSON.
+        registro_excel = item_map.get(normalize_key(ean))
 
-with json_path.open("w", encoding="utf-8") as f:
-    json.dump(converted, f, ensure_ascii=False, indent=2)
-    f.write("\n")
+        if registro_excel:
+            codigo_interno = (
+                codigo_interno or registro_excel["codigoInterno"]
+            )
+            produto = produto or registro_excel["produto"]
+            secao = secao or registro_excel["secao"]
 
-print(f"Arquivo convertido: {json_path}")
-print(f"Registros no JSON: {len(converted)}")
-print(f"Registros disponíveis no items.txt: {len(item_map)}")
-print("Conversão concluída!")
+        converted[ean] = {
+            "codigoInterno": codigo_interno,
+            "produto": produto,
+            "secao": secao,
+        }
+
+    # Grava o JSON atualizado.
+    with JSON_PATH.open("w", encoding="utf-8") as file:
+        json.dump(
+            converted,
+            file,
+            ensure_ascii=False,
+            indent=2,
+        )
+        file.write("\n")
+
+    print(f"Arquivo atualizado: {JSON_PATH}")
+    print(f"Produtos no JSON: {len(converted)}")
+    print(f"EANs encontrados no Excel: {len(item_map)}")
+
+    encontrados = sum(
+        1
+        for ean in converted
+        if normalize_key(ean) in item_map
+    )
+
+    print(f"Produtos correspondentes: {encontrados}")
+    print("Conversão concluída com sucesso!")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print(f"ERRO: {error}", file=sys.stderr)
+        sys.exit(1)
