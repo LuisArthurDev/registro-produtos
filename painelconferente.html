@@ -2472,8 +2472,11 @@ function renderControleValidade() {
       `;
     }).join('');
   
-    document.getElementById('transferenciasEmpty').style.display =
-      rows.length ? 'none' : 'block';
+    const transferenciasEmpty = document.getElementById('transferenciasEmpty');
+
+    if (transferenciasEmpty) {
+      transferenciasEmpty.style.display = rows.length ? 'none' : 'block';
+    }
   
     renderPainelIcons();
 }
