@@ -6,7 +6,7 @@ on:
 
   push:
     paths:
-      - "Items.xls"
+      - "Items.XLS"
       - "produtos_ean.json"
       - "scripts/atualizar_produtos.py"
       - ".github/workflows/atualizar-produtos.yml"
