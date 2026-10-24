@@ -3599,23 +3599,6 @@ function atualizarProdutosAtencao(registros) {
     const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','circle-check':'✓','x':'×','search':'⌕','circle-x':'×','rotate-cw':'↻','arrow-left-right':'↔','package-check':'▣'};
     root.querySelectorAll('[data-lucide]').forEach(el=>{ if(el.querySelector('svg')) return; el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; });
   }
-  // Inicialização dos controles do Controle de Estoque
-  g('btnImportarEstoqueOds')?.addEventListener('click', () => {
-    const input = g('estoqueArquivoOds');
-    if (input) input.click();
-    else alert('Campo de seleção do arquivo não encontrado.');
-  });
-  g('estoqueArquivoOds')?.addEventListener('change', async e => {
-    const arquivo = e.target.files?.[0];
-    if (arquivo) await importarEstoqueOds(arquivo);
-    e.target.value = '';
-  });
-  g('estoqueBusca')?.addEventListener('input', renderEstoque);
-  g('estoqueFiltro')?.addEventListener('change', renderEstoque);
-  g('refreshEstoque')?.addEventListener('click', renderEstoque);
-  carregarEstoqueOdsSalvo();
-  renderEstoque();
-
   renderPainelIcons();
   atualizarPainel();
   async function lancarMapaParaQueima(chave) {
@@ -4760,6 +4743,30 @@ function limparFormularioMapaManterFuncionario() {
       fecharModalNovoProdutoJson();
     }
   });
+
+  // Inicializa os controles do estoque dentro do escopo correto.
+  g("btnImportarEstoqueOds")?.addEventListener("click", () => {
+    const input = g("estoqueArquivoOds");
+    if (!input) {
+      alert("Campo de seleção do arquivo não encontrado.");
+      return;
+    }
+    input.click();
+  });
+
+  g("estoqueArquivoOds")?.addEventListener("change", async event => {
+    const arquivo = event.target.files && event.target.files[0];
+    if (arquivo) await importarEstoqueOds(arquivo);
+    event.target.value = "";
+  });
+
+  g("estoqueBusca")?.addEventListener("input", renderEstoque);
+  g("estoqueFiltro")?.addEventListener("change", renderEstoque);
+  g("refreshEstoque")?.addEventListener("click", renderEstoque);
+
+  carregarEstoqueOdsSalvo();
+  renderEstoque();
+  renderPainelIcons(g("page-estoque"));
 
 </script>
 </body>
