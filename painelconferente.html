@@ -4184,7 +4184,19 @@ document.addEventListener("keydown", evento => {
       modal.querySelectorAll(
         "input:not([type='hidden']):not([type='checkbox']):not([disabled]), select:not([disabled])"
       )
-    ).filter(el => el.offsetParent !== null);
+    ).filter(el => {
+      if (el.offsetParent === null) return false;
+
+      // Ignora o campo Descrição
+      if (
+        el.id.toLowerCase().includes("descricao") ||
+        el.name.toLowerCase().includes("descricao")
+      ) {
+        return false;
+      }
+
+      return true;
+    });
 
     const indice = campos.indexOf(campo);
 
