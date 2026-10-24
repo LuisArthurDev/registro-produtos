@@ -6,7 +6,7 @@ on:
 
   push:
     paths:
-      - "Items.XLS"
+      - "Items.ods"
       - "produtos_ean.json"
       - "scripts/atualizar_produtos.py"
       - ".github/workflows/atualizar-produtos.yml"
@@ -25,8 +25,6 @@ jobs:
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -36,22 +34,26 @@ jobs:
       - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pandas xlrd
+          python -m pip install pandas odfpy
 
       - name: Verificar arquivos necessários
         run: |
-          test -f Items.xls || {
-            echo "ERRO: Items.xls não encontrado na raiz."
+          echo "Raiz do repositório: $GITHUB_WORKSPACE"
+
+          test -f "$GITHUB_WORKSPACE/Items.ods" || {
+            echo "ERRO: Items.ods não encontrado na raiz."
+            echo "Arquivos encontrados:"
+            find . -maxdepth 3 -type f | sort
             exit 1
           }
 
-          test -f produtos_ean.json || {
+          test -f "$GITHUB_WORKSPACE/produtos_ean.json" || {
             echo "ERRO: produtos_ean.json não encontrado na raiz."
             exit 1
           }
 
-          test -f scripts/atualizar_produtos.py || {
-            echo "ERRO: script Python não encontrado."
+          test -f "$GITHUB_WORKSPACE/scripts/atualizar_produtos.py" || {
+            echo "ERRO: scripts/atualizar_produtos.py não encontrado."
             exit 1
           }
 
