@@ -4516,18 +4516,102 @@ function limparFormularioMapaManterFuncionario() {
   function carregarEstoqueOdsSalvo() { try { const x=JSON.parse(localStorage.getItem(ESTOQUE_ODS_STORAGE_KEY)||'null'); if(x&&Array.isArray(x.registros)){estoqueOdsRegistros=x.registros;estoqueOdsAtualizadoEm=x.atualizadoEm||'';} } catch(e) { console.warn(e); } }
   function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
   async function importarEstoqueOds(arquivo) {
-    if(!arquivo)return;
-    if(!window.XLSX){alert('A biblioteca de leitura de planilhas não carregou. Atualize a página e tente novamente.');return;}
-    setText('estoqueNotice','Lendo '+arquivo.name+'...'); mostrar('estoqueNotice',true);
+    if (!arquivo) return;
+  
+    if (!window.XLSX) {
+      alert('A biblioteca de leitura de planilhas não carregou. Atualize a página e tente novamente.');
+      return;
+    }
+  
+    setText('estoqueNotice', 'Lendo ' + arquivo.name + '...');
+    mostrar('estoqueNotice', true);
+  
     try {
-      const wb=XLSX.read(await arquivo.arrayBuffer(),{type:'array'}); const nomeAba=wb.SheetNames[0]; if(!nomeAba)throw new Error('O arquivo não possui abas.');
-      const linhas=XLSX.utils.sheet_to_json(wb.Sheets[nomeAba],{header:1,defval:'',raw:false}); const lista=[];
-      for(const linha of linhas){const ci=String(linha?.[1]??'').trim(), desc=String(linha?.[2]??'').trim(), sec=String(linha?.[3]??'').trim(), qb=String(linha?.[7]??'').trim(); if(!ci||/c[oó]digo.*interno/i.test(ci)||/^descri[cç][aã]o$/i.test(desc))continue; const p=buscarProdutoPorCodigoInterno(ci); let qtd=Number(qb.replace(/\./g,'').replace(',','.')); if(!Number.isFinite(qtd))qtd=0; lista.push({codigoInterno:ci,ean:p?.ean||'',produto:p?.produto?.produto||p?.produto?.descricao||desc||'Produto sem descrição',secao:p?.produto?.secao||p?.produto?.seção||sec,quantidade:qtd,encontradoNoJson:!!p});}
-      if(!lista.length)throw new Error('Não encontrei dados com Código Interno na coluna B.');
-      estoqueOdsRegistros=lista; estoqueOdsAtualizadoEm=new Date().toLocaleString('pt-BR');
-      localStorage.setItem(ESTOQUE_ODS_STORAGE_KEY,JSON.stringify({registros:lista,atualizadoEm:estoqueOdsAtualizadoEm,nomeArquivo:arquivo.name}));
-      renderEstoque(); setText('estoqueNotice',`Importação concluída: ${lista.length} produtos. ${lista.filter(x=>!x.encontradoNoJson).length} sem correspondência no JSON.`); mostrar('estoqueNotice',true);
-    } catch(e){setText('estoqueNotice','Falha na importação: '+e.message);mostrar('estoqueNotice',true);alert('Não foi possível importar o .ods: '+e.message);}
+      const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array' });
+      const nomeAba = wb.SheetNames[0];
+  
+      if (!nomeAba) {
+        throw new Error('O arquivo não possui abas.');
+      }
+  
+      const linhas = XLSX.utils.sheet_to_json(
+        wb.Sheets[nomeAba],
+        { header: 1, defval: '', raw: false }
+      );
+  
+      const lista = [];
+  
+      for (const linha of linhas) {
+        // Novas colunas da planilha
+        const produto = String(linha?.[2] ?? '').trim();       // C
+        const descricao = String(linha?.[3] ?? '').trim();    // D
+        const ean = String(linha?.[4] ?? '').trim();          // E
+        const secao = String(linha?.[6] ?? '').trim();        // G
+        const saldoTexto = String(linha?.[13] ?? '').trim();  // N
+  
+        // Ignora linhas vazias e cabeçalhos
+        if (
+          !ean ||
+          /^e?an$/i.test(ean) ||
+          /^descri[cç][aã]o$/i.test(descricao)
+        ) {
+          continue;
+        }
+  
+        // Procura o produto no JSON pelo EAN
+        const produtoJson = mapaDescricoes?.[ean];
+  
+        let quantidade = Number(
+          saldoTexto.replace(/\./g, '').replace(',', '.')
+        );
+  
+        if (!Number.isFinite(quantidade)) {
+          quantidade = 0;
+        }
+  
+        lista.push({
+          codigoInterno: produto,
+          ean: ean,
+          produto: descricao || produto || 'Produto sem descrição',
+          secao: secao,
+          quantidade: quantidade,
+          encontradoNoJson: !!produtoJson
+        });
+      }
+  
+      if (!lista.length) {
+        throw new Error(
+          'Nenhum produto encontrado. Confira se o EAN está na coluna E.'
+        );
+      }
+  
+      estoqueOdsRegistros = lista;
+      estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
+  
+      localStorage.setItem(
+        ESTOQUE_ODS_STORAGE_KEY,
+        JSON.stringify({
+          registros: lista,
+          atualizadoEm: estoqueOdsAtualizadoEm,
+          nomeArquivo: arquivo.name
+        })
+      );
+  
+      renderEstoque();
+  
+      setText(
+        'estoqueNotice',
+        `Importação concluída: ${lista.length} produtos. ` +
+        `${lista.filter(x => !x.encontradoNoJson).length} sem correspondência no JSON.`
+      );
+  
+      mostrar('estoqueNotice', true);
+  
+    } catch (e) {
+      setText('estoqueNotice', 'Falha na importação: ' + e.message);
+      mostrar('estoqueNotice', true);
+      alert('Não foi possível importar o .ods: ' + e.message);
+    }
   }
   function abrirModalMapasEstoque(ean,codigoInterno,descricao){
     const registros=registrosVisiveisHTML(painelCache.validades||[]).filter(r=>String(r.codigo||'').trim()===String(ean||'').trim()||( !ean && String(r.codigo||'').trim()===String(codigoInterno||'').trim())).sort((a,b)=>String(a.validadeISO||a.validade||'9999').localeCompare(String(b.validadeISO||b.validade||'9999')));
