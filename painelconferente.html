@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1748,54 +1747,36 @@
       <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
         <div class="page-heading">
-          <div><h2>Controle de Estoque</h2><p>Consulte saldos e quantidades de produtos registrados.</p></div>
-          <button class="button button-primary" data-demo="Registrar movimentação de estoque"><i data-lucide="plus"></i> Movimentação</button>
+          <div><h2>Controle de Estoque</h2><p>Saldo por produto, somando os lançamentos do Mapa de Validade.</p></div>
+          <button class="button" id="refreshEstoque" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div class="mini-stats">
-          <div class="mini-stat"><span>Produtos em estoque</span><strong>1.248</strong></div>
-          <div class="mini-stat"><span>Unidades registradas</span><strong>18.642</strong></div>
-          <div class="mini-stat"><span>Estoque baixo</span><strong>16</strong></div>
-        </div>
+        <div class="notice" id="estoqueNotice">Carregando dados...</div>
+        <div class="mini-stats"><div class="mini-stat"><span>Produtos no mapa</span><strong id="estoqueProdutos">—</strong></div><div class="mini-stat"><span>Unidades registradas</span><strong id="estoqueUnidades">—</strong></div><div class="mini-stat"><span>Produtos vencidos</span><strong id="estoqueVencidos">—</strong></div></div>
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Posição de estoque</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar produto..."></div><select class="filter-select table-filter"><option value="">Todas as situações</option><option>Normal</option><option>Estoque baixo</option><option>Sem estoque</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Posição por produto</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou seção..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Código</th><th>Produto</th><th>EAN</th><th>Quantidade</th><th>Unidade</th><th>Última movimentação</th><th>Situação</th></tr></thead>
-            <tbody>
-              <tr><td>PR001</td><td class="cell-primary">Leite Integral 1L</td><td>7890000000012</td><td>240</td><td>Unidade</td><td>22/10/2026</td><td><span class="badge badge-success">Normal</span></td></tr>
-              <tr><td>PR002</td><td class="cell-primary">Café Tradicional 500g</td><td>7890000000043</td><td>84</td><td>Pacote</td><td>22/10/2026</td><td><span class="badge badge-success">Normal</span></td></tr>
-              <tr><td>PR003</td><td class="cell-primary">Biscoito Cream Cracker</td><td>7890000000029</td><td>8</td><td>Pacote</td><td>21/10/2026</td><td><span class="badge badge-warning">Estoque baixo</span></td></tr>
-              <tr><td>PR004</td><td class="cell-primary">Refrigerante Cola 2L</td><td>7890000000036</td><td>0</td><td>Unidade</td><td>20/10/2026</td><td><span class="badge badge-danger">Sem estoque</span></td></tr>
-            </tbody>
+            <thead><tr><th>EAN</th><th>Produto</th><th>Lotes</th><th>Quantidade</th><th>Próxima validade</th><th>Último lançamento</th><th>Situação</th></tr></thead>
+            <tbody id="estoqueTbody"></tbody>
           </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
+          <div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum registro encontrado.</div>
         </div>
       </section>
 
       <!-- PRODUTOS -->
       <section class="page" id="page-produtos">
         <div class="page-heading">
-          <div><h2>Produtos</h2><p>Cadastro e consulta do catálogo de produtos.</p></div>
-          <button class="button button-primary" data-demo="Cadastrar produto"><i data-lucide="plus"></i> Adicionar produto</button>
+          <div><h2>Produtos</h2><p>Catálogo produtos_ean.json e presença de cada item no mapa.</p></div>
+          <button class="button" id="refreshProdutos" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div class="notice">O catálogo abaixo é demonstrativo. O cadastro real de código, EAN, descrição e categoria será implementado na integração com o banco de dados.</div>
-        <div class="mini-stats">
-          <div class="mini-stat"><span>Total de produtos</span><strong>1.248</strong></div>
-          <div class="mini-stat"><span>Ativos</span><strong>1.231</strong></div>
-          <div class="mini-stat"><span>Inativos</span><strong>17</strong></div>
-        </div>
+        <div class="notice" id="produtosNotice">Carregando dados...</div>
+        <div class="mini-stats"><div class="mini-stat"><span>Total de produtos</span><strong id="produtosTotal">—</strong></div><div class="mini-stat"><span>Seções</span><strong id="produtosSecoes">—</strong></div><div class="mini-stat"><span>Com lançamento no mapa</span><strong id="produtosNoMapa">—</strong></div></div>
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Catálogo de produtos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar código, EAN ou descrição..."></div><select class="filter-select table-filter"><option value="">Todos os status</option><option>Ativo</option><option>Inativo</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Catálogo de produtos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="produtosBusca" placeholder="Buscar EAN, descrição ou seção..."></div><select id="produtosFiltro" class="filter-select"><option value="">Todos os produtos</option><option value="mapa">No mapa</option><option value="sem">Sem lançamento</option></select></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Código</th><th>EAN</th><th>Descrição</th><th>Categoria</th><th>Unidade</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody>
-              <tr><td>PR001</td><td>7890000000012</td><td class="cell-primary">Leite Integral 1L</td><td>Laticínios</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR001" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td>PR002</td><td>7890000000043</td><td class="cell-primary">Café Tradicional 500g</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR002" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td>PR003</td><td>7890000000029</td><td class="cell-primary">Biscoito Cream Cracker</td><td>Biscoitos</td><td>Pacote</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR003" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td>PR004</td><td>7890000000036</td><td class="cell-primary">Refrigerante Cola 2L</td><td>Bebidas</td><td>Unidade</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar produto PR004" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td>PR005</td><td>7890000000050</td><td class="cell-primary">Arroz Tipo 1 5kg</td><td>Mercearia</td><td>Pacote</td><td><span class="badge badge-neutral">Inativo</span></td><td><button class="button" data-demo="Editar produto PR005" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-            </tbody>
+            <thead><tr><th>EAN</th><th>Descrição</th><th>Seção</th><th>Lançamentos</th><th>Unidades</th><th>Situação</th></tr></thead>
+            <tbody id="produtosTbody"></tbody>
           </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum produto encontrado.</div>
+          <div class="empty-state" id="produtosEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado.</div>
         </div>
       </section>
 
@@ -1810,55 +1791,41 @@
       <!-- HISTÓRICO -->
       <section class="page" id="page-historico">
         <div class="page-heading">
-          <div><h2>Histórico</h2><p>Consulte os eventos e as movimentações registrados no painel.</p></div>
-          <button class="button" data-demo="Exportar histórico" title="Exportar histórico" aria-label="Exportar histórico"><i data-lucide="download"></i></button>
+          <div><h2>Histórico</h2><p>Lançamentos, transferências, sinalizações e perdas registrados nas planilhas.</p></div>
+          <button class="button" id="refreshHistorico" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div class="notice">O histórico real deverá registrar quem realizou cada operação, a data, o horário e os detalhes da alteração.</div>
+        <div class="notice" id="historicoNotice">Carregando dados...</div>
+        
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Registro de atividades</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar atividade..."></div><select class="filter-select table-filter"><option value="">Todos os eventos</option><option>Lançamento</option><option>Transferência</option><option>Produto</option><option>Validade</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Registro de atividades</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="historicoBusca" placeholder="Buscar atividade..."></div><select id="historicoFiltro" class="filter-select"><option value="">Todos os eventos</option><option value="Lançamento">Lançamento</option><option value="Transferência">Transferência</option><option value="Sinalização">Sinalização</option><option value="Perda">Perda</option></select></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Data e horário</th><th>Usuário</th><th>Evento</th><th>Descrição</th><th>Identificação</th><th>Situação</th></tr></thead>
-            <tbody>
-              <tr><td>22/10/2026 09:42</td><td>Alice</td><td><span class="badge badge-info">Lançamento</span></td><td>Registro de lote de café</td><td>LAN-1284</td><td><span class="badge badge-success">Concluído</span></td></tr>
-              <tr><td>22/10/2026 09:18</td><td>Gabriela</td><td><span class="badge badge-purple">Transferência</span></td><td>Movimentação entre setores</td><td>TRF-0084</td><td><span class="badge badge-success">Concluído</span></td></tr>
-              <tr><td>22/10/2026 08:56</td><td>Altino</td><td><span class="badge badge-warning">Validade</span></td><td>Produto sinalizado</td><td>SIN-0014</td><td><span class="badge badge-warning">Em aberto</span></td></tr>
-              <tr><td>22/10/2026 08:31</td><td>Ana Carolina</td><td><span class="badge badge-info">Produto</span></td><td>Cadastro de produto</td><td>PR-1248</td><td><span class="badge badge-success">Concluído</span></td></tr>
-            </tbody>
+            <tbody id="historicoTbody"></tbody>
           </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhuma atividade encontrada.</div>
+          <div class="empty-state" id="historicoEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhuma atividade encontrada.</div>
         </div>
       </section>
 
       <!-- FUNCIONÁRIOS -->
       <section class="page" id="page-funcionarios">
         <div class="page-heading">
-          <div><h2>Funcionários</h2><p>Visualize os usuários que terão acesso ao sistema.</p></div>
-          <button class="button button-primary" data-demo="Adicionar funcionário"><i data-lucide="user-plus"></i> Adicionar funcionário</button>
+          <div><h2>Funcionários</h2><p>Equipe e abas de lançamento, com os dados reais do Mapa de Validade.</p></div>
+          <button class="button" id="refreshFuncionarios" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div class="notice">Esta é uma lista demonstrativa. Cadastro de usuários, senhas, permissões e desativação de contas serão implementados com autenticação e banco de dados.</div>
-        <div class="mini-stats">
-          <div class="mini-stat"><span>Total de funcionários</span><strong>18</strong></div>
-          <div class="mini-stat"><span>Ativos</span><strong>16</strong></div>
-          <div class="mini-stat"><span>Administradores</span><strong>2</strong></div>
-        </div>
+        <div class="notice" id="funcionariosNotice">Carregando dados...</div>
+        <div class="mini-stats"><div class="mini-stat"><span>Total de funcionários</span><strong id="funcionariosTotal">—</strong></div><div class="mini-stat"><span>Com lançamentos</span><strong id="funcionariosAtivos">—</strong></div><div class="mini-stat"><span>Com produtos vencidos</span><strong id="funcionariosVencidos">—</strong></div></div>
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Equipe e acessos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input class="table-search" placeholder="Buscar funcionário..."></div><select class="filter-select table-filter"><option value="">Todos os status</option><option>Ativo</option><option>Inativo</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Equipe e lançamentos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="funcionariosBusca" placeholder="Buscar funcionário..."></div><select id="funcionariosFiltro" class="filter-select"><option value="">Todos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option><option value="venc">Com produtos vencidos</option></select></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Funcionário</th><th>Usuário</th><th>Perfil de acesso</th><th>Último acesso</th><th>Status</th><th>Ações</th></tr></thead>
-            <tbody>
-              <tr><td><div class="cell-primary">Alice</div></td><td>alice</td><td><span class="badge badge-purple">Administrador</span></td><td>22/10/2026 09:42</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Alice" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td><div class="cell-primary">Altino</div></td><td>altino</td><td><span class="badge badge-info">Conferente</span></td><td>22/10/2026 09:18</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Altino" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td><div class="cell-primary">Ana Carolina</div></td><td>ana.carolina</td><td><span class="badge badge-info">Conferente</span></td><td>22/10/2026 08:56</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Ana Carolina" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td><div class="cell-primary">Gabriela</div></td><td>gabriela</td><td><span class="badge badge-info">Conferente</span></td><td>21/10/2026 22:12</td><td><span class="badge badge-success">Ativo</span></td><td><button class="button" data-demo="Editar funcionário Gabriela" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-              <tr><td><div class="cell-primary">Anielle</div></td><td>anielle</td><td><span class="badge badge-info">Conferente</span></td><td>21/10/2026 20:45</td><td><span class="badge badge-neutral">Inativo</span></td><td><button class="button" data-demo="Editar funcionário Anielle" title="Editar" aria-label="Editar"><i data-lucide="pencil"></i></button></td></tr>
-            </tbody>
+            <thead><tr><th>Funcionário</th><th>Perfil</th><th>Lançamentos</th><th>Unidades</th><th>Vencidos</th><th>A vencer</th><th>Último lançamento</th><th>Situação</th><th>Ações</th></tr></thead>
+            <tbody id="funcionariosTbody"></tbody>
           </table></div>
-          <div class="empty-state"><i data-lucide="search-x"></i>Nenhum funcionário encontrado.</div>
+          <div class="empty-state" id="funcionariosEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum funcionário encontrado.</div>
         </div>
       </section>
 
       <div id="sinalizadoModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center;padding:18px"><div class="panel" style="background:white;width:min(560px,100%);padding:24px;border-radius:16px;max-height:90vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">Ver sinalização</h2><button class="button" title="Fechar" aria-label="Fechar" onclick="fecharSinalizadoModal()"><i data-lucide="x"></i></button></div><div id="sinalizadoDetalhes" style="margin:18px 0"></div><label for="sinalizadoStatus">Ação tomada</label><select id="sinalizadoStatus" class="filter-select" style="width:100%;margin:8px 0 14px"><option value="Resolvido">Resolvido</option><option value="Negado">Negado</option></select><div id="sinalizadoMotivoWrap"><label for="sinalizadoMotivo">Motivo da resolução</label><textarea id="sinalizadoMotivo" rows="3" style="width:100%;margin-top:8px" placeholder="Descreva o que foi resolvido..."></textarea></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px"><button class="button" title="Cancelar" aria-label="Cancelar" onclick="fecharSinalizadoModal()"><i data-lucide="x"></i></button><button class="button button-primary" title="Salvar" aria-label="Salvar" onclick="salvarSinalizado()"><i data-lucide="check"></i></button></div></div></div>
-      <div class="footer">Painel do Conferente · Protótipo demonstrativo · Os dados exibidos são fictícios.</div>
+      <div class="footer">Painel do Conferente · Dados integrados à planilha de validade e ao catálogo de produtos.</div>
     </div>
   </main>
 </div>
@@ -1876,7 +1843,7 @@
     produtos: ["Produtos", "Cadastro e consulta do catálogo"],
     sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
     historico: ["Histórico", "Registro das atividades do sistema"],
-    funcionarios: ["Funcionários", "Gestão dos usuários e permissões"]
+    funcionarios: ["Funcionários", "Equipe e abas de lançamento"]
   };
 
   function navigate(pageName) {
@@ -1898,6 +1865,7 @@
 
     if(pageName==='transferencias') renderTransferencias();
     if (pageName === 'lancamentos') carregarQueima();
+    if (['estoque','produtos','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -2541,6 +2509,7 @@ function renderControleValidade() {
   
       // Mantém as demais funcionalidades existentes.
       renderTransferencias();
+      if (typeof renderPaginasGestao === 'function') renderPaginasGestao();
   
       atualizarResumoValidade(painelCache.validades);
       atualizarProdutosAtencao(painelCache.validades);
@@ -3016,7 +2985,7 @@ function atualizarProdutosAtencao(registros) {
   document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
   async function atualizarPainel(){
     // Não deixar o carregamento do catálogo bloquear as consultas principais do painel.
-    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); });
+    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(painelCache.validades||[]); atualizarProdutosAtencao(painelCache.validades||[]); if (typeof renderPaginasGestao === 'function') renderPaginasGestao(); });
     const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
     await Promise.allSettled(tarefas);
   }
@@ -3239,6 +3208,231 @@ document.getElementById("cvAtualizarElegiveis")
 
 document.getElementById("cvExportarElegiveis")
   ?.addEventListener("click", exportarElegiveisCSV);
+</script>
+<script>
+/* ===== Páginas de gestão com dados reais (Funcionários, Estoque, Produtos e Histórico) =====
+   Usam os mesmos dados do Mapa de Validade (Apps Script) e o catálogo produtos_ean.json. */
+(function () {
+  const g = id => document.getElementById(id);
+  const MAX = 300;
+  const FUNC = ["Alice","Altino","Ana Carolina","Anielle","Gabriela","Gabriele","Isabela","Livia","Paola","Rafaela","Ramon","Rillary","Sulaima","Thomaz","Termolabil","Psicotropicos","Antibioticos","Transferencias"];
+  const ESPECIAIS = ["termolabil","psicotropicos","antibioticos"];
+
+  const norm = s => String(s == null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  const esc = v => escHtml(v);
+  const num = n => Number(n || 0).toLocaleString("pt-BR");
+  const badge = (txt, cls) => '<span class="badge ' + cls + '">' + esc(txt) + '</span>';
+  const setText = (id, v) => { const el = g(id); if (el) el.textContent = v; };
+  const mostrar = (id, ligado) => { const el = g(id); if (el) el.style.display = ligado ? "block" : "none"; };
+
+  function parseDataHora(s) {
+    const t = String(s || "").trim();
+    let m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime();
+    m = t.match(/^(\d{2})\/(\d{4})$/);
+    return m ? new Date(+m[2], +m[1] - 1, 1).getTime() : 0;
+  }
+  const tsReg = r => Number(r.ts) || parseDataHora(r.dataLancamento) || 0;
+  function fmtDH(t) {
+    if (!t) return "—";
+    const d = new Date(t);
+    return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+  function diasRegistro(r) {
+    let d = null;
+    const m = String(r.validadeISO || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) d = new Date(+m[1], +m[2] - 1, +m[3]);
+    else {
+      const b = String(r.validade || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      if (b) d = new Date(+b[3], +b[2] - 1, +b[1]);
+    }
+    if (!d) return null;
+    const h = new Date(); h.setHours(0, 0, 0, 0);
+    return Math.round((d - h) / 86400000);
+  }
+  function situacao(dias) {
+    if (dias === null) return ["Sem validade", "badge-neutral"];
+    if (dias < 0) return ["Vencido", "badge-danger"];
+    if (dias <= 160) return ["A Vencer", "badge-warning"];
+    return ["Vendável", "badge-success"];
+  }
+  function candidatos(c) {
+    const l = [c];
+    if (/^\d{12}$/.test(c)) l.push("0" + c);
+    if (/^0\d{12}$/.test(c)) l.push(c.slice(1));
+    return l;
+  }
+  function info(codigo) {
+    const c = String(codigo || "").trim();
+    if (typeof mapaDescricoes === "object" && mapaDescricoes) {
+      for (const k of candidatos(c)) {
+        if (Object.prototype.hasOwnProperty.call(mapaDescricoes, k)) {
+          const d = dadosProduto({ codigo: k });
+          return { descricao: d.descricao || c, secao: d.secao || "", noCatalogo: true };
+        }
+      }
+    }
+    return { descricao: c, secao: "", noCatalogo: false };
+  }
+  const registros = () => (typeof painelCache === "object" && Array.isArray(painelCache.validades)) ? painelCache.validades : [];
+
+  function avisoDados(id) {
+    const n = registros().length;
+    setText(id, n ? "Dados do Mapa de Validade: " + num(n) + " registro(s) carregado(s)." : "Aguardando os dados do Mapa de Validade...");
+    mostrar(id, true);
+  }
+
+  /* ---------- Funcionários ---------- */
+  function dadosFuncionarios() {
+    const mapa = new Map(FUNC.map(n => [norm(n), { nome: n, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }]));
+    registros().forEach(r => {
+      const k = norm(r.funcionario);
+      let o = mapa.get(k);
+      if (!o) { o = { nome: r.funcionario || "—", lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }; mapa.set(k, o); }
+      o.lanc++; o.un += Number(r.quantidade) || 0;
+      const d = diasRegistro(r);
+      if (d !== null) { if (d < 0) o.venc++; else if (d <= 160) o.avenc++; }
+      o.ult = Math.max(o.ult, tsReg(r));
+    });
+    return [...mapa.values()];
+  }
+  function renderFuncionarios() {
+    if (!g("funcionariosTbody")) return;
+    const q = norm(g("funcionariosBusca").value), f = g("funcionariosFiltro").value;
+    const todos = dadosFuncionarios();
+    const rows = todos.filter(o => (!q || norm(o.nome).includes(q)) &&
+      (!f || (f === "com" ? o.lanc > 0 : f === "sem" ? o.lanc === 0 : o.venc > 0)));
+    setText("funcionariosTotal", todos.length);
+    setText("funcionariosAtivos", todos.filter(o => o.lanc > 0).length);
+    setText("funcionariosVencidos", todos.filter(o => o.venc > 0).length);
+    g("funcionariosTbody").innerHTML = rows.map(o => {
+      const k = norm(o.nome);
+      const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Conferente", "badge-info");
+      return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div></td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
+        (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
+        (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")) + '</td><td><a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' +
+        encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a></td></tr>';
+    }).join("");
+    mostrar("funcionariosEmpty", rows.length === 0);
+    avisoDados("funcionariosNotice");
+    renderPainelIcons(g("page-funcionarios"));
+  }
+
+  /* ---------- Estoque (saldo por produto, a partir dos lançamentos) ---------- */
+  function dadosProdutos() {
+    const m = new Map();
+    registros().forEach(r => {
+      const c = String(r.codigo || "").trim();
+      if (!c) return;
+      let o = m.get(c);
+      if (!o) { o = { codigo: c, lanc: 0, un: 0, lotes: new Set(), prox: null, ult: 0 }; m.set(c, o); }
+      o.lanc++; o.un += Number(r.quantidade) || 0;
+      if (r.lote) o.lotes.add(String(r.lote).trim());
+      const iso = r.validadeISO || "";
+      if (iso && (!o.prox || iso < (o.prox.validadeISO || ""))) o.prox = r;
+      o.ult = Math.max(o.ult, tsReg(r));
+    });
+    return m;
+  }
+  function renderEstoque() {
+    if (!g("estoqueTbody")) return;
+    const q = norm(g("estoqueBusca").value), f = g("estoqueFiltro").value;
+    const todos = [...dadosProdutos().values()].map(o => {
+      const i = info(o.codigo), s = situacao(o.prox ? diasRegistro(o.prox) : null);
+      return Object.assign(o, { descricao: i.descricao, secao: i.secao, sit: s[0], cls: s[1] });
+    });
+    const rows = todos.filter(o => (!q || norm(o.codigo + " " + o.descricao + " " + o.secao).includes(q)) && (!f || o.sit === f))
+      .sort((a, b) => (a.prox ? a.prox.validadeISO : "9999").localeCompare(b.prox ? b.prox.validadeISO : "9999"));
+    setText("estoqueProdutos", num(todos.length));
+    setText("estoqueUnidades", num(todos.reduce((t, o) => t + o.un, 0)));
+    setText("estoqueVencidos", num(todos.filter(o => o.sit === "Vencido").length));
+    g("estoqueTbody").innerHTML = rows.slice(0, MAX).map(o =>
+      '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + (o.secao ? '<div class="cell-secondary">' + esc(o.secao) + '</div>' : '') + '</td><td>' +
+      num(o.lotes.size) + '</td><td>' + num(o.un) + '</td><td>' + esc(o.prox ? fmtData(o.prox.validade || o.prox.validadeISO) : "—") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' + badge(o.sit, o.cls) + '</td></tr>').join("");
+    mostrar("estoqueEmpty", rows.length === 0);
+    setText("estoqueNotice", rows.length > MAX ? "Mostrando " + MAX + " de " + num(rows.length) + " produtos. Use a busca para refinar." : "Saldo calculado a partir dos lançamentos do Mapa de Validade (" + num(registros().length) + " registro(s)).");
+    mostrar("estoqueNotice", true);
+    renderPainelIcons(g("page-estoque"));
+  }
+
+  /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
+  function renderProdutos() {
+    if (!g("produtosTbody")) return;
+    const catalogo = (typeof mapaDescricoes === "object" && mapaDescricoes) ? mapaDescricoes : {};
+    const codigos = Object.keys(catalogo);
+    const resumo = dadosProdutos();
+    const q = norm(g("produtosBusca").value), f = g("produtosFiltro").value;
+    const lista = codigos.map(c => {
+      const i = info(c);
+      let r = null;
+      for (const k of candidatos(c)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
+      return { codigo: c, descricao: i.descricao, secao: i.secao, lanc: r ? r.lanc : 0, un: r ? r.un : 0 };
+    });
+    const rows = lista.filter(o => (!q || norm(o.codigo + " " + o.descricao + " " + o.secao).includes(q)) &&
+      (!f || (f === "mapa" ? o.lanc > 0 : o.lanc === 0)));
+    setText("produtosTotal", num(lista.length));
+    setText("produtosSecoes", num(new Set(lista.map(o => o.secao).filter(Boolean)).size));
+    setText("produtosNoMapa", num(lista.filter(o => o.lanc > 0).length));
+    g("produtosTbody").innerHTML = rows.slice(0, MAX).map(o =>
+      '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + '</td><td>' + esc(o.secao || "—") + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
+      (o.lanc ? badge("No mapa", "badge-success") : badge("Sem lançamento", "badge-neutral")) + '</td></tr>').join("");
+    mostrar("produtosEmpty", codigos.length > 0 && rows.length === 0);
+    setText("produtosNotice", !codigos.length ? "Catálogo produtos_ean.json ainda não carregado. Confira se o arquivo está na mesma pasta do painel." :
+      rows.length > MAX ? "Mostrando " + MAX + " de " + num(rows.length) + " produtos. Use a busca para refinar." : num(codigos.length) + " produto(s) no catálogo.");
+    mostrar("produtosNotice", true);
+    renderPainelIcons(g("page-produtos"));
+  }
+
+  /* ---------- Histórico (lançamentos, transferências, sinalizações e perdas) ---------- */
+  function eventosHistorico() {
+    const ev = [];
+    registros().forEach(r => {
+      const t = tsReg(r);
+      if (!t) return;
+      const trf = norm(r.funcionario) === "transferencias";
+      ev.push({ t, usuario: r.funcionario || "—", tipo: trf ? "Transferência" : "Lançamento", cls: trf ? "badge-purple" : "badge-info",
+        desc: info(r.codigo).descricao + " · Lote " + (r.lote || "—") + " · " + num(r.quantidade) + " un.", id: r.codigo || "", sit: "Concluído", sitCls: "badge-success" });
+    });
+    (typeof sinalizadosCache !== "undefined" ? sinalizadosCache : []).forEach(r => {
+      const t = parseDataHora(r.dataRegistro);
+      const s = r.acaoTomada || "Em Aberto";
+      ev.push({ t, usuario: r.funcionario || "—", tipo: "Sinalização", cls: "badge-warning",
+        desc: (r.descricao || r.codigo || "Produto") + " · " + (r.motivo || ""), id: r.codigo || "", sit: s, sitCls: s === "Resolvido" ? "badge-success" : s === "Negado" ? "badge-danger" : "badge-warning" });
+    });
+    const venc = (typeof painelCache === "object" && painelCache.vencidos && painelCache.vencidos.retirados) || [];
+    venc.forEach(r => {
+      ev.push({ t: parseDataHora(r.dataRegistro) || parseDataHora(r.dataColeta), usuario: r.abaOrigem || r.abaOrigemInicial || "—", tipo: "Perda", cls: "badge-danger",
+        desc: info(r.codigo).descricao + " · Lote " + (r.lote || "—") + " · " + num(r.quantidade) + " un.", id: r.codigo || "", sit: "Retirado da loja", sitCls: "badge-neutral" });
+    });
+    return ev.sort((a, b) => b.t - a.t);
+  }
+  function renderHistorico() {
+    if (!g("historicoTbody")) return;
+    const q = norm(g("historicoBusca").value), f = g("historicoFiltro").value;
+    const todos = eventosHistorico();
+    const rows = todos.filter(e => (!f || e.tipo === f) && (!q || norm(e.usuario + " " + e.desc + " " + e.id).includes(q)));
+    g("historicoTbody").innerHTML = rows.slice(0, MAX).map(e =>
+      '<tr><td>' + esc(fmtDH(e.t)) + '</td><td>' + esc(e.usuario) + '</td><td>' + badge(e.tipo, e.cls) + '</td><td>' + esc(e.desc) + '</td><td>' + esc(e.id) + '</td><td>' + badge(e.sit, e.sitCls) + '</td></tr>').join("");
+    mostrar("historicoEmpty", rows.length === 0);
+    setText("historicoNotice", rows.length > MAX ? "Mostrando os " + MAX + " eventos mais recentes de " + num(rows.length) + ". Use a busca para refinar." : num(todos.length) + " evento(s) registrado(s) nas planilhas.");
+    mostrar("historicoNotice", true);
+    renderPainelIcons(g("page-historico"));
+  }
+
+  function renderPaginasGestao() {
+    [renderFuncionarios, renderEstoque, renderProdutos, renderHistorico].forEach(fn => { try { fn(); } catch (e) { console.error("Falha em " + fn.name + ":", e); } });
+  }
+  window.renderPaginasGestao = renderPaginasGestao;
+
+  [["funcionariosBusca", "input", renderFuncionarios], ["funcionariosFiltro", "change", renderFuncionarios],
+   ["estoqueBusca", "input", renderEstoque], ["estoqueFiltro", "change", renderEstoque],
+   ["produtosBusca", "input", renderProdutos], ["produtosFiltro", "change", renderProdutos],
+   ["historicoBusca", "input", renderHistorico], ["historicoFiltro", "change", renderHistorico]]
+    .forEach(([id, ev, fn]) => g(id) && g(id).addEventListener(ev, fn));
+  ["refreshFuncionarios", "refreshEstoque", "refreshProdutos", "refreshHistorico"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
+
+  renderPaginasGestao();
+})();
 </script>
 </body>
 </html>
