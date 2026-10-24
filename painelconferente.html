@@ -4549,6 +4549,9 @@ function limparFormularioMapaManterFuncionario() {
   renderPaginasGestao();
 })();
 
+  // Helper global do cadastro de produtos; o helper g original existe apenas dentro da IIFE.
+  const gProdutoJson = id => document.getElementById(id);
+
   function buscarProdutoPorCodigoInterno(codigoInterno) {
   const codigo = String(codigoInterno).trim();
 
@@ -4567,30 +4570,30 @@ function limparFormularioMapaManterFuncionario() {
 
   /* ---------- Cadastro de produto no produtos_ean.json via Apps Script/GitHub ---------- */
   function abrirModalNovoProdutoJson() {
-    const modal = g("modalNovoProdutoJson");
+    const modal = gProdutoJson("modalNovoProdutoJson");
     if (!modal) return;
-    g("formNovoProdutoJson").reset();
-    const status = g("novoProdutoJsonStatus");
+    gProdutoJson("formNovoProdutoJson").reset();
+    const status = gProdutoJson("novoProdutoJsonStatus");
     status.textContent = "";
     status.className = "produto-json-status";
     modal.style.display = "flex";
-    setTimeout(() => g("novoProdutoCodigo")?.focus(), 50);
+    setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
     renderPainelIcons(modal);
   }
 
   function fecharModalNovoProdutoJson() {
-    const modal = g("modalNovoProdutoJson");
+    const modal = gProdutoJson("modalNovoProdutoJson");
     if (modal) modal.style.display = "none";
   }
 
   async function salvarNovoProdutoJson(event) {
     event.preventDefault();
-    const btn = g("btnSalvarNovoProdutoJson");
-    const status = g("novoProdutoJsonStatus");
-    const codigoInterno = g("novoProdutoCodigo").value.trim();
-    const ean = g("novoProdutoEan").value.trim();
-    const produto = g("novoProdutoDescricao").value.trim();
-    const secao = g("novoProdutoSecao").value.trim();
+    const btn = gProdutoJson("btnSalvarNovoProdutoJson");
+    const status = gProdutoJson("novoProdutoJsonStatus");
+    const codigoInterno = gProdutoJson("novoProdutoCodigo").value.trim();
+    const ean = gProdutoJson("novoProdutoEan").value.trim();
+    const produto = gProdutoJson("novoProdutoDescricao").value.trim();
+    const secao = gProdutoJson("novoProdutoSecao").value.trim();
 
     if (!codigoInterno || !ean || !produto || !secao) {
       status.className = "produto-json-status error";
@@ -4618,7 +4621,7 @@ function limparFormularioMapaManterFuncionario() {
 
       status.className = "produto-json-status success";
       status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
-      g("formNovoProdutoJson").reset();
+      gProdutoJson("formNovoProdutoJson").reset();
 
       setTimeout(async () => {
         try {
@@ -4635,15 +4638,15 @@ function limparFormularioMapaManterFuncionario() {
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
-      renderPainelIcons(g("modalNovoProdutoJson"));
+      renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
     }
   }
 
-  g("modalNovoProdutoJson")?.addEventListener("click", event => {
-    if (event.target === g("modalNovoProdutoJson")) fecharModalNovoProdutoJson();
+  gProdutoJson("modalNovoProdutoJson")?.addEventListener("click", event => {
+    if (event.target === gProdutoJson("modalNovoProdutoJson")) fecharModalNovoProdutoJson();
   });
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && g("modalNovoProdutoJson")?.style.display === "flex") {
+    if (event.key === "Escape" && gProdutoJson("modalNovoProdutoJson")?.style.display === "flex") {
       fecharModalNovoProdutoJson();
     }
   });
