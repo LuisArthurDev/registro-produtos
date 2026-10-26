@@ -718,6 +718,7 @@ const APPS_SCRIPT_URL =
 
 const LIMITE_VENCIDO_PADRAO = 60;
 const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
+const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA = 3;
 const LIMITE_A_VENCER = 160;
 
 const $ = id => document.getElementById(id);
@@ -1380,7 +1381,7 @@ function diasAte(iso) {
   return Math.round((alvo - hoje) / 86400000);
 }
 
-function limiteVencidoPorSecao(secao) {
+function limiteVencidoPorSecao(secao, estaNoQueima = false) {
   const secaoNormalizada = String(secao || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -1391,14 +1392,24 @@ function limiteVencidoPorSecao(secao) {
     secaoNormalizada === "NUTRICAO" ||
     secaoNormalizada === "CONVENIENCIA"
   ) {
-    return LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA;
+    return estaNoQueima
+      ? LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA
+      : LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA;
   }
 
   return LIMITE_VENCIDO_PADRAO;
 }
 
-function situacao(dias, secao = "") {
-  const limiteVencido = limiteVencidoPorSecao(secao);
+function produtoEstaNoQueima(codigo) {
+  if (!queimaCache || !Array.isArray(queimaCache.registros)) return false;
+  const codigoNormalizado = String(codigo || "").trim();
+  return queimaCache.registros.some(r =>
+    String(r.codigo || r.ean || r.EAN || r.codBarras || "").trim() === codigoNormalizado
+  );
+}
+
+function situacao(dias, secao = "", estaNoQueima = false) {
+  const limiteVencido = limiteVencidoPorSecao(secao, estaNoQueima);
 
   if (dias <= limiteVencido) {
     return {
@@ -1635,6 +1646,19 @@ function renderizarMes() {
 }
 
 function renderizarValidade() {
+  // Carrega a situação da Queima antes de classificar os prazos de validade.
+  if (!queimaCache || Date.now() - queimaCache.t >= TEMPO_CACHE_QUEIMA) {
+    if (window.__carregandoQueimaParaValidade) return;
+    window.__carregandoQueimaParaValidade = true;
+    consultarQueimaTodos()
+      .catch(() => null)
+      .finally(() => {
+        window.__carregandoQueimaParaValidade = false;
+        renderizarValidade();
+      });
+    return;
+  }
+
   const funcionarioSelecionado = $("funcionario").value;
   const filtro = $("statusValidade").value;
   const itens = [];
@@ -1653,7 +1677,7 @@ function renderizarValidade() {
     if (dias === null) return;
 
     const secao = obterSecao(registro.codigo);
-    const sit = situacao(dias, secao);
+    const sit = situacao(dias, secao, produtoEstaNoQueima(registro.codigo));
 
     if (filtro === "criticos" && sit.chave === "vendavel") return;
 
@@ -1691,9 +1715,11 @@ function renderizarValidade() {
   definirMensagem(
     itens.length +
     " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
-    "Nutrição e Conveniência: VENCIDO até " +
+    "Nutrição e Conveniência fora do Queima: VENCIDO quando faltarem " +
     LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
-    " dias. Demais seções: VENCIDO até " +
+    " dias ou menos; no Queima: " +
+    LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA +
+    " dias ou menos. Demais seções: VENCIDO até " +
     LIMITE_VENCIDO_PADRAO +
     " dias. À vencer até " +
     LIMITE_A_VENCER + " dias."
