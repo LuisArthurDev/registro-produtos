@@ -4745,38 +4745,32 @@ function limparFormularioMapaManterFuncionario() {
   });
 
   // Inicializa os controles de importação do estoque.
-  const campoArquivoEstoque = g("estoqueArquivoOds");
-  const botaoImportarEstoque = g("btnImportarEstoqueOds");
+  const campoArquivoEstoqueOds = document.getElementById("estoqueArquivoOds");
+  const botaoImportarEstoqueOds = document.getElementById("btnImportarEstoqueOds");
   
-  if (botaoImportarEstoque && campoArquivoEstoque) {
-    botaoImportarEstoque.onclick = () => {
-      campoArquivoEstoque.click();
+  if (botaoImportarEstoqueOds && campoArquivoEstoqueOds) {
+    botaoImportarEstoqueOds.onclick = () => {
+      campoArquivoEstoqueOds.click();
     };
   
-    campoArquivoEstoque.onchange = async function () {
-      const arquivo = this.files?.[0];
+    campoArquivoEstoqueOds.onchange = async function () {
+      const arquivo = this.files && this.files[0];
   
-      if (!arquivo) {
-        return;
-      }
+      if (!arquivo) return;
   
-      console.log("Arquivo selecionado:", arquivo.name, arquivo.size);
+      const aviso = document.getElementById("estoqueNotice");
+      if (aviso) aviso.textContent = "Importando arquivo: " + arquivo.name;
   
       try {
         await importarEstoqueOds(arquivo);
       } catch (erro) {
-        console.error("Erro ao importar o estoque:", erro);
-  
-        const aviso = g("estoqueNotice");
-  
+        console.error("Erro ao importar estoque:", erro);
         if (aviso) {
-          aviso.textContent =
-            "Falha na importação: " + (erro.message || erro);
+          aviso.textContent = "Erro ao importar: " + (erro.message || erro);
         } else {
-          alert("Falha na importação: " + (erro.message || erro));
+          alert("Erro ao importar: " + (erro.message || erro));
         }
       } finally {
-        // Permite selecionar novamente o mesmo arquivo.
         this.value = "";
       }
     };
