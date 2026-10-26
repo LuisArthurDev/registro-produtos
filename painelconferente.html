@@ -1743,6 +1743,11 @@
             </div>
           
             <div class="toolbar-actions">
+              
+              <select id="cvElegiveisFuncionario" class="filter-select">
+                <option value="">Todos os funcionários</option>
+              </select>
+
               <div class="search-box">
                 <i data-lucide="search"></i>
                 <input
@@ -2693,8 +2698,11 @@
   let cvElegiveisPaginaAtual = 1;
 const CV_ELEGIVEIS_POR_PAGINA = 25;
 
+
+  
+
 function renderControleValidade() {
-  const registros = registrosVisiveisHTML(painelCache.validades);
+  const registros = registrosVisiveisHTML(painelCache.validades || []);
 
   const dentro = registros.filter(r => {
     const dias = diasAte(r.validadeISO || r.validade);
@@ -2718,16 +2726,54 @@ function renderControleValidade() {
   document.getElementById("cvVencidos").textContent = vencidos.length;
   document.getElementById("cvElegiveis").textContent = elegiveis.length;
 
+  // Preenche o seletor com os funcionários presentes nos registros.
+  const selectFuncionario = document.getElementById("cvElegiveisFuncionario");
+
+  if (selectFuncionario) {
+    const valorAnterior = selectFuncionario.value;
+    const funcionarios = [...new Set(
+      registros
+        .map(r => String(r.funcionario || "").trim())
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+    selectFuncionario.innerHTML =
+      '<option value="">Todos os funcionários</option>';
+
+    funcionarios.forEach(nome => {
+      const option = document.createElement("option");
+      option.value = nome;
+      option.textContent = nome;
+      selectFuncionario.appendChild(option);
+    });
+
+    // Preserva a seleção se o funcionário ainda existir.
+    if (funcionarios.includes(valorAnterior)) {
+      selectFuncionario.value = valorAnterior;
+    }
+  }
+
+  const funcionarioSelecionado = selectFuncionario?.value || "";
+
   const busca = (
     document.getElementById("cvElegiveisBusca")?.value || ""
   ).toLocaleLowerCase("pt-BR").trim();
 
   const filtrados = elegiveis.filter(r => {
+    const funcionario = String(r.funcionario || "").trim();
+
+    if (
+      funcionarioSelecionado &&
+      funcionario !== funcionarioSelecionado
+    ) {
+      return false;
+    }
+
     const texto = [
       r.codigo,
       descricaoProduto(r),
       r.lote,
-      r.funcionario
+      funcionario
     ].join(" ").toLocaleLowerCase("pt-BR");
 
     return texto.includes(busca);
@@ -2739,7 +2785,6 @@ function renderControleValidade() {
     Math.ceil(total / CV_ELEGIVEIS_POR_PAGINA)
   );
 
-  // Mantém a página atual dentro do intervalo válido.
   cvElegiveisPaginaAtual = Math.min(
     Math.max(1, cvElegiveisPaginaAtual),
     totalPaginas
@@ -2789,6 +2834,7 @@ function renderControleValidade() {
   document.getElementById("cvElegiveisProxima").disabled =
     cvElegiveisPaginaAtual >= totalPaginas;
 }
+
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
   let tipoMapaAtivo = 'funcionarios';
   const FUNCIONARIOS_MAPA = ['Alice','Altino','Ana Carolina','Anielle','Gabriela','Gabriele','Isabela','Livia','Paola','Rafaela','Ramon','Rillary','Sulaima','Thomaz'];
@@ -5100,6 +5146,20 @@ function limparFormularioMapaManterFuncionario() {
   
   document.getElementById("refreshEstoque")
     ?.addEventListener("click", renderEstoque);
+
+  
+document.getElementById("cvElegiveisFuncionario")
+  ?.addEventListener("change", () => {
+    cvElegiveisPaginaAtual = 1;
+    renderControleValidade();
+  });
+
+document.getElementById("cvElegiveisBusca")
+  ?.addEventListener("input", () => {
+    cvElegiveisPaginaAtual = 1;
+    renderControleValidade();
+  });
+
   
   carregarEstoqueDoGitHub();
   renderEstoque();
