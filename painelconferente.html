@@ -2662,7 +2662,36 @@
   function parseDataBR(s) { if (!s) return null; if (s instanceof Date) return s; const m=String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m) return new Date(+m[3],+m[2]-1,+m[1]); const d=new Date(s); return isNaN(d) ? null : d; }
   function fmtData(s) { const d=parseDataBR(s); return d ? d.toLocaleDateString('pt-BR') : (s || '—'); }
   function diasAte(s) { const d=parseDataBR(s); if(!d) return null; const hoje=new Date(); hoje.setHours(0,0,0,0); d.setHours(0,0,0,0); return Math.round((d-hoje)/86400000); }
-  function situacaoPainel(r) { const dias=diasAte(r.validadeISO || r.validade); if(dias===null) return 'Sem validade'; if(dias<0) return 'Vencido'; if(dias<=160) return 'A Vencer'; return 'Vendável'; }
+  function secaoProdutoPainel(r) {
+    const p = mapaDescricoes[String(r?.codigo || '').trim()] || {};
+    return String(p.secao || r?.secao || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  function limiteVencimentoPainel(r) {
+    const sec = secaoProdutoPainel(r);
+    const sensivel = sec.includes('nutricao') || sec.includes('conveniencia');
+    if (!sensivel) return 0;
+    return foiParaQueimaHTML(r) ? 3 : 15;
+  }
+
+  // Para Nutrição/Conveniência, a classificação muda quando restam 15 dias
+  // fora do Queima ou 3 dias dentro do Queima. Outros setores seguem a regra atual.
+  function estaVencidoPainel(r) {
+    const dias = diasAte(r.validadeISO || r.validade);
+    if (dias === null) return false;
+    const sec = secaoProdutoPainel(r);
+    const sensivel = sec.includes('nutricao') || sec.includes('conveniencia');
+    return sensivel ? dias <= limiteVencimentoPainel(r) : dias < 0;
+  }
+
+  function situacaoPainel(r) {
+    const dias = diasAte(r.validadeISO || r.validade);
+    if (dias === null) return 'Sem validade';
+    if (estaVencidoPainel(r)) return 'Vencido';
+    if (dias <= 160) return 'A Vencer';
+    return 'Vendável';
+  }
   function adicionarMeses(data, meses) {
     const resultado = new Date(data);
     const diaOriginal = resultado.getDate();
@@ -2716,7 +2745,7 @@ function renderControleValidade() {
 
   const vencidos = registros.filter(r => {
     const dias = diasAte(r.validadeISO || r.validade);
-    return dias !== null && dias < 0;
+    return dias !== null && estaVencidoPainel(r);
   });
 
   const elegiveis = registros.filter(estaEntre3e9Meses);
@@ -3411,7 +3440,7 @@ function renderControleValidade() {
   document.getElementById('queimaBuscaRelancar')
     ?.addEventListener('input', renderQueima);
 
-  function atualizarResumoValidade(registros){registros = registrosVisiveisHTML(registros);const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(dias<0)vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
+  function atualizarResumoValidade(registros){registros = registrosVisiveisHTML(registros);const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(estaVencidoPainel(r))vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
   
 
 
@@ -3522,7 +3551,7 @@ function atualizarProdutosAtencao(registros) {
       const ocultosQueima = (painelCache.validades || []).filter(foiParaQueimaHTML);
       const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
       const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
-      const ocultosVencidos = diasOcultos.filter(dias => dias !== null && dias < 0).length;
+      const ocultosVencidos = ocultosQueima.filter(r => estaVencidoPainel(r)).length;
   
       // Os totais de validade/lancamentos são ajustados visualmente no HTML.
       const indicadores = {
