@@ -4507,7 +4507,6 @@ function limparFormularioMapaManterFuncionario() {
   let estoqueOdsRegistros = [];
   let estoqueOdsAtualizadoEm = '';
   function chaveEstoque(v) { return String(v ?? '').trim().replace(/\.0$/, '').toLocaleLowerCase('pt-BR'); }
-  function carregarEstoqueOdsSalvo() { try { const x=JSON.parse(localStorage.getItem(ESTOQUE_ODS_STORAGE_KEY)||'null'); if(x&&Array.isArray(x.registros)){estoqueOdsRegistros=x.registros;estoqueOdsAtualizadoEm=x.atualizadoEm||'';} } catch(e) { console.warn(e); } }
   function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
   
   async function importarEstoqueOds(arquivo) {
@@ -4785,7 +4784,7 @@ function limparFormularioMapaManterFuncionario() {
       if (botao) botao.disabled = false;
     }
   }
-
+  window.carregarEstoqueDoGitHub = carregarEstoqueDoGitHub;
   
   document.getElementById('refreshEstoque')
     ?.addEventListener('click', carregarEstoqueDoGitHub);
@@ -5031,7 +5030,7 @@ function limparFormularioMapaManterFuncionario() {
   document.getElementById("refreshEstoque")
     ?.addEventListener("click", renderEstoque);
   
-  carregarEstoqueOdsSalvo();
+  carregarEstoqueDoGitHub();
   renderEstoque();
   
   renderPainelIcons(document.getElementById("page-estoque"));
