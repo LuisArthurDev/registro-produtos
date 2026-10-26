@@ -4776,13 +4776,19 @@ function limparFormularioMapaManterFuncionario() {
     };
   }
   
-  g("estoqueBusca")?.addEventListener("input", renderEstoque);
-  g("estoqueFiltro")?.addEventListener("change", renderEstoque);
-  g("refreshEstoque")?.addEventListener("click", renderEstoque);
+  document.getElementById("estoqueBusca")
+  ?.addEventListener("input", renderEstoque);
 
+  document.getElementById("estoqueFiltro")
+    ?.addEventListener("change", renderEstoque);
+  
+  document.getElementById("refreshEstoque")
+    ?.addEventListener("click", renderEstoque);
+  
   carregarEstoqueOdsSalvo();
   renderEstoque();
-  renderPainelIcons(g("page-estoque"));
+  
+  renderPainelIcons(document.getElementById("page-estoque"));
 
   // Conecta o seletor de arquivo à importação do estoque.
   
