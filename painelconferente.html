@@ -5281,7 +5281,213 @@ document.getElementById("cvElegiveisBusca")
       }
     });
   }
+
+  
+let registroParaSinalizarPainel = null;
+
+function abrirSinalizacaoPainel(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Este lançamento não possui chave única. Verifique os dados retornados pelo Apps Script.");
+    return;
+  }
+
+  registroParaSinalizarPainel = registro;
+
+  document.getElementById("itemSinalizacaoPainel").textContent =
+    "Produto: " + descricaoProduto(registro) +
+    " | Código: " + (registro.codigo || "") +
+    " | Lote: " + (registro.lote || "") +
+    " | Validade: " + (registro.validadeISO || registro.validade || "") +
+    " | Funcionário: " + (registro.funcionario || "");
+
+  document.getElementById("formSinalizacaoPainel").reset();
+  document.getElementById("campoOutrasSinalizacaoPainel").hidden = true;
+  document.getElementById("outrasSinalizacaoPainel").required = false;
+  document.getElementById("mensagemSinalizacaoPainel").textContent = "";
+
+  document.getElementById("modalSinalizacaoPainel").style.display = "flex";
+}
+
+function fecharSinalizacaoPainel() {
+  document.getElementById("modalSinalizacaoPainel").style.display = "none";
+  registroParaSinalizarPainel = null;
+}
+
+document.querySelectorAll('input[name="motivoSinalizacaoPainel"]').forEach(campo => {
+  campo.addEventListener("change", () => {
+    const outras = document.querySelector(
+      'input[name="motivoSinalizacaoPainel"]:checked'
+    )?.value === "Outras";
+
+    document.getElementById("campoOutrasSinalizacaoPainel").hidden = !outras;
+    document.getElementById("outrasSinalizacaoPainel").required = outras;
+  });
+});
+
+document.getElementById("btnCancelarSinalizacaoPainel")
+  .addEventListener("click", fecharSinalizacaoPainel);
+
+document.getElementById("modalSinalizacaoPainel")
+  .addEventListener("click", evento => {
+    if (evento.target.id === "modalSinalizacaoPainel") {
+      fecharSinalizacaoPainel();
+    }
+  });
+
+document.getElementById("formSinalizacaoPainel")
+  .addEventListener("submit", async evento => {
+    evento.preventDefault();
+
+    const registro = registroParaSinalizarPainel;
+    if (!registro) return;
+
+    const funcionario = document.getElementById(
+      "funcionarioSinalizacaoPainel"
+    ).value.trim();
+
+    const selecionado = document.querySelector(
+      'input[name="motivoSinalizacaoPainel"]:checked'
+    );
+
+    const mensagem = document.getElementById("mensagemSinalizacaoPainel");
+    const botao = document.getElementById("btnSalvarSinalizacaoPainel");
+
+    if (!funcionario || !selecionado) {
+      mensagem.textContent = "Selecione o funcionário e o motivo.";
+      return;
+    }
+
+    let motivo = selecionado.value;
+
+    if (motivo === "Outras") {
+      const detalhe = document.getElementById(
+        "outrasSinalizacaoPainel"
+      ).value.trim();
+
+      if (!detalhe) {
+        mensagem.textContent = "Descreva o motivo em Outras.";
+        return;
+      }
+
+      motivo += ": " + detalhe;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Salvando...";
+    mensagem.textContent = "Registrando sinalização...";
+
+    try {
+      const resposta = await jsonpPainel(
+        "sinalizarLancamento",
+        "sinalizacao",
+        {
+          chaveUnica: String(registro.chaveUnica),
+          funcionario,
+          motivo
+        }
+      );
+
+      if (!resposta || !resposta.sucesso) {
+        throw new Error(
+          resposta?.mensagem || "Não foi possível salvar a sinalização."
+        );
+      }
+
+      alert(resposta.mensagem || "Sinalização registrada com sucesso.");
+      fecharSinalizacaoPainel();
+    } catch (erro) {
+      mensagem.textContent = erro.message || "Erro ao salvar sinalização.";
+    } finally {
+      botao.disabled = false;
+      botao.textContent = "Salvar sinalização";
+    }
+  });
+
+function abrirSinalizacaoElegivelPorIndice(indice) {
+  const registro = window.cvElegiveisRegistros?.[indice];
+
+  if (!registro) {
+    alert("Não foi possível localizar este lançamento. Atualize a lista.");
+    return;
+  }
+
+  abrirSinalizacaoPainel(registro);
+}
+
   
 </script>
+
+<div id="modalSinalizacaoPainel" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.6); z-index:10000; align-items:center; justify-content:center; padding:18px;">
+  <div class="panel" style="background:white; color:#1f2937; width:min(560px,100%); padding:24px; border-radius:16px; max-height:90vh; overflow:auto;">
+    <h2>Sinalizar lançamento</h2>
+
+    <p id="itemSinalizacaoPainel"></p>
+
+    <form id="formSinalizacaoPainel">
+      <div class="campo">
+        <label for="funcionarioSinalizacaoPainel">Funcionário</label>
+        <select id="funcionarioSinalizacaoPainel" required>
+          <option value="">Selecione seu nome</option>
+          <option>Alice</option>
+          <option>Altino</option>
+          <option>Ana Carolina</option>
+          <option>Anielle</option>
+          <option>Gabriela</option>
+          <option>Gabriele</option>
+          <option>Isabela</option>
+          <option>Livia</option>
+          <option>Paola</option>
+          <option>Rafaela</option>
+          <option>Ramon</option>
+          <option>Rillary</option>
+          <option>Sulaima</option>
+          <option>Thomaz</option>
+          <option>Gabriela Gerente</option>
+          <option>Cristina</option>
+          <option>Tamires</option>
+          <option>Jonas</option>
+          <option>Luis Arthur</option>
+        </select>
+      </div>
+
+      <div class="campo">
+        <label>Motivo da sinalização</label>
+
+        <label class="motivo-opcao">
+          <input type="radio" name="motivoSinalizacaoPainel" value="Não Entrou no Queima" required>
+          Não Entrou no Queima
+        </label>
+
+        <label class="motivo-opcao">
+          <input type="radio" name="motivoSinalizacaoPainel" value="Muita Quantidade">
+          Muita Quantidade
+        </label>
+
+        <label class="motivo-opcao">
+          <input type="radio" name="motivoSinalizacaoPainel" value="Outras">
+          Outras
+        </label>
+      </div>
+
+      <div class="campo" id="campoOutrasSinalizacaoPainel" hidden>
+        <label for="outrasSinalizacaoPainel">Descreva o motivo</label>
+        <textarea id="outrasSinalizacaoPainel" rows="3" maxlength="500" placeholder="Digite o motivo"></textarea>
+      </div>
+
+      <div id="mensagemSinalizacaoPainel" role="status" aria-live="polite"></div>
+
+      <div class="botoes" style="display:flex; gap:8px; margin-top:18px;">
+        <button id="btnSalvarSinalizacaoPainel" type="submit" class="button button-primary">
+          Salvar sinalização
+        </button>
+
+        <button id="btnCancelarSinalizacaoPainel" type="button" class="button">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 </body>
 </html>
