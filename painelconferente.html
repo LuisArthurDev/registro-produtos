@@ -4795,6 +4795,8 @@ function limparFormularioMapaManterFuncionario() {
     setText('estoqueMapasTitulo','Mapas do produto'); setText('estoqueMapasSubtitulo',`${descricao||'Produto'} · EAN ${ean||'não encontrado'} · Código interno ${codigoInterno||'não informado'}`);
     g('estoqueMapasTbody').innerHTML=registros.map(r=>{const dias=diasAte(r.validadeISO||r.validade);const sit=situacao(dias);return `<tr><td>${esc(r.funcionario||'—')}</td><td>${esc(r.lote||'—')}</td><td>${esc(fmtData(r.validade||r.validadeISO)||'—')}</td><td>${esc(r.quantidade??'—')}</td><td>${badge(sit[0],sit[1])}</td></tr>`;}).join(''); mostrar('estoqueMapasEmpty',!registros.length); g('estoqueMapasModal').style.display='flex'; renderPainelIcons(g('estoqueMapasModal'));
   }
+  window.abrirModalMapasEstoque = abrirModalMapasEstoque;
+  
   function fecharModalMapasEstoque(){g('estoqueMapasModal').style.display='none';}
   function renderEstoque() {
     if(!g('estoqueTbody'))return;
@@ -4811,12 +4813,43 @@ function limparFormularioMapaManterFuncionario() {
   /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
   function renderProdutos() {
     if (!g("produtosTbody")) return;
-    const catalogo = (typeof mapaDescricoes === "object" && mapaDescricoes) ? mapaDescricoes : {};
+    const registrosEstoque = Array.isArray(estoqueOdsRegistros)
+  ? estoqueOdsRegistros
+  : [];
+
+    const catalogoJson =
+      (typeof mapaDescricoes === "object" && mapaDescricoes)
+        ? mapaDescricoes
+        : {};
+    
+    const catalogo = { ...catalogoJson };
+    
+    registrosEstoque.forEach(p => {
+      const codigo = String(p.ean || p.codigoInterno || "").trim();
+    
+      if (!codigo) return;
+    
+      const existente = catalogo[codigo] || {};
+    
+      catalogo[codigo] = {
+        ...existente,
+        produto: p.produto || existente.produto || existente.descricao || "",
+        descricao: p.produto || existente.descricao || existente.produto || "",
+        secao: p.secao || existente.secao || existente["seção"] || "",
+        codigoInterno: p.codigoInterno || ""
+      };
+    });
+    
     const codigos = Object.keys(catalogo);
-    const resumo = dadosProdutos();
+    const resumo = new Map();
     const q = norm(g("produtosBusca").value), f = g("produtosFiltro").value;
     const lista = codigos.map(c => {
-      const i = info(c);
+      const item = catalogo[c] || {};
+
+      const i = {
+        descricao: item.descricao || item.produto || item.nome || c,
+        secao: item.secao || item["seção"] || ""
+      };
       let r = null;
       for (const k of candidatos(c)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
       return { codigo: c, descricao: i.descricao, secao: i.secao, lanc: r ? r.lanc : 0, un: r ? r.un : 0 };
