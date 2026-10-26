@@ -1915,7 +1915,7 @@
 
       <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
-        <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button" onclick="document.getElementById('estoqueArquivoOds').click()"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="refreshEstoque" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
+        <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button" onclick="document.getElementById('estoqueArquivoOds').click()"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="btnCarregarEstoqueGitHub" title="Atualizar" onclick="carregarEstoqueDoGitHub()" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
         <div class="notice" id="estoqueNotice">Selecione o arquivo .ods para importar o estoque.</div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos no arquivo</span><strong id="estoqueProdutos">0</strong></div><div class="mini-stat"><span>Unidades em estoque</span><strong id="estoqueUnidades">0</strong></div><div class="mini-stat"><span>Produtos mapeados</span><strong id="estoqueVencidos">0</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Posição por produto</div><div class="panel-subtitle" id="estoqueUltimaImportacao">Nenhum arquivo importado.</div></div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou código interno..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todos</option><option value="Sim">Mapeada</option><option value="Não">Não mapeada</option></select></div></div>
@@ -4661,6 +4661,136 @@ function limparFormularioMapaManterFuncionario() {
   }
 
   window.importarEstoqueOds = importarEstoqueOds;
+  
+  async function carregarEstoqueDoGitHub() {
+    const url =
+      'https://raw.githubusercontent.com/LuisArthurDev/registro-produtos/main/estoque/estoque.ods';
+  
+    const botao = document.getElementById('btnCarregarEstoqueGitHub');
+  
+    try {
+      if (botao) botao.disabled = true;
+  
+      setText('estoqueNotice', 'Carregando estoque do GitHub...');
+      mostrar('estoqueNotice', true);
+  
+      const resposta = await fetch(url + '?t=' + Date.now(), {
+        cache: 'no-store'
+      });
+  
+      if (!resposta.ok) {
+        throw new Error(
+          'Não foi possível baixar o arquivo do GitHub (HTTP ' +
+          resposta.status + '). Confira se o arquivo existe e se o repositório é público.'
+        );
+      }
+  
+      const bytes = await resposta.arrayBuffer();
+      const wb = XLSX.read(bytes, { type: 'array' });
+      const nomeAba = wb.SheetNames[0];
+  
+      if (!nomeAba) {
+        throw new Error('O arquivo ODS não possui abas.');
+      }
+  
+      const linhas = XLSX.utils.sheet_to_json(
+        wb.Sheets[nomeAba],
+        { header: 1, defval: '', raw: false }
+      );
+  
+      const lista = [];
+  
+      for (const linha of linhas) {
+        const codigoInterno = String(linha?.[2] ?? '').trim();
+        const descricao = String(linha?.[3] ?? '').trim();
+        const ean = String(linha?.[4] ?? '').trim();
+        const secao = String(linha?.[6] ?? '').trim();
+        const saldoTexto = String(linha?.[13] ?? '').trim();
+  
+        if (
+          !ean ||
+          /^e?an$/i.test(ean) ||
+          /^descri[cç][aã]o$/i.test(descricao) ||
+          /^(produto|c[oó]digo interno)$/i.test(codigoInterno)
+        ) {
+          continue;
+        }
+  
+        const produtoJson =
+          typeof mapaDescricoes === 'object' && mapaDescricoes
+            ? mapaDescricoes[ean]
+            : null;
+  
+        let quantidade = Number(
+          saldoTexto.replace(/\./g, '').replace(',', '.')
+        );
+  
+        if (!Number.isFinite(quantidade)) quantidade = 0;
+  
+        lista.push({
+          codigoInterno,
+          ean,
+          produto:
+            descricao ||
+            produtoJson?.produto ||
+            produtoJson?.descricao ||
+            codigoInterno ||
+            'Produto sem descrição',
+          secao:
+            secao ||
+            produtoJson?.secao ||
+            produtoJson?.seção ||
+            '',
+          quantidade,
+          encontradoNoJson: !!produtoJson
+        });
+      }
+  
+      if (!lista.length) {
+        throw new Error(
+          'Nenhum produto encontrado. Confira as colunas C, D, E, G e N do arquivo.'
+        );
+      }
+  
+      estoqueOdsRegistros = lista;
+      estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
+  
+      localStorage.setItem(
+        ESTOQUE_ODS_STORAGE_KEY,
+        JSON.stringify({
+          registros: lista,
+          atualizadoEm: estoqueOdsAtualizadoEm,
+          nomeArquivo: 'estoque.ods (GitHub)'
+        })
+      );
+  
+      renderEstoque();
+  
+      setText(
+        'estoqueNotice',
+        `Estoque carregado do GitHub: ${lista.length} produtos. ` +
+        `${lista.filter(x => !x.encontradoNoJson).length} sem correspondência no JSON.`
+      );
+      mostrar('estoqueNotice', true);
+  
+    } catch (erro) {
+      const msg = 'Falha ao carregar estoque do GitHub: ' +
+        (erro.message || erro);
+  
+      setText('estoqueNotice', msg);
+      mostrar('estoqueNotice', true);
+      alert(msg);
+  
+    } finally {
+      if (botao) botao.disabled = false;
+    }
+  }
+
+  
+  document.getElementById('refreshEstoque')
+    ?.addEventListener('click', carregarEstoqueDoGitHub);
+  
+
   function abrirModalMapasEstoque(ean,codigoInterno,descricao){
     const registros=registrosVisiveisHTML(painelCache.validades||[]).filter(r=>String(r.codigo||'').trim()===String(ean||'').trim()||( !ean && String(r.codigo||'').trim()===String(codigoInterno||'').trim())).sort((a,b)=>String(a.validadeISO||a.validade||'9999').localeCompare(String(b.validadeISO||b.validade||'9999')));
     setText('estoqueMapasTitulo','Mapas do produto'); setText('estoqueMapasSubtitulo',`${descricao||'Produto'} · EAN ${ean||'não encontrado'} · Código interno ${codigoInterno||'não informado'}`);
