@@ -3444,39 +3444,68 @@ function renderControleValidade() {
   
 
 
+
 function atualizarProdutosAtencao(registros) {
   const tbody = document.getElementById('dashboardAttentionTbody');
+  if (!tbody) return;
 
   const norm = s => String(s || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
-  const rows = registros.filter(r => {
-    const p = mapaDescricoes[String(r.codigo || '').trim()] || {};
-    const sec = norm(p.secao || r.secao || '');
-    const dias = diasAte(r.validadeISO || r.validade);
+  // Recupera as chaves dos produtos marcados no Queima neste navegador.
+  const chavesQueima = obterChavesQueimaHTML();
 
-    return (
-      (sec.includes('nutricao') || sec.includes('conveniencia')) &&
-      dias !== null &&
-      dias >= 0 &&
-      dias <= 40
+  const rows = (Array.isArray(registros) ? registros : [])
+    .filter(r => {
+      const p = mapaDescricoes[String(r.codigo || '').trim()] || {};
+      const sec = norm(p.secao || r.secao || '');
+      const dias = diasAte(r.validadeISO || r.validade);
+
+      const chave = String(r.chaveUnica || '').trim();
+      const estaNoQueima = chave && chavesQueima.has(chave);
+
+      if (dias === null || dias < 0) return false;
+
+      // No Queima: só aparece quando faltarem 3 dias ou menos.
+      if (estaNoQueima) {
+        return dias <= 3;
+      }
+
+      // Fora do Queima: somente Nutrição e Conveniência.
+      const secaoPermitida =
+        sec.includes('nutricao') ||
+        sec.includes('conveniencia');
+
+      return secaoPermitida && dias <= 40;
+    })
+    .sort((a, b) =>
+      diasAte(a.validadeISO || a.validade) -
+      diasAte(b.validadeISO || b.validade)
     );
-  }).sort((a, b) =>
-    diasAte(a.validadeISO || a.validade) -
-    diasAte(b.validadeISO || b.validade)
-  );
 
   tbody.innerHTML = rows.length
     ? rows.map(r => {
         const chave = escHtml(r.chaveUnica || '');
         const lote = escHtml(r.lote || '');
-        const validade = escHtml(r.validadeISO || '');
         const quantidade = escHtml(r.quantidade ?? '');
-        const funcionario = escHtml(r.funcionario || '');
         const codigo = escHtml(r.codigo || '');
         const dias = diasAte(r.validadeISO || r.validade);
+
+        const estaNoQueima =
+          obterChavesQueimaHTML().has(String(r.chaveUnica || '').trim());
+
+        let textoSituacao;
+        let classeSituacao;
+
+        if (dias <= (estaNoQueima ? 3 : 15)) {
+          textoSituacao = 'Vencido pela regra operacional';
+          classeSituacao = 'badge-danger';
+        } else {
+          textoSituacao = `Vence em ${dias} dias`;
+          classeSituacao = 'badge-warning';
+        }
 
         return `
           <tr>
@@ -3488,8 +3517,8 @@ function atualizarProdutosAtencao(registros) {
             <td>${escHtml(fmtData(r.validade))}</td>
             <td>${quantidade}</td>
             <td>
-              <span class="badge badge-warning">
-                Vence em ${dias} dias
+              <span class="badge ${classeSituacao}">
+                ${textoSituacao}
               </span>
             </td>
             <td>
@@ -3502,14 +3531,16 @@ function atualizarProdutosAtencao(registros) {
                 Excluir
               </button>
 
-              <button
-                class="button button-primary"
-                onclick="lancarMapaParaQueima('${chave}')"
-                title="Lançar no Queima"
-                aria-label="Lançar no Queima">
-                <i data-lucide="flame"></i>
-                Lançar no Queima
-              </button>
+              ${!estaNoQueima ? `
+                <button
+                  class="button button-primary"
+                  onclick="lancarMapaParaQueima('${chave}')"
+                  title="Lançar no Queima"
+                  aria-label="Lançar no Queima">
+                  <i data-lucide="flame"></i>
+                  Lançar no Queima
+                </button>
+              ` : ''}
             </td>
           </tr>
         `;
@@ -3517,15 +3548,13 @@ function atualizarProdutosAtencao(registros) {
     : `
       <tr>
         <td colspan="6" class="attention-empty">
-          Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
+          Nenhum produto exige atenção neste momento.
         </td>
       </tr>
     `;
 
   renderPainelIcons();
 }
-
-
 
   async function carregarDashboard() {
     const banner = document.getElementById('dashboardLoading');
