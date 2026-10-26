@@ -2472,6 +2472,24 @@
   }
 
   // Integração real com o Apps Script: as respostas JSONP usam callbacks fixos.
+  
+  function renderPainelIcons(root) {
+    const alvo = root || document;
+  
+    if (
+      window.lucide &&
+      typeof window.lucide.createIcons === "function"
+    ) {
+      try {
+        window.lucide.createIcons();
+      } catch (erro) {
+        console.warn("Não foi possível atualizar os ícones:", erro);
+      }
+    }
+  }
+  
+  window.renderPainelIcons = renderPainelIcons;
+
   const painelCache = { validades: [], vencidos: [], queima: [] };
 
   // Controle visual local: não altera nem exclui dados das planilhas.
