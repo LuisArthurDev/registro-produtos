@@ -4744,31 +4744,44 @@ function limparFormularioMapaManterFuncionario() {
     }
   });
 
-  // Inicializa os controles do estoque dentro do escopo correto.
-
-  document.getElementById('estoqueArquivoOds').addEventListener('change', function () {
-    const arquivo = this.files[0];
+  // Inicializa os controles de importação do estoque.
+  const campoArquivoEstoque = g("estoqueArquivoOds");
+  const botaoImportarEstoque = g("btnImportarEstoqueOds");
   
-    if (arquivo) {
-      importarEstoqueOds(arquivo);
-    }
-  });
+  if (botaoImportarEstoque && campoArquivoEstoque) {
+    botaoImportarEstoque.onclick = () => {
+      campoArquivoEstoque.click();
+    };
   
-  g("btnImportarEstoqueOds")?.addEventListener("click", () => {
-    const input = g("estoqueArquivoOds");
-    if (!input) {
-      alert("Campo de seleção do arquivo não encontrado.");
-      return;
-    }
-    input.click();
-  });
-
-  g("estoqueArquivoOds")?.addEventListener("change", async event => {
-    const arquivo = event.target.files && event.target.files[0];
-    if (arquivo) await importarEstoqueOds(arquivo);
-    event.target.value = "";
-  });
-
+    campoArquivoEstoque.onchange = async function () {
+      const arquivo = this.files?.[0];
+  
+      if (!arquivo) {
+        return;
+      }
+  
+      console.log("Arquivo selecionado:", arquivo.name, arquivo.size);
+  
+      try {
+        await importarEstoqueOds(arquivo);
+      } catch (erro) {
+        console.error("Erro ao importar o estoque:", erro);
+  
+        const aviso = g("estoqueNotice");
+  
+        if (aviso) {
+          aviso.textContent =
+            "Falha na importação: " + (erro.message || erro);
+        } else {
+          alert("Falha na importação: " + (erro.message || erro));
+        }
+      } finally {
+        // Permite selecionar novamente o mesmo arquivo.
+        this.value = "";
+      }
+    };
+  }
+  
   g("estoqueBusca")?.addEventListener("input", renderEstoque);
   g("estoqueFiltro")?.addEventListener("change", renderEstoque);
   g("refreshEstoque")?.addEventListener("click", renderEstoque);
