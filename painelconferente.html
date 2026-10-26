@@ -4777,6 +4777,24 @@ function limparFormularioMapaManterFuncionario() {
   renderEstoque();
   renderPainelIcons(g("page-estoque"));
 
+  // Conecta o seletor de arquivo à importação do estoque.
+  const campoArquivoEstoque = document.getElementById('estoqueArquivoOds');
+  
+  if (campoArquivoEstoque) {
+    campoArquivoEstoque.addEventListener('change', async function () {
+      const arquivo = this.files && this.files[0];
+  
+      if (!arquivo) return;
+  
+      try {
+        await importarEstoqueOds(arquivo);
+      } finally {
+        // Permite selecionar novamente o mesmo arquivo.
+        this.value = '';
+      }
+    });
+  }
+  
 </script>
 </body>
 </html>
