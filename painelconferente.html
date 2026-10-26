@@ -4811,63 +4811,101 @@ function limparFormularioMapaManterFuncionario() {
   window.renderEstoque = renderEstoque;
 
   /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
+  
   function renderProdutos() {
     if (!g("produtosTbody")) return;
-    const registrosEstoque = Array.isArray(estoqueOdsRegistros)
-  ? estoqueOdsRegistros
-  : [];
-
-    const catalogoJson =
+  
+    const catalogo =
       (typeof mapaDescricoes === "object" && mapaDescricoes)
         ? mapaDescricoes
         : {};
-    
-    const catalogo = { ...catalogoJson };
-    
-    registrosEstoque.forEach(p => {
-      const codigo = String(p.ean || p.codigoInterno || "").trim();
-    
-      if (!codigo) return;
-    
-      const existente = catalogo[codigo] || {};
-    
-      catalogo[codigo] = {
-        ...existente,
-        produto: p.produto || existente.produto || existente.descricao || "",
-        descricao: p.produto || existente.descricao || existente.produto || "",
-        secao: p.secao || existente.secao || existente["seção"] || "",
-        codigoInterno: p.codigoInterno || ""
-      };
-    });
-    
+  
     const codigos = Object.keys(catalogo);
-    const resumo = new Map();
-    const q = norm(g("produtosBusca").value), f = g("produtosFiltro").value;
+  
+    // Não depende do estoque.ods.
+    // Mantém a tabela funcional enquanto os totais de lançamentos
+    // não estiverem conectados à função dadosProdutos().
+    const resumo = typeof dadosProdutos === "function"
+      ? dadosProdutos()
+      : new Map();
+  
+    const q = norm(g("produtosBusca")?.value || "");
+    const f = g("produtosFiltro")?.value || "";
+  
     const lista = codigos.map(c => {
-      const item = catalogo[c] || {};
-
-      const i = {
-        descricao: item.descricao || item.produto || item.nome || c,
-        secao: item.secao || item["seção"] || ""
-      };
+      const i = info(c);
       let r = null;
-      for (const k of candidatos(c)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
-      return { codigo: c, descricao: i.descricao, secao: i.secao, lanc: r ? r.lanc : 0, un: r ? r.un : 0 };
+  
+      if (resumo && typeof resumo.has === "function") {
+        for (const k of candidatos(c)) {
+          if (resumo.has(k)) {
+            r = resumo.get(k);
+            break;
+          }
+        }
+      }
+  
+      return {
+        codigo: c,
+        descricao: i.descricao,
+        secao: i.secao,
+        lanc: r ? r.lanc : 0,
+        un: r ? r.un : 0
+      };
     });
-    const rows = lista.filter(o => (!q || norm(o.codigo + " " + o.descricao + " " + o.secao).includes(q)) &&
-      (!f || (f === "mapa" ? o.lanc > 0 : o.lanc === 0)));
+  
+    const rows = lista.filter(o =>
+      (!q || norm(
+        o.codigo + " " + o.descricao + " " + o.secao
+      ).includes(q)) &&
+      (!f || (f === "mapa" ? o.lanc > 0 : o.lanc === 0))
+    );
+  
     setText("produtosTotal", num(lista.length));
-    setText("produtosSecoes", num(new Set(lista.map(o => o.secao).filter(Boolean)).size));
-    setText("produtosNoMapa", num(lista.filter(o => o.lanc > 0).length));
-    g("produtosTbody").innerHTML = rows.slice(0, MAX).map(o =>
-      '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + '</td><td>' + esc(o.secao || "—") + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
-      (o.lanc ? badge("No mapa", "badge-success") : badge("Sem lançamento", "badge-neutral")) + '</td></tr>').join("");
+  
+    setText(
+      "produtosSecoes",
+      num(new Set(lista.map(o => o.secao).filter(Boolean)).size)
+    );
+  
+    setText(
+      "produtosNoMapa",
+      num(lista.filter(o => o.lanc > 0).length)
+    );
+  
+    g("produtosTbody").innerHTML = rows
+      .slice(0, MAX)
+      .map(o =>
+        '<tr>' +
+          '<td>' + esc(o.codigo) + '</td>' +
+          '<td class="cell-primary">' + esc(o.descricao) + '</td>' +
+          '<td>' + esc(o.secao || "—") + '</td>' +
+          '<td>' + num(o.lanc) + '</td>' +
+          '<td>' + num(o.un) + '</td>' +
+          '<td>' +
+            (o.lanc
+              ? badge("No mapa", "badge-success")
+              : badge("Sem lançamento", "badge-neutral")) +
+          '</td>' +
+        '</tr>'
+      ).join("");
+  
     mostrar("produtosEmpty", codigos.length > 0 && rows.length === 0);
-    setText("produtosNotice", !codigos.length ? "Catálogo produtos_ean.json ainda não carregado. Confira se o arquivo está na mesma pasta do painel." :
-      rows.length > MAX ? "Mostrando " + MAX + " de " + num(rows.length) + " produtos. Use a busca para refinar." : num(codigos.length) + " produto(s) no catálogo.");
+  
+    setText(
+      "produtosNotice",
+      !codigos.length
+        ? "Catálogo produtos_ean.json ainda não carregado. Confira se o arquivo está na mesma pasta do painel."
+        : rows.length > MAX
+          ? "Mostrando " + MAX + " de " + num(rows.length) +
+            " produtos. Use a busca para refinar."
+          : num(codigos.length) + " produto(s) no catálogo."
+    );
+  
     mostrar("produtosNotice", true);
     renderPainelIcons(g("page-produtos"));
   }
+
 
   /* ---------- Histórico (lançamentos, transferências, sinalizações e perdas) ---------- */
   function eventosHistorico() {
@@ -5069,7 +5107,7 @@ function limparFormularioMapaManterFuncionario() {
   renderPainelIcons(document.getElementById("page-estoque"));
 
   // Conecta o seletor de arquivo à importação do estoque.
-  
+  const campoArquivoEstoque = document.getElementById("estoqueArquivoOds");
   if (campoArquivoEstoque) {
     campoArquivoEstoque.addEventListener('change', async function () {
       const arquivo = this.files && this.files[0];
