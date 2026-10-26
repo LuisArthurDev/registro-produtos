@@ -1803,6 +1803,7 @@
                   <th>Dias restantes</th>
                   <th>Quantidade</th>
                   <th>Funcionário / Aba</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="cvElegiveisTbody"></tbody>
@@ -2725,10 +2726,7 @@
   }
   
   let cvElegiveisPaginaAtual = 1;
-const CV_ELEGIVEIS_POR_PAGINA = 25;
-
-
-  
+const CV_ELEGIVEIS_POR_PAGINA = 25;  
 
 function renderControleValidade() {
   const registros = registrosVisiveisHTML(painelCache.validades || []);
@@ -2827,9 +2825,12 @@ function renderControleValidade() {
 
   const tbody = document.getElementById("cvElegiveisTbody");
 
-  tbody.innerHTML = pagina.map(r => {
+  // Mantém os registros da página disponíveis para a ação dos botões.
+  window.cvElegiveisPagina = pagina;
+  
+  tbody.innerHTML = pagina.map((r, i) => {
     const dias = diasAte(r.validadeISO || r.validade);
-
+  
     return `
       <tr>
         <td>${escHtml(r.codigo || "")}</td>
@@ -2839,6 +2840,16 @@ function renderControleValidade() {
         <td>${dias}</td>
         <td>${escHtml(r.quantidade ?? "")}</td>
         <td>${escHtml(r.funcionario || "")}</td>
+        <td>
+          <button
+            type="button"
+            class="button button-primary"
+            onclick="sinalizarElegivel(${i})"
+            title="Sinalizar este produto"
+          >
+            Sinalizar
+          </button>
+        </td>
       </tr>
     `;
   }).join("");
