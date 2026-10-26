@@ -4251,6 +4251,27 @@ async function enviarLancamentoManualMapa(dados) {
       );
     }
 
+    // Confere se o lote já aparece nos mapas carregados antes de gravar.
+    // A comparação ignora maiúsculas/minúsculas e espaços nas extremidades.
+    const loteDigitado = String(dados.lote || "").trim().toLocaleUpperCase("pt-BR");
+    const loteExistente = (Array.isArray(painelCache?.validades) ? painelCache.validades : [])
+      .some(registro =>
+        String(registro.lote || "").trim().toLocaleUpperCase("pt-BR") === loteDigitado
+      );
+
+    if (loteExistente) {
+      const continuar = confirm(
+        "ATENÇÃO: o lote \"" + String(dados.lote || "").trim() +
+        "\" já existe em um lançamento do Mapa de Validade.\n\nDeseja salvar mesmo assim?"
+      );
+
+      if (!continuar) {
+        status.textContent = "Salvamento cancelado. Os dados foram mantidos para revisão.";
+        status.style.color = "#b45309";
+        return;
+      }
+    }
+
     const resposta = await jsonpPainel(
       "adicionarValidadeManual",
       "validade",
