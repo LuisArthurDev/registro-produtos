@@ -1492,7 +1492,7 @@
           <div class="table-toolbar">
             <div>
               <div class="panel-title">Produtos que exigem atenção</div>
-              <div class="panel-subtitle">Produtos de Nutrição e Conveniência com vencimento em até 40 dias</div>
+              <div class="panel-subtitle">Nutrição e Conveniência: atenção até 15 dias antes do vencimento; produtos no Queima, até 3 dias</div>
             </div>
             <button class="button" data-go="controle-validade">Ver validade</button>
           </div>
@@ -3446,22 +3446,27 @@ function renderControleValidade() {
 
 function atualizarProdutosAtencao(registros) {
   const tbody = document.getElementById('dashboardAttentionTbody');
+  if (!tbody) return;
 
   const norm = s => String(s || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
-  const rows = registros.filter(r => {
+  const rows = (Array.isArray(registros) ? registros : []).filter(r => {
     const p = mapaDescricoes[String(r.codigo || '').trim()] || {};
     const sec = norm(p.secao || r.secao || '');
     const dias = diasAte(r.validadeISO || r.validade);
+
+    // Mesma regra de validade usada no painel:
+    // fora do Queima: até 15 dias; no Queima: até 3 dias.
+    const limiteDias = foiParaQueimaHTML(r) ? 3 : 15;
 
     return (
       (sec.includes('nutricao') || sec.includes('conveniencia')) &&
       dias !== null &&
       dias >= 0 &&
-      dias <= 40
+      dias <= limiteDias
     );
   }).sort((a, b) =>
     diasAte(a.validadeISO || a.validade) -
@@ -3470,13 +3475,15 @@ function atualizarProdutosAtencao(registros) {
 
   tbody.innerHTML = rows.length
     ? rows.map(r => {
-        const chave = escHtml(r.chaveUnica || '');
         const lote = escHtml(r.lote || '');
-        const validade = escHtml(r.validadeISO || '');
         const quantidade = escHtml(r.quantidade ?? '');
-        const funcionario = escHtml(r.funcionario || '');
         const codigo = escHtml(r.codigo || '');
         const dias = diasAte(r.validadeISO || r.validade);
+        const limiteDias = foiParaQueimaHTML(r) ? 3 : 15;
+        const origem = foiParaQueimaHTML(r) ? 'Queima' : 'Mapa de Validade';
+        const situacaoTexto = dias === 0
+          ? 'Vence hoje'
+          : `Vence em ${dias} dia${dias === 1 ? '' : 's'}`;
 
         return `
           <tr>
@@ -3485,251 +3492,18 @@ function atualizarProdutosAtencao(registros) {
               <div class="cell-secondary">Código: ${codigo}</div>
             </td>
             <td>${lote || '—'}</td>
-            <td>${escHtml(fmtData(r.validade))}</td>
+            <td>${escHtml(fmtData(r.validade || r.validadeISO))}</td>
             <td>${quantidade}</td>
             <td>
-              <span class="badge badge-warning">
-                Vence em ${dias} dias
+              <span class="badge badge-warning" title="${origem}; limite de atenção: ${limiteDias} dias">
+                ${situacaoTexto}
               </span>
-            </td>
-            <td>
-              <button
-                class="button button-danger"
-                onclick="excluirMapa('${chave}')"
-                title="Excluir lançamento"
-                aria-label="Excluir lançamento">
-                <i data-lucide="trash-2"></i>
-                Excluir
-              </button>
-
-              <button
-                class="button button-primary"
-                onclick="lancarMapaParaQueima('${chave}')"
-                title="Lançar no Queima"
-                aria-label="Lançar no Queima">
-                <i data-lucide="flame"></i>
-                Lançar no Queima
-              </button>
             </td>
           </tr>
         `;
       }).join('')
-    : `
-      <tr>
-        <td colspan="6" class="attention-empty">
-          Nenhum produto de Nutrição ou Conveniência vence nos próximos 40 dias.
-        </td>
-      </tr>
-    `;
-
-  renderPainelIcons();
+    : '<tr><td colspan="5" class="attention-empty">Nenhum produto de Nutrição ou Conveniência dentro do prazo de atenção.</td></tr>';
 }
-
-
-
-  async function carregarDashboard() {
-    const banner = document.getElementById('dashboardLoading');
-  
-    try {
-      if (banner) {
-        banner.style.display = 'flex';
-        banner.innerHTML =
-          '<span class="loading-spinner"></span>' +
-          '<span>Carregando indicadores...</span>';
-      }
-  
-      const d = await jsonpPainel('dashboardPainel', 'dashboard');
-  
-      if (!d || d.sucesso !== true) {
-        throw new Error(
-          (d && d.mensagem) ||
-          'O servidor não confirmou a consulta dos indicadores.'
-        );
-      }
-  
-      const x = d.indicadores || {};
-      const ocultosQueima = (painelCache.validades || []).filter(foiParaQueimaHTML);
-      const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
-      const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
-      const ocultosVencidos = ocultosQueima.filter(r => estaVencidoPainel(r)).length;
-  
-      // Os totais de validade/lancamentos são ajustados visualmente no HTML.
-      const indicadores = {
-        dashLancamentos: Math.max(0, (Number(x.lancamentos) || 0) - ocultosQueima.length),
-        dashQueimaTotal: x.queimaTotal,
-        dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
-        dashAVencer: Math.max(0, (Number(x.aVencer) || 0) - ocultosAVencer),
-        dashVencidos: Math.max(0,
-          (Number(x.vencidosRetirados) || 0) +
-          (Number(x.vencidosSalao) || 0) - ocultosVencidos),
-  
-        // Gráfico de Queima do mês atual.
-        queimaMesLancados: x.queimaMes,
-        queimaMesAprovados: x.queimaAprovadosMes,
-  
-        // Gráfico geral de Queima.
-        queimaGeralLancados: x.queimaTotal,
-        queimaGeralAprovados: x.queimaAprovadosTotal
-      };
-  
-      for (const [id, valor] of Object.entries(indicadores)) {
-        const elemento = document.getElementById(id);
-  
-        if (elemento) {
-          elemento.textContent = valor ?? 0;
-        }
-      }
-  
-      // Atualiza os gráficos sem impedir os demais indicadores
-      // caso algum elemento do gráfico esteja ausente.
-      try {
-        setDonut(
-          'queimaMesChart',
-          'queimaMesInner',
-          x.queimaMes,
-          x.queimaAprovadosMes
-        );
-  
-        setDonut(
-          'queimaGeralChart',
-          'queimaGeralInner',
-          x.queimaTotal,
-          x.queimaAprovadosTotal
-        );
-      } catch (erroGrafico) {
-        console.warn(
-          'Não foi possível atualizar os gráficos de Queima:',
-          erroGrafico
-        );
-      }
-  
-      // Atualiza os resumos de validade.
-      if (typeof atualizarResumoValidade === 'function') {
-        atualizarResumoValidade(
-          registrosVisiveisHTML(painelCache.validades)
-        );
-      }
-  
-      if (typeof atualizarProdutosAtencao === 'function') {
-        atualizarProdutosAtencao(
-          registrosVisiveisHTML(painelCache.validades)
-        );
-      }
-  
-      // Oculta o banner após o carregamento bem-sucedido.
-      if (banner) {
-        banner.style.display = 'none';
-      }
-  
-    } catch (erro) {
-      console.error('Erro ao carregar o Dashboard:', erro);
-  
-      if (banner) {
-        banner.style.display = 'flex';
-        banner.innerHTML =
-          '<span>Indicadores temporariamente indisponíveis. ' +
-          'Os demais dados podem ter sido carregados. ' +
-          'Clique em Atualizar para tentar novamente.</span>';
-      }
-    }
-  }
-
-  function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
-  let sinalizadosCache=[]; let sinalizadoAtual=null;
-  function carregarSinalizados(){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados').then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
-  function renderSinalizados(){const q=(document.getElementById('sinalizadosBusca').value||'').toLocaleLowerCase('pt-BR');const filtro=document.getElementById('sinalizadosFiltro').value;const norm=s=>String(s||'').toLocaleLowerCase('pt-BR');const rows=sinalizadosCache.filter(r=>(!filtro||r.acaoTomada===filtro)&&(!q||norm([r.codigo,r.descricao,r.lote,r.motivo,r.funcionario].join(' ')).includes(q)));document.getElementById('sinalizadosTotal').textContent=sinalizadosCache.length;document.getElementById('sinalizadosAbertos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Em Aberto').length;document.getElementById('sinalizadosResolvidos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Resolvido').length;document.getElementById('sinalizadosNegados').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Negado').length;document.getElementById('sinalizadosTbody').innerHTML=rows.map((r,i)=>{const status=r.acaoTomada||'Em Aberto', cls=status==='Resolvido'?'badge-success':status==='Negado'?'badge-danger':'badge-warning';return `<tr><td class="cell-primary">${escHtml(r.descricao||r.codigo||'Produto não localizado')}<div class="cell-secondary">${escHtml(r.codigo||'')} · ${escHtml(r.chaveUnica)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade)||'—')}</td><td>${escHtml(r.quantidade||'—')}</td><td>${escHtml(r.motivo||'—')}</td><td>${escHtml(r.funcionario||'—')}</td><td>${escHtml(r.dataRegistro||'—')}</td><td><span class="badge ${cls}">${escHtml(status)}</span></td><td><button class="button" title="Ver / resolver" aria-label="Ver / resolver" onclick="abrirSinalizado('${escHtml(r.chaveUnica)}')"><i data-lucide="eye"></i></button></td></tr>`}).join('');document.getElementById('sinalizadosEmpty').style.display=rows.length?'none':'block';document.getElementById('sinalizadosNotice').style.display=sinalizadosCache.length?'none':'block';renderPainelIcons();}
-  function abrirSinalizado(chave){sinalizadoAtual=sinalizadosCache.find(r=>r.chaveUnica===chave);if(!sinalizadoAtual)return;const r=sinalizadoAtual;document.getElementById('sinalizadoDetalhes').innerHTML=`<p><b>Produto:</b> ${escHtml(r.descricao||r.codigo||'Não localizado')}</p><p><b>Código:</b> ${escHtml(r.codigo||'—')}</p><p><b>Lote:</b> ${escHtml(r.lote||'—')}</p><p><b>Validade:</b> ${escHtml(fmtData(r.validade)||'—')}</p><p><b>Quantidade:</b> ${escHtml(r.quantidade||'—')}</p><p><b>Funcionário:</b> ${escHtml(r.funcionario||'—')}</p><p><b>Motivo atual:</b> ${escHtml(r.motivo||'—')}</p><p><b>Situação:</b> ${escHtml(r.acaoTomada||'Em Aberto')}</p>`;document.getElementById('sinalizadoStatus').value=['Resolvido','Negado'].includes(r.acaoTomada)?r.acaoTomada:'Resolvido';document.getElementById('sinalizadoMotivo').value='';document.getElementById('sinalizadoMotivoWrap').style.display=document.getElementById('sinalizadoStatus').value==='Resolvido'?'block':'none';document.getElementById('sinalizadoModal').style.display='flex';renderPainelIcons();}
-  function fecharSinalizadoModal(){document.getElementById('sinalizadoModal').style.display='none';sinalizadoAtual=null;}
-  document.getElementById('sinalizadoStatus').addEventListener('change',e=>{document.getElementById('sinalizadoMotivoWrap').style.display=e.target.value==='Resolvido'?'block':'none';});
-  async function salvarSinalizado(){if(!sinalizadoAtual)return;const status=document.getElementById('sinalizadoStatus').value,motivoResolucao=document.getElementById('sinalizadoMotivo').value.trim();if(status==='Resolvido'&&!motivoResolucao){alert('Informe o motivo da resolução.');return;}try{const d=await jsonpPainel('atualizarSinalizado','atualizarSinalizado',{chaveUnica:sinalizadoAtual.chaveUnica,status,motivoResolucao});alert(d.mensagem||'Resposta recebida');if(d.sucesso){fecharSinalizadoModal();await carregarSinalizados();}}catch(e){alert(e.message);}}
-  document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
-  async function atualizarPainel(){
-    // Não deixar o carregamento do catálogo bloquear as consultas principais do painel.
-    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades)); atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades)); if (typeof renderPaginasGestao === 'function') renderPaginasGestao(); });
-    const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
-    await Promise.allSettled(tarefas);
-  }
-  ['mapaProduto','mapaLote','mapaValidade'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
-  ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
-  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
-  ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
-  document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
-  ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
-  document.getElementById('addDamagedBtn')?.addEventListener('click',adicionarDanificado); document.getElementById('danificadosBusca')?.addEventListener('input',()=>{const q=document.getElementById('danificadosBusca').value.toLocaleLowerCase('pt-BR');document.querySelectorAll('#danificadosTbody tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');});
-  document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
-
-  const today = new Date();
-  document.getElementById("currentDate").textContent =
-    today.toLocaleDateString("pt-BR", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    });
-
-  function renderPainelIcons(root=document) {
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      try { window.lucide.createIcons({root}); return; } catch (_) { /* usa glifos abaixo */ }
-    }
-    const iconGlyphs={'eye':'◉','pencil':'✎','trash-2':'⌫','archive':'▣','check':'✓','refresh-cw':'↻','panel-left-close':'⇤','panel-left-open':'⇥','scan-barcode':'▦','layout-dashboard':'▥','clipboard-list':'☷','check-circle':'✓','circle-check':'✓','x':'×','search':'⌕','circle-x':'×','rotate-cw':'↻','arrow-left-right':'↔','package-check':'▣'};
-    root.querySelectorAll('[data-lucide]').forEach(el=>{ if(el.querySelector('svg')) return; el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; });
-  }
-  renderPainelIcons();
-  atualizarPainel();
-  async function lancarMapaParaQueima(chave) {
-  if (!chave) {
-    alert('Este lançamento não possui Chave Única.');
-    return;
-  }
-
-  const registro = (painelCache.validades || []).find(
-    r => String(r.chaveUnica || '') === String(chave)
-  );
-
-  if (!registro) {
-    alert('Registro não encontrado. Atualize o Mapa de Validade.');
-    return;
-  }
-
-  if (!confirm(
-    'Lançar este produto para a Queima? O registro original será mantido.'
-  )) return;
-
-  try {
-    const dados = await jsonpPainel(
-      'adicionarAoQueima',
-      'adicionarQueima',
-      {
-        chaveUnica: registro.chaveUnica,
-        funcionario: registro.funcionario || '',
-        descricao: descricaoProduto(registro)
-      }
-    );
-
-    if (!dados || !dados.sucesso) {
-      throw new Error(
-        dados?.mensagem || 'Não foi possível lançar o produto.'
-      );
-    }
-
-    // Registra somente no navegador para ocultar este lote no Mapa/Dashboard.
-    marcarComoQueimaHTML(registro.chaveUnica);
-    renderMapa();
-    atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
-    atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
-
-    alert(dados.mensagem || 'Produto lançado para a Queima.');
-
-    await carregarQueima();
-    await carregarMapa();
-    await carregarDashboard();
-
-  } catch (e) {
-    alert('Erro ao lançar para a Queima: ' + e.message);
-  }
-}
-
-  
 function calcularSituacaoValidade(dataValidade) {
   if (!dataValidade) return 'Sem validade';
 
