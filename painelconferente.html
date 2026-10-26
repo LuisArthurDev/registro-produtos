@@ -4764,7 +4764,7 @@ function limparFormularioMapaManterFuncionario() {
         })
       );
   
-      renderEstoque();
+      window.renderEstoque();
   
       setText(
         'estoqueNotice',
@@ -4807,6 +4807,7 @@ function limparFormularioMapaManterFuncionario() {
     g('estoqueTbody').innerHTML=rows.slice(0,MAX).map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
     mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',estoqueOdsRegistros.length?`${estoqueOdsRegistros.length} produtos importados; ${estoqueOdsRegistros.filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
   }
+  window.renderEstoque = renderEstoque;
 
   /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
   function renderProdutos() {
