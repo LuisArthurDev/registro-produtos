@@ -4546,6 +4546,7 @@ function limparFormularioMapaManterFuncionario() {
       alert('Não foi possível importar o .ods: ' + (e.message || e));
     }
   }
+  window.importarEstoqueOds = importarEstoqueOds;
   function abrirModalMapasEstoque(ean,codigoInterno,descricao){
     const registros=registrosVisiveisHTML(painelCache.validades||[]).filter(r=>String(r.codigo||'').trim()===String(ean||'').trim()||( !ean && String(r.codigo||'').trim()===String(codigoInterno||'').trim())).sort((a,b)=>String(a.validadeISO||a.validade||'9999').localeCompare(String(b.validadeISO||b.validade||'9999')));
     setText('estoqueMapasTitulo','Mapas do produto'); setText('estoqueMapasSubtitulo',`${descricao||'Produto'} · EAN ${ean||'não encontrado'} · Código interno ${codigoInterno||'não informado'}`);
