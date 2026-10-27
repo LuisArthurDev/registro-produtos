@@ -3268,17 +3268,129 @@ function renderControleValidade() {
   async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
+  
   function renderVencidos(data) {
-    const todos=data.retirados||[]; const danificados=todos.filter(r=>String(r.abaOrigem||r.abaOrigemInicial||'').trim().toLowerCase()==='danificado');
-    const retirados=todos.filter(r=>!danificados.includes(r));
-    const salao=(data.salao||[]).filter(r=>String(r.funcionario||'').trim().toLowerCase()!=='danificado'); painelCache.vencidos=data;
-    document.getElementById('vencidosRetiradosTotal').textContent=retirados.length; document.getElementById('vencidosSalaoTotal').textContent=salao.length; document.getElementById('vencidosQuantidadeTotal').textContent=[...retirados,...salao].reduce((a,r)=>a+(Number(r.quantidade)||0),0);
-    const desc=r=>descricaoProduto(r)||r.codigo||'';
-    document.getElementById('retiradosTbody').innerHTML=retirados.map(r=>`<tr><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(r.abaOrigem||'')}</td><td>${escHtml(fmtData(r.dataColeta))}</td><td><button class="button button-danger" onclick="retirarDanificado('${escHtml(r.chaveUnica||'')}')" title="Retirado de Loja" aria-label="Retirado de Loja"><i data-lucide="check-circle"></i></button></td></tr>`).join('');
-    document.getElementById('salaoTbody').innerHTML=salao.map(r=>`<tr><td>${escHtml(r.funcionario)}</td><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(dataRegistro(r)))}</td><td><button class="button" onclick="moverVencido('${escHtml(r.chaveUnica||'')}')" title="Mover para Vencidos" aria-label="Mover para Vencidos"><i data-lucide="archive"></i></button></td></tr>`).join('');
-    document.getElementById('danificadosTbody').innerHTML=danificados.map(r=>`<tr><td>${escHtml(r.codigo)}</td><td class="cell-primary">${escHtml(desc(r))}</td><td>${escHtml(r.lote)}</td><td>${escHtml(fmtData(r.validade))}</td><td>${escHtml(r.quantidade)}</td><td>${escHtml(fmtData(r.dataRegistro||r.dataColeta))}</td><td><button class="button button-danger" onclick="retirarDanificado('${escHtml(r.chaveUnica||'')}')" title="Retirado de Loja" aria-label="Retirado de Loja"><i data-lucide="check-circle"></i></button></td></tr>`).join('');
-    document.getElementById('retiradosEmpty').style.display=retirados.length?'none':'block'; document.getElementById('salaoEmpty').style.display=salao.length?'none':'block'; document.getElementById('danificadosEmpty').style.display=danificados.length?'none':'block';
+    const todos = Array.isArray(data.retirados) ? data.retirados : [];
+  
+    const danificados = todos.filter(r =>
+      String(r.abaOrigem || r.abaOrigemInicial || "")
+        .trim().toLowerCase() === "danificado"
+    );
+  
+    const retirados = todos.filter(r =>
+      String(r.abaOrigem || r.abaOrigemInicial || "")
+        .trim().toLowerCase() !== "danificado"
+    );
+  
+    const salao = (Array.isArray(data.salao) ? data.salao : [])
+      .filter(r => String(r.funcionario || "").trim().toLowerCase() !== "danificado");
+  
+    painelCache.vencidos = data;
+  
+    // Converte somente quantidades válidas. Datas não entram na soma.
+    const quantidadeSegura = valor => {
+      if (typeof valor === "number") {
+        return Number.isFinite(valor) && valor >= 0 ? valor : 0;
+      }
+  
+      if (valor instanceof Date) return 0;
+  
+      const texto = String(valor ?? "").trim();
+      if (!texto || /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}$/.test(texto)) {
+        return 0;
+      }
+  
+      const n = Number(texto.replace(",", "."));
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+  
+    const descricao = r =>
+      descricaoProduto(r) || r.descricao || r.codigo || "";
+  
+    const formatarQuantidade = valor =>
+      quantidadeSegura(valor).toLocaleString("pt-BR", {
+        maximumFractionDigits: 3
+      });
+  
+    document.getElementById("vencidosRetiradosTotal").textContent =
+      retirados.length.toLocaleString("pt-BR");
+  
+    document.getElementById("vencidosSalaoTotal").textContent =
+      salao.length.toLocaleString("pt-BR");
+  
+    document.getElementById("vencidosQuantidadeTotal").textContent =
+      [...retirados, ...salao]
+        .reduce((total, r) => total + quantidadeSegura(r.quantidade), 0)
+        .toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+  
+    document.getElementById("retiradosTbody").innerHTML = retirados.map(r => `
+      <tr>
+        <td>${escHtml(r.codigo || "")}</td>
+        <td class="cell-primary">${escHtml(descricao(r))}</td>
+        <td>${escHtml(r.lote || "")}</td>
+        <td>${escHtml(fmtData(r.validade))}</td>
+        <td>${escHtml(formatarQuantidade(r.quantidade))}</td>
+        <td>${escHtml(r.abaOrigem || r.abaOrigemInicial || "")}</td>
+        <td>${escHtml(fmtData(r.dataColeta))}</td>
+        <td>
+          <button class="button button-danger"
+            onclick="retirarDanificado('${escHtml(r.chaveUnica || "")}')"
+            title="Retirado de Loja" aria-label="Retirado de Loja">
+            <i data-lucide="check-circle"></i>
+          </button>
+        </td>
+      </tr>
+    `).join("");
+  
+    document.getElementById("salaoTbody").innerHTML = salao.map(r => `
+      <tr>
+        <td>${escHtml(r.funcionario || "")}</td>
+        <td>${escHtml(r.codigo || "")}</td>
+        <td class="cell-primary">${escHtml(descricao(r))}</td>
+        <td>${escHtml(r.lote || "")}</td>
+        <td>${escHtml(fmtData(r.validade))}</td>
+        <td>${escHtml(formatarQuantidade(r.quantidade))}</td>
+        <td>${escHtml(fmtData(r.dataLancamento || ""))}</td>
+        <td>
+          <button class="button"
+            onclick="moverVencido('${escHtml(r.chaveUnica || "")}')"
+            title="Mover para Vencidos" aria-label="Mover para Vencidos">
+            <i data-lucide="archive"></i>
+          </button>
+        </td>
+      </tr>
+    `).join("");
+  
+    document.getElementById("danificadosTbody").innerHTML = danificados.map(r => `
+      <tr>
+        <td>${escHtml(r.codigo || "")}</td>
+        <td class="cell-primary">${escHtml(descricao(r))}</td>
+        <td>${escHtml(r.lote || "")}</td>
+        <td>${escHtml(fmtData(r.validade))}</td>
+        <td>${escHtml(formatarQuantidade(r.quantidade))}</td>
+        <td>${escHtml(fmtData(r.dataRegistro || r.dataColeta))}</td>
+        <td>
+          <button class="button button-danger"
+            onclick="retirarDanificado('${escHtml(r.chaveUnica || "")}')"
+            title="Retirado de Loja" aria-label="Retirado de Loja">
+            <i data-lucide="check-circle"></i>
+          </button>
+        </td>
+      </tr>
+    `).join("");
+  
+    document.getElementById("retiradosEmpty").style.display =
+      retirados.length ? "none" : "block";
+  
+    document.getElementById("salaoEmpty").style.display =
+      salao.length ? "none" : "block";
+  
+    document.getElementById("danificadosEmpty").style.display =
+      danificados.length ? "none" : "block";
+  
+    if (window.lucide) lucide.createIcons();
   }
+
   async function adicionarDanificado(){const codigo=prompt('Código do produto (EAN/código):');if(codigo===null)return;const descricao=prompt('Descrição do produto:');if(descricao===null)return;const lote=prompt('Lote:');if(lote===null)return;const validade=prompt('Validade (DD/MM/AAAA):');if(validade===null)return;const quantidade=prompt('Quantidade:');if(quantidade===null)return;if(!codigo.trim()||!descricao.trim()||!validade.trim()||!quantidade.trim()){alert('Preencha código, descrição, validade e quantidade.');return;}try{const d=await jsonpPainel('adicionarDanificado','danificado',{codigo:codigo.trim(),descricao:descricao.trim(),lote:lote.trim(),validade:validade.trim(),quantidade:quantidade.trim()});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
   async function retirarDanificado(chave){if(!chave)return alert('Não foi possível identificar este registro. Atualize a página.');if(!confirm('Confirmar retirada deste produto da loja? A linha correspondente à Chave Única será excluída da aba Vencidos.'))return;try{const d=await jsonpPainel('retirarDeLoja','retirar',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
   async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
