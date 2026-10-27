@@ -1321,7 +1321,7 @@
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
-        <button class="icon-button" id="refreshButton" title="Atualizar demonstração">
+        <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
         </button>
       </div>
@@ -1691,7 +1691,7 @@
       <section class="page" id="page-controle-validade">
         <div class="page-heading">
           <div><h2>Controle de Validade</h2><p>Acompanhe os itens vencidos e aqueles que estão próximos do vencimento.</p></div>
-          <button class="button button-primary" data-demo="Atualizar controle de validade"><i data-lucide="refresh-cw"></i> Atualizar controle</button>
+          <button class="button button-primary" id="cvAtualizarControle" type="button"><i data-lucide="refresh-cw"></i> Atualizar controle</button>
         </div>
          <div class="stats">
           <div class="stat-card">
@@ -2414,7 +2414,7 @@
     document.querySelector(".page-subtitle").textContent = names[1];
 
     if(pageName==='transferencias') renderTransferencias();
-    if (pageName === 'lancamentos') carregarQueima();
+    if (typeof garantirAba === 'function') garantirAba(pageName);
     if (['estoque','produtos','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2439,17 +2439,6 @@
     if(window.lucide && typeof window.lucide.createIcons==='function') { try { window.lucide.createIcons(); } catch (_) { renderPainelIcons(); } } else renderPainelIcons();
   });
 
-  document.getElementById("refreshButton").addEventListener("click", () => {
-    const button = document.getElementById("refreshButton");
-    button.innerHTML = '<i data-lucide="check"></i>';
-    if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-
-    setTimeout(() => {
-      button.innerHTML = '<i data-lucide="refresh-cw"></i>';
-      if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
-      else renderPainelIcons();
-    }, 900);
-  });
 
   document.querySelectorAll("[data-demo]").forEach(button => {
     button.addEventListener("click", () => {
@@ -2534,10 +2523,19 @@
     return String(valor ?? "").trim();
   }
   
-  async function carregarDescricoesProdutos() {
+  let catalogoPromessa = null;
+
+  // Sem argumento: reaproveita o catálogo já carregado. Com true: baixa de novo (ex.: após adicionar produto).
+  function carregarDescricoesProdutos(forcar) {
+    if (forcar !== true && catalogoPromessa) return catalogoPromessa;
+    catalogoPromessa = carregarDescricoesProdutosInterno(forcar === true);
+    return catalogoPromessa;
+  }
+
+  async function carregarDescricoesProdutosInterno(forcar) {
     try {
       const resposta = await fetch("./produtos_ean.json", {
-        cache: "no-store"
+        cache: forcar ? "reload" : "default"
       });
   
       if (!resposta.ok) {
@@ -2581,6 +2579,7 @@
     } catch (erro) {
       console.error("Erro ao carregar produtos_ean.json:", erro);
       mapaDescricoes = {};
+      catalogoPromessa = null;
     }
   }
   
@@ -3211,7 +3210,11 @@ function renderControleValidade() {
     renderPainelIcons();
 }
   
-  async function carregarMapa() {
+  function carregarMapa(usarCache) {
+    return semDuplicar('mapa', () => carregarMapaInterno(usarCache === true));
+  }
+
+  async function carregarMapaInterno(usarCache) {
     const n = document.getElementById('mapaNotice');
   
     if (n) {
@@ -3220,7 +3223,7 @@ function renderControleValidade() {
     }
   
     try {
-      const d = await jsonpPainel('validades', 'validade');
+      const d = await jsonpPainel('validades', 'validade', usarCache ? {} : { nocache: '1' });
   
       if (!d || d.sucesso !== true) {
         throw new Error(
@@ -3231,6 +3234,7 @@ function renderControleValidade() {
       painelCache.validades = Array.isArray(d.registros)
         ? d.registros
         : [];
+      validadesProntas = true;
   
       // Atualiza o Mapa de Validade.
       renderMapa();
@@ -3243,8 +3247,8 @@ function renderControleValidade() {
       // Mantém as demais funcionalidades existentes.
       renderTransferencias();
       if (typeof renderPaginasGestao === 'function') renderPaginasGestao();
-      // Recalcula os indicadores depois que o mapa chegou, evitando a corrida de carregamento.
-      if (typeof carregarDashboard === 'function') carregarDashboard();
+      // Recalcula os indicadores com os dados do mapa (sem consultar o servidor de novo).
+      if (typeof renderizarDashboard === 'function') renderizarDashboard();
   
       atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
       atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
@@ -3257,6 +3261,7 @@ function renderControleValidade() {
   
     } catch (e) {
       console.error('Erro ao carregar o Mapa de Validade:', e);
+      if (typeof renderizarDashboard === 'function') renderizarDashboard(true);
   
       if (n) {
         n.textContent =
@@ -3393,7 +3398,8 @@ function renderControleValidade() {
 
   async function adicionarDanificado(){const codigo=prompt('Código do produto (EAN/código):');if(codigo===null)return;const descricao=prompt('Descrição do produto:');if(descricao===null)return;const lote=prompt('Lote:');if(lote===null)return;const validade=prompt('Validade (DD/MM/AAAA):');if(validade===null)return;const quantidade=prompt('Quantidade:');if(quantidade===null)return;if(!codigo.trim()||!descricao.trim()||!validade.trim()||!quantidade.trim()){alert('Preencha código, descrição, validade e quantidade.');return;}try{const d=await jsonpPainel('adicionarDanificado','danificado',{codigo:codigo.trim(),descricao:descricao.trim(),lote:lote.trim(),validade:validade.trim(),quantidade:quantidade.trim()});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
   async function retirarDanificado(chave){if(!chave)return alert('Não foi possível identificar este registro. Atualize a página.');if(!confirm('Confirmar retirada deste produto da loja? A linha correspondente à Chave Única será excluída da aba Vencidos.'))return;try{const d=await jsonpPainel('retirarDeLoja','retirar',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
-  async function carregarVencidos() { try {const d=await jsonpPainel('vencidosPainel','vencidos');if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
+  function carregarVencidos(usarCache){return semDuplicar('vencidos',()=>carregarVencidosInterno(usarCache===true));}
+  async function carregarVencidosInterno(usarCache) { try {const d=await jsonpPainel('vencidosPainel','vencidos',usarCache?{}:{nocache:'1'});if(!d.sucesso)throw new Error(d.mensagem||'Falha na consulta');renderVencidos(d);vencidosProntos=true;}catch(e){console.error(e);document.getElementById('retiradosTbody').innerHTML='';document.getElementById('salaoTbody').innerHTML=`<tr><td colspan="8">Não foi possível carregar os dados: ${escHtml(e.message)}</td></tr>`;} }
   
   let queimaCache = {
     pendentes: [],
@@ -3545,14 +3551,15 @@ function renderControleValidade() {
     renderPainelIcons();
   }
   
-  async function carregarQueima() {
+  function carregarQueima(usarCache) {
+    return semDuplicar('queima', () => carregarQueimaInterno(usarCache === true));
+  }
+
+  async function carregarQueimaInterno(usarCache) {
     mostrarAvisoQueima('Carregando registros da Queima...');
   
     try {
-      const dados = await jsonpPainel(
-        'consultarQueima',
-        'consultarQueima'
-      );
+      const dados = await jsonpPainel('consultarQueima', 'consultarQueima', usarCache ? {} : { nocache: '1' });
   
       if (!dados || dados.sucesso !== true) {
         throw new Error(dados?.mensagem || 'Não foi possível consultar a Queima.');
@@ -3561,6 +3568,7 @@ function renderControleValidade() {
       queimaCache.pendentes = dados.pendentes || [];
       queimaCache.aprovados = dados.aprovados || [];
       queimaCache.relancar = dados.relancar || [];
+      queimaPronta = true;
 
       // Reconcilia itens já existentes na Queima com o mapa, inclusive registros enviados antes desta versão.
       const itensQueima = [...queimaCache.pendentes, ...queimaCache.aprovados, ...queimaCache.relancar];
@@ -3779,7 +3787,28 @@ function atualizarProdutosAtencao(registros) {
   renderPainelIcons();
 }
 
-  async function carregarDashboard() {
+  let dashboardDados = null;
+  let validadesProntas = false;
+  let vencidosProntos = false;
+  let queimaPronta = false;
+  let sinalizadosProntos = false;
+
+  const emAndamento = {};
+
+  // Evita duas consultas iguais ao mesmo tempo (ex.: clicar em Atualizar duas vezes).
+  function semDuplicar(chave, fn) {
+    if (emAndamento[chave]) return emAndamento[chave];
+    const p = Promise.resolve().then(fn).finally(() => { delete emAndamento[chave]; });
+    emAndamento[chave] = p;
+    return p;
+  }
+
+  // Sem argumento (botão Atualizar): consulta dados novos. Com true: aceita o cache do servidor.
+  function carregarDashboard(usarCache) {
+    return semDuplicar('dashboard', () => carregarDashboardInterno(usarCache === true));
+  }
+
+  async function carregarDashboardInterno(usarCache) {
     const banner = document.getElementById('dashboardLoading');
   
     try {
@@ -3790,7 +3819,7 @@ function atualizarProdutosAtencao(registros) {
           '<span>Carregando indicadores...</span>';
       }
   
-      const d = await jsonpPainel('dashboardPainel', 'dashboard');
+      const d = await jsonpPainel('dashboardPainel', 'dashboard', usarCache ? {} : { nocache: '1' });
   
       if (!d || d.sucesso !== true) {
         throw new Error(
@@ -3799,7 +3828,27 @@ function atualizarProdutosAtencao(registros) {
         );
       }
   
-      const x = d.indicadores || {};
+      dashboardDados = d.indicadores || {};
+      renderizarDashboard();
+
+} catch (erro) {
+      console.error('Erro ao carregar o Dashboard:', erro);
+  
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.innerHTML =
+          '<span>Indicadores temporariamente indisponíveis. ' +
+          'Os demais dados podem ter sido carregados. ' +
+          'Clique em Atualizar para tentar novamente.</span>';
+      }
+    }
+  }
+
+  // Desenha os indicadores. Só roda quando o indicador do servidor E o mapa já chegaram
+  // (os totais descontam o que já foi para a Queima). Com forcar=true desenha mesmo sem o mapa.
+  function renderizarDashboard(forcar) {
+    if (!dashboardDados || (!forcar && !validadesProntas)) return;
+    const x = dashboardDados;
       const ocultosQueima = (painelCache.validades || []).filter(foiParaQueimaHTML);
       const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
       const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
@@ -3832,6 +3881,17 @@ function atualizarProdutosAtencao(registros) {
         }
       }
   
+      // Guarda os valores para exibir na próxima abertura enquanto os dados novos carregam.
+      if (validadesProntas) {
+        try {
+          localStorage.setItem('painelDashSnap', JSON.stringify({
+            indicadores: indicadores,
+            mes: [x.queimaMes, x.queimaAprovadosMes],
+            geral: [x.queimaTotal, x.queimaAprovadosTotal]
+          }));
+        } catch (_) { /* sem espaço: segue sem guardar */ }
+      }
+
       // Atualiza os gráficos sem impedir os demais indicadores
       // caso algum elemento do gráfico esteja ausente.
       try {
@@ -3867,39 +3927,132 @@ function atualizarProdutosAtencao(registros) {
           registrosVisiveisHTML(painelCache.validades)
         );
       }
-  
-      // Oculta o banner após o carregamento bem-sucedido.
-      if (banner) {
-        banner.style.display = 'none';
+
+    const bannerFim = document.getElementById('dashboardLoading');
+    if (bannerFim) bannerFim.style.display = 'none';
+  }
+
+  // Mostra na hora os últimos valores conhecidos enquanto o servidor responde.
+  function pintarSnapshotDashboard() {
+    try {
+      const snap = JSON.parse(localStorage.getItem('painelDashSnap') || 'null');
+      if (!snap || !snap.indicadores) return;
+
+      for (const [id, valor] of Object.entries(snap.indicadores)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = valor ?? 0;
       }
-  
-    } catch (erro) {
-      console.error('Erro ao carregar o Dashboard:', erro);
-  
+
+      setDonut('queimaMesChart', 'queimaMesInner', snap.mes[0], snap.mes[1]);
+      setDonut('queimaGeralChart', 'queimaGeralInner', snap.geral[0], snap.geral[1]);
+
+      const banner = document.getElementById('dashboardLoading');
       if (banner) {
         banner.style.display = 'flex';
-        banner.innerHTML =
-          '<span>Indicadores temporariamente indisponíveis. ' +
-          'Os demais dados podem ter sido carregados. ' +
-          'Clique em Atualizar para tentar novamente.</span>';
+        banner.innerHTML = '<span class="loading-spinner"></span><span>Atualizando indicadores...</span>';
       }
-    }
+    } catch (_) { /* sem valores guardados */ }
   }
 
   function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let sinalizadosCache=[]; let sinalizadoAtual=null;
-  function carregarSinalizados(){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados').then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
+  function carregarSinalizados(usarCache){return semDuplicar('sinalizados',()=>carregarSinalizadosInterno(usarCache===true));}
+  function carregarSinalizadosInterno(usarCache){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados',usarCache?{}:{nocache:'1'}).then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];sinalizadosProntos=true;renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
   function renderSinalizados(){const q=(document.getElementById('sinalizadosBusca').value||'').toLocaleLowerCase('pt-BR');const filtro=document.getElementById('sinalizadosFiltro').value;const norm=s=>String(s||'').toLocaleLowerCase('pt-BR');const rows=sinalizadosCache.filter(r=>(!filtro||r.acaoTomada===filtro)&&(!q||norm([r.codigo,r.descricao,r.lote,r.motivo,r.funcionario].join(' ')).includes(q)));document.getElementById('sinalizadosTotal').textContent=sinalizadosCache.length;document.getElementById('sinalizadosAbertos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Em Aberto').length;document.getElementById('sinalizadosResolvidos').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Resolvido').length;document.getElementById('sinalizadosNegados').textContent=sinalizadosCache.filter(r=>r.acaoTomada==='Negado').length;document.getElementById('sinalizadosTbody').innerHTML=rows.map((r,i)=>{const status=r.acaoTomada||'Em Aberto', cls=status==='Resolvido'?'badge-success':status==='Negado'?'badge-danger':'badge-warning';return `<tr><td class="cell-primary">${escHtml(r.descricao||r.codigo||'Produto não localizado')}<div class="cell-secondary">${escHtml(r.codigo||'')} · ${escHtml(r.chaveUnica)}</div></td><td>${escHtml(r.lote||'—')}</td><td>${escHtml(fmtData(r.validade)||'—')}</td><td>${escHtml(r.quantidade||'—')}</td><td>${escHtml(r.motivo||'—')}</td><td>${escHtml(r.funcionario||'—')}</td><td>${escHtml(r.dataRegistro||'—')}</td><td><span class="badge ${cls}">${escHtml(status)}</span></td><td><button class="button" title="Ver / resolver" aria-label="Ver / resolver" onclick="abrirSinalizado('${escHtml(r.chaveUnica)}')"><i data-lucide="eye"></i></button></td></tr>`}).join('');document.getElementById('sinalizadosEmpty').style.display=rows.length?'none':'block';document.getElementById('sinalizadosNotice').style.display=sinalizadosCache.length?'none':'block';renderPainelIcons();}
   function abrirSinalizado(chave){sinalizadoAtual=sinalizadosCache.find(r=>r.chaveUnica===chave);if(!sinalizadoAtual)return;const r=sinalizadoAtual;document.getElementById('sinalizadoDetalhes').innerHTML=`<p><b>Produto:</b> ${escHtml(r.descricao||r.codigo||'Não localizado')}</p><p><b>Código:</b> ${escHtml(r.codigo||'—')}</p><p><b>Lote:</b> ${escHtml(r.lote||'—')}</p><p><b>Validade:</b> ${escHtml(fmtData(r.validade)||'—')}</p><p><b>Quantidade:</b> ${escHtml(r.quantidade||'—')}</p><p><b>Funcionário:</b> ${escHtml(r.funcionario||'—')}</p><p><b>Motivo atual:</b> ${escHtml(r.motivo||'—')}</p><p><b>Situação:</b> ${escHtml(r.acaoTomada||'Em Aberto')}</p>`;document.getElementById('sinalizadoStatus').value=['Resolvido','Negado'].includes(r.acaoTomada)?r.acaoTomada:'Resolvido';document.getElementById('sinalizadoMotivo').value='';document.getElementById('sinalizadoMotivoWrap').style.display=document.getElementById('sinalizadoStatus').value==='Resolvido'?'block':'none';document.getElementById('sinalizadoModal').style.display='flex';renderPainelIcons();}
   function fecharSinalizadoModal(){document.getElementById('sinalizadoModal').style.display='none';sinalizadoAtual=null;}
   document.getElementById('sinalizadoStatus').addEventListener('change',e=>{document.getElementById('sinalizadoMotivoWrap').style.display=e.target.value==='Resolvido'?'block':'none';});
   async function salvarSinalizado(){if(!sinalizadoAtual)return;const status=document.getElementById('sinalizadoStatus').value,motivoResolucao=document.getElementById('sinalizadoMotivo').value.trim();if(status==='Resolvido'&&!motivoResolucao){alert('Informe o motivo da resolução.');return;}try{const d=await jsonpPainel('atualizarSinalizado','atualizarSinalizado',{chaveUnica:sinalizadoAtual.chaveUnica,status,motivoResolucao});alert(d.mensagem||'Resposta recebida');if(d.sucesso){fecharSinalizadoModal();await carregarSinalizados();}}catch(e){alert(e.message);}}
   document.getElementById('sinalizadosBusca').addEventListener('input',renderSinalizados);document.getElementById('sinalizadosFiltro').addEventListener('change',renderSinalizados);
-  async function atualizarPainel(){
-    // Não deixar o carregamento do catálogo bloquear as consultas principais do painel.
-    carregarDescricoesProdutos().then(() => { atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades)); atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades)); if (typeof renderPaginasGestao === 'function') renderPaginasGestao(); });
-    const tarefas = [carregarDashboard(), carregarMapa(), carregarVencidos(), carregarSinalizados()];
+  /* ===== Carregamento por aba =====
+     - Ao abrir o painel: só os dados da aba aberta (a aba inicial é o Dashboard).
+     - Ao abrir outra aba: carrega só o que ainda não foi carregado.
+     - Botões Atualizar: recarregam apenas os dados daquela aba. */
+  const CARREGADORES = {
+    dashboard: u => carregarDashboard(u),
+    mapa: u => carregarMapa(u),
+    queima: u => carregarQueima(u),
+    vencidos: u => carregarVencidos(u),
+    sinalizados: u => carregarSinalizados(u)
+  };
+
+  const PRONTOS = {
+    dashboard: () => !!dashboardDados,
+    mapa: () => validadesProntas,
+    queima: () => queimaPronta,
+    vencidos: () => vencidosProntos,
+    sinalizados: () => sinalizadosProntos
+  };
+
+  const FONTES_ABA = {
+    dashboard: ['dashboard', 'mapa'],
+    lancamentos: ['queima', 'mapa'],
+    mapa: ['mapa'],
+    'controle-validade': ['mapa'],
+    vencidos: ['vencidos'],
+    transferencias: ['mapa'],
+    estoque: ['mapa'],
+    produtos: ['mapa'],
+    sinalizados: ['sinalizados'],
+    historico: ['mapa', 'sinalizados', 'vencidos'],
+    funcionarios: ['mapa']
+  };
+
+  // Na Queima, o mapa é só apoio: o botão Atualizar recarrega apenas a Queima.
+  const ATUALIZAR_ABA = Object.assign({}, FONTES_ABA, { lancamentos: ['queima'] });
+
+  function paginaAtiva() {
+    const p = document.querySelector('.page.active');
+    return p ? p.id.replace(/^page-/, '') : 'dashboard';
+  }
+
+  function aposCatalogo() {
+    try {
+      atualizarResumoValidade(registrosVisiveisHTML(painelCache.validades));
+      atualizarProdutosAtencao(registrosVisiveisHTML(painelCache.validades));
+      if (validadesProntas && typeof renderMapa === 'function') renderMapa();
+      if (typeof renderPaginasGestao === 'function') renderPaginasGestao();
+      if (typeof renderizarDashboard === 'function') renderizarDashboard();
+    } catch (erro) {
+      console.warn('Falha ao atualizar telas após o catálogo:', erro);
+    }
+  }
+
+  // Carrega só o que falta para a aba (usado ao abrir a aba).
+  function garantirAba(pagina) {
+    const faltam = (FONTES_ABA[pagina] || []).filter(f => !PRONTOS[f]());
+    return Promise.allSettled(faltam.map(f => CARREGADORES[f](true)));
+  }
+
+  // Recarrega os dados da aba (usado pelos botões Atualizar).
+  async function atualizarAba(pagina) {
+    const tarefas = (ATUALIZAR_ABA[pagina] || []).map(f => CARREGADORES[f](false));
+    if (pagina === 'produtos') tarefas.push(carregarDescricoesProdutos(true).then(aposCatalogo));
     await Promise.allSettled(tarefas);
+  }
+
+  async function atualizarPainel(usarCache) {
+    const manual = usarCache !== true;
+    const botao = document.getElementById('refreshButton');
+
+    if (manual && botao) {
+      botao.disabled = true;
+      botao.title = 'Atualizando...';
+    }
+
+    try {
+      // O catálogo usa o cache do navegador e não bloqueia as consultas principais.
+      carregarDescricoesProdutos().then(aposCatalogo);
+
+      const pagina = paginaAtiva();
+      if (manual) await atualizarAba(pagina);
+      else await garantirAba(pagina);
+    } finally {
+      if (botao) {
+        botao.disabled = false;
+        botao.title = 'Atualizar esta aba';
+      }
+    }
   }
   ['mapaProduto','mapaLote','mapaValidade'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
@@ -3927,7 +4080,8 @@ function atualizarProdutosAtencao(registros) {
     root.querySelectorAll('[data-lucide]').forEach(el=>{ if(el.querySelector('svg')) return; el.textContent=iconGlyphs[el.getAttribute('data-lucide')]||'•'; el.style.fontStyle='normal'; el.style.fontSize='18px'; el.style.lineHeight='1'; });
   }
   renderPainelIcons();
-  atualizarPainel();
+  pintarSnapshotDashboard();
+  atualizarPainel(true);
   async function lancarMapaParaQueima(chave) {
   if (!chave) {
     alert('Este lançamento não possui Chave Única.');
@@ -4026,7 +4180,12 @@ function calcularSituacaoValidade(dataValidade) {
   ?.addEventListener("input", renderControleValidade);
 
 document.getElementById("cvAtualizarElegiveis")
-  ?.addEventListener("click", carregarMapa);
+  ?.addEventListener("click", () => carregarMapa());
+
+// Botões Atualizar do Controle de Validade (antes eram só demonstração ou não tinham função).
+["cvAtualizarControle", "cvAtualizarVencimentos"].forEach(id => {
+  document.getElementById(id)?.addEventListener("click", () => carregarMapa());
+});
 
 function exportarElegiveisCSV() {
   const registros = painelCache.validades || [];
@@ -4143,6 +4302,15 @@ function abrirModalDigitacaoManualMapa() {
 
   form.reset();
 
+  // Mantém o último funcionário usado.
+  try {
+    const fixo = localStorage.getItem("manualFuncionarioFixo");
+    const campoFuncionario = document.getElementById("manualFuncionario");
+    if (fixo && campoFuncionario && Array.from(campoFuncionario.options).some(o => o.value === fixo)) {
+      campoFuncionario.value = fixo;
+    }
+  } catch (_) {}
+
   document.getElementById("manualProdutoStatus").textContent =
     "Digite o código interno para consultar a descrição.";
 
@@ -4173,6 +4341,34 @@ function fecharModalDigitacaoManualMapa() {
   document.getElementById("modalConfirmarCodigoManualMapa").style.display = "none";
 
   confirmacaoManualMapaPendente = false;
+}
+
+let indiceCodigoInternoManual = null;
+let indiceCodigoInternoRef = null;
+
+// Índice código interno -> produto, montado uma vez por catálogo carregado.
+function buscarPorCodigoInternoManual(codigoInterno) {
+  if (!indiceCodigoInternoManual || indiceCodigoInternoRef !== mapaDescricoes) {
+    indiceCodigoInternoManual = new Map();
+
+    for (const [ean, registro] of Object.entries(mapaDescricoes || {})) {
+      if (!registro || typeof registro !== "object") continue;
+
+      const codigo = normalizarCodigoManualMapa(registro.codigoInterno || registro.codigo || "");
+
+      if (codigo && !indiceCodigoInternoManual.has(codigo)) {
+        indiceCodigoInternoManual.set(codigo, {
+          ean,
+          codigoInterno: codigo,
+          descricao: String(registro.produto || registro.descricao || registro.nome || "").trim()
+        });
+      }
+    }
+
+    indiceCodigoInternoRef = mapaDescricoes;
+  }
+
+  return indiceCodigoInternoManual.get(codigoInterno) || null;
 }
 
 function normalizarCodigoManualMapa(valor) {
@@ -4214,39 +4410,9 @@ async function consultarProdutoManualMapa() {
   status.style.color = "#64748b";
 
   try {
-    const resposta = await fetch("./produtos_ean.json?v=" + Date.now(), {
-      cache: "no-store"
-    });
-
-    if (!resposta.ok) {
-      throw new Error("Não foi possível carregar a base de produtos.");
-    }
-
-    const base = await resposta.json();
-    let produtoEncontrado = null;
-
-    for (const [ean, registro] of Object.entries(base || {})) {
-      if (!registro || typeof registro !== "object") continue;
-
-      const codigo = normalizarCodigoManualMapa(
-        registro.codigoInterno || registro.codigo || ""
-      );
-
-      if (codigo === codigoInterno) {
-        produtoEncontrado = {
-          ean,
-          codigoInterno: codigo,
-          descricao: String(
-            registro.produto ||
-            registro.descricao ||
-            registro.nome ||
-            ""
-          ).trim()
-        };
-
-        break;
-      }
-    }
+    // Usa o catálogo que já está em memória (carregado uma única vez) em vez de baixar o JSON a cada consulta.
+    await carregarDescricoesProdutos();
+    const produtoEncontrado = buscarPorCodigoInternoManual(codigoInterno);
 
     if (!produtoEncontrado) {
       status.textContent = "Código interno não encontrado na base.";
@@ -4551,18 +4717,17 @@ async function enviarLancamentoManualMapa(dados) {
       resposta.mensagem || "Lançamento salvo com sucesso.";
     status.style.color = "#15803d";
 
-    alert(resposta.mensagem || "Lançamento salvo com sucesso.");
+    const mensagemSucesso = resposta.mensagem || "Lançamento salvo com sucesso.";
+
+    // Limpa o formulário, mantém o funcionário e volta o cursor ao Código Interno.
     limparFormularioMapaManterFuncionario();
-    
 
-    if (typeof carregarValidades === "function") {
-      await carregarValidades();
-    } else if (typeof carregarMapa === "function") {
-      await carregarMapa();
-    }
+    status.textContent = mensagemSucesso;
+    status.style.color = "#15803d";
 
-    if (typeof renderMapa === "function") {
-      renderMapa();
+    // O mapa é atualizado em segundo plano para não atrapalhar o próximo lançamento.
+    if (typeof carregarMapa === "function") {
+      carregarMapa().catch(() => {});
     }
 
   } catch (erro) {
@@ -4647,11 +4812,8 @@ document.addEventListener("keydown", evento => {
     ).filter(el => {
       if (el.offsetParent === null) return false;
 
-      // Ignora o campo Descrição
-      if (
-        el.id.toLowerCase().includes("descricao") ||
-        el.name.toLowerCase().includes("descricao") || el.id.toLowerCase().includes("manualFuncionario") || el.name.toLowerCase().includes("manualFuncionario")
-      ) {
+      // Ignora os campos Descrição e Funcionário
+      if (el.id === "manualDescricao" || el.id === "manualFuncionario") {
         return false;
       }
 
@@ -4682,12 +4844,17 @@ function limparFormularioMapaManterFuncionario() {
 
   // Guarda o funcionário selecionado antes de limpar os campos.
   const campoFuncionario = modal.querySelector(
-    "#funcionarioManualMapa, #funcionarioDigitacaoManualMapa, select[name='funcionario'], input[name='funcionario']"
+    "#manualFuncionario"
   );
 
   const funcionarioSelecionado = campoFuncionario
     ? campoFuncionario.value
     : "";
+
+  // Lembra o funcionário também para quando o modal for aberto de novo.
+  if (funcionarioSelecionado) {
+    try { localStorage.setItem("manualFuncionarioFixo", funcionarioSelecionado); } catch (_) {}
+  }
 
   // Limpa os campos do formulário, exceto Funcionário.
   modal.querySelectorAll("input, textarea").forEach(campo => {
@@ -4738,6 +4905,22 @@ function limparFormularioMapaManterFuncionario() {
     botaoSalvar.disabled = false;
     botaoSalvar.innerHTML = "Salvar Lançamento";
   }
+
+  // Volta o formulário ao estado inicial e posiciona o cursor no primeiro campo.
+  const statusProduto = document.getElementById("manualProdutoStatus");
+  if (statusProduto) {
+    statusProduto.textContent = "Digite o código interno para consultar a descrição.";
+    statusProduto.style.color = "#64748b";
+  }
+
+  const avisoNaoEncontrado = document.getElementById("manualAvisoNaoEncontrado");
+  if (avisoNaoEncontrado) avisoNaoEncontrado.style.display = "none";
+
+  const campoValidade = document.getElementById("manualValidade");
+  if (campoValidade) campoValidade.style.borderColor = "#dbe2ea";
+
+  const primeiroCampo = document.getElementById("manualCodigoInterno");
+  if (primeiroCampo) primeiroCampo.focus();
 }
 
 </script>
@@ -5292,7 +5475,17 @@ function limparFormularioMapaManterFuncionario() {
   }
 
   function renderPaginasGestao() {
-    [renderFuncionarios, renderEstoque, renderProdutos, renderHistorico].forEach(fn => { try { fn(); } catch (e) { console.error("Falha em " + fn.name + ":", e); } });
+    const pagina = (document.querySelector(".page.active") || {}).id;
+    const renderizador = {
+      "page-funcionarios": renderFuncionarios,
+      "page-estoque": renderEstoque,
+      "page-produtos": renderProdutos,
+      "page-historico": renderHistorico
+    }[pagina];
+
+    if (renderizador) {
+      try { renderizador(); } catch (e) { console.error("Falha em " + renderizador.name + ":", e); }
+    }
   }
   window.renderPaginasGestao = renderPaginasGestao;
 
@@ -5382,7 +5575,7 @@ function limparFormularioMapaManterFuncionario() {
 
       setTimeout(async () => {
         try {
-          await carregarDescricoesProdutos();
+          await carregarDescricoesProdutos(true);
           renderProdutos();
         } catch (erroAtualizacao) {
           console.warn("Produto salvo; catálogo visual será atualizado quando a publicação terminar.", erroAtualizacao);
