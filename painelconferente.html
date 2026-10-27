@@ -1803,6 +1803,7 @@
                   <th>Dias restantes</th>
                   <th>Quantidade</th>
                   <th>Funcionário / Aba</th>
+                  <th>Ação</th>
                 </tr>
               </thead>
               <tbody id="cvElegiveisTbody"></tbody>
@@ -2352,6 +2353,33 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="cvModalSinalizacao" style="display:none;position:fixed;inset:0;background:#0008;z-index:9999;align-items:center;justify-content:center;padding:16px;">
+  <section class="panel" style="width:min(100%,520px);padding:22px;background:var(--surface);border-radius:12px;">
+    <h2 style="font-size:18px;margin-bottom:8px;">Sinalizar produto elegível</h2>
+    <p id="cvSinalizacaoProduto" style="font-size:12px;color:var(--muted);margin-bottom:16px;"></p>
+    <form id="cvFormSinalizacao">
+      <label for="cvFuncionarioSinalizacao" style="display:block;margin-bottom:6px;font-size:12px;">Funcionário</label>
+      <select id="cvFuncionarioSinalizacao" required class="filter-select" style="width:100%;height:42px;margin-bottom:14px;">
+        <option value="">Selecione seu nome</option>
+        <option>Alice</option><option>Altino</option><option>Ana Carolina</option><option>Anielle</option>
+        <option>Gabriela</option><option>Gabriele</option><option>Isabela</option><option>Livia</option>
+        <option>Paola</option><option>Rafaela</option><option>Ramon</option><option>Rillary</option>
+        <option>Sulaima</option><option>Thomaz</option><option>Gabriela Gerente</option><option>Cristina</option>
+        <option>Tamires</option><option>Jonas</option><option>Luis Arthur</option>
+      </select>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:10px 0 16px;">
+        <input type="radio" name="cvMotivoSinalizacao" value="Apto a Tentativa" required style="width:auto;">
+        Apto a Tentativa
+      </label>
+      <p id="cvMensagemSinalizacao" role="status" style="font-size:12px;margin-bottom:12px;"></p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="button" id="cvCancelarSinalizacao">Cancelar</button>
+        <button type="submit" class="button button-primary" id="cvSalvarSinalizacao">Salvar sinalização</button>
+      </div>
+    </form>
+  </section>
+</div>
+
 <script>
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const pageNames = {
@@ -2668,28 +2696,35 @@
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
+  // Mesmas regras de visualizacao.html:
+  // Nutrição/Conveniência: vencido com 15 dias ou menos fora do Queima,
+  // ou 3 dias ou menos quando estiver no Queima.
+  // Demais seções: vencido com 60 dias ou menos.
+  const LIMITE_VENCIDO_PADRAO_PAINEL = 60;
+  const LIMITE_VENCIDO_SENSIVEL_PAINEL = 15;
+  const LIMITE_VENCIDO_SENSIVEL_QUEIMA_PAINEL = 3;
+  const LIMITE_A_VENCER_PAINEL = 160;
+
   function limiteVencimentoPainel(r) {
     const sec = secaoProdutoPainel(r);
     const sensivel = sec.includes('nutricao') || sec.includes('conveniencia');
-    if (!sensivel) return 0;
-    return foiParaQueimaHTML(r) ? 3 : 15;
+    if (!sensivel) return LIMITE_VENCIDO_PADRAO_PAINEL;
+    return foiParaQueimaHTML(r)
+      ? LIMITE_VENCIDO_SENSIVEL_QUEIMA_PAINEL
+      : LIMITE_VENCIDO_SENSIVEL_PAINEL;
   }
 
-  // Para Nutrição/Conveniência, a classificação muda quando restam 15 dias
-  // fora do Queima ou 3 dias dentro do Queima. Outros setores seguem a regra atual.
   function estaVencidoPainel(r) {
     const dias = diasAte(r.validadeISO || r.validade);
     if (dias === null) return false;
-    const sec = secaoProdutoPainel(r);
-    const sensivel = sec.includes('nutricao') || sec.includes('conveniencia');
-    return sensivel ? dias <= limiteVencimentoPainel(r) : dias < 0;
+    return dias <= limiteVencimentoPainel(r);
   }
 
   function situacaoPainel(r) {
     const dias = diasAte(r.validadeISO || r.validade);
     if (dias === null) return 'Sem validade';
     if (estaVencidoPainel(r)) return 'Vencido';
-    if (dias <= 160) return 'A Vencer';
+    if (dias <= LIMITE_A_VENCER_PAINEL) return 'A Vencer';
     return 'Vendável';
   }
   function adicionarMeses(data, meses) {
@@ -2729,6 +2764,73 @@ const CV_ELEGIVEIS_POR_PAGINA = 25;
 
 
   
+
+let cvRegistroParaSinalizar = null;
+
+function abrirSinalizacaoElegivel(registro) {
+  if (!registro || !registro.chaveUnica) {
+    alert("Este registro não possui chave única para sinalização.");
+    return;
+  }
+  cvRegistroParaSinalizar = registro;
+  document.getElementById("cvSinalizacaoProduto").textContent =
+    `${registro.codigo || ""} — ${descricaoProduto(registro)} | Lote: ${registro.lote || "—"}`;
+  document.getElementById("cvFuncionarioSinalizacao").value = "";
+  document.getElementById("cvMensagemSinalizacao").textContent = "";
+  document.querySelectorAll('input[name="cvMotivoSinalizacao"]').forEach(el => el.checked = false);
+  document.getElementById("cvModalSinalizacao").style.display = "flex";
+}
+
+function fecharSinalizacaoElegivel() {
+  document.getElementById("cvModalSinalizacao").style.display = "none";
+  cvRegistroParaSinalizar = null;
+}
+
+document.getElementById("cvCancelarSinalizacao")?.addEventListener("click", fecharSinalizacaoElegivel);
+document.getElementById("cvModalSinalizacao")?.addEventListener("click", e => {
+  if (e.target.id === "cvModalSinalizacao") fecharSinalizacaoElegivel();
+});
+
+document.getElementById("cvElegiveisTbody")?.addEventListener("click", e => {
+  const botao = e.target.closest("[data-sinalizar-elegivel]");
+  if (!botao) return;
+  const chave = botao.getAttribute("data-sinalizar-elegivel");
+  const registro = (painelCache.validades || []).find(r => String(r.chaveUnica || "") === chave);
+  abrirSinalizacaoElegivel(registro);
+});
+
+document.getElementById("cvFormSinalizacao")?.addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!cvRegistroParaSinalizar) return;
+  const funcionario = document.getElementById("cvFuncionarioSinalizacao").value.trim();
+  const motivo = document.querySelector('input[name="cvMotivoSinalizacao"]:checked')?.value;
+  if (!funcionario || !motivo) {
+    document.getElementById("cvMensagemSinalizacao").textContent = "Selecione o funcionário e a opção de sinalização.";
+    return;
+  }
+  const botao = document.getElementById("cvSalvarSinalizacao");
+  botao.disabled = true;
+  botao.textContent = "Salvando...";
+  document.getElementById("cvMensagemSinalizacao").textContent = "Registrando sinalização...";
+  try {
+    const resposta = await jsonpPainel("sinalizarLancamento", "sinalizacao", {
+      chaveUnica: String(cvRegistroParaSinalizar.chaveUnica),
+      funcionario,
+      motivo
+    });
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta?.mensagem || "Não foi possível salvar a sinalização.");
+    }
+    alert("Sinalização registrada com sucesso na aba Sinalizacao.");
+    fecharSinalizacaoElegivel();
+  } catch (erro) {
+    document.getElementById("cvMensagemSinalizacao").textContent =
+      erro.message || "Erro ao salvar sinalização.";
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Salvar sinalização";
+  }
+});
 
 function renderControleValidade() {
   const registros = registrosVisiveisHTML(painelCache.validades || []);
@@ -2839,6 +2941,15 @@ function renderControleValidade() {
         <td>${dias}</td>
         <td>${escHtml(r.quantidade ?? "")}</td>
         <td>${escHtml(r.funcionario || "")}</td>
+        <td>
+          <button class="button button-primary"
+            type="button"
+            data-sinalizar-elegivel="${escHtml(r.chaveUnica || "")}"
+            ${r.chaveUnica ? "" : "disabled"}
+            title="${r.chaveUnica ? "Sinalizar como apto a tentativa" : "Registro sem chave única; não é possível sinalizar"}">
+            ⚑ Sinalizar
+          </button>
+        </td>
       </tr>
     `;
   }).join("");
