@@ -385,7 +385,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 /* Controles ficam acima do vídeo */
 
-/* Câmera em tela cheia */
+/* Leitor de câmera em tela cheia */
 #reader.camera-fullscreen {
   position: fixed !important;
   inset: 0 !important;
@@ -396,13 +396,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
-  border: 0 !important;
+  border: none !important;
   border-radius: 0 !important;
   background: #000 !important;
   overflow: hidden !important;
 }
 
-/* Vídeo ocupa a tela */
+/* Vídeo preenchendo a tela */
 #reader.camera-fullscreen video {
   position: absolute !important;
   inset: 0 !important;
@@ -411,7 +411,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   object-fit: cover !important;
 }
 
-/* Botão fechar */
+/* Botão X */
 #btnFecharCamera {
   display: none;
 }
@@ -421,34 +421,29 @@ button:disabled{opacity:.55;cursor:not-allowed}
   position: absolute;
   top: max(16px, env(safe-area-inset-top));
   right: 16px;
-  z-index: 100001;
+  z-index: 100002;
   width: 48px;
   height: 48px;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 1px solid rgba(255,255,255,.3);
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
+  background: rgba(0,0,0,.7);
+  color: #fff;
   font-size: 32px;
   line-height: 1;
   cursor: pointer;
 }
 
-/* Mira de leitura */
-#reader.camera-fullscreen .mira {
-  position: absolute;
-  z-index: 100000;
-}
-
-/* Controles acima do vídeo */
-body.camera-aberta #cameraControles {
-  position: fixed;
-  z-index: 100000;
+/* Controles da câmera sobre o vídeo */
+body.camera-aberta #cameraControles:not([hidden]) {
+  position: fixed !important;
+  z-index: 100001;
   left: 16px;
   right: 16px;
   bottom: max(20px, env(safe-area-inset-bottom));
 }
+
 
 
 </style>
@@ -987,40 +982,135 @@ async function cicloLeitura(){
   }
   if(cameraAtiva)temporizadorLeitura=setTimeout(cicloLeitura,espera);
 }
-async function iniciarCamera(){
-  if(cameraAtiva)return;
-  btnCamera.disabled=true;mostrarStatus("Abrindo a câmera...");
-  try{
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error("sem-camera");
+
+function abrirCameraTelaCheia() {
+  readerEl.classList.add("camera-fullscreen");
+  document.body.classList.add("camera-aberta");
+}
+
+function fecharCameraTelaCheia() {
+  readerEl.classList.remove("camera-fullscreen");
+  document.body.classList.remove("camera-aberta");
+}
+
+async function iniciarCamera() {
+  if (cameraAtiva) return;
+
+  btnCamera.disabled = true;
+  mostrarStatus("Abrindo a câmera...");
+
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("sem-camera");
+    }
+
     await prepararDetectores();
-    fluxoCamera=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});
-    const video=$("video");video.srcObject=fluxoCamera;readerEl.classList.add("ativo");await video.play();
-    leituraAceita=false;leituraPendente={codigo:"",vezes:0,t:0};quadrosSemLeitura=0;cameraAtiva=true;
-    btnPararCamera.style.display="block";btnCamera.style.display="none";configurarRecursosCamera();
-    mostrarStatus("Câmera ativa. Aponte para o código de barras, a cerca de 15 a 20 cm e sem reflexo.");
-    temporizadorDica=setTimeout(()=>{
-      if(cameraAtiva&&!leituraAceita)mostrarStatus("Dica: afaste um pouco o celular, ligue a lanterna ou toque na imagem para focar.");
-    },7000);
+
+    fluxoCamera = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 }
+      }
+    });
+
+    const video = $("video");
+    video.srcObject = fluxoCamera;
+
+    readerEl.classList.add("ativo");
+    await video.play();
+
+    leituraAceita = false;
+    leituraPendente = { codigo: "", vezes: 0, t: 0 };
+    quadrosSemLeitura = 0;
+    cameraAtiva = true;
+
+    // NOVO: abre a câmera em tela cheia
+    abrirCameraTelaCheia();
+
+    btnPararCamera.style.display = "block";
+    btnCamera.style.display = "none";
+
+    configurarRecursosCamera();
+
+    mostrarStatus(
+      "Câmera ativa. Aponte para o código de barras, a cerca de 15 a 20 cm e sem reflexo."
+    );
+
+    temporizadorDica = setTimeout(() => {
+      if (cameraAtiva && !leituraAceita) {
+        mostrarStatus(
+          "Dica: afaste um pouco o celular, ligue a lanterna ou toque na imagem para focar."
+        );
+      }
+    }, 7000);
+
     cicloLeitura();
-  }catch(erro){
+
+  } catch (erro) {
     console.error(erro);
-    if(fluxoCamera){fluxoCamera.getTracks().forEach(t=>t.stop());fluxoCamera=null}
-    readerEl.classList.remove("ativo");btnCamera.disabled=false;
-    const nome=erro&&erro.name;
-    const mensagem=nome==="NotAllowedError"?"Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador.":
-      erro&&erro.message==="sem-camera"?"Este navegador não permite acessar a câmera. A página precisa estar em HTTPS.":
-      "Não foi possível abrir a câmera ou carregar o leitor. Verifique a permissão e a conexão.";
-    mostrarStatus(mensagem,"error");
+
+    if (fluxoCamera) {
+      fluxoCamera.getTracks().forEach(t => t.stop());
+      fluxoCamera = null;
+    }
+
+    $("video").srcObject = null;
+    cameraAtiva = false;
+
+    fecharCameraTelaCheia();
+    readerEl.classList.remove("ativo");
+    btnCamera.disabled = false;
+
+    const nome = erro && erro.name;
+
+    const mensagem =
+      nome === "NotAllowedError"
+        ? "Permissão da câmera negada. Libere o acesso à câmera nas configurações do navegador."
+        : erro && erro.message === "sem-camera"
+          ? "Este navegador não permite acessar a câmera. A página precisa estar em HTTPS."
+          : "Não foi possível abrir a câmera ou carregar o leitor. Verifique a permissão e a conexão.";
+
+    mostrarStatus(mensagem, "error");
   }
 }
-async function pararCamera(silencioso=false){
-  desligarRecursosCamera();cameraAtiva=false;
-  clearTimeout(temporizadorLeitura);clearTimeout(temporizadorDica);
-  if(fluxoCamera){fluxoCamera.getTracks().forEach(t=>t.stop());fluxoCamera=null}
-  $("video").srcObject=null;readerEl.classList.remove("ativo");
-  btnCamera.disabled=false;btnCamera.style.display="block";btnPararCamera.style.display="none";
-  if(!silencioso)mostrarStatus("Câmera parada.");
+
+async function pararCamera(silencioso = false) {
+  desligarRecursosCamera();
+
+  cameraAtiva = false;
+
+  clearTimeout(temporizadorLeitura);
+  clearTimeout(temporizadorDica);
+
+  if (fluxoCamera) {
+    fluxoCamera.getTracks().forEach(t => t.stop());
+    fluxoCamera = null;
+  }
+
+  $("video").srcObject = null;
+
+  readerEl.classList.remove("ativo");
+
+  // NOVO: fecha a tela cheia ao parar a câmera
+  fecharCameraTelaCheia();
+
+  btnCamera.disabled = false;
+  btnCamera.style.display = "block";
+  btnPararCamera.style.display = "none";
+
+  if (!silencioso) {
+    mostrarStatus("Câmera parada.");
+  }
 }
+
+// NOVO: o X fecha a câmera e interrompe a leitura
+document.getElementById("btnFecharCamera").addEventListener("click", () => {
+  pararCamera();
+});
+
 const FORMATOS_GTIN=["EAN_13","EAN_8","UPC_A"];
 const LEITURAS_PARA_CONFIRMAR=2,JANELA_CONFIRMACAO_MS=4000;
 let ultimoErroLeitura=0;
@@ -1684,29 +1774,6 @@ document.addEventListener("keydown", evento => {
   }
 });
 
-  
-const readerCamera = document.getElementById("reader");
-const btnFecharCamera = document.getElementById("btnFecharCamera");
-const btnAbrirCamera = document.getElementById("btnCamera");
-
-function abrirCameraTelaCheia() {
-  readerCamera.classList.add("camera-fullscreen");
-  document.body.classList.add("camera-aberta");
-}
-
-function fecharCameraTelaCheia() {
-  readerCamera.classList.remove("camera-fullscreen");
-  document.body.classList.remove("camera-aberta");
-}
-
-btnAbrirCamera.addEventListener("click", abrirCameraTelaCheia);
-
-btnFecharCamera.addEventListener("click", () => {
-  fecharCameraTelaCheia();
-
-  // Usa a função de parada que já existe no projeto.
-  document.getElementById("btnPararCamera").click();
-});
 
 </script>
 </body>
