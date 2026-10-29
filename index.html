@@ -335,6 +335,122 @@ button:disabled{opacity:.55;cursor:not-allowed}
   box-sizing: border-box;
   border-radius: 12px;
 }
+
+
+/* Câmera em tela cheia */
+#cameraContainer.camera-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+  border-radius: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Vídeo ocupa toda a tela */
+#cameraContainer.camera-fullscreen video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+/* Botão de fechar */
+#cameraContainer .camera-close-fullscreen {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  z-index: 100001;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Controles ficam acima do vídeo */
+
+/* Câmera em tela cheia */
+#reader.camera-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+  overflow: hidden !important;
+}
+
+/* Vídeo ocupa a tela */
+#reader.camera-fullscreen video {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+/* Botão fechar */
+#btnFecharCamera {
+  display: none;
+}
+
+#reader.camera-fullscreen #btnFecharCamera {
+  display: flex;
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  z-index: 100001;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Mira de leitura */
+#reader.camera-fullscreen .mira {
+  position: absolute;
+  z-index: 100000;
+}
+
+/* Controles acima do vídeo */
+body.camera-aberta #cameraControles {
+  position: fixed;
+  z-index: 100000;
+  left: 16px;
+  right: 16px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+
 </style>
 </head>
 
@@ -418,13 +534,33 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <button type="button" class="btn-limpar-input" aria-label="Limpar campo" title="Limpar campo">×</button>
     </div>
   </div>
-  <button type="button" id="btnCamera" class="btn-camera">Ler com a câmera</button>
-  <button type="button" id="btnPararCamera" class="btn-stop">Parar câmera</button>
-  <div id="reader"><video id="video" playsinline muted autoplay></video><div class="mira"></div></div>
-  <div id="cameraControles" class="camera-controles" hidden>
-    <button type="button" id="btnLanterna" class="btn-lanterna" hidden>Lanterna</button>
-    <div id="zoomWrap" class="zoom-wrap" hidden><span>Zoom</span><input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" aria-label="Zoom da câmera"></div>
+  
+  <button type="button" id="btnCamera" class="btn-camera">
+    Ler com a câmera
+  </button>
+  
+  <button type="button" id="btnPararCamera" class="btn-stop">
+    Parar câmera
+  </button>
+  
+  <div id="reader">
+    <button type="button" id="btnFecharCamera" aria-label="Fechar câmera">×</button>
+    <video id="video" playsinline muted autoplay></video>
+    <div class="mira"></div>
   </div>
+  
+  <div id="cameraControles" class="camera-controles" hidden>
+    <button type="button" id="btnLanterna" class="btn-lanterna" hidden>
+      Lanterna
+    </button>
+  
+    <div id="zoomWrap" class="zoom-wrap" hidden>
+      <span>Zoom</span>
+      <input id="zoomRange" type="range" min="1" max="3" step="0.1"
+        value="1" aria-label="Zoom da câmera">
+    </div>
+  </div>
+
   <div id="ultimoItem" class="ultimo" hidden><span class="ultimo-label">Último item lançado</span><span id="ultimoNome"></span></div>
 </section>
 
@@ -1547,6 +1683,31 @@ document.addEventListener("keydown", evento => {
     fecharAvisoValidade();
   }
 });
+
+  
+const readerCamera = document.getElementById("reader");
+const btnFecharCamera = document.getElementById("btnFecharCamera");
+const btnAbrirCamera = document.getElementById("btnCamera");
+
+function abrirCameraTelaCheia() {
+  readerCamera.classList.add("camera-fullscreen");
+  document.body.classList.add("camera-aberta");
+}
+
+function fecharCameraTelaCheia() {
+  readerCamera.classList.remove("camera-fullscreen");
+  document.body.classList.remove("camera-aberta");
+}
+
+btnAbrirCamera.addEventListener("click", abrirCameraTelaCheia);
+
+btnFecharCamera.addEventListener("click", () => {
+  fecharCameraTelaCheia();
+
+  // Usa a função de parada que já existe no projeto.
+  document.getElementById("btnPararCamera").click();
+});
+
 </script>
 </body>
 </html>
