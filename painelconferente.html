@@ -1229,6 +1229,80 @@
     .produto-json-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}
     @media(max-width:560px){.produto-json-card{padding:17px}.produto-json-actions{flex-direction:column-reverse}.produto-json-actions button{width:100%}}
 
+
+    
+.modal-editar-mapa {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, .65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.conteudo-modal-editar {
+  width: 100%;
+  max-width: 460px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  color: var(--text, #17212b);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+}
+
+.cabecalho-modal-editar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cabecalho-modal-editar h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.fechar-modal-editar {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.conteudo-modal-editar label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: 600;
+}
+
+.conteudo-modal-editar input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #aab4c0;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.acoes-modal-editar {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+#btnSalvarEdicaoMapa:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
   </style>
 </head>
 
@@ -3053,7 +3127,7 @@ function renderControleValidade() {
           <td><span class="badge ${badge}">${st}</span></td>
           <td>
             <button class="button"
-              onclick="editarMapa('${escHtml(r.chaveUnica || '')}','${escHtml(r.lote || '')}','${escHtml(r.validadeISO || '')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')"
+              onclick="editarMapa('${escHtml(r.chaveUnica || '')}','${escHtml(r.codigo || '')}' ,'${escHtml(r.lote || '')}','${escHtml(r.validadeISO || '')}','${escHtml(r.quantidade)}','${escHtml(r.funcionario)}')"
               title="Editar lote, validade e quantidade"
               aria-label="Editar">
               <i data-lucide="pencil"></i>
@@ -3270,7 +3344,89 @@ function renderControleValidade() {
       }
     }
   }
-  async function editarMapa(chave,lote,validade,quantidade,funcionario) { if(!chave){alert('Este registro não possui chave única e não pode ser editado pelo painel.');return;} const novoLote=prompt('Lote:',lote); if(novoLote===null)return; const novaValidade=prompt('Validade (AAAA-MM-DD):',validade); if(novaValidade===null)return; const novaQuantidade=prompt('Quantidade:',quantidade); if(novaQuantidade===null)return; try { const d=await jsonpPainel('editarLancamento','editar',{chaveUnica:chave,lote:novoLote,validade:novaValidade,quantidade:novaQuantidade,funcionario}); alert(d.mensagem||'Resposta recebida'); if(d.sucesso) await atualizarPainel(); } catch(e){alert(e.message);} }
+  
+  let chaveEdicaoMapa = "";
+  let funcionarioEdicaoMapa = "";
+  
+  function editarMapa(chave, codigo, lote, validade, quantidade, funcionario) {
+    if (!chave) {
+      alert("Este registro não possui chave única.");
+      return;
+    }
+  
+    chaveEdicaoMapa = chave;
+    funcionarioEdicaoMapa = funcionario || "";
+  
+    document.getElementById("editCodigo").value = codigo || "";
+    document.getElementById("editLote").value = lote || "";
+    document.getElementById("editValidade").value = validade || "";
+    document.getElementById("editQuantidade").value = quantidade ?? "";
+  
+    document.getElementById("modalEditarMapa").style.display = "flex";
+  }
+  
+  function fecharModalEditarMapa() {
+    document.getElementById("modalEditarMapa").style.display = "none";
+    chaveEdicaoMapa = "";
+    funcionarioEdicaoMapa = "";
+  }
+  
+  async function salvarEdicaoMapa() {
+    const codigo = document.getElementById("editCodigo").value.trim();
+    const lote = document.getElementById("editLote").value.trim();
+    const validade = document.getElementById("editValidade").value;
+    const quantidade = document.getElementById("editQuantidade").value.trim();
+    const botao = document.getElementById("btnSalvarEdicaoMapa");
+  
+    if (!codigo || !/^\d{8,14}$/.test(codigo)) {
+      alert("Informe um código de barras válido, com 8 a 14 dígitos.");
+      return;
+    }
+  
+    if (!lote) {
+      alert("Informe o lote.");
+      return;
+    }
+  
+    if (!validade) {
+      alert("Informe a validade.");
+      return;
+    }
+  
+    if (!/^\d+$/.test(quantidade) || Number(quantidade) < 1) {
+      alert("Informe uma quantidade inteira maior que zero.");
+      return;
+    }
+  
+    botao.disabled = true;
+    botao.textContent = "Salvando...";
+  
+    try {
+      const d = await jsonpPainel("editarLancamento", "editar", {
+        chaveUnica: chaveEdicaoMapa,
+        codigo: codigo,
+        lote: lote,
+        validade: validade,
+        quantidade: quantidade,
+        funcionario: funcionarioEdicaoMapa
+      });
+  
+      if (!d.sucesso) {
+        throw new Error(d.mensagem || "Não foi possível editar o lançamento.");
+      }
+  
+      fecharModalEditarMapa();
+      await atualizarPainel();
+      alert(d.mensagem || "Lançamento atualizado com sucesso.");
+  
+    } catch (e) {
+      alert(e.message || "Erro ao salvar as alterações.");
+    } finally {
+      botao.disabled = false;
+      botao.textContent = "Salvar alterações";
+    }
+  }
+
   async function excluirMapa(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Deseja excluir este lançamento?'))return; try {const d=await jsonpPainel('excluirLancamento','excluir',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   async function moverVencido(chave) { if(!chave){alert('Este registro não possui chave única.');return;} if(!confirm('Mover este produto vencido para a aba Vencidos?'))return; try {const d=await jsonpPainel('subirParaVencidos','subirVencidos',{chaveUnica:chave});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);} }
   
@@ -5679,5 +5835,40 @@ document.getElementById("cvElegiveisBusca")
   }
   
 </script>
+
+  
+<div id="modalEditarMapa" class="modal-editar-mapa" style="display:none">
+  <div class="conteudo-modal-editar">
+    <div class="cabecalho-modal-editar">
+      <h2>Editar lançamento</h2>
+      <button type="button" class="fechar-modal-editar"
+        onclick="fecharModalEditarMapa()" aria-label="Fechar">×</button>
+    </div>
+
+    <label for="editCodigo">Código de barras</label>
+    <input id="editCodigo" type="text" inputmode="numeric"
+      maxlength="14" autocomplete="off">
+
+    <label for="editLote">Lote</label>
+    <input id="editLote" type="text" maxlength="100">
+
+    <label for="editValidade">Validade</label>
+    <input id="editValidade" type="date">
+
+    <label for="editQuantidade">Quantidade</label>
+    <input id="editQuantidade" type="number" min="1" step="1">
+
+    <div class="acoes-modal-editar">
+      <button type="button" class="button"
+        onclick="fecharModalEditarMapa()">Cancelar</button>
+
+      <button type="button" class="button button-primary"
+        id="btnSalvarEdicaoMapa" onclick="salvarEdicaoMapa()">
+        Salvar alterações
+      </button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
