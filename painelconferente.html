@@ -1738,7 +1738,14 @@
               <i data-lucide="keyboard"></i>
               <span>Digitação Manual de Mapa</span>
             </button>
-        
+
+            <button class="button button-primary"
+              id="imprimirMapaBtn"
+              type="button">
+            <i data-lucide="printer"></i>
+            Imprimir Mapa
+            </button>
+            
             <button
               type="button"
               class="button"
@@ -1757,7 +1764,14 @@
           <button type="button" class="button mapa-tab" data-mapa-tipo="todos" role="tab" aria-selected="false">Todos os mapas</button>
         </div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="mapaTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="mapaLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="mapaMes">—</strong></div></div>
-        <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><select class="filter-select" id="mapaFuncionario"><option value="">Todos os funcionários</option></select><input class="filter-select" id="mapaProduto" placeholder="Produto / código"><input class="filter-select" id="mapaLote" placeholder="Lote"><input class="filter-select" id="mapaValidade" type="date" aria-label="Filtrar validade"><select class="filter-select" id="mapaSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
+        <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><select class="filter-select" id="mapaFuncionario"><option value="">Todos os funcionários</option></select><input class="filter-select" id="mapaProduto" placeholder="Produto / código"><input class="filter-select" id="mapaLote" placeholder="Lote">
+          <input
+          class="filter-select"
+          id="mapaValidade"
+          type="month"
+          aria-label="Filtrar validade por mês e ano"
+          >
+        <select class="filter-select" id="mapaSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
         <div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
       </section>
 
@@ -3066,7 +3080,7 @@ function renderControleValidade() {
       return 'outros';
     };
     const base=todos.filter(r=> tipoMapaAtivo==='todos' ? true : categoria(r)===tipoMapaAtivo);
-    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'').slice(0,10)===validade) && (!sit||situacaoPainel(r)===sit));
+    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'').slice(0,7)===validade) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
@@ -3163,6 +3177,222 @@ function renderControleValidade() {
     document.querySelectorAll('.mapa-tab').forEach(b=>{const active=b.dataset.mapaTipo===tipoMapaAtivo;b.classList.toggle('active',active);b.classList.toggle('button-primary',active);b.setAttribute('aria-selected',String(active));});
     renderPainelIcons();
   }
+
+
+function imprimirMapaValidade() {
+  const funcionario = document.getElementById('mapaFuncionario').value;
+
+  const q = (document.getElementById('mapaProduto').value || '')
+    .toLocaleLowerCase('pt-BR').trim();
+
+  const loteFiltro = (document.getElementById('mapaLote').value || '')
+    .toLocaleLowerCase('pt-BR').trim();
+
+  const validadeFiltro = document.getElementById('mapaValidade').value;
+  const situacaoFiltro = document.getElementById('mapaSituacao').value;
+
+  const funcionarios = [
+    'Alice', 'Altino', 'Ana Carolina', 'Anielle', 'Gabriela',
+    'Gabriele', 'Isabela', 'Livia', 'Paola', 'Rafaela',
+    'Ramon', 'Rillary', 'Sulaima', 'Thomaz'
+  ];
+
+  const controlados = [
+    'Termolabil', 'Psicotropicos', 'Antibioticos'
+  ];
+
+  let registros = registrosVisiveisHTML(painelCache.validades)
+    .filter(r => {
+      const nome = String(r.funcionario || '').trim();
+
+      if (nome === 'Transferencias') return false;
+
+      if (tipoMapaAtivo === 'funcionarios' &&
+          !funcionarios.includes(nome)) return false;
+
+      if (tipoMapaAtivo === 'controlados' &&
+          !controlados.includes(nome)) return false;
+
+      if (funcionario && nome !== funcionario) return false;
+
+      if (q && !(String(r.codigo || '') + ' ' +
+          descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) {
+        return false;
+      }
+
+      if (loteFiltro &&
+          !String(r.lote || '').toLocaleLowerCase('pt-BR').includes(loteFiltro)) {
+        return false;
+      }
+
+      if (validadeFiltro &&
+          String(r.validadeISO || '').slice(0, 7) !== validadeFiltro) {
+        return false;
+      }
+
+      if (situacaoFiltro && situacaoPainel(r) !== situacaoFiltro) {
+        return false;
+      }
+
+      return true;
+    });
+
+  if (!registros.length) {
+    alert('Nenhum produto encontrado para imprimir.');
+    return;
+  }
+
+  const escapar = valor => String(valor ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[c]);
+
+  const formatarValidade = r => {
+    const valor = String(r.validadeISO || r.validade || '');
+    const iso = valor.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  
+    if (iso) return `${iso[2]}/${iso[1]}`;
+  
+    const br = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  
+    if (br) return `${br[2]}/${br[3]}`;
+  
+    return fmtData(valor);
+  };
+
+  const nomes = [...new Set(
+    registros.map(r => String(r.funcionario || '').trim()).filter(Boolean)
+  )];
+
+  const nomeFuncionario = funcionario ||
+    (nomes.length === 1 ? nomes[0] : 'Todos os mapas');
+
+  const mesSelecionado = document.getElementById('mapaMes')?.value;
+  const anoSelecionado = document.getElementById('mapaAno')?.value;
+  
+  const mes = mesSelecionado
+    ? new Date(Number(anoSelecionado), Number(mesSelecionado) - 1, 1)
+        .toLocaleDateString('pt-BR', { month: 'long' })
+    : new Date().toLocaleDateString('pt-BR', { month: 'long' });
+  
+  const ano = anoSelecionado || new Date().getFullYear();
+
+  const linhas = registros.map((r, i) => `
+    <tr>
+      <td class="numero">${i + 1}</td>
+      <td class="codigo">${escapar(r.codigo)}</td>
+      <td class="descricao">${escapar(descricaoProduto(r))}</td>
+      <td class="lote">${escapar(r.lote)}</td>
+      <td class="validade">${escapar(formatarValidade(r))}</td>
+      <td class="qtd">${escapar(r.quantidade)}</td>
+    </tr>
+  `).join('');
+
+  const janela = window.open('', '_blank');
+
+  if (!janela) {
+    alert('O navegador bloqueou a impressão. Permita pop-ups para este painel.');
+    return;
+  }
+
+  janela.document.open();
+  janela.document.write(`
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Mapa de Validade - ${escapar(nomeFuncionario)}</title>
+      <style>
+        @page {
+          size: A4 portrait;
+          margin: 10mm;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+          font-family: Arial, sans-serif;
+          color: #000;
+          margin: 0;
+          font-size: 10pt;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+
+        th, td {
+          border: 1px solid #000;
+          padding: 5px 4px;
+          overflow-wrap: anywhere;
+          vertical-align: middle;
+        }
+
+        .cabecalho td {
+          font-weight: bold;
+          text-align: center;
+          font-size: 11pt;
+        }
+
+        .colunas th {
+          text-align: center;
+          font-weight: bold;
+          font-size: 9pt;
+        }
+
+        .numero { width: 5%; text-align: center; }
+        .codigo { width: 13%; text-align: center; }
+        .descricao { width: 43%; text-align: left; }
+        .lote { width: 15%; text-align: center; }
+        .validade { width: 14%; text-align: center; }
+        .qtd { width: 10%; text-align: center; }
+
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; }
+
+        @media print {
+          body { print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <table>
+        <thead>
+          <tr class="cabecalho">
+            <td class="numero"></td>
+            <td colspan="2">${escapar(nomeFuncionario)}</td>
+            <td colspan="2">MAPA DE VALIDADE</td>
+            <td>${escapar(mes)} ${ano}</td>
+          </tr>
+          <tr class="colunas">
+            <th class="numero"></th>
+            <th class="codigo">CÓDIGO</th>
+            <th class="descricao">DESCRIÇÃO</th>
+            <th class="lote">LOTE</th>
+            <th class="validade">VALIDADE</th>
+            <th class="qtd">QTD.</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+
+      <script>
+        window.onload = function() {
+          window.print();
+        };
+      <\/script>
+    </body>
+    </html>
+  `);
+  janela.document.close();
+}
+
+  
   function renderTransferencias() {
     const all = (painelCache.validades || []).filter(
       r => String(r.funcionario || '') === 'Transferencias'
@@ -4217,7 +4447,9 @@ function atualizarProdutosAtencao(registros) {
   document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
   ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
   document.getElementById('addDamagedBtn')?.addEventListener('click',adicionarDanificado); document.getElementById('danificadosBusca')?.addEventListener('input',()=>{const q=document.getElementById('danificadosBusca').value.toLocaleLowerCase('pt-BR');document.querySelectorAll('#danificadosTbody tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');});
-  document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
+  document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); 
+  document.getElementById('imprimirMapaBtn')
+  ?.addEventListener('click', imprimirMapaValidade); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
 
   const today = new Date();
   document.getElementById("currentDate").textContent =
