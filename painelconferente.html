@@ -3837,6 +3837,9 @@ function imprimirMapaValidade() {
     try {
       const d = await jsonpPainel('validades', 'validade', usarCache ? {} : { nocache: '1' });
       console.log("Resposta da consulta de validades:", d);
+      if (d && d.sucesso !== true) {
+        console.warn("O Apps Script respondeu erro em 'validades'. Veja Execuções/Logs no editor do Apps Script. Detalhes:", d.erro || d.detalhe || d.mensagem);
+      }
   
       if (!d || d.sucesso !== true) {
         throw new Error(
@@ -5830,8 +5833,10 @@ function pararCameraCadastroQueima() {
   detectandoQueimaManual = false;
 }
 
-document.getElementById("formCadastroQueima")
-  .addEventListener("submit", async function(event) {
+/* O formulário fica no HTML depois deste script; por isso usamos delegação
+   de evento no document (não depende do elemento já existir). */
+document.addEventListener("submit", async function(event) {
+    if (!event.target || event.target.id !== "formCadastroQueima") return;
     event.preventDefault();
 
     const codigo = document.getElementById("queimaManualCodigo").value.trim();
