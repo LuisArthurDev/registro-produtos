@@ -2861,72 +2861,96 @@
     return dadosProduto(r).descricao;
   }
 
-  function jsonpPainel(action, callback, extra = {}) {
-    return new Promise((resolve, reject) => {
-      const callbackMap = {
-        sinalizados: '__sinalizadosCb',
-        funcionarios: '__funcionariosCb',
-        atualizarSinalizado: '__atualizarSinalizadoCb',
-        validade: '__validadeCb',
-        historico: '__historicoCb',
-        sinalizacao: '__sinalizacaoCb',
-        editar: '__editarCb',
-        excluir: '__excluirCb',
-        subirVencidos: '__subirVencidosCb',
-        dashboard: '__dashboardPainelCb',
-        vencidos: '__vencidosPainelCb',
-        danificado: '__adicionarDanificadoCb',
-        retirar: '__retirarDeLojaCb',
   
-        // Ações da Queima
-        consultarQueima: '__consultarQueimaCb',
-        cadastrarQueimaManual: "__cadastrarQueimaManualCb",
-        aprovarQueima: '__aprovarQueimaCb',
-        relancarQueima: '__relancarQueimaCb',
-        adicionarQueima: '__adicionarAoQueimaCb',
-        adicionarProdutoJson: '__adicionarProdutoJsonCb'
-      };
-  
-      const cbName = callbackMap[callback] || callback;
-      const params = new URLSearchParams({
-        action,
-        callback: cbName,
-        ...extra
-      });
-  
-      const script = document.createElement('script');
-  
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('Tempo esgotado ao consultar ' + action));
-      }, 20000);
-  
-      function cleanup() {
-        clearTimeout(timeout);
-  
-        try {
-          delete window[cbName];
-        } catch (_) {
-          window[cbName] = undefined;
-        }
-  
-        script.remove();
-      }
-  
-      window[cbName] = data => {
-        cleanup();
-        resolve(data);
-      };
-  
-      script.onerror = () => {
-        cleanup();
-        reject(new Error('Falha ao consultar ' + action));
-      };
-  
-      script.src = API_URL + '?' + params.toString();
-      document.head.appendChild(script);
-    });
+const consultasJsonpPainel = new Map();
+
+function jsonpPainel(action, callback, extra = {}) {
+  const callbackMap = {
+    sinalizados: '__sinalizadosCb',
+    funcionarios: '__funcionariosCb',
+    atualizarSinalizado: '__atualizarSinalizadoCb',
+    validade: '__validadeCb',
+    historico: '__historicoCb',
+    sinalizacao: '__sinalizacaoCb',
+    editar: '__editarCb',
+    excluir: '__excluirCb',
+    subirVencidos: '__subirVencidosCb',
+    dashboard: '__dashboardPainelCb',
+    vencidos: '__vencidosPainelCb',
+    danificado: '__adicionarDanificadoCb',
+    retirar: '__retirarDeLojaCb',
+    consultarQueima: '__consultarQueimaCb',
+    cadastrarQueimaManual: '__cadastrarQueimaManualCb',
+    aprovarQueima: '__aprovarQueimaCb',
+    relancarQueima: '__relancarQueimaCb',
+    adicionarQueima: '__adicionarAoQueimaCb',
+    adicionarProdutoJson: '__adicionarProdutoJsonCb'
+  };
+
+  const cbName = callbackMap[callback] || callback;
+
+  // Evita registrar duas consultas simultâneas no mesmo callback global.
+  if (consultasJsonpPainel.has(cbName)) {
+    return consultasJsonpPainel.get(cbName);
   }
+
+  const promessa = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    let finalizado = false;
+
+    const params = new URLSearchParams({
+      ...extra,
+      action,
+      callback: cbName
+    });
+
+    const timeout = setTimeout(() => {
+      finalizar(
+        new Error('Tempo esgotado ao consultar ' + action)
+      );
+    }, 20000);
+
+    function finalizar(erro, dados) {
+      if (finalizado) return;
+      finalizado = true;
+
+      clearTimeout(timeout);
+      script.remove();
+
+      if (window[cbName] === receberResposta) {
+        delete window[cbName];
+      }
+
+      consultasJsonpPainel.delete(cbName);
+
+      if (erro) {
+        reject(erro);
+      } else {
+        resolve(dados);
+      }
+    }
+
+    function receberResposta(dados) {
+      finalizar(null, dados);
+    }
+
+    window[cbName] = receberResposta;
+
+    script.onerror = () => {
+      finalizar(
+        new Error('Falha ao consultar ' + action)
+      );
+    };
+
+    script.src = API_URL + '?' + params.toString();
+    document.head.appendChild(script);
+  });
+
+  consultasJsonpPainel.set(cbName, promessa);
+
+  return promessa;
+}
+
   function carregarCadastroFuncionariosPainel() {
     if (cadastroFuncionariosPromise) {
       return cadastroFuncionariosPromise;
