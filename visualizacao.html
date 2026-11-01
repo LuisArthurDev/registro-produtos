@@ -546,24 +546,6 @@ button{border-radius:9px;font-weight:650}
         <label for="funcionario">Funcionário</label>
         <select id="funcionario">
           <option value="">Todos os funcionários</option>
-          <option>Alice</option>
-          <option>Altino</option>
-          <option>Ana Carolina</option>
-          <option>Anielle</option>
-          <option>Gabriela</option>
-          <option>Gabriele</option>
-          <option>Isabela</option>
-          <option>Livia</option>
-          <option>Paola</option>
-          <option>Rafaela</option>
-          <option>Ramon</option>
-          <option>Rillary</option>
-          <option>Sulaima</option>
-          <option>Thomaz</option>
-          <option>Termolabil</option>
-          <option>Psicotropicos</option>
-          <option>Antibioticos</option>
-          <option>Transferencias</option>
         </select>
       </div>
 
@@ -990,8 +972,65 @@ function consultar() {
 }
 
 /* =========================
+   COLETA FUNCIONARIOS
+   ========================= */
+function carregarCadastroFuncionarios() {
+  return new Promise((resolve, reject) => {
+    const callback = "__funcionariosCb";
+
+    window[callback] = function (resposta) {
+      delete window[callback];
+
+      if (!resposta || !resposta.sucesso) {
+        reject(new Error("Não foi possível carregar os funcionários."));
+        return;
+      }
+
+      const select = document.getElementById("funcionario");
+      const selecionado = select.value;
+
+      select.innerHTML =
+        '<option value="">Todos os funcionários e abas</option>';
+
+      resposta.todos.forEach(nome => {
+        const option = document.createElement("option");
+        option.value = nome;
+        option.textContent = nome;
+        select.appendChild(option);
+      });
+
+      if (resposta.todos.includes(selecionado)) {
+        select.value = selecionado;
+      }
+
+      const funcionarioURL =
+        new URLSearchParams(window.location.search).get("funcionario");
+
+      if (funcionarioURL && resposta.todos.includes(funcionarioURL)) {
+        select.value = funcionarioURL;
+      }
+
+      resolve(resposta);
+    };
+
+    const script = document.createElement("script");
+    script.src =
+      APPS_SCRIPT_URL +
+      "?action=funcionarios&callback=" + callback;
+
+    script.onerror = () => {
+      delete window[callback];
+      reject(new Error("Erro ao consultar a aba Funcionarios."));
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
+/* =========================
    SINALIZAÇÃO DE LANÇAMENTOS
    ========================= */
+  
 let registroParaSinalizar = null;
 
 let registroParaEditar = null;
@@ -1861,14 +1900,13 @@ if (funcionarioURL) {
   if (opcao) $("funcionario").value = opcao.value;
 }
 
-carregarDescricoes()
+carregarCadastroFuncionarios()
+  .then(() => carregarDescricoes())
   .then(consultarHistorico)
   .catch(erro => {
     console.error(erro);
-
     definirMensagem(
-      "Não foi possível carregar produtos_ean.json. " +
-      "Confira se ele está na mesma pasta da página."
+      "Não foi possível carregar o cadastro de funcionários ou os produtos."
     );
   });
   function validadeRegistroISO(registro) {
