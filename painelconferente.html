@@ -4657,6 +4657,12 @@ function atualizarProdutosAtencao(registros) {
         const m = String(r.dataLancamento || '').match(/^(?:\d{2}\/)?(\d{2}\/\d{4})/);
         return m && m[1] === mesAtualDash;
       }).length;
+      const situacoesSalao = { vencidos: 0, aVencer: 0 };
+      registrosVisiveisHTML(painelCache.validades).forEach(r => {
+        const sit = situacaoPainel(r);
+        if (sit === 'Vencido') situacoesSalao.vencidos++;
+        else if (sit === 'A Vencer') situacoesSalao.aVencer++;
+      });
       const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
       const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
       const ocultosVencidos = ocultosQueima.filter(r => estaVencidoPainel(r)).length;
@@ -4671,10 +4677,17 @@ function atualizarProdutosAtencao(registros) {
           (Number(x.lancamentos) || 0) - ocultosQueimaMes) + ' neste mês',
         dashQueimaTotal: x.queimaTotal,
         dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
-        dashAVencer: Math.max(0, (Number(x.aVencer) || 0) - ocultosAVencer),
+        // Vencidos no salão e A vencer seguem a mesma regra do painel
+        // (limite por seção e Queima, via situacaoPainel). Sem os dados do mapa,
+        // usa o valor calculado pelo servidor como alternativa.
+        dashAVencer: validadesProntas
+          ? situacoesSalao.aVencer
+          : Math.max(0, (Number(x.aVencer) || 0) - ocultosAVencer),
         dashVencidos: Math.max(0,
           (Number(x.vencidosRetirados) || 0) +
-          (Number(x.vencidosSalao) || 0) - ocultosVencidos),
+          (validadesProntas
+            ? situacoesSalao.vencidos
+            : (Number(x.vencidosSalao) || 0) - ocultosVencidos)),
   
         // Gráfico de Queima do mês atual.
         queimaMesLancados: x.queimaMes,
