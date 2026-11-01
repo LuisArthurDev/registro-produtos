@@ -3365,7 +3365,7 @@ function renderControleValidade() {
               <i data-lucide="package-check"></i>
             </button>
     
-            ${st === 'Vencido' ? `
+            ${situacao === 'Vencido' ? `
               <button class="button"
                 onclick="moverVencido('${escHtml(r.chaveUnica || '')}')"
                 title="Mover para Vencidos"
