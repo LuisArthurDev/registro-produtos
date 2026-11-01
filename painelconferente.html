@@ -2917,9 +2917,70 @@
   }
 
   function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function parseDataBR(s) { if (!s) return null; if (s instanceof Date) return s; const m=String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m) return new Date(+m[3],+m[2]-1,+m[1]); const d=new Date(s); return isNaN(d) ? null : d; }
-  function fmtData(s) { const d=parseDataBR(s); return d ? d.toLocaleDateString('pt-BR') : (s || '—'); }
-  function diasAte(s) { const d=parseDataBR(s); if(!d) return null; const hoje=new Date(); hoje.setHours(0,0,0,0); d.setHours(0,0,0,0); return Math.round((d-hoje)/86400000); }
+  
+  function parseDataBR(valor) {
+    if (!valor) return null;
+  
+    if (valor instanceof Date) {
+      if (isNaN(valor.getTime())) return null;
+  
+      return new Date(
+        valor.getFullYear(),
+        valor.getMonth(),
+        valor.getDate()
+      );
+    }
+  
+    const texto = String(valor).trim();
+    let ano, mes, dia;
+    let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  
+    if (m) {
+      ano = Number(m[1]);
+      mes = Number(m[2]);
+      dia = Number(m[3]);
+    } else {
+      m = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!m) return null;
+  
+      dia = Number(m[1]);
+      mes = Number(m[2]);
+      ano = Number(m[3]);
+    }
+  
+    const data = new Date(ano, mes - 1, dia);
+  
+    if (
+      data.getFullYear() !== ano ||
+      data.getMonth() !== mes - 1 ||
+      data.getDate() !== dia
+    ) {
+      return null;
+    }
+  
+    return data;
+  }
+  
+  function fmtData(valor) {
+    const data = parseDataBR(valor);
+  
+    return data
+      ? data.toLocaleDateString("pt-BR")
+      : (valor || "—");
+  }
+  
+  function diasAte(valor) {
+    const data = parseDataBR(valor);
+    if (!data) return null;
+  
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+  
+    return Math.round(
+      (data.getTime() - hoje.getTime()) / 86400000
+    );
+  }
+
   function secaoProdutoPainel(r) {
     const p = mapaDescricoes[String(r?.codigo || '').trim()] || {};
     return String(p.secao || r?.secao || '')
