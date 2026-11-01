@@ -1556,7 +1556,7 @@
               <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
             </div>
             <div class="stat-value" id="dashLancamentos">—</div>
-            <div class="stat-footer">Total de lançamentos registrados</div>
+            <div class="stat-footer"><strong id="dashLancamentosMes">— neste mês</strong> · total geral de lançamentos</div>
           </div>
 
           <div class="stat-card">
@@ -4548,13 +4548,25 @@ function atualizarProdutosAtencao(registros) {
     if (!dashboardDados || (!forcar && !validadesProntas)) return;
     const x = dashboardDados;
       const ocultosQueima = (painelCache.validades || []).filter(foiParaQueimaHTML);
+      // Ocultos (já enviados à Queima) lançados no mês atual.
+      const hojeDash = new Date();
+      const mesAtualDash = String(hojeDash.getMonth() + 1).padStart(2, '0') + '/' + hojeDash.getFullYear();
+      const ocultosQueimaMes = ocultosQueima.filter(r => {
+        const m = String(r.dataLancamento || '').match(/^(?:\d{2}\/)?(\d{2}\/\d{4})/);
+        return m && m[1] === mesAtualDash;
+      }).length;
       const diasOcultos = ocultosQueima.map(r => diasAte(r.validadeISO || r.validade));
       const ocultosAVencer = diasOcultos.filter(dias => dias !== null && dias >= 0).length;
       const ocultosVencidos = ocultosQueima.filter(r => estaVencidoPainel(r)).length;
   
       // Os totais de validade/lancamentos são ajustados visualmente no HTML.
       const indicadores = {
-        dashLancamentos: Math.max(0, (Number(x.lancamentos) || 0) - ocultosQueima.length),
+        // Em cima: total geral. Embaixo: lançamentos do mês atual.
+        dashLancamentos: Math.max(0,
+          (x.lancamentosTotal != null ? Number(x.lancamentosTotal) : Number(x.lancamentos) || 0)
+          - ocultosQueima.length),
+        dashLancamentosMes: Math.max(0,
+          (Number(x.lancamentos) || 0) - ocultosQueimaMes) + ' neste mês',
         dashQueimaTotal: x.queimaTotal,
         dashQueimaMes: (Number(x.queimaMes) || 0) + ' neste mês',
         dashAVencer: Math.max(0, (Number(x.aVencer) || 0) - ocultosAVencer),
