@@ -2864,8 +2864,8 @@
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
       const callbackMap = {
-        funcionarios: "__funcionariosCb",
         sinalizados: '__sinalizadosCb',
+        funcionarios: '__funcionariosCb',
         atualizarSinalizado: '__atualizarSinalizadoCb',
         validade: '__validadeCb',
         historico: '__historicoCb',
@@ -2928,44 +2928,44 @@
     });
   }
   function carregarCadastroFuncionariosPainel() {
-  if (cadastroFuncionariosPromise) {
+    if (cadastroFuncionariosPromise) {
+      return cadastroFuncionariosPromise;
+    }
+  
+    cadastroFuncionariosPromise = jsonpPainel(
+      "funcionarios",
+      "funcionarios"
+    ).then(resposta => {
+      if (
+        !resposta ||
+        resposta.sucesso !== true ||
+        !Array.isArray(resposta.funcionarios) ||
+        !Array.isArray(resposta.especiais) ||
+        !Array.isArray(resposta.todos)
+      ) {
+        throw new Error(
+          resposta?.mensagem || "Cadastro de funcionários inválido."
+        );
+      }
+  
+      cadastroFuncionariosPainel = {
+        funcionarios: resposta.funcionarios,
+        especiais: resposta.especiais,
+        todos: resposta.todos
+      };
+  
+      FUNCIONARIOS_MAPA = [...resposta.funcionarios];
+      CONTROLADOS_MAPA = [...resposta.especiais];
+      funcionariosMapaCarregados = true;
+  
+      return cadastroFuncionariosPainel;
+    }).catch(erro => {
+      cadastroFuncionariosPromise = null;
+      throw erro;
+    });
+  
     return cadastroFuncionariosPromise;
   }
-
-  cadastroFuncionariosPromise = jsonpPainel(
-    "funcionarios",
-    "funcionarios"
-  ).then(resposta => {
-    if (
-      !resposta ||
-      resposta.sucesso !== true ||
-      !Array.isArray(resposta.funcionarios) ||
-      !Array.isArray(resposta.especiais) ||
-      !Array.isArray(resposta.todos)
-    ) {
-      throw new Error(
-        resposta?.mensagem || "Cadastro de funcionários inválido."
-      );
-    }
-
-    cadastroFuncionariosPainel = {
-      funcionarios: resposta.funcionarios,
-      especiais: resposta.especiais,
-      todos: resposta.todos
-    };
-
-    FUNCIONARIOS_MAPA = [...resposta.funcionarios];
-    CONTROLADOS_MAPA = [...resposta.especiais];
-    funcionariosMapaCarregados = true;
-
-    return cadastroFuncionariosPainel;
-  }).catch(erro => {
-    cadastroFuncionariosPromise = null;
-    throw erro;
-  });
-
-  return cadastroFuncionariosPromise;
-}
 
   function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   
@@ -3348,8 +3348,26 @@ function renderControleValidade() {
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value;
-    const nomesCategoria=tipoMapaAtivo==='funcionarios'?FUNCIONARIOS_MAPA:tipoMapaAtivo==='controlados'?CONTROLADOS_MAPA:[...FUNCIONARIOS_MAPA,...CONTROLADOS_MAPA];
-    const names=nomesCategoria.filter(n=>todos.some(r=>String(r.funcionario||'').trim()===n));
+    const funcionariosAtuais = Array.isArray(window.listaFuncionarios)
+      ? window.listaFuncionarios
+      : [];
+    
+    const especiaisAtuais = Array.isArray(window.listaAbasEspeciais)
+      ? window.listaAbasEspeciais
+      : [];
+    
+    const nomesCategoria =
+      tipoMapaAtivo === 'funcionarios'
+        ? funcionariosAtuais
+        : tipoMapaAtivo === 'controlados'
+          ? especiaisAtuais
+          : [...funcionariosAtuais, ...especiaisAtuais];
+    
+    const names = nomesCategoria.filter(n =>
+      todos.some(r =>
+        String(r.funcionario || '').trim() === n
+      )
+    );
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
     
@@ -3794,6 +3812,7 @@ function imprimirMapaValidade() {
   
     try {
       const d = await jsonpPainel('validades', 'validade', usarCache ? {} : { nocache: '1' });
+      console.log("Resposta da consulta de validades:", d);
   
       if (!d || d.sucesso !== true) {
         throw new Error(
@@ -4683,6 +4702,49 @@ function atualizarProdutosAtencao(registros) {
     await Promise.allSettled(tarefas);
   }
 
+  async function carregarFuncionarios() {
+    try {
+      const resposta = await jsonpPainel(
+        'funcionarios',
+        'funcionarios'
+      );
+  
+      if (!resposta || resposta.sucesso !== true) {
+        throw new Error(
+          resposta?.mensagem || 'Não foi possível carregar os funcionários.'
+        );
+      }
+  
+      window.listaFuncionarios = Array.isArray(resposta.funcionarios)
+        ? resposta.funcionarios
+        : [];
+  
+      window.listaAbasEspeciais = Array.isArray(resposta.especiais)
+        ? resposta.especiais
+        : [];
+  
+      window.listaTodasAbas = Array.isArray(resposta.todos)
+        ? resposta.todos
+        : [];
+  
+      console.log(
+        'Funcionários carregados:',
+        window.listaFuncionarios.length
+      );
+  
+      console.log(
+        'Abas especiais carregadas:',
+        window.listaAbasEspeciais
+      );
+  
+      return resposta;
+  
+    } catch (erro) {
+      console.error('Erro ao carregar funcionários:', erro);
+      throw erro;
+    }
+  }
+
   async function atualizarPainel(usarCache) {
     const manual = usarCache !== true;
     const botao = document.getElementById('refreshButton');
@@ -4693,9 +4755,12 @@ function atualizarProdutosAtencao(registros) {
     }
 
     try {
+      if (!Array.isArray(window.listaFuncionarios)) {
+        await carregarFuncionarios();
+      }
       // O catálogo usa o cache do navegador e não bloqueia as consultas principais.
       carregarDescricoesProdutos().then(aposCatalogo);
-
+      
       const pagina = paginaAtiva();
       if (manual) await atualizarAba(pagina);
       else await garantirAba(pagina);
@@ -5627,8 +5692,14 @@ function atualizarDescricaoQueimaManual() {
     : "Código informado: " + codigo;
 }
 
-document.getElementById("queimaManualCodigo")
-  .addEventListener("input", atualizarDescricaoQueimaManual);
+const campoQueimaManualCodigo = document.getElementById("queimaManualCodigo");
+
+if (campoQueimaManualCodigo) {
+  campoQueimaManualCodigo.addEventListener(
+    "input",
+    atualizarDescricaoQueimaManual
+  );
+}
 
 async function iniciarCameraCadastroQueima() {
   if (cameraQueimaManualAtiva) return;
