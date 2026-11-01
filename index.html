@@ -564,15 +564,8 @@ body.camera-aberta #cameraControles:not([hidden]) {
   <div class="field">
     <label for="funcionario">Funcionário</label>
     <div class="funcionario-linha">
-      <select id="funcionario" name="funcionario" required>
-        <option value="">Selecione o funcionário</option>
-        <option>Alice</option><option>Altino</option><option>Ana Carolina</option>
-        <option>Anielle</option><option>Gabriela</option><option>Gabriele</option>
-        <option>Isabela</option><option>Livia</option><option>Paola</option>
-        <option>Rafaela</option><option>Ramon</option><option>Rillary</option>
-        <option>Sulaima</option><option>Thomaz</option><option>Termolabil</option>
-        <option>Psicotropicos</option><option>Antibioticos</option>
-        <option value="Transferencias">Transferencias</option>
+      <select id="funcionario" name="funcionario" required disabled>
+        <option value="">Carregando funcionários...</option>
       </select>
       <button type="button" id="btnVisualizarFuncionario" class="btn-visualizar" title="Visualizar lançamentos do funcionário" aria-label="Visualizar lançamentos do funcionário">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -690,6 +683,99 @@ body.camera-aberta #cameraControles:not([hidden]) {
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 const $ = id => document.getElementById(id);
 const metaTema = document.querySelector('meta[name="theme-color"]');
+
+function carregarCadastroFuncionarios() {
+  return new Promise((resolve, reject) => {
+    const callback = "__funcionariosCb";
+    const select = document.getElementById("funcionario");
+    const script = document.createElement("script");
+
+    let finalizado = false;
+
+    const timeout = setTimeout(() => {
+      finalizar();
+      reject(new Error("Tempo esgotado ao carregar os funcionários."));
+    }, 15000);
+
+    function finalizar() {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeout);
+      script.remove();
+
+      try {
+        delete window[callback];
+      } catch (e) {
+        window[callback] = undefined;
+      }
+    }
+
+    window[callback] = resposta => {
+      finalizar();
+
+      if (!resposta || resposta.sucesso !== true ||
+          !Array.isArray(resposta.todos)) {
+        select.innerHTML =
+          '<option value="">Erro ao carregar funcionários</option>';
+        select.disabled = true;
+        reject(new Error(
+          resposta?.mensagem || "Não foi possível carregar o cadastro."
+        ));
+        return;
+      }
+
+      const nomes = [...new Set(resposta.todos)]
+        .filter(nome => String(nome || "").trim());
+
+      select.innerHTML =
+        '<option value="">Selecione o funcionário</option>' +
+        nomes.map(nome => {
+          const valor = String(nome);
+          const option = document.createElement("option");
+          option.value = valor;
+          option.textContent = valor;
+          return option;
+        }).map(option =>
+          `<option value="${escaparAtributo(option.value)}">` +
+          `${escaparHTML(option.textContent)}</option>`
+        ).join("");
+
+      select.disabled = false;
+
+      resolve(resposta);
+    };
+
+    script.onerror = () => {
+      finalizar();
+      select.innerHTML =
+        '<option value="">Erro ao carregar funcionários</option>';
+      select.disabled = true;
+      reject(new Error("Falha de comunicação com o Apps Script."));
+    };
+
+    const parametros = new URLSearchParams({
+      action: "funcionarios",
+      callback
+    });
+
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function escaparHTML(valor) {
+  return String(valor ?? "").replace(/[&<>"']/g, caractere => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[caractere]);
+}
+
+function escaparAtributo(valor) {
+  return escaparHTML(valor);
+}
 
 function aplicarTema(tema){
   document.documentElement.dataset.theme=tema;
@@ -1531,17 +1617,39 @@ btnVisualizarFuncionario.addEventListener("click", () => {
 funcionarioEl.addEventListener("change", atualizarBotaoVisualizar);
 
 
-window.addEventListener("load",()=>{
-  restaurarUltimoItem();
-  atualizarBotoesLimpar();
-  atualizarCamposTransferencia();
-  atualizarBotaoVisualizar();
-  if(funcionarioEl.value)verificarHistoricoFuncionario(funcionarioEl.value);
+window.addEventListener("load", async () => {
+  try {
+    await carregarCadastroFuncionarios();
+
+    // Restaura o funcionário salvo somente depois de carregar as opções.
+    try {
+      const salvo = localStorage.getItem("funcionario");
+
+      if (
+        salvo &&
+        Array.from(funcionarioEl.options).some(opcao => opcao.value === salvo)
+      ) {
+        funcionarioEl.value = salvo;
+      }
+    } catch (e) {}
+
+    restaurarUltimoItem();
+    atualizarBotoesLimpar();
+    atualizarCamposTransferencia();
+    atualizarBotaoVisualizar();
+
+    if (funcionarioEl.value) {
+      verificarHistoricoFuncionario(funcionarioEl.value);
+    }
+  } catch (erro) {
+    console.error(erro);
+    mostrarStatus(
+      "Não foi possível carregar os funcionários. Atualize a página ou confira a conexão.",
+      "error"
+    );
+  }
 });
-window.addEventListener("beforeunload",()=>{
-  if(temporizadorDigitacao)clearTimeout(temporizadorDigitacao);
-  if(temporizadorPolling)clearTimeout(temporizadorPolling);
-});
+
 /* Aviso automático de produtos a vencer */
 
 const TEMPO_AVISO_VALIDADE = 6000;
