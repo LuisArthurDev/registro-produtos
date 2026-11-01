@@ -2612,6 +2612,17 @@
 
 <script>
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+  let cadastroFuncionariosPainel = {
+    funcionarios: [],
+    especiais: [],
+    todos: ["Transferencias"]
+  };
+  
+  let funcionariosMapaCarregados = false;
+  let cadastroFuncionariosPromise = null;
+  
+  let FUNCIONARIOS_MAPA = [];
+  let CONTROLADOS_MAPA = [];
   const pageNames = {
     dashboard: ["Dashboard", "Visão geral das operações"],
     lancamentos: ["Queima de estoque", "Consulta e registro de produtos para queima de estoque"],
@@ -2853,6 +2864,7 @@
   function jsonpPainel(action, callback, extra = {}) {
     return new Promise((resolve, reject) => {
       const callbackMap = {
+        funcionarios: "__funcionariosCb",
         sinalizados: '__sinalizadosCb',
         atualizarSinalizado: '__atualizarSinalizadoCb',
         validade: '__validadeCb',
@@ -2915,6 +2927,45 @@
       document.head.appendChild(script);
     });
   }
+  function carregarCadastroFuncionariosPainel() {
+  if (cadastroFuncionariosPromise) {
+    return cadastroFuncionariosPromise;
+  }
+
+  cadastroFuncionariosPromise = jsonpPainel(
+    "funcionarios",
+    "funcionarios"
+  ).then(resposta => {
+    if (
+      !resposta ||
+      resposta.sucesso !== true ||
+      !Array.isArray(resposta.funcionarios) ||
+      !Array.isArray(resposta.especiais) ||
+      !Array.isArray(resposta.todos)
+    ) {
+      throw new Error(
+        resposta?.mensagem || "Cadastro de funcionários inválido."
+      );
+    }
+
+    cadastroFuncionariosPainel = {
+      funcionarios: resposta.funcionarios,
+      especiais: resposta.especiais,
+      todos: resposta.todos
+    };
+
+    FUNCIONARIOS_MAPA = [...resposta.funcionarios];
+    CONTROLADOS_MAPA = [...resposta.especiais];
+    funcionariosMapaCarregados = true;
+
+    return cadastroFuncionariosPainel;
+  }).catch(erro => {
+    cadastroFuncionariosPromise = null;
+    throw erro;
+  });
+
+  return cadastroFuncionariosPromise;
+}
 
   function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   
@@ -3267,10 +3318,11 @@ function renderControleValidade() {
 }
 
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
-  let tipoMapaAtivo = 'funcionarios';
-  const FUNCIONARIOS_MAPA = ['Alice','Altino','Ana Carolina','Anielle','Gabriela','Gabriele','Isabela','Livia','Paola','Rafaela','Ramon','Rillary','Sulaima','Thomaz'];
-  const CONTROLADOS_MAPA = ['Termolabil','Psicotropicos','Antibioticos'];
+  let tipoMapaAtivo = "funcionarios";
   function renderMapa() {
+    if (!funcionariosMapaCarregados) {
+      return;
+    }
     const q=(document.getElementById('mapaProduto').value||'').toLocaleLowerCase('pt-BR').trim();
     const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
     const func=document.getElementById('mapaFuncionario').value;
@@ -3278,10 +3330,17 @@ function renderControleValidade() {
     const sit=document.getElementById('mapaSituacao').value;
     const todos=registrosVisiveisHTML(painelCache.validades).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
     const categoria = r => {
-      const nome=String(r.funcionario||'').trim();
-      if (FUNCIONARIOS_MAPA.includes(nome)) return 'funcionarios';
-      if (CONTROLADOS_MAPA.includes(nome)) return 'controlados';
-      return 'outros';
+      const nome = String(r.funcionario || "").trim();
+    
+      if (CONTROLADOS_MAPA.includes(nome)) {
+        return "controlados";
+      }
+    
+      if (FUNCIONARIOS_MAPA.includes(nome)) {
+        return "funcionarios";
+      }
+    
+      return "outros";
     };
     const base=todos.filter(r=> tipoMapaAtivo==='todos' ? true : categoria(r)===tipoMapaAtivo);
     const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'').slice(0,7)===validade) && (!sit||situacaoPainel(r)===sit));
@@ -4647,6 +4706,17 @@ function atualizarProdutosAtencao(registros) {
       }
     }
   }
+  carregarCadastroFuncionariosPainel()
+  .then(() => {
+    renderMapa();
+
+    if (typeof renderPaginasGestao === "function") {
+      renderPaginasGestao();
+    }
+  })
+  .catch(erro => {
+    console.error("Falha ao carregar cadastro de funcionários:", erro);
+  });
   ['mapaProduto','mapaLote','mapaValidade'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
   document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
@@ -5734,8 +5804,8 @@ document.getElementById("formCadastroQueima")
 (function () {
   const g = id => document.getElementById(id);
   const MAX = 300;
-  const FUNC = ["Alice","Altino","Ana Carolina","Anielle","Gabriela","Gabriele","Isabela","Livia","Paola","Rafaela","Ramon","Rillary","Sulaima","Thomaz","Termolabil","Psicotropicos","Antibioticos","Transferencias"];
-  const ESPECIAIS = ["termolabil","psicotropicos","antibioticos"];
+  let FUNC = ["Transferencias"];
+  let ESPECIAIS = [];
 
   const norm = s => String(s == null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
   const esc = v => escHtml(v);
@@ -6300,7 +6370,26 @@ document.getElementById("formCadastroQueima")
     .forEach(([id, ev, fn]) => g(id) && g(id).addEventListener(ev, fn));
   ["refreshFuncionarios", "refreshEstoque", "refreshProdutos", "refreshHistorico"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
 
-  renderPaginasGestao();
+  carregarCadastroFuncionariosPainel()
+  .then(cadastro => {
+    FUNC = [
+      ...cadastro.funcionarios,
+      ...cadastro.especiais,
+      "Transferencias"
+    ];
+
+    ESPECIAIS = cadastro.especiais.map(norm);
+
+    renderPaginasGestao();
+  })
+  .catch(erro => {
+    console.error(
+      "Não foi possível carregar os funcionários para o gerenciamento:",
+      erro
+    );
+
+    renderPaginasGestao();
+  });
 })();
 
   // Helper global do cadastro de produtos; o helper g original existe apenas dentro da IIFE.
