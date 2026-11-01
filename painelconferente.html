@@ -1438,6 +1438,16 @@
 }
 
 
+      /* Ordenação por clique no cabeçalho + barra de seleção do Mapa */
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { background: rgba(100,116,139,.12); }
+    th.sortable .sort-ind { margin-left: 5px; font-size: 10px; opacity: .35; }
+    th.sortable[aria-sort="ascending"] .sort-ind,
+    th.sortable[aria-sort="descending"] .sort-ind { opacity: 1; }
+    .mapa-selecao-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; margin: 0 0 10px; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 12px; font-size: 13px; }
+    .mapa-selecao-bar #mapaSelResumo { font-weight: 700; margin-right: auto; }
+    .mapa-selecao-bar button[disabled] { opacity: .5; cursor: not-allowed; }
+    .mapa-sel, #mapaSelTodos { width: 16px; height: 16px; cursor: pointer; }
   </style>
 </head>
 
@@ -1914,7 +1924,13 @@
           aria-label="Filtrar validade por mês e ano"
           >
         <select class="filter-select" id="mapaSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
-        <div class="table-wrap"><table><thead><tr><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
+        <div id="mapaSelecaoBar" class="mapa-selecao-bar" style="display:none">
+          <span id="mapaSelResumo"></span>
+          <button type="button" class="button button-primary" id="mapaSelQueima" onclick="acaoEmMassaMapa('queima')"><i data-lucide="package-check"></i> <span>Lançar no Queima</span></button>
+          <button type="button" class="button" id="mapaSelVencido" onclick="acaoEmMassaMapa('vencido')"><i data-lucide="archive"></i> <span>Mover para Vencidos</span></button>
+          <button type="button" class="button" onclick="limparSelecaoMapa()">Limpar seleção</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th data-nosort style="width:36px;text-align:center"><input type="checkbox" id="mapaSelTodos" title="Selecionar todos os registros filtrados" aria-label="Selecionar todos os registros filtrados" onchange="alternarSelecaoTodosMapa(this.checked)"></th><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
       </section>
 
       <!-- CONTROLE DE VALIDADE -->
@@ -2621,6 +2637,9 @@
   let funcionariosMapaCarregados = false;
   let cadastroFuncionariosPromise = null;
   
+  const mapaSelecionados = new Set();
+  let mapaVisiveisChaves = [];
+  let mapaAcaoEmAndamento = false;
   let FUNCIONARIOS_MAPA = [];
   let CONTROLADOS_MAPA = [];
   const pageNames = {
@@ -3395,6 +3414,16 @@ function renderControleValidade() {
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
     
+    mapaVisiveisChaves = rows
+      .filter(r => !func || r.funcionario === func)
+      .map(r => String(r.chaveUnica || ''))
+      .filter(Boolean);
+    // Remove da seleção o que não existe mais nos dados carregados.
+    (function () {
+      const existentes = new Set((painelCache.validades || []).map(r => String(r.chaveUnica || '')));
+      [...mapaSelecionados].forEach(c => { if (!existentes.has(c)) mapaSelecionados.delete(c); });
+    })();
+
     document.getElementById('mapaTbody').innerHTML = rows
       .filter(r => !func || r.funcionario === func)
       .map(r => {
@@ -3435,7 +3464,9 @@ function renderControleValidade() {
           : 'badge-success';
 
     
+        const chaveSel = String(r.chaveUnica || '');
         return `<tr>
+          <td style="text-align:center"><input type="checkbox" class="mapa-sel" data-chave="${escHtml(chaveSel)}" ${chaveSel ? '' : 'disabled'} ${mapaSelecionados.has(chaveSel) ? 'checked' : ''} onchange="alternarSelecaoMapa(this.dataset.chave, this.checked)" aria-label="Selecionar registro"></td>
           <td>${escHtml(r.funcionario)}</td>
           <td>${escHtml(r.codigo)}</td>
           <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
@@ -3482,6 +3513,7 @@ function renderControleValidade() {
       }).join('');
 
     document.getElementById('mapaEmpty').style.display=rows.length?'none':'block';
+    atualizarBarraSelecaoMapa();
     document.querySelectorAll('.mapa-tab').forEach(b=>{const active=b.dataset.mapaTipo===tipoMapaAtivo;b.classList.toggle('active',active);b.classList.toggle('button-primary',active);b.setAttribute('aria-selected',String(active));});
     renderPainelIcons();
   }
@@ -4851,6 +4883,152 @@ function atualizarProdutosAtencao(registros) {
   renderPainelIcons();
   pintarSnapshotDashboard();
   atualizarPainel(true);
+
+  /* ===== Seleção em massa no Mapa de Validade ===== */
+
+  function registroMapaPorChave(chave) {
+    return (painelCache.validades || []).find(r => String(r.chaveUnica || '') === String(chave));
+  }
+
+  function alternarSelecaoMapa(chave, marcado) {
+    if (!chave) return;
+    if (marcado) mapaSelecionados.add(String(chave)); else mapaSelecionados.delete(String(chave));
+    atualizarBarraSelecaoMapa();
+  }
+
+  // Marca/desmarca todos os registros que estão visíveis com os filtros atuais
+  // (funcionário, produto, lote, mês de validade e situação).
+  function alternarSelecaoTodosMapa(marcado) {
+    mapaVisiveisChaves.forEach(c => { if (marcado) mapaSelecionados.add(c); else mapaSelecionados.delete(c); });
+    document.querySelectorAll('#mapaTbody .mapa-sel').forEach(cb => {
+      if (!cb.disabled) cb.checked = marcado;
+    });
+    atualizarBarraSelecaoMapa();
+  }
+
+  function limparSelecaoMapa() {
+    mapaSelecionados.clear();
+    document.querySelectorAll('#mapaTbody .mapa-sel').forEach(cb => { cb.checked = false; });
+    atualizarBarraSelecaoMapa();
+  }
+
+  // Quais selecionados podem ir para cada destino.
+  function classificarSelecaoMapa() {
+    const queima = [], vencido = [], ignoradosControlados = [];
+    mapaSelecionados.forEach(chave => {
+      const r = registroMapaPorChave(chave);
+      if (!r) return;
+      const sit = situacaoPainel(r);
+      if (sit === 'Vencido') {
+        vencido.push(r);
+      } else {
+        queima.push(r);
+      }
+    });
+    return { queima, vencido, ignoradosControlados };
+  }
+
+  function atualizarBarraSelecaoMapa() {
+    const bar = document.getElementById('mapaSelecaoBar');
+    const todos = document.getElementById('mapaSelTodos');
+    if (!bar || !todos) return;
+
+    const total = mapaSelecionados.size;
+    const visiveisMarcados = mapaVisiveisChaves.filter(c => mapaSelecionados.has(c)).length;
+    todos.checked = mapaVisiveisChaves.length > 0 && visiveisMarcados === mapaVisiveisChaves.length;
+    todos.indeterminate = visiveisMarcados > 0 && visiveisMarcados < mapaVisiveisChaves.length;
+    todos.title = 'Selecionar todos os registros filtrados (' + mapaVisiveisChaves.length + ')';
+
+    bar.style.display = total ? 'flex' : 'none';
+    if (!total) return;
+
+    const c = classificarSelecaoMapa();
+    document.getElementById('mapaSelResumo').textContent = total + ' selecionado(s)';
+    const bq = document.getElementById('mapaSelQueima');
+    const bv = document.getElementById('mapaSelVencido');
+    bq.querySelector('span').textContent = 'Lançar no Queima (' + c.queima.length + ')';
+    bv.querySelector('span').textContent = 'Mover para Vencidos (' + c.vencido.length + ')';
+    bq.disabled = mapaAcaoEmAndamento || c.queima.length === 0;
+    bv.disabled = mapaAcaoEmAndamento || c.vencido.length === 0;
+  }
+
+  async function acaoEmMassaMapa(tipo) {
+    if (mapaAcaoEmAndamento) return;
+    const c = classificarSelecaoMapa();
+    const lista = tipo === 'queima' ? c.queima : c.vencido;
+
+    if (!lista.length) {
+      alert(tipo === 'queima'
+        ? 'Nenhum dos selecionados está apto para a Queima (itens vencidos não vão para a Queima).'
+        : 'Nenhum dos selecionados está apto para Vencidos (somente itens já vencidos).');
+      return;
+    }
+
+    const destino = tipo === 'queima' ? 'lançar na Queima' : 'mover para Vencidos';
+    let aviso = 'Deseja ' + destino + ' ' + lista.length + ' registro(s)?';
+    const naoAptos = mapaSelecionados.size - lista.length;
+    if (naoAptos > 0) aviso += '\n\n' + naoAptos + ' selecionado(s) não estão aptos para esta ação e serão mantidos.';
+    if (!confirm(aviso)) return;
+
+    mapaAcaoEmAndamento = true;
+    atualizarBarraSelecaoMapa();
+
+    const notice = document.getElementById('mapaNotice');
+    const falhas = [];
+    let ok = 0;
+
+    // Sequencial de propósito: o servidor processa uma alteração por vez.
+    for (let i = 0; i < lista.length; i++) {
+      const r = lista[i];
+      if (notice) {
+        notice.style.display = 'block';
+        notice.textContent = 'Processando ' + (i + 1) + ' de ' + lista.length + '...';
+      }
+      try {
+        const dados = tipo === 'queima'
+          ? await jsonpPainel('adicionarAoQueima', 'adicionarQueima', {
+              chaveUnica: r.chaveUnica,
+              funcionario: r.funcionario || '',
+              descricao: descricaoProduto(r)
+            })
+          : await jsonpPainel('subirParaVencidos', 'subirVencidos', {
+              chaveUnica: r.chaveUnica,
+              descricao: descricaoProduto(r)
+            });
+
+        if (!dados || !dados.sucesso) throw new Error((dados && dados.mensagem) || 'Falha na operação.');
+
+        ok++;
+        mapaSelecionados.delete(String(r.chaveUnica));
+        if (tipo === 'queima') marcarComoQueimaHTML(r.chaveUnica);
+      } catch (e) {
+        falhas.push((r.codigo || '') + ' (' + (r.lote || '') + '): ' + e.message);
+      }
+    }
+
+    mapaAcaoEmAndamento = false;
+
+    try {
+      if (tipo === 'queima') {
+        await carregarQueima();
+        await carregarMapa();
+        await carregarDashboard();
+      } else {
+        await atualizarPainel();
+      }
+    } catch (e) { console.warn('Falha ao atualizar após a ação em massa:', e); }
+
+    renderMapa();
+
+    let msg = ok + ' registro(s) ' + (tipo === 'queima' ? 'lançado(s) na Queima.' : 'movido(s) para Vencidos.');
+    if (falhas.length) {
+      msg += '\n\n' + falhas.length + ' falha(s):\n' + falhas.slice(0, 8).join('\n') +
+        (falhas.length > 8 ? '\n...' : '');
+    }
+    if (notice) notice.textContent = msg.split('\n')[0];
+    alert(msg);
+  }
+
   async function lancarMapaParaQueima(chave) {
   if (!chave) {
     alert('Este lançamento não possui Chave Única.');
@@ -6781,6 +6959,116 @@ document.getElementById("cvElegiveisBusca")
   </div>
 </div>
 
+
+<script>
+/* ===== Ordenação crescente/decrescente clicando no cabeçalho de todas as tabelas ===== */
+(function () {
+  const estado = new WeakMap();   // tabela -> { col, dir }
+  let aplicando = false;
+
+  function chaveOrdenacao(texto) {
+    const t = String(texto || '').trim();
+    if (!t) return null;
+    let m = t.match(/(\d{2})\/(\d{2})\/(\d{4})(?:[ ,]+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) return { n: Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)) };
+    m = t.match(/^(\d{2})\/(\d{4})$/);
+    if (m) return { n: Date.UTC(+m[2], +m[1] - 1, 1) };
+    m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return { n: Date.UTC(+m[1], +m[2] - 1, +m[3]) };
+    if (/^-?\d+([.,]\d+)?$/.test(t)) return { n: parseFloat(t.replace(',', '.')) };
+    m = t.match(/-?\d+/);                       // ex.: "VENCIDO - 5 dias" / "12 dias"
+    if (m && /dias?$/i.test(t) && !/[a-z]{3,}.*[a-z]{3,}/i.test(t.replace(/dias?$/i, ''))) return { n: parseInt(m[0], 10) };
+    return { s: t.toLocaleLowerCase('pt-BR') };
+  }
+
+  function comparar(a, b, dir) {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;                   // vazios sempre no fim
+    if (b === null) return -1;
+    let r;
+    if (a.n !== undefined && b.n !== undefined) r = a.n - b.n;
+    else if (a.n !== undefined) r = -1;         // números antes de textos
+    else if (b.n !== undefined) r = 1;
+    else r = a.s.localeCompare(b.s, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? r : -r;
+  }
+
+  function aplicar(tabela) {
+    const e = estado.get(tabela);
+    const tbody = tabela.tBodies[0];
+    if (!e || !tbody) return;
+    const linhas = [...tbody.rows];
+    if (linhas.length < 2 || linhas.some(l => [...l.cells].some(c => c.colSpan > 1))) return;
+
+    linhas.forEach((l, i) => { if (l._ordem === undefined) l._ordem = i; });
+
+    const ordenadas = e.dir
+      ? linhas
+          .map(l => ({ l, k: chaveOrdenacao(l.cells[e.col] ? (l.cells[e.col].dataset.sort ?? l.cells[e.col].textContent) : '') }))
+          .sort((x, y) => comparar(x.k, y.k, e.dir) || x.l._ordem - y.l._ordem)
+          .map(x => x.l)
+      : linhas.sort((x, y) => x._ordem - y._ordem);
+
+    aplicando = true;
+    const frag = document.createDocumentFragment();
+    ordenadas.forEach(l => frag.appendChild(l));
+    tbody.appendChild(frag);
+    aplicando = false;
+  }
+
+  function marcarCabecalhos(tabela) {
+    const e = estado.get(tabela);
+    [...tabela.tHead.rows[0].cells].forEach((th, i) => {
+      if (!th.classList.contains('sortable')) return;
+      const ind = th.querySelector('.sort-ind');
+      if (e && e.dir && e.col === i) {
+        th.setAttribute('aria-sort', e.dir === 'asc' ? 'ascending' : 'descending');
+        ind.textContent = e.dir === 'asc' ? '▲' : '▼';
+      } else {
+        th.removeAttribute('aria-sort');
+        ind.textContent = '⇅';
+      }
+    });
+  }
+
+  function preparar(tabela) {
+    if (tabela.dataset.sortPronto || !tabela.tHead || !tabela.tHead.rows.length || !tabela.tBodies[0]) return;
+    tabela.dataset.sortPronto = '1';
+    estado.set(tabela, { col: -1, dir: null });
+
+    [...tabela.tHead.rows[0].cells].forEach((th, i) => {
+      const nome = th.textContent.trim().toLowerCase();
+      if (th.hasAttribute('data-nosort') || th.colSpan > 1 || /^a[çc](ão|ões|ao|oes)$/.test(nome) || !nome) return;
+      th.classList.add('sortable');
+      th.tabIndex = 0;
+      th.title = 'Clique para ordenar (crescente / decrescente)';
+      th.insertAdjacentHTML('beforeend', '<span class="sort-ind" aria-hidden="true">⇅</span>');
+      const alternar = () => {
+        const e = estado.get(tabela);
+        if (e.col !== i) { e.col = i; e.dir = 'asc'; }
+        else if (e.dir === 'asc') e.dir = 'desc';
+        else if (e.dir === 'desc') { e.dir = null; }
+        else e.dir = 'asc';
+        aplicar(tabela);
+        marcarCabecalhos(tabela);
+      };
+      th.addEventListener('click', alternar);
+      th.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alternar(); } });
+    });
+
+    // Quando o painel redesenha as linhas, mantém a ordenação escolhida.
+    new MutationObserver(() => {
+      if (aplicando) return;
+      const e = estado.get(tabela);
+      if (e && e.dir) aplicar(tabela);
+    }).observe(tabela.tBodies[0], { childList: true });
+  }
+
+  function iniciar() { document.querySelectorAll('table').forEach(preparar); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+  else iniciar();
+})();
+</script>
 
 </body>
 </html>
