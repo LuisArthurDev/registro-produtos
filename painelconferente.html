@@ -1448,6 +1448,56 @@
     .mapa-selecao-bar #mapaSelResumo { font-weight: 700; margin-right: auto; }
     .mapa-selecao-bar button[disabled] { opacity: .5; cursor: not-allowed; }
     .mapa-sel, #mapaSelTodos { width: 16px; height: 16px; cursor: pointer; }
+      /* ===== Menu lateral: novo layout e botão de recolher na borda ===== */
+    .sidebar { box-shadow: 4px 0 24px rgba(15,23,42,.12); }
+    .brand { background: linear-gradient(180deg, #14203a 0%, var(--sidebar) 100%); }
+    .brand-icon { background: linear-gradient(135deg, #60a5fa, var(--primary)); box-shadow: 0 6px 16px rgba(59,130,246,.35); flex: 0 0 42px; }
+    .brand-text { min-width: 0; white-space: nowrap; overflow: hidden; }
+    .brand-name { font-size: 16px; }
+
+    .navigation { padding: 0 10px 12px; }
+    .nav-label { padding: 20px 14px 8px; }
+    .nav-item { border-radius: 10px; padding: 11px 14px; position: relative; }
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(59,130,246,.28), rgba(59,130,246,.10));
+      box-shadow: inset 3px 0 #60a5fa;
+    }
+    .nav-item.active svg { color: #93c5fd; }
+
+    .sidebar-bottom { padding: 12px; }
+    .profile { background: #162235; border: 1px solid #263246; border-radius: 12px; padding: 8px 10px; }
+
+    /* Botão redondo preso à borda do menu (não ocupa espaço dentro dele). */
+    .sidebar-collapse {
+      position: absolute; top: 27px; right: -14px;
+      width: 28px; height: 28px; min-height: 0; margin: 0; padding: 0;
+      border-radius: 50%; border: 3px solid var(--bg);
+      background: var(--primary); color: #fff;
+      display: grid; place-items: center;
+      box-shadow: 0 4px 12px rgba(59,130,246,.45);
+      cursor: pointer; z-index: 101;
+      transition: background .2s, transform .2s, box-shadow .2s;
+    }
+    .sidebar-collapse:hover { background: #2563eb; transform: scale(1.1); border-color: var(--bg); }
+    .sidebar-collapse:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+    .sidebar-collapse svg { width: 14px; height: 14px; stroke-width: 3; }
+    .sidebar-collapse span { display: none !important; }
+
+    /* Menu recolhido: só ícones, sem textos nem espaços vazios. */
+    body.sidebar-collapsed .brand { justify-content: center; padding: 0; gap: 0; }
+    body.sidebar-collapsed .brand-text { display: none; }
+    body.sidebar-collapsed .nav-label {
+      font-size: 0; padding: 0; height: 1px; margin: 14px 16px; background: #263246;
+    }
+    body.sidebar-collapsed .nav-item { justify-content: center; padding: 12px 0; gap: 0; }
+    body.sidebar-collapsed .nav-item svg { width: 20px; height: 20px; }
+    body.sidebar-collapsed .navigation { padding: 0 8px 12px; }
+    body.sidebar-collapsed .profile { background: transparent; border-color: transparent; padding: 5px 0; justify-content: center; }
+    body.sidebar-collapsed .sidebar-bottom { padding: 12px 8px; }
+    body.sidebar-collapsed .sidebar-collapse { margin: 0; padding: 0; width: 28px; }
+
+    /* No celular o menu abre pelo botão do topo; o botão da borda não é necessário. */
+    @media (max-width: 900px) { .sidebar-collapse { display: none; } }
   </style>
 </head>
 
@@ -1457,13 +1507,13 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-icon"><i data-lucide="scan-barcode"></i></div>
-      <div>
+      <div class="brand-text">
         <div class="brand-name">Painel do Conferente</div>
         <div class="brand-subtitle">Gestão de operações</div>
       </div>
     </div>
 
-    <button class="sidebar-collapse" id="sidebarCollapse" type="button" title="Recolher/expandir menu"><i data-lucide="panel-left-close"></i><span>Recolher menu</span></button>
+    <button class="sidebar-collapse" id="sidebarCollapse" type="button" title="Recolher menu" aria-label="Recolher menu" aria-expanded="true"><i data-lucide="chevrons-left"></i></button>
     <div class="nav-label">Principal</div>
     <nav class="navigation" id="navigation">
       <button class="nav-item active" data-page="dashboard">
@@ -2689,15 +2739,35 @@
   });
 
   document.getElementById("menuToggle").addEventListener("click", () => { document.getElementById("sidebar").classList.toggle("open"); });
-  document.getElementById("sidebarCollapse")?.addEventListener("click",()=>{
-    document.body.classList.toggle("sidebar-collapsed");
-    const collapsed=document.body.classList.contains("sidebar-collapsed");
-    const b=document.getElementById("sidebarCollapse");
-    b.title=collapsed?"Expandir menu":"Recolher menu";
-    b.setAttribute("aria-label",b.title);
-    b.innerHTML=`<i data-lucide="${collapsed?'panel-left-open':'panel-left-close'}"></i><span>${collapsed?'Expandir menu':'Recolher menu'}</span>`;
-    if(window.lucide && typeof window.lucide.createIcons==='function') { try { window.lucide.createIcons(); } catch (_) { renderPainelIcons(); } } else renderPainelIcons();
-  });
+  (function () {
+    const botao = document.getElementById("sidebarCollapse");
+
+    // Nome de cada item vira dica ao passar o mouse quando o menu está recolhido.
+    document.querySelectorAll(".nav-item").forEach(item => {
+      if (!item.title) item.title = item.textContent.trim();
+    });
+
+    function aplicar(recolhido, salvar) {
+      document.body.classList.toggle("sidebar-collapsed", recolhido);
+      if (botao) {
+        const texto = recolhido ? "Expandir menu" : "Recolher menu";
+        botao.title = texto;
+        botao.setAttribute("aria-label", texto);
+        botao.setAttribute("aria-expanded", String(!recolhido));
+        botao.innerHTML = `<i data-lucide="${recolhido ? 'chevrons-right' : 'chevrons-left'}"></i>`;
+        if (window.lucide && typeof window.lucide.createIcons === "function") {
+          try { window.lucide.createIcons(); } catch (_) { renderPainelIcons(); }
+        } else renderPainelIcons();
+      }
+      if (salvar) { try { localStorage.setItem("menuRecolhido", recolhido ? "1" : "0"); } catch (_) {} }
+    }
+
+    let inicial = false;
+    try { inicial = localStorage.getItem("menuRecolhido") === "1"; } catch (_) {}
+    if (inicial) aplicar(true, false);
+
+    botao?.addEventListener("click", () => aplicar(!document.body.classList.contains("sidebar-collapsed"), true));
+  })();
 
 
   document.querySelectorAll("[data-demo]").forEach(button => {
