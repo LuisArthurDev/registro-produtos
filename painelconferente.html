@@ -3358,13 +3358,16 @@ function renderControleValidade() {
               <i data-lucide="trash-2"></i>
             </button>
     
-            <button class="button button-primary"
-              onclick="lancarMapaParaQueima('${escHtml(r.chaveUnica || '')}')"
-              title="Lançar para o Queima"
-              aria-label="Lançar para o Queima">
-              <i data-lucide="package-check"></i>
-            </button>
-    
+            
+            ${situacao !== 'Vencido' ? `
+              <button class="button button-primary"
+                onclick="lancarMapaParaQueima('${escHtml(r.chaveUnica || '')}')"
+                title="Lançar para o Queima"
+                aria-label="Lançar para o Queima">
+                <i data-lucide="package-check"></i>
+              </button>
+            ` : ''}
+
             ${situacao === 'Vencido' ? `
               <button class="button"
                 onclick="moverVencido('${escHtml(r.chaveUnica || '')}')"
