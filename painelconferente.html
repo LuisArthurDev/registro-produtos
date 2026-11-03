@@ -2668,6 +2668,11 @@
     <p id="funcModalSub" style="color:#64748b;font-size:13px;margin-bottom:14px"></p>
     <label for="funcModalNome" style="display:block;font-size:12px;font-weight:700;margin-bottom:6px">Nome (será também o nome da aba)</label>
     <input id="funcModalNome" class="filter-select" maxlength="60" required style="width:100%">
+    <div id="funcModalPinWrap" style="display:none;margin-top:14px">
+      <label for="funcModalPin" style="display:block;font-size:12px;font-weight:700;margin-bottom:6px">PIN numérico (4 a 6 dígitos)</label>
+      <input id="funcModalPin" class="filter-select" type="password" inputmode="numeric" autocomplete="new-password" maxlength="6" style="width:100%;letter-spacing:4px">
+      <p style="font-size:11px;color:#64748b;margin-top:6px">O PIN é guardado criptografado. Ninguém consegue vê-lo depois de salvo; para trocar, defina um novo.</p>
+    </div>
     <label id="funcModalEspecialWrap" style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:14px">
       <input type="checkbox" id="funcModalEspecial" style="width:auto"> Aba especial (controlados: soma quantidades iguais)
     </label>
@@ -2959,7 +2964,56 @@
   
 const consultasJsonpPainel = new Map();
 
-function jsonpPainel(action, callback, extra = {}) {
+/* ===== Senha de administrador (ativa quando ADMIN_PIN existe no Apps Script) ===== */
+const ACOES_ADMIN_PAINEL = [
+  'editarLancamento', 'excluirLancamento', 'adicionarValidadeManual',
+  'retirarDeLoja', 'adicionarDanificado', 'adicionarAoQueima', 'aprovarQueima',
+  'relancarQueima', 'atualizarSinalizado', 'subirVencidos', 'subirParaVencidos',
+  'adicionarProdutoJson', 'cadastrarQueimaManual', 'adicionarFuncionario',
+  'renomearFuncionario', 'definirEspecialFuncionario', 'marcarCheckFuncionario',
+  'definirPinFuncionario'
+];
+
+function tokenAdminPainel() {
+  try {
+    const t = JSON.parse(sessionStorage.getItem('painelAdmin') || 'null');
+    if (t && t.token && t.ate > Date.now()) return t.token;
+  } catch (_) {}
+  return '';
+}
+
+async function obterTokenAdminPainel() {
+  const pin = prompt('Senha de administrador (PIN) para continuar:');
+  if (!pin) throw new Error('Operação cancelada: a senha de administrador não foi informada.');
+
+  const d = await jsonpPainelBruto('loginAdmin', '__loginAdminCb', { pin: pin.trim() });
+  if (!d || d.sucesso !== true) throw new Error((d && d.mensagem) || 'Senha de administrador incorreta.');
+
+  sessionStorage.setItem('painelAdmin', JSON.stringify({ token: d.token, ate: Date.now() + 5.5 * 3600 * 1000 }));
+  return d.token;
+}
+
+async function jsonpPainel(action, callback, extra = {}) {
+  const escrita = ACOES_ADMIN_PAINEL.includes(action);
+  const params = Object.assign({}, extra);
+
+  if (escrita) {
+    const t = tokenAdminPainel();
+    if (t) params.admin = t;
+  }
+
+  let d = await jsonpPainelBruto(action, callback, params);
+
+  if (escrita && d && (d.precisaAdmin || d.precisaLogin)) {
+    sessionStorage.removeItem('painelAdmin');
+    params.admin = await obterTokenAdminPainel();
+    d = await jsonpPainelBruto(action, callback, params);
+  }
+
+  return d;
+}
+
+function jsonpPainelBruto(action, callback, extra = {}) {
   const callbackMap = {
     sinalizados: '__sinalizadosCb',
     funcionarios: '__funcionariosCb',
@@ -6301,11 +6355,12 @@ document.addEventListener("submit", async function(event) {
         : '<td style="text-align:center" data-sort="-1">—</td>';
       const textoEspecial = det && det.especial ? "Tirar definição de especial" : "Definir como especial";
       const botoesGestao = det
-        ? ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
+        ? ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="' + (det.temPin ? "Redefinir PIN de acesso" : "Definir PIN de acesso") + '" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>' +
+          ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
           ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="' + (det.especial ? 1 : 0) + '" title="' + textoEspecial + '" aria-label="' + textoEspecial + '"><i data-lucide="' + (det.especial ? "star-off" : "star") + '"></i></button>'
         : "";
       const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
-      return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div></td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
+      return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
         (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")) + '</td>' + checkCelula + '<td><a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' +
         encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>' + botoesGestao + '</td></tr>';
@@ -6369,23 +6424,53 @@ document.addEventListener("submit", async function(event) {
   let funcModalModo = "adicionar", funcModalNomeAtual = "";
   function abrirModalFuncionario(modo, nome) {
     funcModalModo = modo; funcModalNomeAtual = nome || "";
-    g("funcModalTitulo").textContent = modo === "renomear" ? "Renomear funcionário" : "Adicionar funcionário";
-    g("funcModalSub").textContent = modo === "renomear"
-      ? "A aba da planilha e as referências (Sinalizações, Queima e Vencidos) também serão renomeadas."
-      : "Será criada uma aba com o mesmo nome na planilha.";
+    const ehPin = modo === "pin";
+    g("funcModalTitulo").textContent = ehPin ? "Definir PIN de acesso" : modo === "renomear" ? "Renomear funcionário" : "Adicionar funcionário";
+    g("funcModalSub").textContent = ehPin
+      ? "O funcionário usará o próprio nome e este PIN para entrar no sistema de lançamentos."
+      : modo === "renomear"
+        ? "A aba da planilha e as referências (Sinalizações, Queima e Vencidos) também serão renomeadas."
+        : "Será criada uma aba com o mesmo nome na planilha.";
     g("funcModalNome").value = nome || "";
+    g("funcModalNome").readOnly = ehPin;
     g("funcModalEspecial").checked = false;
-    g("funcModalEspecialWrap").style.display = modo === "renomear" ? "none" : "flex";
+    g("funcModalEspecialWrap").style.display = modo === "adicionar" ? "flex" : "none";
+    g("funcModalPinWrap").style.display = ehPin ? "block" : "none";
+    g("funcModalPin").value = "";
     g("funcModalMsg").textContent = "";
     g("funcModalSalvar").disabled = false;
     g("funcModal").style.display = "flex";
-    setTimeout(() => { g("funcModalNome").focus(); g("funcModalNome").select(); }, 30);
+    setTimeout(() => {
+      const alvo = ehPin ? g("funcModalPin") : g("funcModalNome");
+      alvo.focus(); if (!ehPin) alvo.select();
+    }, 30);
   }
   function fecharModalFuncionario() { g("funcModal").style.display = "none"; }
 
   async function salvarModalFuncionario(ev) {
     ev.preventDefault();
     const nome = g("funcModalNome").value.trim();
+
+    if (funcModalModo === "pin") {
+      const pin = g("funcModalPin").value.trim();
+      if (!/^\d{4,6}$/.test(pin)) { g("funcModalMsg").textContent = "O PIN deve ter de 4 a 6 números."; return; }
+      const botaoPin = g("funcModalSalvar");
+      botaoPin.disabled = true;
+      g("funcModalMsg").style.color = "#475569";
+      g("funcModalMsg").textContent = "Salvando...";
+      try {
+        const d = await chamarFuncionarioApi("definirPinFuncionario", "__definirPinCb", { nome: nome, pin: pin });
+        fecharModalFuncionario();
+        await atualizarAposMudancaFuncionario();
+        alert(d.mensagem || "PIN definido.");
+      } catch (e) {
+        g("funcModalMsg").style.color = "#b91c1c";
+        g("funcModalMsg").textContent = e.message;
+        botaoPin.disabled = false;
+      }
+      return;
+    }
+
     const erro = validarNomeFuncionario(nome, funcModalModo === "renomear" ? funcModalNomeAtual : "");
     if (erro) { g("funcModalMsg").textContent = erro; return; }
 
@@ -6423,6 +6508,7 @@ document.addEventListener("submit", async function(event) {
   g("addFuncionarioBtn")?.addEventListener("click", () => abrirModalFuncionario("adicionar"));
   g("funcModalCancelar")?.addEventListener("click", fecharModalFuncionario);
   g("funcModalForm")?.addEventListener("submit", salvarModalFuncionario);
+  g("funcModalPin")?.addEventListener("input", ev => { ev.target.value = ev.target.value.replace(/\D/g, ""); });
   g("funcModal")?.addEventListener("mousedown", ev => { if (ev.target === g("funcModal")) fecharModalFuncionario(); });
   document.addEventListener("keydown", ev => { if (ev.key === "Escape" && g("funcModal") && g("funcModal").style.display !== "none") fecharModalFuncionario(); });
 
@@ -6431,6 +6517,7 @@ document.addEventListener("submit", async function(event) {
     if (!btn) return;
     const nome = btn.dataset.nome;
     if (btn.dataset.funcAcao === "renomear") abrirModalFuncionario("renomear", nome);
+    else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
   });
 
