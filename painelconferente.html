@@ -1953,12 +1953,12 @@
         </div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="mapaTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="mapaLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="mapaMes">—</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><select class="filter-select" id="mapaFuncionario"><option value="">Todos os funcionários</option></select><input class="filter-select" id="mapaProduto" placeholder="Produto / código"><input class="filter-select" id="mapaLote" placeholder="Lote">
-          <input
-          class="filter-select"
-          id="mapaValidade"
-          type="month"
-          aria-label="Filtrar validade por mês e ano"
-          >
+          <label class="filter-label" style="display:flex;flex-direction:column;font-size:11px;font-weight:700;color:#64748b;gap:2px">Lançamento (mês/ano)
+          <input class="filter-select" id="mapaLancamento" type="month" aria-label="Filtrar por mês e ano de lançamento">
+        </label>
+        <label class="filter-label" style="display:flex;flex-direction:column;font-size:11px;font-weight:700;color:#64748b;gap:2px">Validade (dia/mês/ano)
+          <input class="filter-select" id="mapaValidade" type="date" aria-label="Filtrar por data de validade">
+        </label>
         <select class="filter-select" id="mapaSituacao"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A Vencer">A Vencer</option><option value="Vendável">Vendável</option></select></div></div>
         <div id="mapaSelecaoBar" class="mapa-selecao-bar" style="display:none">
           <span id="mapaSelResumo"></span>
@@ -3438,6 +3438,17 @@ function renderControleValidade() {
 }
 
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
+
+  // Mês/ano de lançamento no formato AAAA-MM (aceita "dd/MM/yyyy HH:mm:ss" e "MM/yyyy").
+  function mesLancamentoISO(r) {
+    const t = String(dataRegistro(r) || '').trim();
+    let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return m[3] + '-' + String(m[2]).padStart(2, '0');
+    m = t.match(/^(\d{1,2})\/(\d{4})/);
+    if (m) return m[2] + '-' + String(m[1]).padStart(2, '0');
+    m = t.match(/^(\d{4})-(\d{2})/);
+    return m ? m[1] + '-' + m[2] : '';
+  }
   let tipoMapaAtivo = "funcionarios";
   function renderMapa() {
     if (!funcionariosMapaCarregados) {
@@ -3447,6 +3458,7 @@ function renderControleValidade() {
     const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
     const func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
+    const lancamentoMes=document.getElementById('mapaLancamento').value;
     const sit=document.getElementById('mapaSituacao').value;
     const todos=registrosVisiveisHTML(painelCache.validades).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
     const categoria = r => {
@@ -3463,7 +3475,7 @@ function renderControleValidade() {
       return "outros";
     };
     const base=todos.filter(r=> tipoMapaAtivo==='todos' ? true : categoria(r)===tipoMapaAtivo);
-    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'').slice(0,7)===validade) && (!sit||situacaoPainel(r)===sit));
+    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
@@ -3606,6 +3618,7 @@ function imprimirMapaValidade() {
     .toLocaleLowerCase('pt-BR').trim();
 
   const validadeFiltro = document.getElementById('mapaValidade').value;
+  const lancamentoFiltro = document.getElementById('mapaLancamento').value;
   const situacaoFiltro = document.getElementById('mapaSituacao').value;
 
   const funcionarios = [
@@ -3642,8 +3655,12 @@ function imprimirMapaValidade() {
         return false;
       }
 
+      if (lancamentoFiltro && mesLancamentoISO(r) !== lancamentoFiltro) {
+        return false;
+      }
+
       if (validadeFiltro &&
-          String(r.validadeISO || '').slice(0, 7) !== validadeFiltro) {
+          String(r.validadeISO || '') !== validadeFiltro) {
         return false;
       }
 
@@ -4943,7 +4960,7 @@ function atualizarProdutosAtencao(registros) {
   .catch(erro => {
     console.error("Falha ao carregar cadastro de funcionários:", erro);
   });
-  ['mapaProduto','mapaLote','mapaValidade'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
+  ['mapaProduto','mapaLote','mapaValidade','mapaLancamento'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
   document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
@@ -6287,7 +6304,7 @@ document.addEventListener("submit", async function(event) {
         ? ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
           ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="' + (det.especial ? 1 : 0) + '" title="' + textoEspecial + '" aria-label="' + textoEspecial + '"><i data-lucide="' + (det.especial ? "star-off" : "star") + '"></i></button>'
         : "";
-      const perfil = ESPECIAIS.includes(k) ? badge("Estoque", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
+      const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div></td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
         (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")) + '</td>' + checkCelula + '<td><a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' +
@@ -7203,7 +7220,7 @@ document.getElementById("cvElegiveisBusca")
 /* ===== Ordenação crescente/decrescente clicando no cabeçalho de todas as tabelas ===== */
 (function () {
   const estado = new WeakMap();   // tabela -> { col, dir }
-  let aplicando = false;
+  const observadores = new WeakMap();
 
   function chaveOrdenacao(texto) {
     const t = String(texto || '').trim();
@@ -7248,11 +7265,17 @@ document.getElementById("cvElegiveisBusca")
           .map(x => x.l)
       : linhas.sort((x, y) => x._ordem - y._ordem);
 
-    aplicando = true;
+    // Se já está na ordem correta, não mexe no DOM (evita disparar o observador de novo).
+    if (ordenadas.every((l, i) => l === linhas[i])) return;
+
+    // O observador é desligado durante a reordenação; assim as mudanças feitas
+    // aqui não o acionam novamente (isso causava um laço infinito e travava a página).
+    const obs = observadores.get(tabela);
+    if (obs) obs.disconnect();
     const frag = document.createDocumentFragment();
     ordenadas.forEach(l => frag.appendChild(l));
     tbody.appendChild(frag);
-    aplicando = false;
+    if (obs) obs.observe(tbody, { childList: true });
   }
 
   function marcarCabecalhos(tabela) {
@@ -7296,11 +7319,12 @@ document.getElementById("cvElegiveisBusca")
     });
 
     // Quando o painel redesenha as linhas, mantém a ordenação escolhida.
-    new MutationObserver(() => {
-      if (aplicando) return;
+    const observador = new MutationObserver(() => {
       const e = estado.get(tabela);
       if (e && e.dir) aplicar(tabela);
-    }).observe(tabela.tBodies[0], { childList: true });
+    });
+    observadores.set(tabela, observador);
+    observador.observe(tabela.tBodies[0], { childList: true });
   }
 
   function iniciar() { document.querySelectorAll('table').forEach(preparar); }
