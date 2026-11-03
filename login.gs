@@ -299,22 +299,23 @@ function consultarSessao_(p) {
     return respostaTexto_("Callback inválido.");
   }
 
-  const sessao = lerSessao_(p.sessao);
-
-  return respostaJsonp_(callback, sessao
-    ? {
-        sucesso: true,
-        nome: sessao.nome,
-        loja: sessao.loja,
-        administrador: sessao.administrador,
-        especial: sessao.especial,
-        loginId: sessao.loginId
-      }
-    : {
-        sucesso: false,
-        mensagem: "Sessão expirada."
-      }
-  );
+  try {
+    const sessao = obterSessaoObrigatoria_({ sessao: p.sessao });
+    return respostaJsonp_(callback, {
+      sucesso: true,
+      nome: sessao.nome,
+      loja: sessao.loja,
+      administrador: sessao.administrador,
+      especial: sessao.especial,
+      loginId: sessao.loginId
+    });
+  } catch (erro) {
+    return respostaJsonp_(callback, {
+      sucesso: false,
+      precisaLogin: true,
+      mensagem: mensagemErro_(erro)
+    });
+  }
 }
 
 /* ============================================================
@@ -417,4 +418,25 @@ function definirPinFuncionario_(p) {
       lock.releaseLock();
     }
   }
+}
+
+
+/**
+ * BOOTSTRAP: execute manualmente no editor do Apps Script apenas se ainda
+ * não existir nenhum administrador com PIN. Não é exposta por doGet.
+ * Depois do primeiro login, os demais PINs devem ser definidos pelo Painel.
+ */
+function definirPinInicialAdmin(nome, pin) {
+  const funcionario = buscarFuncionarioPorNome_(nome);
+  if (!funcionario || !funcionario.administrador) {
+    throw new Error("O nome informado não está marcado como Administrador na coluna H.");
+  }
+  if (!funcionario.loja) throw new Error("Preencha a loja na coluna I antes de definir o PIN.");
+  if (!pinValido_(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
+  const salt = Utilities.getUuid();
+  const hash = hashPin_(String(pin), salt);
+  SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios")
+    .getRange(funcionario.linha, COLUNA_PIN_).setNumberFormat("@")
+    .setValue(salt + ":" + hash);
+  return "PIN inicial definido. Acesse o sistema e entre como administrador.";
 }

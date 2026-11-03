@@ -15,6 +15,8 @@
     })();
   </script>
   <title>Visualização dos Lançamentos</title>
+  <style>body{visibility:hidden}html.auth-ok body{visibility:visible}</style>
+  <script src="auth.js"></script>
 
   <style>
     :root {
@@ -500,6 +502,10 @@ button{border-radius:9px;font-weight:650}
 </div>
 
 <header>
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px;font-size:12px">
+    <span id="usuarioSessao"></span>
+    <button type="button" onclick="Auth.sair()">Sair</button>
+  </div>
   <h1>Visualização dos Lançamentos</h1>
   <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
 </header>
@@ -860,7 +866,8 @@ function chamarApps(action, callbackName, extra) {
     const parametros = new URLSearchParams(
       Object.assign({
         action: action,
-        callback: callbackName
+        callback: callbackName,
+        sessao: Auth.token()
       }, extra || {})
     );
 
@@ -999,8 +1006,13 @@ function carregarCadastroFuncionarios() {
         select.appendChild(option);
       });
 
-      if (resposta.todos.includes(selecionado)) {
-        select.value = selecionado;
+      if (Auth.administrador()) {
+        if (resposta.todos.includes(selecionado)) select.value = selecionado;
+      } else {
+        select.value = Auth.usuario();
+        select.disabled = true;
+        const primeira = select.options[0];
+        if (primeira) primeira.textContent = Auth.usuario();
       }
 
       const funcionarioURL =
@@ -1014,9 +1026,12 @@ function carregarCadastroFuncionarios() {
     };
 
     const script = document.createElement("script");
-    script.src =
-      APPS_SCRIPT_URL +
-      "?action=funcionarios&callback=" + callback;
+    const parametros = new URLSearchParams({
+      action: "funcionarios",
+      callback: callback,
+      sessao: Auth.token()
+    });
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
 
     script.onerror = () => {
       delete window[callback];
@@ -1899,6 +1914,12 @@ if (funcionarioURL) {
 
   if (opcao) $("funcionario").value = opcao.value;
 }
+
+Auth.exigirLogin().then(ok => {
+  if (!ok) return;
+  const usuario = document.getElementById("usuarioSessao");
+  if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja() + " · Login " + Auth.loginId().slice(0,8);
+});
 
 carregarCadastroFuncionarios()
   .then(() => carregarDescricoes())

@@ -347,6 +347,10 @@
         aria-live="polite"
       ></div>
 
+      <div id="adminAcesso" hidden style="margin:16px 0;text-align:center">
+        <p id="adminBoasVindas">Acesso de administrador confirmado.</p>
+        <a id="btnPainelConferente" href="painelconferente.html" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#12354b;color:#fff;text-decoration:none;font-weight:700">Entrar no Painel Conferente</a>
+      </div>
       <form id="loginForm" autocomplete="on">
         <div class="field">
           <label for="usuario">Usuário (seu nome)</label>
@@ -354,8 +358,7 @@
             id="usuario"
             name="username"
             type="text"
-            list="listaUsuarios"
-            placeholder="Digite ou escolha seu nome"
+            placeholder="Digite seu nome"
             autocomplete="username"
             maxlength="80"
             required
@@ -503,14 +506,8 @@
       senhaInput.value = senhaInput.value.replace(/\D/g, "");
     });
 
-    // Sugestões de nomes (a lista de funcionários já é pública no sistema).
-    chamarServidor("funcionarios", "__funcionariosCb", {})
-      .then(d => {
-        const nomes = [...(d.funcionarios || []), ...(d.especiais || [])];
-        document.getElementById("listaUsuarios").innerHTML =
-          nomes.map(n => '<option value="' + n.replace(/"/g, "&quot;") + '"></option>').join("");
-      })
-      .catch(() => {});
+    // O nome é digitado pelo próprio usuário. Não expomos a lista de funcionários
+    // antes da autenticação.
 
     // Se já existe uma sessão válida, entra direto.
     (async function () {
@@ -518,7 +515,21 @@
       if (!sessao) return;
       try {
         const d = await chamarServidor("sessao", "__sessaoCb", { sessao: sessao.token });
-        if (d && d.sucesso) { location.replace(destinoSeguro()); return; }
+        if (d && d.sucesso) {
+          localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+            token: sessao.token, nome: d.nome, loja: d.loja,
+            administrador: d.administrador === true, loginId: d.loginId,
+            ate: Date.now() + 5.9 * 3600 * 1000
+          }));
+          if (d.administrador === true) {
+            document.getElementById("loginForm").hidden = true;
+            document.getElementById("adminAcesso").hidden = false;
+            document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
+            return;
+          }
+          location.replace(destinoSeguro());
+          return;
+        }
       } catch (_) {}
       localStorage.removeItem(CHAVE_SESSAO);
     })();
@@ -552,12 +563,21 @@
         localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
           token: d.token,
           nome: d.nome,
-          ate: Date.now() + 5.9 * 3600 * 1000
+          loja: d.loja,
+          administrador: d.administrador === true,
+          loginId: d.loginId,
+          ate: d.ate || (Date.now() + 5.9 * 3600 * 1000)
         }));
 
-        mostrarMensagem("Acesso liberado. Entrando...", "success");
+        mostrarMensagem(d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando...", "success");
         senhaInput.value = "";
-        location.replace(destinoSeguro());
+        if (d.administrador === true) {
+          document.getElementById("loginForm").hidden = true;
+          document.getElementById("adminAcesso").hidden = false;
+          document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
+        } else {
+          location.replace(destinoSeguro());
+        }
 
       } catch (erro) {
         senhaInput.value = "";

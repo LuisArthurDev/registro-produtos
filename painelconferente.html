@@ -1486,9 +1486,26 @@
     body.sidebar-collapsed .sidebar-bottom { padding: 12px 8px; }
 
   </style>
+  <style>body{visibility:hidden}html.auth-ok body{visibility:visible}</style>
+  <script src="auth.js"></script>
 </head>
 
 <body>
+<script>
+Auth.exigirAdmin().then(ok => {
+  if (!ok) return;
+  const atualizarIdentidade = () => {
+    const info = document.getElementById("sessaoPainelInfo");
+    if (info) info.textContent = "Login " + Auth.loginId().slice(0,8);
+    const nome = document.getElementById("perfilAdminNome");
+    const loja = document.getElementById("perfilAdminLoja");
+    if (nome) nome.textContent = Auth.usuario();
+    if (loja) loja.textContent = "Administrador · Loja " + Auth.loja();
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", atualizarIdentidade);
+  else atualizarIdentidade();
+});
+</script>
 <div class="app">
 
   <aside class="sidebar" id="sidebar">
@@ -1555,8 +1572,8 @@
       <div class="profile">
         <div class="avatar">AD</div>
         <div>
-          <div class="profile-name">Administrador</div>
-          <div class="profile-role">Painel demonstrativo</div>
+          <div class="profile-name" id="perfilAdminNome">Administrador</div>
+          <div class="profile-role" id="perfilAdminLoja">Painel Conferente</div>
         </div>
       </div>
     </div>
@@ -1576,6 +1593,8 @@
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
+        <span id="sessaoPainelInfo" style="font-size:11px;opacity:.8"></span>
+        <button class="icon-button" type="button" id="btnSairPainel" title="Sair" onclick="Auth.sair()">Sair</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
         </button>
@@ -2964,53 +2983,11 @@
   
 const consultasJsonpPainel = new Map();
 
-/* ===== Senha de administrador (ativa quando ADMIN_PIN existe no Apps Script) ===== */
-const ACOES_ADMIN_PAINEL = [
-  'editarLancamento', 'excluirLancamento', 'adicionarValidadeManual',
-  'retirarDeLoja', 'adicionarDanificado', 'adicionarAoQueima', 'aprovarQueima',
-  'relancarQueima', 'atualizarSinalizado', 'subirVencidos', 'subirParaVencidos',
-  'adicionarProdutoJson', 'cadastrarQueimaManual', 'adicionarFuncionario',
-  'renomearFuncionario', 'definirEspecialFuncionario', 'marcarCheckFuncionario',
-  'definirPinFuncionario'
-];
-
-function tokenAdminPainel() {
-  try {
-    const t = JSON.parse(sessionStorage.getItem('painelAdmin') || 'null');
-    if (t && t.token && t.ate > Date.now()) return t.token;
-  } catch (_) {}
-  return '';
-}
-
-async function obterTokenAdminPainel() {
-  const pin = prompt('Senha de administrador (PIN) para continuar:');
-  if (!pin) throw new Error('Operação cancelada: a senha de administrador não foi informada.');
-
-  const d = await jsonpPainelBruto('loginAdmin', '__loginAdminCb', { pin: pin.trim() });
-  if (!d || d.sucesso !== true) throw new Error((d && d.mensagem) || 'Senha de administrador incorreta.');
-
-  sessionStorage.setItem('painelAdmin', JSON.stringify({ token: d.token, ate: Date.now() + 5.5 * 3600 * 1000 }));
-  return d.token;
-}
-
+/* ===== Sessão individual do administrador ===== */
 async function jsonpPainel(action, callback, extra = {}) {
-  const escrita = ACOES_ADMIN_PAINEL.includes(action);
-  const params = Object.assign({}, extra);
-
-  if (escrita) {
-    const t = tokenAdminPainel();
-    if (t) params.admin = t;
-  }
-
-  let d = await jsonpPainelBruto(action, callback, params);
-
-  if (escrita && d && (d.precisaAdmin || d.precisaLogin)) {
-    sessionStorage.removeItem('painelAdmin');
-    params.admin = await obterTokenAdminPainel();
-    d = await jsonpPainelBruto(action, callback, params);
-  }
-
-  return d;
+  if (!Auth.token()) throw new Error("Sessão inválida. Entre novamente.");
+  if (!Auth.administrador()) throw new Error("Acesso exclusivo para administradores.");
+  return jsonpPainelBruto(action, callback, extra);
 }
 
 function jsonpPainelBruto(action, callback, extra = {}) {
@@ -3049,6 +3026,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
 
     const params = new URLSearchParams({
       ...extra,
+      sessao: Auth.token(),
       action,
       callback: cbName
     });
@@ -6334,6 +6312,12 @@ document.addEventListener("submit", async function(event) {
       if (d !== null) { if (d < 0) o.venc++; else if (d <= 160) o.avenc++; }
       o.ult = Math.max(o.ult, tsReg(r));
     });
+    const presentes = new Set([...mapa.keys()]);
+    ((cadastroFuncionariosPainel && cadastroFuncionariosPainel.detalhes) || []).forEach(d => {
+      if (d.administrador && !presentes.has(norm(d.nome))) {
+        mapa.set(norm(d.nome), { nome: d.nome, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0, administrador: true });
+      }
+    });
     return [...mapa.values()];
   }
   function renderFuncionarios() {
@@ -6350,20 +6334,22 @@ document.addEventListener("submit", async function(event) {
       const k = norm(o.nome);
       const det = detalhes.get(k);
       const nomeAttr = det ? esc(det.nome) : "";
-      const checkCelula = det
+      const checkCelula = det && !det.administrador
         ? '<td style="text-align:center" data-sort="' + (det.check ? 1 : 0) + '"><input type="checkbox" class="func-check" data-nome="' + nomeAttr + '"' + (det.check ? ' checked' : '') + ' title="Check manual (zera todo dia 20)" aria-label="Check de ' + nomeAttr + '" style="width:16px;height:16px;cursor:pointer"></td>'
         : '<td style="text-align:center" data-sort="-1">—</td>';
       const textoEspecial = det && det.especial ? "Tirar definição de especial" : "Definir como especial";
-      const botoesGestao = det
+      let botoesGestao = det
         ? ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="' + (det.temPin ? "Redefinir PIN de acesso" : "Definir PIN de acesso") + '" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>' +
           ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
           ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="' + (det.especial ? 1 : 0) + '" title="' + textoEspecial + '" aria-label="' + textoEspecial + '"><i data-lucide="' + (det.especial ? "star-off" : "star") + '"></i></button>'
         : "";
-      const perfil = ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
+      if (det && det.administrador) {
+        botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
+      }
+      const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")) + '</td>' + checkCelula + '<td><a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' +
-        encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>' + botoesGestao + '</td></tr>';
+        (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral"))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
@@ -6676,6 +6662,7 @@ document.addEventListener("submit", async function(event) {
         },
         body: JSON.stringify({
           acao: 'salvarOdsNoGitHub',
+          sessao: Auth.token(),
           nomeArquivo: arquivo.name,
           conteudoBase64: base64
         })

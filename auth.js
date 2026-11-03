@@ -151,6 +151,8 @@
         return false;
       }
 
+      // Libera a interface somente depois da confirmação do servidor.
+      document.documentElement.classList.add("auth-ok");
       return true;
 
     } catch (erro) {
@@ -193,6 +195,16 @@
     loja: function () {
       const s = lerSessao();
       return s ? s.loja : "";
+    },
+
+    loginId: function () {
+      const s = lerSessao();
+      return s ? s.loginId : "";
+    },
+
+    loginId: function () {
+      const s = lerSessao();
+      return s ? s.loginId : "";
     },
 
     administrador: function () {

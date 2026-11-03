@@ -239,6 +239,7 @@ function doPost(e) {
         : null;
 
       if (corpo && corpo.acao === "salvarOdsNoGitHub") {
+        exigirAdministrador_({ sessao: corpo.sessao });
         dadosUpload = corpo;
       }
     } catch (_) {
@@ -274,9 +275,8 @@ function doPost(e) {
       throw new Error("Token de solicitação inválido.");
     }
 
-    // O token da sessão vem separado do JSON do lançamento.
-    payload.sessao = token;
-
+    // O token da sessão pertence ao payload; o campo token separado é
+    // exclusivamente o identificador temporário usado no polling.
     exigirSessaoLancamento_(payload);
 
     gravarStatus_(requestId, token, {
@@ -380,33 +380,25 @@ function doGetOriginal_(e) {
 
   if (acao === "funcionarios") {
     const callback = String(parametros.callback || "");
-
-    if (callback !== "__funcionariosCb") {
-      return respostaTexto_("Callback inválido.");
-    }
-
+    if (callback !== "__funcionariosCb") return respostaTexto_("Callback inválido.");
     try {
-        let detalhes = [];
-
-        try {
-          detalhes = obterDetalhesFuncionarios_();
-        } catch (erroDetalhes) {
-          console.error("Detalhes de funcionários: " + (erroDetalhes.stack || erroDetalhes));
-        }
-
-        return respostaJsonp_("__funcionariosCb", {
-          sucesso: true,
-          ...obterCadastroFuncionarios_(),
-          detalhes: detalhes
-        });
-      } catch (erro) {
-        return respostaJsonp_("__funcionariosCb", {
-          sucesso: false,
-          mensagem: erro.message,
-          funcionarios: [],
-          especiais: [],
-          todos: ["Transferencias"]
-        });
+      const sessao = obterSessaoObrigatoria_(parametros);
+      const nomesPermitidos = obterAbasPermitidas_(parametros).filter(n => n !== "Transferencias");
+      const cadastro = obterCadastroFuncionarios_();
+      const porNome = {};
+      cadastro.funcionarios.concat(cadastro.especiais).forEach(nome => {
+        porNome[normalizarTexto_(nome)] = nome;
+      });
+      const funcionarios = nomesPermitidos.filter(nome => porNome[normalizarTexto_(nome)] && !cadastro.especiais.includes(nome));
+      const especiais = nomesPermitidos.filter(nome => cadastro.especiais.includes(nome));
+      const todos = sessao.administrador ? nomesPermitidos.concat("Transferencias") : nomesPermitidos;
+      const detalhes = obterDetalhesFuncionarios_(parametros);
+      return respostaJsonp_(callback, {
+        sucesso: true, funcionarios, especiais, todos: [...new Set(todos)], detalhes,
+        usuario: sessao.nome, loja: sessao.loja, administrador: sessao.administrador, loginId: sessao.loginId
+      });
+    } catch (erro) {
+      return respostaJsonp_(callback, { sucesso: false, precisaLogin: true, mensagem: mensagemErro_(erro), funcionarios: [], especiais: [], todos: [] });
     }
   }
 
@@ -442,6 +434,22 @@ function consultarStatus_(parametros) {
   }
 
   return respostaJsonp_("__statusCb", resultado);
+}
+
+/* =========================
+   AUTORIZAÇÃO DO LANÇAMENTO POST
+   ========================= */
+function exigirSessaoLancamento_(dados) {
+  const sessao = obterSessaoObrigatoria_({ sessao: dados && dados.sessao });
+  if (sessao.administrador === true) {
+    throw new Error("Administradores não realizam lançamentos de mapa.");
+  }
+  const nomeInformado = String(dados.funcionario || "").trim();
+  if (normalizarTexto_(nomeInformado) !== normalizarTexto_(sessao.nome)) {
+    throw new Error("Você só pode lançar produtos no seu próprio mapa.");
+  }
+  dados.funcionario = sessao.nome;
+  return sessao;
 }
 
 /* =========================
@@ -1329,6 +1337,8 @@ function buscarProdutoPorChave_(ss,chave) {
 function atualizarSinalizado_(parametros) {
   if(String(parametros.callback||"")!=="__atualizarSinalizadoCb")return respostaTexto_("Callback inválido.");
   try {
+    const sessao = exigirAdministrador_(parametros);
+    garantirLojaOrigemSinalizacao_();
     const chave=String(parametros.chaveUnica||"").trim(), status=String(parametros.status||"").trim(), motivoResolucao=String(parametros.motivoResolucao||"").trim();
     if(!chave)throw new Error("Chave Única não informada.");
     if(!["Resolvido","Negado"].includes(status))throw new Error("Selecione Resolvido ou Negado.");
@@ -1339,6 +1349,9 @@ function atualizarSinalizado_(parametros) {
     const keys=sh.getRange(2,ki+1,sh.getLastRow()-1,1).getDisplayValues(); let row=-1;
     for(let i=0;i<keys.length;i++)if(String(keys[i][0]).trim()===chave){row=i+2;break;}
     if(row<0)throw new Error("Sinalização não encontrada.");
+    const idxLoja = headers.indexOf("lojaorigem");
+    const lojaRegistro = idxLoja >= 0 ? normalizarLoja_(sh.getRange(row, idxLoja + 1).getDisplayValue()) : "";
+    if (!lojaRegistro || lojaRegistro !== sessao.loja) throw new Error("Você só pode atualizar sinalizações da sua loja.");
     if(status==="Resolvido") { const antigo=String(sh.getRange(row,mi+1).getDisplayValue()||"").trim(); sh.getRange(row,mi+1).setValue(antigo+" | Resolução: "+motivoResolucao); }
     sh.getRange(row,ai+1).setValue(status); SpreadsheetApp.flush();
     return respostaJsonp_("__atualizarSinalizadoCb",{sucesso:true,mensagem:"Sinalização atualizada para "+status+"."});
@@ -1825,8 +1838,8 @@ function consultarDashboardPainel_(parametros) {
         mes: headers.findIndex(h => ["mes do lancamento", "mes de lancamento", "data de registro / mes de lancamento", "mes lancamento"].includes(h)),
         mesAprovado: headers.findIndex(h => ["mes aprovado", "mes da aprovacao"].includes(h)),
         aprovado: headers.findIndex(h => h === "aprovado"),
-        origem: headers.findIndex(h => ["aba de origem", "origem"].includes(h)
-),
+        origem: headers.findIndex(h => ["aba de origem", "origem"].includes(h)),
+        loja: headers.indexOf("lojaorigem"),
       };
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -1838,10 +1851,11 @@ function consultarDashboardPainel_(parametros) {
           ? String(row[idx.origem] || "").trim()
           : "";
 
-        if (
-          !abaOrigem ||
-          abaOrigem === "Transferencias" ||
-          !abasPermitidas.has(abaOrigem)
+        if (normalizarTexto_(abaOrigem) === "cadastro manual") {
+          const lojaManual = idx.loja >= 0 ? normalizarLoja_(row[idx.loja]) : "";
+          if (lojaManual !== sessao.loja) continue;
+        } else if (
+          !abaOrigem || abaOrigem === "Transferencias" || !abasPermitidas.has(abaOrigem)
         ) {
           continue;
         }
@@ -1865,7 +1879,13 @@ function consultarDashboardPainel_(parametros) {
     }
 
     const abaVencidos = planilha.getSheetByName("Vencidos");
-    let vencidosRetirados = abaVencidos && abaVencidos.getLastRow() > 1 ? abaVencidos.getLastRow() - 1 : 0;
+    let vencidosRetirados = 0;
+    if (abaVencidos && abaVencidos.getLastRow() > 1) {
+      const linhasVencidos = abaVencidos.getRange(2, 1, abaVencidos.getLastRow() - 1, Math.min(abaVencidos.getLastColumn(), 11)).getDisplayValues();
+      linhasVencidos.forEach((linha, i) => {
+        if (lojaDaLinhaVencidos_(abaVencidos, i + 2, linha) === sessao.loja) vencidosRetirados++;
+      });
+    }
     const resultado = {
       sucesso: true,
       indicadores: {
@@ -1899,6 +1919,7 @@ function consultarVencidosPainel_(parametros) {
   try {
     const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
     const fuso = planilha.getSpreadsheetTimeZone();
+    const sessao = exigirAdministrador_(parametros);
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -1936,6 +1957,8 @@ function consultarVencidosPainel_(parametros) {
         .getDisplayValues();
 
       valores.forEach((linha, i) => {
+        const numeroLinha = i + 2;
+        if (lojaDaLinhaVencidos_(abaVencidos, numeroLinha, exibidos[i]) !== sessao.loja) return;
         const abaOrigem = String(exibidos[i][0] || "").trim();
         const linhaOriginal = String(exibidos[i][1] || "").trim();
 
@@ -2015,7 +2038,6 @@ function consultarVencidosPainel_(parametros) {
     // PRODUTOS VENCIDOS QUE AINDA ESTÃO NAS ABAS DOS MAPAS
     // =====================================================
 
-    const sessao = obterSessaoObrigatoria_(parametros);
     const nomesAbas = obterAbasPermitidas_(parametros);
 
     nomesAbas.forEach(nome => {
@@ -2206,6 +2228,7 @@ function adicionarDanificado_(p) {
   const cb=String(p.callback||''); if(cb!=='__adicionarDanificadoCb') return respostaTexto_('Callback inválido.');
   const lock=LockService.getScriptLock();
   try {
+    const admin = exigirAdministrador_(p);
     const codigo=String(p.codigo||'').trim(), descricao=String(p.descricao||'').trim(), lote=String(p.lote||'').trim();
     const validadeTexto=String(p.validade||'').trim(), quantidadeTexto=String(p.quantidade||'').trim();
     if(!codigo||!descricao||!validadeTexto||!quantidadeTexto) throw new Error('Código, descrição, validade e quantidade são obrigatórios.');
@@ -2220,10 +2243,11 @@ function adicionarDanificado_(p) {
     if(isNaN(validade.getTime())||validade.getDate()!==Number((m||[])[1]||validade.getDate())) throw new Error('A data de validade não é válida.');
     if(!lock.tryLock(10000)) throw new Error('Sistema ocupado. Tente novamente.');
     const ss=SpreadsheetApp.openById(SPREADSHEET_ID);let sh=ss.getSheetByName('Vencidos');
-    if(!sh){sh=ss.insertSheet('Vencidos');sh.appendRow(['Aba de origem','Código','Descrição','Lote','Validade','Quantidade','Aba de Origem','Data de Coleta','Data de Registro / Mês de Lançamento','Chave Única']);}
+    if(!sh){sh=ss.insertSheet('Vencidos');sh.appendRow(['Aba de origem','Linha original','Código','Descrição','Lote','Validade','Quantidade','Data de Registro / Mês de Lançamento','EAN interno','Chave Única','LojaOrigem']);}
+    if (sh.getLastColumn() < 11) sh.getRange(1,11).setValue('LojaOrigem');
     const chave='DAN-' + Utilities.getUuid();
-    // A:I seguem o esquema atual informado; J guarda a chave para a ação de retirada.
-    sh.appendRow(['Danificado',codigo,descricao,lote,validade,quantidade,'Danificado',new Date(),new Date(),chave]);
+    // A:J preservam o formato histórico; K identifica a loja responsável.
+    sh.appendRow(['Danificado','',codigo,descricao,lote,validade,quantidade,new Date(),' ',chave,admin.loja]);
     SpreadsheetApp.flush();
     return respostaJsonp_(cb,{sucesso:true,mensagem:'Produto danificado registrado na aba Vencidos.',chaveUnica:chave});
   } catch(e){return respostaJsonp_(cb,{sucesso:false,mensagem:mensagemErro_(e)});} finally {if(lock.hasLock())lock.releaseLock();}
@@ -2233,6 +2257,7 @@ function retirarDeLoja_(p) {
   const cb=String(p.callback||''); if(cb!=='__retirarDeLojaCb') return respostaTexto_('Callback inválido.');
   const lock=LockService.getScriptLock();
   try {
+    const admin = exigirAdministrador_(p);
     const chave=String(p.chaveUnica||'').trim(); if(!chave) throw new Error('Chave Única ou linha não informada.');
     if(!lock.tryLock(10000)) throw new Error('Sistema ocupado. Tente novamente.');
     const ss=SpreadsheetApp.openById(SPREADSHEET_ID); const sh=ss.getSheetByName('Vencidos');
@@ -2246,6 +2271,8 @@ function retirarDeLoja_(p) {
       if(String(keys[i][0]||'').trim()===chave){row=i+2;break;}
     }
     if(row<0) throw new Error('Não encontrei a Chave Única na aba Vencidos. Atualize a página. Nenhuma linha foi excluída.');
+    const dadosLinha = sh.getRange(row,1,1,Math.min(sh.getLastColumn(),11)).getDisplayValues()[0];
+    if (lojaDaLinhaVencidos_(sh, row, dadosLinha) !== admin.loja) throw new Error('Você só pode retirar registros da sua própria loja.');
     sh.deleteRow(row); SpreadsheetApp.flush();
     return respostaJsonp_(cb,{sucesso:true,mensagem:'Registro removido da aba Vencidos após retirada da loja.'});
   } catch(e){return respostaJsonp_(cb,{sucesso:false,mensagem:mensagemErro_(e)});} finally {if(lock.hasLock())lock.releaseLock();}
@@ -2504,6 +2531,7 @@ function consultarQueima_(p) {
   }
 
   try {
+    const sessao = exigirAdministrador_(p);
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const aba = ss.getSheetByName("Queima");
 
@@ -2530,6 +2558,7 @@ function consultarQueima_(p) {
       quantidade: cabecalhos.indexOf("quantidade"),
       mes: cabecalhos.indexOf("mes do lancamento"),
       origem: cabecalhos.indexOf("aba de origem"),
+      loja: cabecalhos.indexOf("lojaorigem"),
       mesAprovado: cabecalhos.indexOf("mes aprovado"),
       aprovado: cabecalhos.indexOf("aprovado"),
       chave: cabecalhos.indexOf("chave unica")
@@ -2550,6 +2579,14 @@ function consultarQueima_(p) {
       ).trim();
 
       if (!codigo) continue;
+      const origemRegistro = indice.origem >= 0 ? String(linha[indice.origem] || "").trim() : "";
+      if (normalizarTexto_(origemRegistro) === "cadastro manual") {
+        const lojaManual = indice.loja >= 0 ? normalizarLoja_(linha[indice.loja]) : "";
+        if (lojaManual !== sessao.loja) continue;
+      } else {
+        const funcionarioOrigem = buscarFuncionarioPorNome_(origemRegistro);
+        if (!funcionarioOrigem || funcionarioOrigem.administrador || funcionarioOrigem.loja !== sessao.loja) continue;
+      }
 
       const aprovadoTexto = indice.aprovado >= 0
         ? normalizarTexto_(linha[indice.aprovado])
@@ -2620,6 +2657,8 @@ function aprovarQueima_(p) {
     if (!aba || linha > aba.getLastRow()) {
       throw new Error("Registro não encontrado.");
     }
+    const sessao = exigirAdministrador_(p);
+    exigirOrigemQueimaDaLoja_(sessao, aba, linha);
 
     const cabecalhos = aba.getRange(
       1, 1, 1, aba.getLastColumn()
@@ -2695,6 +2734,8 @@ function relancarQueima_(p) {
     if (!aba || linha > aba.getLastRow()) {
       throw new Error("Registro não encontrado.");
     }
+    const sessao = exigirAdministrador_(p);
+    exigirOrigemQueimaDaLoja_(sessao, aba, linha);
 
     const lock = LockService.getScriptLock();
 
@@ -2818,7 +2859,8 @@ function subirParaVencidos_(p) {
     if (!registro) {
       throw new Error("Lançamento não encontrado. Atualize a página.");
     }
-
+    exigirAcessoRegistro_(p, registro);
+    const sessao = obterSessaoObrigatoria_(p);
 
     const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
     const transferencia = registro.nomeAba === "Transferencias";
@@ -2871,6 +2913,7 @@ function subirParaVencidos_(p) {
     if (vencidos.getLastRow() === 0) {
       vencidos.getRange(1, 1, 1, 10).setValues([cabecalhos]);
     }
+    if (vencidos.getLastColumn() < 11) vencidos.getRange(1, 11).setValue("LojaOrigem");
 
     // Evita duplicar o mesmo lançamento.
     const ultimaLinha = vencidos.getLastRow();
@@ -2909,6 +2952,7 @@ function subirParaVencidos_(p) {
       eanInterno,         // I: EAN interno
       chave               // J: Chave única
     ]]);
+    vencidos.getRange(linhaDestino, 11).setValue(sessao.loja);
 
     vencidos.getRange(linhaDestino, 6)
       .setNumberFormat("dd/MM/yyyy");
@@ -4831,6 +4875,7 @@ function cadastrarQueimaManual_(p) {
   const lock = LockService.getScriptLock();
 
   try {
+    const admin = exigirAdministrador_(p);
     const codigo = String(p.codigo || "").trim();
     const lote = String(p.lote || "").trim();
     const validadeTexto = String(p.validade || "").trim();
@@ -4886,12 +4931,19 @@ function cadastrarQueimaManual_(p) {
     }
 
     const fuso = ss.getSpreadsheetTimeZone();
-    const cabecalhos = aba
+    let cabecalhos = aba
       .getRange(1, 1, 1, aba.getLastColumn())
       .getDisplayValues()[0]
       .map(h => normalizarTexto_(h).replace(/\s+/g, " "));
 
+    let indiceLoja = cabecalhos.indexOf("lojaorigem");
+    if (indiceLoja < 0) {
+      indiceLoja = cabecalhos.length;
+      aba.getRange(1, indiceLoja + 1).setValue("LojaOrigem");
+      cabecalhos.push("lojaorigem");
+    }
     const novaLinha = Array(cabecalhos.length).fill("");
+    novaLinha[indiceLoja] = admin.loja;
 
     function definirCampo(aliases, valor, obrigatorio = false) {
       const indice = cabecalhos.findIndex(h => aliases.includes(h));
@@ -5190,6 +5242,7 @@ function adicionarFuncionario_(p) {
   const lock = LockService.getScriptLock();
 
   try {
+    const admin = exigirAdministrador_(p);
     const nome = String(p.nome || "").trim();
     const especial = String(p.especial || "") === "1";
 
@@ -5229,6 +5282,9 @@ function adicionarFuncionario_(p) {
     cadastro.getRange(linha, 1).setValue(nome);
     cadastro.getRange(linha, 2).insertCheckboxes().setValue(especial);
     cadastro.getRange(linha, 6).insertCheckboxes().setValue(false);
+    cadastro.getRange(linha, 7).clearContent();
+    cadastro.getRange(linha, 8).insertCheckboxes().setValue(false);
+    cadastro.getRange(linha, 9).setValue(admin.loja);
 
     SpreadsheetApp.flush();
 
@@ -5255,7 +5311,10 @@ function renomearFuncionario_(p) {
   const lock = LockService.getScriptLock();
 
   try {
+    const admin = exigirAdministrador_(p);
     const nomeAtual = String(p.nomeAtual || "").trim();
+    const cadastroAlvo = buscarFuncionarioPorNome_(nomeAtual);
+    if (!cadastroAlvo || cadastroAlvo.administrador || cadastroAlvo.loja !== admin.loja) throw new Error("Você só pode renomear funcionários da sua própria loja.");
     const novoNome = String(p.novoNome || "").trim();
 
     if (!nomeAtual) throw new Error("Funcionário não informado.");
@@ -5330,7 +5389,10 @@ function definirEspecialFuncionario_(p) {
   const lock = LockService.getScriptLock();
 
   try {
+    const admin = exigirAdministrador_(p);
     const nome = String(p.nome || "").trim();
+    const alvo = buscarFuncionarioPorNome_(nome);
+    if (!alvo || alvo.administrador || alvo.loja !== admin.loja) throw new Error("Você só pode alterar funcionários da sua própria loja.");
     const especial = String(p.especial || "") === "1";
 
     if (!nome) throw new Error("Funcionário não informado.");
@@ -5370,7 +5432,10 @@ function marcarCheckFuncionario_(p) {
   const lock = LockService.getScriptLock();
 
   try {
+    const admin = exigirAdministrador_(p);
     const nome = String(p.nome || "").trim();
+    const alvo = buscarFuncionarioPorNome_(nome);
+    if (!alvo || alvo.administrador || alvo.loja !== admin.loja) throw new Error("Você só pode alterar funcionários da sua própria loja.");
     const marcado = String(p.marcado || "") === "1";
 
     if (!nome) throw new Error("Funcionário não informado.");
@@ -5453,6 +5518,49 @@ function salvarCiclo_(ciclo) {
 
 /* ========================== FIM DO BLOCO PARA COLAR ========================== */
 
+
+function exigirOrigemQueimaDaLoja_(sessao, aba, linha) {
+  const ultimaColuna = aba.getLastColumn();
+  const cab = aba.getRange(1, 1, 1, ultimaColuna).getDisplayValues()[0].map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+  const idx = cab.findIndex(h => ["aba de origem", "origem", "funcionario", "mapa de origem"].includes(h));
+  if (idx < 0) throw new Error("Não foi possível validar a loja de origem deste registro.");
+  const origem = String(aba.getRange(linha, idx + 1).getDisplayValue() || "").trim();
+  if (normalizarTexto_(origem) === "cadastro manual") {
+    const idxLoja = cab.indexOf("lojaorigem");
+    const loja = idxLoja >= 0 ? normalizarLoja_(aba.getRange(linha, idxLoja + 1).getDisplayValue()) : "";
+    if (!loja || loja !== sessao.loja) throw new Error("Este registro manual não pertence à sua loja.");
+    return;
+  }
+  const funcionario = buscarFuncionarioPorNome_(origem);
+  if (!funcionario || funcionario.administrador || funcionario.loja !== sessao.loja) {
+    throw new Error("Este registro não pertence à sua loja.");
+  }
+}
+
+function lojaDaLinhaVencidos_(aba, linha, exibidos) {
+  const lojaGravada = normalizarLoja_(aba.getLastColumn() >= 11 ? aba.getRange(linha, 11).getDisplayValue() : "");
+  if (lojaGravada) return lojaGravada;
+  const origem = String(exibidos[0] || "").trim();
+  const funcionario = buscarFuncionarioPorNome_(origem);
+  return funcionario && !funcionario.administrador ? funcionario.loja : "";
+}
+
+/* ============================================================
+   DETALHES DOS FUNCIONÁRIOS (ESCOPO DA LOJA DO ADMIN)
+   ============================================================ */
+function obterDetalhesFuncionarios_(parametros) {
+  const sessao = obterSessaoObrigatoria_(parametros || {});
+  const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
+  if (!aba || aba.getLastRow() < 2) return [];
+  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
+  return dados.map(linha => {
+    const nome = String(linha[0] || "").trim();
+    const loja = normalizarLoja_(linha[8]);
+    const administrador = ehAdministradorValor_(linha[7]);
+    if (!nome || (!sessao.administrador && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administrador && loja !== sessao.loja)) return null;
+    return { nome, especial: linha[1] === true, check: linha[5] === true, temPin: String(linha[6] || "").includes(":"), administrador, loja };
+  }).filter(Boolean);
+}
 
 /* ============================================================
    SEGURANÇA — LOGIN, PERFIL E LOJA
@@ -5611,6 +5719,9 @@ function exigirAcessoRegistro_(parametros, registro) {
   const sessao = obterSessaoObrigatoria_(parametros);
 
   if (registro.nomeAba === "Transferencias") {
+    if (!sessao.administrador) {
+      throw new Error("Somente administradores podem acessar transferências.");
+    }
     const aba = registro.aba;
     const linha = registro.linha;
 
@@ -5628,7 +5739,22 @@ function exigirAcessoRegistro_(parametros, registro) {
     return;
   }
 
-  exigirAcessoRegistro_(parametros, registro);
+  const nomeAba = String(registro.nomeAba || "").trim();
+  if (!nomeAba) {
+    throw new Error("Não foi possível identificar a origem do lançamento.");
+  }
+
+  if (!sessao.administrador) {
+    if (normalizarTexto_(nomeAba) !== normalizarTexto_(sessao.nome)) {
+      throw new Error("Você só pode acessar seu próprio mapa.");
+    }
+    return;
+  }
+
+  const funcionario = buscarFuncionarioPorNome_(nomeAba);
+  if (!funcionario || funcionario.administrador || funcionario.loja !== sessao.loja) {
+    throw new Error("Você só pode acessar mapas da sua própria loja.");
+  }
 }
 
 /* ============================================================
@@ -5642,8 +5768,7 @@ function bloquearSeNaoAutorizado_(p) {
   const publicas = [
     "login",
     "sessao",
-    "logout",
-    "funcionarios"
+    "logout"
   ];
 
   if (publicas.includes(acao)) {

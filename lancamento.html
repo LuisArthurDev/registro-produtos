@@ -446,7 +446,10 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 
 
+  body { visibility: hidden; }
+  html.auth-ok body { visibility: visible; }
 </style>
+<script src="auth.js"></script>
 </head>
 
 <body>
@@ -457,8 +460,10 @@ body.camera-aberta #cameraControles:not([hidden]) {
   </div>
 
   <div class="topbar-acoes">
+    <span id="identidadeLogin" style="font-size:11px;opacity:.85"></span>
+    <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
-      href="login.html"
+      href="index.html"
       class="theme-toggle header-icon-btn"
       title="Entrar"
       aria-label="Entrar"
@@ -677,14 +682,14 @@ body.camera-aberta #cameraControles:not([hidden]) {
 <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
 </main>
 
-<script src="auth.js"></script>
-
 <script>
 "use strict";
 
-if (!Auth.exigirLogin()) {
-  throw new Error("É necessário entrar para acessar os lançamentos.");
-}
+Auth.exigirFuncionario().then(ok => {
+  if (!ok) return;
+  const identidade = document.getElementById("identidadeLogin");
+  if (identidade) identidade.textContent = Auth.usuario() + " · Loja " + Auth.loja() + " · " + Auth.loginId().slice(0,8);
+});
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 const $ = id => document.getElementById(id);
@@ -747,6 +752,8 @@ function carregarCadastroFuncionarios() {
         ).join("");
 
       select.disabled = false;
+      select.value = Auth.usuario();
+      select.disabled = true;
 
       resolve(resposta);
     };
@@ -761,7 +768,8 @@ function carregarCadastroFuncionarios() {
 
     const parametros = new URLSearchParams({
       action: "funcionarios",
-      callback
+      callback,
+      sessao: Auth.token()
     });
 
     script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
@@ -1532,7 +1540,7 @@ function iniciarPolling(requestId,token){
     }
     if(scriptStatusAtual){scriptStatusAtual.remove();scriptStatusAtual=null}
     const script=document.createElement("script");
-    const parametros=new URLSearchParams({action:"status",callback:"__statusCb",requestId,token});
+    const parametros=new URLSearchParams({action:"status",callback:"__statusCb",requestId,token,sessao:Auth.token()});
     const terminar=()=>{script.remove();if(scriptStatusAtual===script)scriptStatusAtual=null;proximo()};
     script.async=true;script.onerror=terminar;script.onload=terminar;
     script.src=APPS_SCRIPT_URL+"?"+parametros.toString();
