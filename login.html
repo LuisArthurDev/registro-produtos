@@ -337,7 +337,7 @@
     <section class="card" aria-labelledby="loginTitle">
       <h2 id="loginTitle">Bem-vindo de volta</h2>
       <p class="card-description">
-        Entre com seu usuário e sua senha para continuar.
+        Entre com seu nome e seu PIN para continuar.
       </p>
 
       <div
@@ -349,37 +349,41 @@
 
       <form id="loginForm" autocomplete="on">
         <div class="field">
-          <label for="usuario">Usuário</label>
+          <label for="usuario">Usuário (seu nome)</label>
           <input
             id="usuario"
             name="username"
             type="text"
-            placeholder="Digite seu usuário"
+            list="listaUsuarios"
+            placeholder="Digite ou escolha seu nome"
             autocomplete="username"
             maxlength="80"
             required
           >
+          <datalist id="listaUsuarios"></datalist>
         </div>
 
         <div class="field">
-          <label for="senha">Senha</label>
+          <label for="senha">PIN</label>
           <div class="input-wrap">
             <input
               class="password-input"
               id="senha"
               name="password"
               type="password"
-              placeholder="Digite sua senha"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="Digite seu PIN"
               autocomplete="current-password"
-              maxlength="200"
+              maxlength="6"
               required
             >
             <button
               class="show-password"
               id="showPassword"
               type="button"
-              aria-label="Mostrar senha"
-              title="Mostrar senha"
+              aria-label="Mostrar PIN"
+              title="Mostrar PIN"
             >◉</button>
           </div>
         </div>
@@ -405,15 +409,13 @@
 
   <script>
     /*
-     * INTEGRAÇÃO PENDENTE
-     *
-     * Este HTML ainda não autentica usuários sozinho.
-     * O Login.gs precisa disponibilizar uma operação de autenticação
-     * que receba usuário e senha, valide as credenciais no servidor
-     * e retorne uma sessão válida.
-     *
-     * Não coloque senhas ou listas de usuários neste arquivo.
+     * Autenticação feita no servidor (Apps Script). Este arquivo não guarda
+     * usuários nem PINs: ele envia o que foi digitado e guarda apenas o token
+     * de sessão devolvido. O token expira no servidor em 6 horas.
      */
+    const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+    const CHAVE_SESSAO = "mv_sessao";
+    const PAGINA_DESTINO = "lancamento.html";   // página de lançamento (antigo index)
 
     const form = document.getElementById("loginForm");
     const usuarioInput = document.getElementById("usuario");
@@ -438,16 +440,54 @@
       buttonText.textContent = ativo ? "Verificando..." : "Entrar";
     }
 
+    // Consulta ao Apps Script (JSONP).
+    function chamarServidor(action, callback, params) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        let finalizado = false;
+
+        const timeout = setTimeout(
+          () => finalizar(new Error("O servidor demorou para responder. Tente novamente.")),
+          20000
+        );
+
+        function finalizar(erro, dados) {
+          if (finalizado) return;
+          finalizado = true;
+          clearTimeout(timeout);
+          script.remove();
+          delete window[callback];
+          erro ? reject(erro) : resolve(dados);
+        }
+
+        window[callback] = dados => finalizar(null, dados);
+        script.onerror = () => finalizar(new Error("Não foi possível conectar ao servidor."));
+        script.src = API_URL + "?" + new URLSearchParams(
+          Object.assign({}, params, { action: action, callback: callback })
+        ).toString();
+        document.head.appendChild(script);
+      });
+    }
+
+    function destinoSeguro() {
+      const next = new URLSearchParams(location.search).get("next") || "";
+      return /^[A-Za-z0-9_\-]+\.html$/.test(next) && next !== "login.html" ? next : PAGINA_DESTINO;
+    }
+
+    function lerSessaoLocal() {
+      try {
+        const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
+        return s && s.token && s.ate > Date.now() ? s : null;
+      } catch (_) { return null; }
+    }
+
     document.getElementById("showPassword").addEventListener("click", () => {
       const mostrar = senhaInput.type === "password";
       senhaInput.type = mostrar ? "text" : "password";
 
       const botao = document.getElementById("showPassword");
-      botao.setAttribute(
-        "aria-label",
-        mostrar ? "Ocultar senha" : "Mostrar senha"
-      );
-      botao.title = mostrar ? "Ocultar senha" : "Mostrar senha";
+      botao.setAttribute("aria-label", mostrar ? "Ocultar PIN" : "Mostrar PIN");
+      botao.title = mostrar ? "Ocultar PIN" : "Mostrar PIN";
     });
 
     document.getElementById("themeToggle").addEventListener("click", () => {
@@ -455,33 +495,75 @@
       const escuro = raiz.getAttribute("data-theme") !== "dark";
 
       raiz.setAttribute("data-theme", escuro ? "dark" : "light");
-      document.getElementById("themeToggle").textContent =
-        escuro ? "☀️" : "🌙";
+      document.getElementById("themeToggle").textContent = escuro ? "☀️" : "🌙";
     });
+
+    // O PIN aceita somente números.
+    senhaInput.addEventListener("input", () => {
+      senhaInput.value = senhaInput.value.replace(/\D/g, "");
+    });
+
+    // Sugestões de nomes (a lista de funcionários já é pública no sistema).
+    chamarServidor("funcionarios", "__funcionariosCb", {})
+      .then(d => {
+        const nomes = [...(d.funcionarios || []), ...(d.especiais || [])];
+        document.getElementById("listaUsuarios").innerHTML =
+          nomes.map(n => '<option value="' + n.replace(/"/g, "&quot;") + '"></option>').join("");
+      })
+      .catch(() => {});
+
+    // Se já existe uma sessão válida, entra direto.
+    (async function () {
+      const sessao = lerSessaoLocal();
+      if (!sessao) return;
+      try {
+        const d = await chamarServidor("sessao", "__sessaoCb", { sessao: sessao.token });
+        if (d && d.sucesso) { location.replace(destinoSeguro()); return; }
+      } catch (_) {}
+      localStorage.removeItem(CHAVE_SESSAO);
+    })();
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       limparMensagem();
 
       const usuario = usuarioInput.value.trim();
-      const senha = senhaInput.value;
+      const pin = senhaInput.value.trim();
 
-      if (!usuario || !senha) {
-        mostrarMensagem(
-          "Informe seu usuário e sua senha.",
-          "error"
-        );
+      if (!usuario || !pin) {
+        mostrarMensagem("Informe seu nome e seu PIN.", "error");
         return;
       }
 
-      /*
-       * Não redirecionar nem considerar o usuário autenticado
-       * até a integração com o servidor estar implementada.
-       */
-      mostrarMensagem(
-        "A tela está pronta, mas falta conectar a autenticação ao Login.gs. Nenhum acesso foi liberado.",
-        "error"
-      );
+      if (!/^\d{4,6}$/.test(pin)) {
+        mostrarMensagem("O PIN tem de 4 a 6 números.", "error");
+        return;
+      }
+
+      definirCarregamento(true);
+
+      try {
+        const d = await chamarServidor("login", "__loginCb", { usuario: usuario, pin: pin });
+
+        if (!d || d.sucesso !== true) {
+          throw new Error((d && d.mensagem) || "Não foi possível entrar.");
+        }
+
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+          token: d.token,
+          nome: d.nome,
+          ate: Date.now() + 5.9 * 3600 * 1000
+        }));
+
+        mostrarMensagem("Acesso liberado. Entrando...", "success");
+        senhaInput.value = "";
+        location.replace(destinoSeguro());
+
+      } catch (erro) {
+        senhaInput.value = "";
+        mostrarMensagem(erro.message, "error");
+        definirCarregamento(false);
+      }
     });
   </script>
 </body>
