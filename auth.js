@@ -1,130 +1,234 @@
+
 /* =========================================================
-   auth.js — sessão do funcionário (Mapa de Validade)
-   Use nas páginas de lançamento e de visualização:
-
-     <script src="auth.js"></script>
-     <script>
-       Auth.exigirLogin();                  // volta ao login se não houver sessão
-       const usuario = Auth.usuario();      // nome do funcionário logado
-       const token = Auth.token();          // enviar como "sessao" nas ações
-     </script>
-
-   O token é conferido no servidor (Apps Script); este arquivo apenas o guarda.
+   AUTENTICAÇÃO DO MAPA DE VALIDADE
    ========================================================= */
+
 (function () {
   "use strict";
 
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+
   const CHAVE_SESSAO = "mv_sessao";
   const PAGINA_LOGIN = "index.html";
+  const PAGINA_ERRO = "erro.html";
 
   function lerSessao() {
     try {
-      const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
-      return s && s.token && s.ate > Date.now() ? s : null;
-    } catch (_) {
+      const sessao = JSON.parse(
+        localStorage.getItem(CHAVE_SESSAO) || "null"
+      );
+
+      return sessao &&
+        sessao.token &&
+        sessao.ate > Date.now()
+        ? sessao
+        : null;
+
+    } catch (e) {
       return null;
     }
   }
 
   function limparSessao() {
-    try { localStorage.removeItem(CHAVE_SESSAO); } catch (_) {}
+    try {
+      localStorage.removeItem(CHAVE_SESSAO);
+    } catch (e) {}
   }
 
-  function irParaLogin() {
+  function redirecionarErro(mensagem) {
     limparSessao();
-    const atual = (location.pathname.split("/").pop() || "").trim();
-    const next = /^[A-Za-z0-9_\-]+\.html$/.test(atual) && atual !== PAGINA_LOGIN
-      ? "?next=" + encodeURIComponent(atual)
-      : "";
-    location.replace(PAGINA_LOGIN + next);
+
+    location.replace(
+      PAGINA_ERRO + "?motivo=" +
+      encodeURIComponent(mensagem || "Acesso não autorizado.")
+    );
   }
 
-  let contador = 0;
-
-  // Consulta ao Apps Script (JSONP). O token da sessão é enviado automaticamente.
   function chamar(action, callback, params, opcoes) {
     const incluirSessao = !opcoes || opcoes.semSessao !== true;
 
     return new Promise(function (resolve, reject) {
       const script = document.createElement("script");
-      const nomeCb = callback;
       let finalizado = false;
 
-      const dados = Object.assign({}, params || {}, { action: action, callback: nomeCb });
+      const dados = Object.assign(
+        {},
+        params || {},
+        {
+          action: action,
+          callback: callback
+        }
+      );
+
       const sessao = lerSessao();
-      if (incluirSessao && sessao) dados.sessao = sessao.token;
+
+      if (incluirSessao && sessao) {
+        dados.sessao = sessao.token;
+      }
 
       const timeout = setTimeout(function () {
-        finalizar(new Error("O servidor demorou para responder. Tente novamente."));
+        finalizar(
+          new Error("O servidor demorou para responder.")
+        );
       }, 20000);
 
       function finalizar(erro, resposta) {
         if (finalizado) return;
+
         finalizado = true;
         clearTimeout(timeout);
         script.remove();
-        delete window[nomeCb];
+        delete window[callback];
 
-        if (erro) { reject(erro); return; }
+        if (erro) {
+          reject(erro);
+          return;
+        }
 
-        // Sessão vencida no servidor: volta ao login.
-        if (resposta && resposta.precisaLogin) { irParaLogin(); return; }
+        if (resposta && resposta.precisaLogin) {
+          redirecionarErro("Sua sessão expirou.");
+          return;
+        }
 
         resolve(resposta);
       }
 
-      window[nomeCb] = function (resposta) { finalizar(null, resposta); };
-      script.onerror = function () { finalizar(new Error("Não foi possível conectar ao servidor.")); };
-      script.src = API_URL + "?" + new URLSearchParams(dados).toString();
+      window[callback] = function (resposta) {
+        finalizar(null, resposta);
+      };
+
+      script.onerror = function () {
+        finalizar(
+          new Error("Não foi possível conectar ao servidor.")
+        );
+      };
+
+      script.src =
+        API_URL + "?" + new URLSearchParams(dados).toString();
+
       document.head.appendChild(script);
-      contador++;
     });
   }
 
-  window.Auth = {
-    usuario: function () { const s = lerSessao(); return s ? s.nome : ""; },
-    token: function () { const s = lerSessao(); return s ? s.token : ""; },
+  async function validarPerfil(perfilEsperado) {
+    const sessao = lerSessao();
 
-    // Redireciona ao login quando não há sessão local; confirma com o servidor em seguida.
-    exigirLogin: function () {
-      if (!lerSessao()) { irParaLogin(); return false; }
+    if (!sessao) {
+      redirecionarErro("Você precisa entrar no sistema.");
+      return false;
+    }
 
-      chamar("sessao", "__sessaoCb", {})
-        .then(function (d) { if (!d || d.sucesso !== true) irParaLogin(); })
-        .catch(function () { /* sem rede: mantém a tela; o servidor ainda valida cada ação */ });
+    try {
+      const resposta = await chamar(
+        "sessao",
+        "__sessaoCb",
+        {},
+        {}
+      );
+
+      if (!resposta || resposta.sucesso !== true) {
+        redirecionarErro("Sua sessão expirou.");
+        return false;
+      }
+
+      if (
+        perfilEsperado === "admin" &&
+        resposta.administrador !== true
+      ) {
+        redirecionarErro(
+          "Esta página é exclusiva para administradores."
+        );
+        return false;
+      }
+
+      if (
+        perfilEsperado === "funcionario" &&
+        resposta.administrador === true
+      ) {
+        redirecionarErro(
+          "Administradores devem acessar o Painel Conferente."
+        );
+        return false;
+      }
 
       return true;
+
+    } catch (erro) {
+      redirecionarErro(
+        "Não foi possível validar sua sessão."
+      );
+      return false;
+    }
+  }
+
+  async function sair() {
+    const sessao = lerSessao();
+
+    if (sessao) {
+      try {
+        await chamar(
+          "logout",
+          "__logoutCb",
+          {},
+          {}
+        );
+      } catch (e) {}
+    }
+
+    limparSessao();
+    location.replace(PAGINA_LOGIN);
+  }
+
+  window.Auth = {
+    token: function () {
+      const s = lerSessao();
+      return s ? s.token : "";
     },
 
-    sair: function () {
-      const sessao = lerSessao();
-      const terminar = function () { limparSessao(); location.replace(PAGINA_LOGIN); };
-
-      if (!sessao) { terminar(); return; }
-
-      chamar("logout", "__logoutCb", {}).then(terminar, terminar);
+    usuario: function () {
+      const s = lerSessao();
+      return s ? s.nome : "";
     },
 
-    // Chamada genérica ao servidor com o token da sessão.
+    loja: function () {
+      const s = lerSessao();
+      return s ? s.loja : "";
+    },
+
+    administrador: function () {
+      const s = lerSessao();
+      return !!(s && s.administrador === true);
+    },
+
+    perfil: function () {
+      return this.administrador()
+        ? "Administrador"
+        : "Funcionário";
+    },
+
     chamar: chamar,
 
-    // Preenche um elemento com "Nome (Sair)".
+    exigirLogin: function () {
+      return validarPerfil(null);
+    },
+
+    exigirFuncionario: function () {
+      return validarPerfil("funcionario");
+    },
+
+    exigirAdmin: function () {
+      return validarPerfil("admin");
+    },
+
+    sair: sair,
+
     mostrarUsuario: function (idElemento) {
-      const el = document.getElementById(idElemento);
-      if (!el) return;
+      const elemento = document.getElementById(idElemento);
+      if (!elemento) return;
 
-      el.textContent = "";
-      const nome = document.createElement("strong");
-      nome.textContent = Auth.usuario();
-      const botao = document.createElement("button");
-      botao.type = "button";
-      botao.textContent = "Sair";
-      botao.style.marginLeft = "10px";
-      botao.addEventListener("click", Auth.sair);
-
-      el.appendChild(nome);
-      el.appendChild(botao);
+      elemento.textContent =
+        this.usuario() + " · Loja " + this.loja();
     }
   };
+
 })();
