@@ -677,8 +677,14 @@ body.camera-aberta #cameraControles:not([hidden]) {
 <iframe name="respostaPost" id="respostaPost" class="hidden-frame" title="Resposta do envio"></iframe>
 </main>
 
+<script src="auth.js"></script>
+
 <script>
 "use strict";
+
+if (!Auth.exigirLogin()) {
+  throw new Error("É necessário entrar para acessar os lançamentos.");
+}
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
 const $ = id => document.getElementById(id);
@@ -1447,6 +1453,10 @@ formulario.addEventListener("submit",evento=>{
 
   const payload={
     requestId:aleatorioHex(16),
+  
+    // Token real da sessão do funcionário.
+    sessao:Auth.token(),
+  
     funcionario,
     codigo,
     lote,
