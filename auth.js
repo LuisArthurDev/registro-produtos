@@ -16,7 +16,7 @@
 
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const CHAVE_SESSAO = "mv_sessao";
-  const PAGINA_LOGIN = "login.html";
+  const PAGINA_LOGIN = "index.html";
 
   function lerSessao() {
     try {
