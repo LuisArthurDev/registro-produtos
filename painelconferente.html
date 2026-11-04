@@ -6775,11 +6775,11 @@ document.addEventListener("submit", async function(event) {
       }
       if (det) {
         const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
-        const estadoCelular = estadosCelularProprio.get(chaveCelular);
-        const ativoCelular = estadoCelular === true;
-        const rotuloCelular = estadoCelular === undefined ? "Verificando celular próprio" : (ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio");
-        const iconeCelular = "smartphone";
-        botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '"' + (estadoCelular === undefined ? ' disabled' : '') + ' title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="' + iconeCelular + '"></i></button>';
+        // Estado ausente ou ainda não consultado é tratado visualmente como desativado.
+        // O botão permanece habilitado para que a falha da consulta em lote não bloqueie a ação.
+        const ativoCelular = estadosCelularProprio.get(chaveCelular) === true;
+        const rotuloCelular = ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio";
+        botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '" title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="smartphone"></i></button>';
       }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       const botaoVisualizar = o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>';
@@ -6962,9 +6962,18 @@ document.addEventListener("submit", async function(event) {
       const chaveCelular = norm(nome) + "|" + String(loja);
       const novoEstado = estadosCelularProprio.get(chaveCelular) !== true;
       btn.disabled = true;
-      chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0" })
-        .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); renderFuncionarios(); })
-        .catch(e => { alert(e.message); btn.disabled = false; });
+      btn.title = novoEstado ? "Ativando celular próprio..." : "Desativando celular próprio...";
+      // A autorização é validada novamente no Apps Script; não depender da fila
+      // genérica do cadastro evita que outras consultas deixem o clique aguardando.
+      jsonpPainelBruto("gerenciarCelularProprio", "__celularProprioCb", {
+        modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0"
+      })
+        .then(d => {
+          if (!d || d.sucesso !== true) throw new Error(d?.mensagem || "Não foi possível alterar o celular próprio.");
+          estadosCelularProprio.set(chaveCelular, d.ativo === true);
+          renderFuncionarios();
+        })
+        .catch(e => { alert(e.message || "Falha ao alterar celular próprio."); btn.disabled = false; btn.title = novoEstado ? "Ativar celular próprio" : "Desativar celular próprio"; });
     }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });
