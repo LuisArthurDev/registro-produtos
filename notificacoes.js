@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  let ONESIGNAL_APP_ID = "";
+  let ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521";
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
