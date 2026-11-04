@@ -5055,8 +5055,12 @@ function consultarEventosAdministrativos_(sessao, mes, todosMeses) {
     const perfilEvento = String(linha[3] || "").trim();
     if (perfilEvento === "Administrador Geral") return false;
 
+    // O histórico do Painel Conferente é sempre limitado à loja da sessão,
+    // inclusive se a sessão for de um perfil com permissões mais amplas.
+    // Sem loja identificada, nenhum evento administrativo deve ser exibido.
     const loja = normalizarLoja_(linha[1]);
-    if (!sessao.administradorGeral && loja !== sessao.loja) return false;
+    const lojaSessao = normalizarLoja_(sessao && sessao.loja);
+    if (!lojaSessao || !loja || loja !== lojaSessao) return false;
     const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
     if (isNaN(data.getTime())) return false;
     return todosMeses || Utilities.formatDate(data, fuso, "yyyy-MM") === mes;
