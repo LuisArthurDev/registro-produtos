@@ -685,7 +685,7 @@ body.camera-aberta #cameraControles:not([hidden]) {
 <script>
 "use strict";
 
-Auth.exigirFuncionario().then(ok => {
+Auth.exigirLancamento().then(ok => {
   if (!ok) return;
   const identidade = document.getElementById("identidadeLogin");
   if (identidade) identidade.textContent = Auth.usuario() + " · Loja " + Auth.loja() + " · " + Auth.loginId().slice(0,8);
@@ -752,8 +752,15 @@ function carregarCadastroFuncionarios() {
         ).join("");
 
       select.disabled = false;
-      select.value = Auth.usuario();
-      select.disabled = true;
+      if (Auth.administrador()) {
+        // Administrador de Loja escolhe somente entre as abas especiais
+        // devolvidas pelo servidor. A autorização definitiva é validada no POST.
+        select.value = "";
+        select.disabled = false;
+      } else {
+        select.value = Auth.usuario();
+        select.disabled = true;
+      }
 
       resolve(resposta);
     };

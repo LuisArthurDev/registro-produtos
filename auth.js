@@ -151,10 +151,20 @@
 
       if (
         perfilEsperado === "funcionario" &&
-        resposta.administrador === true
+        (resposta.administrador === true || resposta.administradorGeral === true)
       ) {
         redirecionarErro(
-          "Administradores devem acessar o Painel Conferente."
+          "Esta página é exclusiva para funcionários."
+        );
+        return false;
+      }
+
+      if (
+        perfilEsperado === "lancamento" &&
+        resposta.administradorGeral === true
+      ) {
+        redirecionarErro(
+          "O Administrador Geral não realiza lançamentos."
         );
         return false;
       }
@@ -239,6 +249,10 @@
 
     exigirFuncionario: function () {
       return validarPerfil("funcionario");
+    },
+
+    exigirLancamento: function () {
+      return validarPerfil("lancamento");
     },
 
     exigirAdmin: function () {

@@ -3085,7 +3085,8 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   
     cadastroFuncionariosPromise = jsonpPainel(
       "funcionarios",
-      "funcionarios"
+      "funcionarios",
+      { modo: "gestao" }
     ).then(resposta => {
       if (
         !resposta ||

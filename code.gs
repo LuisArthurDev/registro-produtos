@@ -391,9 +391,17 @@ function doGetOriginal_(e) {
       cadastro.funcionarios.concat(cadastro.especiais).forEach(nome => {
         porNome[normalizarTexto_(nome)] = nome;
       });
-      const funcionarios = nomesPermitidos.filter(nome => porNome[normalizarTexto_(nome)] && !cadastro.especiais.includes(nome));
-      const especiais = nomesPermitidos.filter(nome => cadastro.especiais.includes(nome));
-      const todos = sessao.administrador ? nomesPermitidos.concat("Transferencias") : nomesPermitidos;
+      let funcionarios = nomesPermitidos.filter(nome => porNome[normalizarTexto_(nome)] && !cadastro.especiais.includes(nome));
+      let especiais = nomesPermitidos.filter(nome => cadastro.especiais.includes(nome));
+
+      // A página de lançamentos recebe somente as abas especiais para o
+      // Administrador de Loja. O Painel Conferente solicita modo=gestao e
+      // precisa enxergar também as abas normais para administrar a loja.
+      const modoGestao = String(parametros.modo || "") === "gestao";
+      if (sessao.administrador === true && !modoGestao) funcionarios = [];
+      const todos = sessao.administrador
+        ? (modoGestao ? nomesPermitidos : especiais.slice())
+        : nomesPermitidos;
       const detalhes = obterDetalhesFuncionarios_(parametros);
       return respostaJsonp_(callback, {
         sucesso: true, funcionarios, especiais, todos: [...new Set(todos)], detalhes,
@@ -443,10 +451,32 @@ function consultarStatus_(parametros) {
    ========================= */
 function exigirSessaoLancamento_(dados) {
   const sessao = obterSessaoObrigatoria_({ sessao: dados && dados.sessao });
-  if (sessao.administrador === true) {
-    throw new Error("Administradores não realizam lançamentos de mapa.");
+  if (sessao.administradorGeral === true) {
+    throw new Error("O Administrador Geral não realiza lançamentos.");
   }
+
   const nomeInformado = String(dados.funcionario || "").trim();
+
+  if (sessao.administrador === true) {
+    if (!nomeInformado) {
+      throw new Error("Selecione uma aba especial para realizar o lançamento.");
+    }
+
+    const destino = buscarFuncionarioPorNome_(nomeInformado);
+    if (!destino || destino.administrador || destino.administradorGeral) {
+      throw new Error("Aba de destino inválida.");
+    }
+    if (destino.loja !== normalizarLoja_(sessao.loja)) {
+      throw new Error("Você só pode lançar em abas da sua própria loja.");
+    }
+    if (destino.especial !== true) {
+      throw new Error("Administrador de Loja só pode lançar em abas especiais. Use o Painel Conferente para as demais operações.");
+    }
+
+    dados.funcionario = destino.nome;
+    return sessao;
+  }
+
   if (normalizarTexto_(nomeInformado) !== normalizarTexto_(sessao.nome)) {
     throw new Error("Você só pode lançar produtos no seu próprio mapa.");
   }

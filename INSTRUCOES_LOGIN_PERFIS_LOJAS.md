@@ -84,3 +84,11 @@ No `painelgeral.html`, informe nome, número da loja e PIN inicial. O sistema cr
 - O Administrador Geral não deve receber número de loja na coluna I.
 - O Administrador de Loja continua limitado à própria loja e não pode criar outros administradores.
 - Após substituir os arquivos no projeto Apps Script/GitHub Pages, publique uma nova versão do Web App e atualize os arquivos estáticos no GitHub Pages.
+
+
+## Regras de lançamento por perfil (atualização)
+
+- Funcionário: pode lançar somente no próprio mapa.
+- Administrador de Loja: em `lancamento.html`, a lista apresenta somente abas especiais (coluna B marcada) da própria loja. O servidor valida perfil, loja e marcação de especial antes de gravar. Tentativas de lançar em abas normais são rejeitadas.
+- As operações nas abas normais permanecem no `painelconferente.html`.
+- Administrador Geral: não realiza lançamentos; administra os Administradores de Loja em `painelgeral.html`.
