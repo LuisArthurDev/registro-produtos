@@ -17,14 +17,6 @@
   function externalId() {
     const loja = String(window.Auth?.loja?.() || "").replace(/\D/g, "");
     const nome = window.Auth?.usuario?.() || "";
-    try {
-      const autorizado = JSON.parse(localStorage.getItem("mv_celular_proprio_autorizado") || "{}");
-      const token = localStorage.getItem("mv_celular_proprio_token") || "";
-      const slug = normalizarSlug(nome);
-      if (autorizado && normalizarSlug(autorizado.nome) === slug &&
-          String(autorizado.loja || "").replace(/\D/g, "") === loja &&
-          /^[a-f0-9]{64}$/i.test(token)) return "mv_celular_" + loja + "_" + slug;
-    } catch (_) {}
     return loja && nome ? "mv_" + loja + "_" + normalizarSlug(nome) : "";
   }
   function obterAppId() {

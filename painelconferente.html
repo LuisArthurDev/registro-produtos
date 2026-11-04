@@ -3365,7 +3365,7 @@ function carregarCadastroFuncionariosPainel() {
       // requisição, fila ou callback adicional. Ausência equivale a desativado.
       estadosCelularProprio.clear();
       cadastroFuncionariosPainel.detalhes.forEach(item => {
-        const chave = norm(item.nome) + "|" + String(item.loja || "");
+        const chave = String(item.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim() + "|" + String(item.loja || "");
         estadosCelularProprio.set(chave, item.celularProprioAtivo === true);
       });
   
