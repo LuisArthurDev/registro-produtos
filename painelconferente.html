@@ -2921,8 +2921,8 @@ Auth.exigirAdmin().then(ok => {
   
   let funcionariosMapaCarregados = false;
   let cadastroFuncionariosPromise = null;
-  let celularSulaimaHabilitado = null;
-  let carregandoStatusCelularSulaima = false;
+  const estadosCelularProprio = new Map();
+  const consultasCelularProprio = new Set();
   
   const mapaSelecionados = new Set();
   let mapaVisiveisChaves = [];
@@ -4110,7 +4110,12 @@ function imprimirMapaValidade() {
         @media print {
           body { print-color-adjust: exact; }
         }
-      </style>
+      
+    .celular-proprio-btn { width:32px; min-width:32px; height:32px; padding:5px !important; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; }
+    .celular-proprio-btn svg { width:18px; height:18px; }
+    .celular-proprio-ativo { color:#16a34a !important; border-color:#16a34a !important; }
+    .celular-proprio-inativo { color:#dc2626 !important; border-color:#dc2626 !important; }
+</style>
     </head>
     <body>
       <table>
@@ -6749,10 +6754,13 @@ document.addEventListener("submit", async function(event) {
       if (det && det.administrador && !det.especial) {
         botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
       }
-      if (det && !det.administrador && !det.especial && norm(o.nome) === "sulaima" && funcionariosCategoriaAtual !== "especiais") {
-        const textoCelular = celularSulaimaHabilitado === null ? "Verificando celular próprio" : (celularSulaimaHabilitado ? "Desativar celular próprio" : "Habilitar celular próprio");
-        const iconeCelular = celularSulaimaHabilitado ? "smartphone" : "smartphone";
-        botoesGestao += ' <button class="button" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '"' + (celularSulaimaHabilitado === null ? ' disabled' : '') + ' title="' + textoCelular + '" aria-label="' + textoCelular + '"><i data-lucide="' + iconeCelular + '"></i><span style="margin-left:4px">Celular próprio</span></button>';
+      if (det) {
+        const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
+        const estadoCelular = estadosCelularProprio.get(chaveCelular);
+        const ativoCelular = estadoCelular === true;
+        const rotuloCelular = estadoCelular === undefined ? "Verificando celular próprio" : (ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio");
+        const iconeCelular = ativoCelular ? "smartphone" : "smartphone-off";
+        botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '"' + (estadoCelular === undefined ? ' disabled' : '') + ' title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="' + iconeCelular + '"></i></button>';
       }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
@@ -6762,13 +6770,17 @@ document.addEventListener("submit", async function(event) {
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
     renderPainelIcons(g("page-funcionarios"));
-    if (celularSulaimaHabilitado === null && !carregandoStatusCelularSulaima) {
-      carregandoStatusCelularSulaima = true;
-      chamarFuncionarioApi("gerenciarCelularSulaima", "__celularSulaimaCb", { modo: "status" })
-        .then(d => { celularSulaimaHabilitado = d.ativo === true; renderFuncionarios(); })
-        .catch(e => { console.warn("Status do celular próprio:", e); celularSulaimaHabilitado = false; renderFuncionarios(); })
-        .finally(() => { carregandoStatusCelularSulaima = false; });
-    }
+    rows.forEach(o => {
+      const det = detalhes.get(norm(o.nome));
+      if (!det) return;
+      const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
+      if (estadosCelularProprio.has(chaveCelular) || consultasCelularProprio.has(chaveCelular)) return;
+      consultasCelularProprio.add(chaveCelular);
+      chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "status", nome: det.nome, loja: det.loja || "" })
+        .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); renderFuncionarios(); })
+        .catch(e => { console.warn("Status do celular próprio:", e); estadosCelularProprio.set(chaveCelular, false); renderFuncionarios(); })
+        .finally(() => consultasCelularProprio.delete(chaveCelular));
+    });
   }
 
   /* ---------- Funcionários: adicionar, renomear, especial e check ---------- */
@@ -6935,14 +6947,12 @@ document.addEventListener("submit", async function(event) {
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
     else if (btn.dataset.funcAcao === "celular") {
-      const novoEstado = celularSulaimaHabilitado !== true;
-      const pergunta = novoEstado
-        ? "Habilitar a autorização de celular próprio para Sulaima? Ela verá a opção no próximo login pelo celular."
-        : "Desativar o celular próprio da Sulaima? O acesso automático será revogado imediatamente.";
-      if (!confirm(pergunta)) return;
+      const loja = btn.dataset.loja || "";
+      const chaveCelular = norm(nome) + "|" + String(loja);
+      const novoEstado = estadosCelularProprio.get(chaveCelular) !== true;
       btn.disabled = true;
-      chamarFuncionarioApi("gerenciarCelularSulaima", "__celularSulaimaCb", { modo: "alternar", ativo: novoEstado ? "1" : "0" })
-        .then(d => { celularSulaimaHabilitado = d.ativo === true; renderFuncionarios(); alert(novoEstado ? "Recurso habilitado. A Sulaima poderá autorizar o celular no próximo login." : "Celular próprio desativado e autorização revogada."); })
+      chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0" })
+        .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); renderFuncionarios(); })
         .catch(e => { alert(e.message); btn.disabled = false; });
     }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }

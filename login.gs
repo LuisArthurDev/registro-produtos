@@ -240,19 +240,25 @@ function buscarFuncionarioPorNome_(nome) {
    ============================================================ */
 
 /* ============================================================
-   CELULAR PRÓPRIO — SULAIMA
-   A autorização é exclusiva de um dispositivo. O servidor guarda
-   somente o hash do segredo; a chave em texto fica no aparelho.
+   CELULAR PRÓPRIO — autorização individual por funcionário
+   O servidor armazena somente hashes dos tokens dos dispositivos.
    ============================================================ */
-const CELULAR_SULAIMA_NOME_ = "sulaima";
-const CELULAR_SULAIMA_ATIVO_PROP_ = "MV_CELULAR_SULAIMA_ATIVO";
-const CELULAR_SULAIMA_HASH_PROP_ = "MV_CELULAR_SULAIMA_TOKEN_HASH";
-const CELULAR_SULAIMA_EXTERNAL_ID_ = "mv_sulaima_celular_proprio";
-
-function celularSulaimaHabilitado_() {
-  return PropertiesService.getScriptProperties().getProperty(CELULAR_SULAIMA_ATIVO_PROP_) === "1";
+function chaveCelularProprio_(nome, loja) {
+  const identidade = normalizarTexto_(nome) + "|" + normalizarLoja_(loja);
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, identidade, Utilities.Charset.UTF_8
+  )).replace(/=+$/g, "").slice(0, 32);
 }
-function hashTokenCelularSulaima_(token) {
+function propriedadesCelularProprio_(nome, loja) {
+  const chave = chaveCelularProprio_(nome, loja);
+  const slug = normalizarTexto_(nome).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return { ativo: "MV_CELULAR_" + chave + "_ATIVO", hash: "MV_CELULAR_" + chave + "_TOKEN_HASH", externalId: "mv_celular_" + normalizarLoja_(loja) + "_" + slug };
+}
+function celularProprioAtivo_(nome, loja) {
+  const k = propriedadesCelularProprio_(nome, loja);
+  return PropertiesService.getScriptProperties().getProperty(k.ativo) === "1";
+}
+function hashTokenCelularProprio_(token) {
   return Utilities.base64EncodeWebSafe(Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256, String(token || ""), Utilities.Charset.UTF_8
   )).replace(/=+$/g, "");
@@ -267,7 +273,7 @@ function montarSessaoFuncionario_(funcionario, manterConectado) {
     perfil: funcionario.perfil, especial: funcionario.especial,
     loginId: Utilities.getUuid(), criadaEm: agora, ultimaAtividade: agora,
     manterConectado: manterConectado === true,
-    dispositivoSulaima: manterConectado === true && normalizarTexto_(funcionario.nome) === CELULAR_SULAIMA_NOME_
+    dispositivoCelularProprio: manterConectado === true
   };
   salvarSessao_(token, sessao);
   return {
@@ -279,67 +285,72 @@ function montarSessaoFuncionario_(funcionario, manterConectado) {
   };
 }
 
-function registrarCelularSulaima_(p) {
-  const cb = "__registrarCelularSulaimaCb";
+function registrarCelularProprio_(p) {
+  const cb = "__registrarCelularProprioCb";
   if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
   try {
-    const sessao = obterSessaoObrigatoria_({ sessao: p.sessao });
-    if (normalizarTexto_(sessao.nome) !== CELULAR_SULAIMA_NOME_ || sessao.administrador || sessao.administradorGeral) throw new Error("Esta autorização é exclusiva da funcionária Sulaima.");
-    if (!celularSulaimaHabilitado_()) throw new Error("O recurso de celular próprio não está habilitado pelo Painel Conferente.");
+    const tokenSessao = String(p.sessao || "");
+    const sessao = obterSessaoObrigatoria_({ sessao: tokenSessao });
+    const propsCelular = propriedadesCelularProprio_(sessao.nome, sessao.loja);
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty(propsCelular.ativo) !== "1") throw new Error("O administrador ainda não habilitou o celular próprio para esta conta.");
     const token = String(p.tokenDispositivo || "");
     if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Chave do dispositivo inválida.");
     const funcionario = buscarFuncionarioPorNome_(sessao.nome);
-    if (!funcionario || funcionario.ativo === false) throw new Error("Funcionária inativa ou não encontrada.");
-    PropertiesService.getScriptProperties().setProperty(CELULAR_SULAIMA_HASH_PROP_, hashTokenCelularSulaima_(token));
+    if (!funcionario || funcionario.ativo === false || normalizarLoja_(funcionario.loja) !== normalizarLoja_(sessao.loja)) throw new Error("Funcionário inativo ou cadastro alterado.");
+    props.setProperty(propsCelular.hash, hashTokenCelularProprio_(token));
     sessao.manterConectado = true;
-    sessao.dispositivoSulaima = true;
+    sessao.dispositivoCelularProprio = true;
     sessao.ultimaAtividade = Date.now();
-    salvarSessao_(String(p.sessao || ""), sessao);
-    return respostaJsonp_(cb, { sucesso: true, externalId: CELULAR_SULAIMA_EXTERNAL_ID_, manterConectado: true, mensagem: "Este celular foi autorizado para a Sulaima." });
+    salvarSessao_(tokenSessao, sessao);
+    return respostaJsonp_(cb, { sucesso: true, externalId: propsCelular.externalId, manterConectado: true, mensagem: "Este celular foi autorizado para " + sessao.nome + "." });
   } catch (erro) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro) });
   }
 }
 
-function loginDispositivoSulaima_(p) {
-  const cb = "__loginDispositivoCb";
+function loginDispositivoProprio_(p) {
+  const cb = "__loginDispositivoProprioCb";
   if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
   try {
-    if (!celularSulaimaHabilitado_()) throw new Error("Dispositivo não autorizado.");
+    const nome = String(p.nome || "").trim();
+    const loja = normalizarLoja_(p.loja || "");
+    const funcionario = buscarFuncionarioPorNome_(nome);
+    if (!funcionario || funcionario.ativo === false || normalizarLoja_(funcionario.loja) !== loja) throw new Error("Dispositivo não autorizado.");
+    const k = propriedadesCelularProprio_(funcionario.nome, funcionario.loja);
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty(k.ativo) !== "1") throw new Error("Dispositivo não autorizado.");
     const token = String(p.tokenDispositivo || "");
     if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Dispositivo não autorizado.");
-    const props = PropertiesService.getScriptProperties();
-    const salvo = String(props.getProperty(CELULAR_SULAIMA_HASH_PROP_) || "");
-    if (!salvo || !compararSeguro_(hashTokenCelularSulaima_(token), salvo)) throw new Error("Dispositivo não autorizado.");
-    const funcionario = buscarFuncionarioPorNome_("Sulaima");
-    if (!funcionario || funcionario.ativo === false || funcionario.administrador || funcionario.administradorGeral) throw new Error("A conta da funcionária Sulaima não está ativa.");
+    const salvo = String(props.getProperty(k.hash) || "");
+    if (!salvo || !compararSeguro_(hashTokenCelularProprio_(token), salvo)) throw new Error("Dispositivo não autorizado.");
     return respostaJsonp_(cb, montarSessaoFuncionario_(funcionario, true));
   } catch (erro) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro) });
   }
 }
 
-function gerenciarCelularSulaima_(p) {
-  const cb = "__celularSulaimaCb";
+function gerenciarCelularProprio_(p) {
+  const cb = "__celularProprioCb";
   if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
   try {
     const admin = obterSessaoObrigatoria_({ sessao: p.sessao });
-    if (admin.administrador !== true) throw new Error("Ação exclusiva para administradores.");
-    const funcionario = buscarFuncionarioPorNome_("Sulaima");
-    if (!funcionario || funcionario.administrador || funcionario.administradorGeral) throw new Error("Funcionária Sulaima não encontrada no cadastro.");
-    if (admin.administradorGeral !== true && normalizarLoja_(admin.loja) !== normalizarLoja_(funcionario.loja)) throw new Error("Você não tem permissão para gerenciar o dispositivo desta loja.");
+    if (admin.administrador !== true && admin.administradorGeral !== true) throw new Error("Ação exclusiva para administradores.");
+    const nome = String(p.nome || "").trim();
+    const loja = normalizarLoja_(p.loja || "");
+    const funcionario = buscarFuncionarioPorNome_(nome);
+    if (!funcionario || normalizarLoja_(funcionario.loja) !== loja) throw new Error("Funcionário não encontrado.");
+    if (admin.administradorGeral !== true && normalizarLoja_(admin.loja) !== loja) throw new Error("Você só pode gerenciar funcionários da sua loja.");
+    const k = propriedadesCelularProprio_(funcionario.nome, funcionario.loja);
     const props = PropertiesService.getScriptProperties();
     if (String(p.modo || "status") === "alternar") {
       const ativo = String(p.ativo || "0") === "1";
-      if (ativo && funcionario.ativo === false) throw new Error("Reative a funcionária Sulaima antes de habilitar o celular próprio.");
-      props.setProperty(CELULAR_SULAIMA_ATIVO_PROP_, ativo ? "1" : "0");
-      if (!ativo) props.deleteProperty(CELULAR_SULAIMA_HASH_PROP_);
+      if (ativo && funcionario.ativo === false) throw new Error("Reative o funcionário antes de habilitar o celular próprio.");
+      props.setProperty(k.ativo, ativo ? "1" : "0");
+      if (!ativo) props.deleteProperty(k.hash);
     }
-    return respostaJsonp_(cb, {
-      sucesso: true,
-      ativo: celularSulaimaHabilitado_(),
-      dispositivoAutorizado: !!props.getProperty(CELULAR_SULAIMA_HASH_PROP_)
-    });
+    return respostaJsonp_(cb, { sucesso: true, nome: funcionario.nome, loja: funcionario.loja,
+      ativo: props.getProperty(k.ativo) === "1", dispositivoAutorizado: !!props.getProperty(k.hash) });
   } catch (erro) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro) });
   }
@@ -394,8 +405,7 @@ function login_(p) {
     limparFalhas_(chave);
 
     const resultadoSessao = montarSessaoFuncionario_(funcionario, false);
-    resultadoSessao.celularProprioDisponivel =
-      normalizarTexto_(funcionario.nome) === CELULAR_SULAIMA_NOME_ && celularSulaimaHabilitado_();
+    resultadoSessao.celularProprioDisponivel = celularProprioAtivo_(funcionario.nome, funcionario.loja);
     return respostaJsonp_(callback, resultadoSessao);
 
   } catch (erro) {
@@ -432,7 +442,7 @@ function consultarSessao_(p) {
       atividadeEm: sessao.ultimaAtividade || sessao.criadaEm,
       ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000,
       manterConectado: sessao.manterConectado === true,
-      celularProprioDisponivel: normalizarTexto_(sessao.nome) === CELULAR_SULAIMA_NOME_ && celularSulaimaHabilitado_()
+      celularProprioDisponivel: celularProprioAtivo_(sessao.nome, sessao.loja)
     });
   } catch (erro) {
     return respostaJsonp_(callback, {
@@ -482,7 +492,7 @@ function registrarAtividadeSessao_(p) {
 
     // No celular próprio autorizado, a janela de 8 horas é deslizante:
     // cada atividade renova a sessão enquanto a autorização permanecer ativa.
-    if (sessao.dispositivoSulaima === true) sessao.criadaEm = agora;
+    if (sessao.dispositivoCelularProprio === true) sessao.criadaEm = agora;
     sessao.ultimaAtividade = agora;
     salvarSessao_(token, sessao);
     const expiraEm = Number(sessao.criadaEm || agora) + SESSAO_SEGUNDOS_ * 1000;

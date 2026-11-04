@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  let ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521";
+  let ONESIGNAL_APP_ID = "";
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
@@ -17,17 +17,14 @@
   function externalId() {
     const loja = String(window.Auth?.loja?.() || "").replace(/\D/g, "");
     const nome = window.Auth?.usuario?.() || "";
-    if (normalizarSlug(nome) === "sulaima") {
-      try {
-        if (localStorage.getItem("mv_celular_sulaima_autorizado") === "1" &&
-            /^[a-f0-9]{64}$/i.test(localStorage.getItem("mv_celular_sulaima_token") || "")) {
-          return "mv_sulaima_celular_proprio";
-        }
-      } catch (_) {}
-      // Mantém a inscrição geral para comunicados manuais; os push de vencidos
-      // são direcionados pelo servidor exclusivamente ao alias do celular próprio.
-      return loja && nome ? "mv_" + loja + "_" + normalizarSlug(nome) : "";
-    }
+    try {
+      const autorizado = JSON.parse(localStorage.getItem("mv_celular_proprio_autorizado") || "{}");
+      const token = localStorage.getItem("mv_celular_proprio_token") || "";
+      const slug = normalizarSlug(nome);
+      if (autorizado && normalizarSlug(autorizado.nome) === slug &&
+          String(autorizado.loja || "").replace(/\D/g, "") === loja &&
+          /^[a-f0-9]{64}$/i.test(token)) return "mv_celular_" + loja + "_" + slug;
+    } catch (_) {}
     return loja && nome ? "mv_" + loja + "_" + normalizarSlug(nome) : "";
   }
   function obterAppId() {

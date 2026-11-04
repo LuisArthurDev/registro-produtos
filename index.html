@@ -340,15 +340,15 @@
     title="Alternar tema"
   >🌙</button>
 
-  <div class="device-modal-backdrop" id="modalCelularSulaima" role="dialog" aria-modal="true" aria-labelledby="tituloCelularSulaima">
+  <div class="device-modal-backdrop" id="modalCelularProprio" role="dialog" aria-modal="true" aria-labelledby="tituloCelularProprio">
     <div class="device-modal">
-      <h2 id="tituloCelularSulaima">Manter este celular conectado?</h2>
-      <p>Este recurso foi liberado para o celular próprio da Sulaima. Se autorizar, este aparelho poderá entrar automaticamente nas próximas vezes, sem solicitar o PIN. O acesso poderá ser revogado pelo Painel Conferente.</p>
+      <h2 id="tituloCelularProprio">Manter este celular conectado?</h2>
+      <p>Este aparelho foi autorizado pelo administrador como celular próprio da sua conta. Se confirmar, poderá entrar automaticamente nas próximas vezes, sem solicitar o PIN. O acesso poderá ser revogado pelo Painel Conferente.</p>
       <div class="device-modal-actions">
         <button type="button" class="device-modal-secondary" id="naoAutorizarCelular">Agora não</button>
         <button type="button" class="device-modal-primary" id="autorizarCelular">Autorizar celular</button>
       </div>
-      <p id="statusCelularSulaima" role="status" style="margin-top:12px"></p>
+      <p id="statusCelularProprio" role="status" style="margin-top:12px"></p>
     </div>
   </div>
 
@@ -586,9 +586,9 @@
       senhaInput.value = senhaInput.value.replace(/\D/g, "");
     });
 
-    const CHAVE_TOKEN_CELULAR_SULAIMA = "mv_celular_sulaima_token";
-    const CHAVE_FLAG_CELULAR_SULAIMA = "mv_celular_sulaima_autorizado";
-    function ehSulaima(nome) { return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() === "sulaima"; }
+    const CHAVE_TOKEN_CELULAR_PROPRIO = "mv_celular_proprio_token";
+    const CHAVE_FLAG_CELULAR_PROPRIO = "mv_celular_proprio_autorizado";
+    function chaveLocalCelularProprio(nome, loja) { return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() + "|" + String(loja || "").replace(/\D/g, ""); }
     function salvarSessaoLogin(d) {
       localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
         token: d.token, nome: d.nome, loja: d.loja,
@@ -604,28 +604,28 @@
       return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
     }
     function irParaLancamento() { location.replace("lancamento.html"); }
-    function abrirModalCelularSulaima() {
-      const modal = document.getElementById("modalCelularSulaima");
+    function abrirModalCelularProprio() {
+      const modal = document.getElementById("modalCelularProprio");
       modal.style.display = "flex";
-      document.getElementById("statusCelularSulaima").textContent = "";
+      document.getElementById("statusCelularProprio").textContent = "";
       document.getElementById("autorizarCelular").disabled = false;
     }
     document.getElementById("naoAutorizarCelular").addEventListener("click", irParaLancamento);
     document.getElementById("autorizarCelular").addEventListener("click", async function () {
       const botao = this;
-      const status = document.getElementById("statusCelularSulaima");
+      const status = document.getElementById("statusCelularProprio");
       botao.disabled = true;
       status.textContent = "Autorizando este aparelho...";
       try {
         const tokenDispositivo = tokenAleatorioDispositivo();
-        const resposta = await chamarServidor("registrarCelularSulaima", "__registrarCelularSulaimaCb", {
+        const resposta = await chamarServidor("registrarCelularProprio", "__registrarCelularProprioCb", {
           tokenDispositivo: tokenDispositivo,
           sessao: (JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "{}") || {}).token
         });
         if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível autorizar este aparelho.");
-        localStorage.setItem(CHAVE_TOKEN_CELULAR_SULAIMA, tokenDispositivo);
-        localStorage.setItem(CHAVE_FLAG_CELULAR_SULAIMA, "1");
         const sessaoAtual = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "{}");
+        localStorage.setItem(CHAVE_TOKEN_CELULAR_PROPRIO, tokenDispositivo);
+        localStorage.setItem(CHAVE_FLAG_CELULAR_PROPRIO, JSON.stringify({ nome: sessaoAtual.nome, loja: sessaoAtual.loja }));
         sessaoAtual.manterConectado = true;
         sessaoAtual.atividadeEm = Date.now();
         localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessaoAtual));
@@ -668,24 +668,25 @@
 
     carregarFuncionariosAtivosLogin();
 
-    // Primeiro tenta restaurar a sessão normal. Se ela expirou, o celular
-    // previamente autorizado da Sulaima solicita uma nova sessão ao servidor.
+    // Primeiro tenta restaurar a sessão normal. Se ela expirou, o dispositivo
+    // previamente autorizado solicita uma nova sessão para a conta vinculada.
     (async function () {
       let sessao = lerSessaoLocal();
       if (!sessao) {
-        const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA) || "";
-        if (tokenDispositivo) {
+        const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_PROPRIO) || "";
+        let identidadeDispositivo = {}; try { identidadeDispositivo = JSON.parse(localStorage.getItem(CHAVE_FLAG_CELULAR_PROPRIO) || "{}"); } catch (_) {}
+        if (tokenDispositivo && identidadeDispositivo.nome) {
           try {
-            const d = await chamarServidor("loginDispositivoSulaima", "__loginDispositivoCb", { tokenDispositivo: tokenDispositivo });
+            const d = await chamarServidor("loginDispositivoProprio", "__loginDispositivoProprioCb", { tokenDispositivo: tokenDispositivo, nome: identidadeDispositivo.nome, loja: identidadeDispositivo.loja || "" });
             if (d && d.sucesso === true) {
               salvarSessaoLogin(d);
-              localStorage.setItem(CHAVE_FLAG_CELULAR_SULAIMA, "1");
+              localStorage.setItem(CHAVE_FLAG_CELULAR_PROPRIO, JSON.stringify({ nome: d.nome, loja: d.loja }));
               irParaLancamento();
               return;
             }
           } catch (_) {}
-          localStorage.removeItem(CHAVE_TOKEN_CELULAR_SULAIMA);
-          localStorage.removeItem(CHAVE_FLAG_CELULAR_SULAIMA);
+          localStorage.removeItem(CHAVE_TOKEN_CELULAR_PROPRIO);
+          localStorage.removeItem(CHAVE_FLAG_CELULAR_PROPRIO);
         }
         return;
       }
@@ -693,8 +694,8 @@
         const d = await chamarServidor("sessao", "__sessaoCb", { sessao: sessao.token });
         if (d && d.sucesso) {
           salvarSessaoLogin(Object.assign({}, d, { token: sessao.token }));
-          if (ehSulaima(d.nome) && dispositivoMovel() && d.celularProprioDisponivel === true && !localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA)) {
-            abrirModalCelularSulaima();
+          if (dispositivoMovel() && d.celularProprioDisponivel === true && !localStorage.getItem(CHAVE_TOKEN_CELULAR_PROPRIO)) {
+            abrirModalCelularProprio();
             return;
           }
           if (d.administradorGeral === true) { location.replace("painelgeral.html"); return; }
@@ -714,14 +715,15 @@
         }
       } catch (_) {}
       localStorage.removeItem(CHAVE_SESSAO);
-      const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA) || "";
-      if (tokenDispositivo) {
+      const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_PROPRIO) || "";
+      let identidadeDispositivo = {}; try { identidadeDispositivo = JSON.parse(localStorage.getItem(CHAVE_FLAG_CELULAR_PROPRIO) || "{}"); } catch (_) {}
+      if (tokenDispositivo && identidadeDispositivo.nome) {
         try {
-          const d = await chamarServidor("loginDispositivoSulaima", "__loginDispositivoCb", { tokenDispositivo: tokenDispositivo });
+          const d = await chamarServidor("loginDispositivoProprio", "__loginDispositivoProprioCb", { tokenDispositivo: tokenDispositivo, nome: identidadeDispositivo.nome, loja: identidadeDispositivo.loja || "" });
           if (d && d.sucesso === true) { salvarSessaoLogin(d); irParaLancamento(); return; }
         } catch (_) {}
-        localStorage.removeItem(CHAVE_TOKEN_CELULAR_SULAIMA);
-        localStorage.removeItem(CHAVE_FLAG_CELULAR_SULAIMA);
+        localStorage.removeItem(CHAVE_TOKEN_CELULAR_PROPRIO);
+        localStorage.removeItem(CHAVE_FLAG_CELULAR_PROPRIO);
       }
     })();
 
@@ -755,7 +757,9 @@
 
         mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");
         senhaInput.value = "";
-        if (d.administradorGeral === true) {
+        if (dispositivoMovel() && d.celularProprioDisponivel === true) {
+          abrirModalCelularProprio();
+        } else if (d.administradorGeral === true) {
           location.replace("painelgeral.html");
         } else if (d.administrador === true) {
           if (dispositivoMovel()) { location.replace("lancamento.html"); return; }
@@ -766,8 +770,6 @@
           document.getElementById("btnLancamentoEspecial").hidden = false;
           document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
           monitorarAtividadeAdminLogin();
-        } else if (ehSulaima(d.nome) && dispositivoMovel() && d.celularProprioDisponivel === true) {
-          abrirModalCelularSulaima();
         } else {
           location.replace("lancamento.html");
         }

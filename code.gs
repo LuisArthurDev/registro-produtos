@@ -371,9 +371,9 @@ function doGetOriginal_(e) {
     return respostaJsonp_(callback, { sucesso: !!appId, appId: appId });
   }
   if (acao === "login") return login_(parametros);
-  if (acao === "loginDispositivoSulaima") return loginDispositivoSulaima_(parametros);
-  if (acao === "registrarCelularSulaima") return registrarCelularSulaima_(parametros);
-  if (acao === "gerenciarCelularSulaima") return gerenciarCelularSulaima_(parametros);
+  if (acao === "loginDispositivoProprio") return loginDispositivoProprio_(parametros);
+  if (acao === "registrarCelularProprio") return registrarCelularProprio_(parametros);
+  if (acao === "gerenciarCelularProprio") return gerenciarCelularProprio_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
   if (acao === "definirPermanenciaSessao") return definirPermanenciaSessao_(parametros);
@@ -6168,11 +6168,13 @@ function obterSessaoObrigatoria_(parametros) {
     throw new Error("Sessão expirada. Entre novamente.");
   }
 
-  if (sessao.dispositivoSulaima === true &&
-      (PropertiesService.getScriptProperties().getProperty("MV_CELULAR_SULAIMA_ATIVO") !== "1" ||
-       !PropertiesService.getScriptProperties().getProperty("MV_CELULAR_SULAIMA_TOKEN_HASH"))) {
-    removerSessao_(token);
-    throw new Error("O celular próprio da Sulaima foi revogado pelo Painel Conferente.");
+  if (sessao.dispositivoCelularProprio === true) {
+    const kCelular = propriedadesCelularProprio_(sessao.nome, sessao.loja);
+    const propsCelular = PropertiesService.getScriptProperties();
+    if (propsCelular.getProperty(kCelular.ativo) !== "1" || !propsCelular.getProperty(kCelular.hash)) {
+      removerSessao_(token);
+      throw new Error("O celular próprio foi revogado pelo administrador.");
+    }
   }
 
   const agora = Date.now();
@@ -6585,7 +6587,7 @@ function bloquearSeNaoAutorizado_(p) {
   // Ações públicas necessárias para a tela de login.
   const publicas = [
     "login",
-    "loginDispositivoSulaima",
+    "loginDispositivoProprio",
     "funcionariosLogin",
     "sessao",
     "configNotificacoes",
@@ -6629,7 +6631,7 @@ function bloquearSeNaoAutorizado_(p) {
     "marcarCheckFuncionario",
     "inativarFuncionario",
     "definirPinFuncionario",
-    "gerenciarCelularSulaima",
+    "gerenciarCelularProprio",
     "retirarDeLoja",
     "adicionarDanificado",
     "adicionarAoQueima",
@@ -6647,7 +6649,8 @@ function bloquearSeNaoAutorizado_(p) {
 
   if (
     acoesAdmin.includes(acao) &&
-    sessao.administrador !== true
+    sessao.administrador !== true &&
+    !(acao === "gerenciarCelularProprio" && sessao.administradorGeral === true)
   ) {
     const callback = String(p.callback || "");
 
@@ -6671,7 +6674,7 @@ function bloquearSeNaoAutorizado_(p) {
     "adicionarValidadeManual",
     "sinalizarLancamento",
     "atividade", // renova somente a janela de inatividade da sessão autenticada
-    "registrarCelularSulaima"
+    "registrarCelularProprio"
   ];
 
   if (
@@ -6893,12 +6896,10 @@ function idPushFuncionario_(loja, nome) {
 
 function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura) {
   let externalId = idPushFuncionario_(loja, nome);
-  if (normalizarTexto_(nome) === "sulaima") {
-    const propsCelular = PropertiesService.getScriptProperties();
-    if (propsCelular.getProperty("MV_CELULAR_SULAIMA_ATIVO") !== "1" || !propsCelular.getProperty("MV_CELULAR_SULAIMA_TOKEN_HASH")) {
-      return { skipped: true, reason: "Celular próprio da Sulaima ainda não autorizado." };
-    }
-    externalId = "mv_sulaima_celular_proprio";
+  const kCelular = propriedadesCelularProprio_(nome, loja);
+  const propsCelular = PropertiesService.getScriptProperties();
+  if (propsCelular.getProperty(kCelular.ativo) === "1" && propsCelular.getProperty(kCelular.hash)) {
+    externalId = kCelular.externalId;
   }
   const urlSistema = "https://luisarthurdev.github.io/registro-produtos/lancamento.html";
   const plural = quantidade === 1 ? "produto vencido" : "produtos vencidos";
@@ -7115,9 +7116,11 @@ function notificarTodosLoja_(p) {
     if (!nome || especial || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
     if (sessao.administradorGeral !== true && loja !== lojaSessao) return;
     ids.push(idPushFuncionario_(loja, nome));
-    // Comunicado manual continua alcançando todos. A Sulaima também recebe
-    // pelo alias exclusivo do celular próprio, se esse aparelho já estiver inscrito.
-    if (normalizarTexto_(nome) === "sulaima") ids.push("mv_sulaima_celular_proprio");
+    // Comunicado manual continua alcançando todos. O funcionário também recebe
+    // pelo alias exclusivo do próprio aparelho, se ele estiver autorizado.
+    const kCelular = propriedadesCelularProprio_(nome, loja);
+    if (PropertiesService.getScriptProperties().getProperty(kCelular.ativo) === "1" &&
+        PropertiesService.getScriptProperties().getProperty(kCelular.hash)) ids.push(kCelular.externalId);
   });
   const unicos = Array.from(new Set(ids));
   if (!unicos.length) throw new Error("Não há usuários ativos com loja definida para receber a notificação.");
