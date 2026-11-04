@@ -9,7 +9,9 @@ on:
       - "Items.ods"
       - "produtos_ean.json"
       - "scripts/atualizar_produtos.py"
-      - ".github/workflows/atualizar-produtos.yml"
+      - "scripts/gerar_banco_sqlite.py"
+      - "catalogo-sqlite.js"
+      - ".github/workflows/atualiza_produtos_ean.yml"
 
 permissions:
   contents: write
@@ -60,16 +62,26 @@ jobs:
       - name: Atualizar JSON
         run: python scripts/atualizar_produtos.py
 
+      - name: Preparar biblioteca SQLite para o navegador
+        run: |
+          npm install --prefix /tmp/sqljs sql.js@1.13.0
+          mkdir -p libs/sql.js
+          cp /tmp/sqljs/node_modules/sql.js/dist/sql-wasm.js libs/sql.js/
+          cp /tmp/sqljs/node_modules/sql.js/dist/sql-wasm.wasm libs/sql.js/
+
+      - name: Gerar banco SQLite
+        run: python scripts/gerar_banco_sqlite.py
+
       - name: Salvar alterações no repositório
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add produtos_ean.json
+          git add produtos_ean.json produtos_ean.db catalogo_versao.json libs/sql.js/sql-wasm.js libs/sql.js/sql-wasm.wasm
 
           if git diff --cached --quiet; then
-            echo "Nenhuma alteração no JSON."
+            echo "Nenhuma alteração no catálogo JSON/SQLite."
           else
-            git commit -m "Atualiza dados dos produtos"
+            git commit -m "Atualiza catálogo de produtos (JSON e SQLite)"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
