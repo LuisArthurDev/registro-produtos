@@ -6814,6 +6814,98 @@ document.addEventListener("submit", async function(event) {
   let estoqueOdsAtualizadoEm = '';
   function chaveEstoque(v) { return String(v ?? '').trim().replace(/\.0$/, '').toLocaleLowerCase('pt-BR'); }
   function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
+
+
+  // Lê o estoque por nomes de cabeçalho e, quando necessário, detecta a coluna
+  // EAN pelo conteúdo. Isso também aceita planilhas Excel antigas salvas com .ods.
+  function normalizarEanEstoque(valor) {
+    if (valor === null || valor === undefined || valor === '') return '';
+    let texto = String(valor).trim().replace(/\s/g, '');
+    if (/^[0-9]+(?:\.0+)?$/.test(texto)) texto = texto.replace(/\.0+$/, '');
+    if (/^[0-9]+(?:[.,][0-9]+)?e[+-]?[0-9]+$/i.test(texto)) {
+      const n = Number(texto.replace(',', '.'));
+      if (Number.isSafeInteger(n)) texto = String(n);
+    }
+    const digitos = texto.replace(/\D/g, '');
+    return digitos.length >= 8 && digitos.length <= 14 ? digitos : '';
+  }
+
+  function numeroEstoquePlanilha(valor) {
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+    let texto = String(valor ?? '').trim().replace(/\s/g, '');
+    if (!texto) return 0;
+    if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(texto)) texto = texto.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d+(,\d+)?$/.test(texto)) texto = texto.replace(',', '.');
+    const n = Number(texto);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function extrairRegistrosEstoquePlanilha(wb) {
+    const normalizarCab = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const aliases = {
+      ean: ['ean', 'codigo de barras', 'cod barras', 'codigo barra', 'gtin'],
+      codigoInterno: ['produto', 'codigo interno', 'cod interno', 'codigo produto', 'item'],
+      descricao: ['descricao', 'descricao produto', 'nome produto'],
+      secao: ['secao', 'setor'],
+      saldo: ['saldo', 'estoque', 'quantidade', 'qtd']
+    };
+    const indiceCab = (cab, nomes) => cab.findIndex(v => nomes.includes(normalizarCab(v)));
+    let melhor = null;
+
+    for (const nomeAba of (wb?.SheetNames || [])) {
+      const linhas = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, defval: '', raw: false });
+      if (!linhas.length) continue;
+      let linhaCab = -1, cab = [];
+      for (let i = 0; i < Math.min(linhas.length, 40); i++) {
+        const tentativa = linhas[i] || [];
+        const temEan = tentativa.some(v => aliases.ean.includes(normalizarCab(v)));
+        const temDescricao = tentativa.some(v => aliases.descricao.includes(normalizarCab(v))) || tentativa.some(v => aliases.codigoInterno.includes(normalizarCab(v)));
+        if (temEan && temDescricao) { linhaCab = i; cab = tentativa; break; }
+      }
+      let idx = {
+        codigoInterno: linhaCab >= 0 ? indiceCab(cab, aliases.codigoInterno) : 2,
+        descricao: linhaCab >= 0 ? indiceCab(cab, aliases.descricao) : 3,
+        ean: linhaCab >= 0 ? indiceCab(cab, aliases.ean) : 4,
+        secao: linhaCab >= 0 ? indiceCab(cab, aliases.secao) : 6,
+        saldo: linhaCab >= 0 ? indiceCab(cab, aliases.saldo) : 13
+      };
+      const inicio = linhaCab >= 0 ? linhaCab + 1 : 0;
+      const contar = col => linhas.slice(inicio).reduce((n, r) => n + (normalizarEanEstoque(r?.[col]) ? 1 : 0), 0);
+      if (idx.ean < 0 || contar(idx.ean) === 0) {
+        let colMelhor = -1, qtdMelhor = 0;
+        const maxCols = Math.max(0, ...linhas.slice(inicio, inicio + 500).map(r => r?.length || 0));
+        for (let c = 0; c < maxCols; c++) { const qtd = contar(c); if (qtd > qtdMelhor) { qtdMelhor = qtd; colMelhor = c; } }
+        if (colMelhor >= 0) idx.ean = colMelhor;
+      }
+      const qtdEans = idx.ean >= 0 ? contar(idx.ean) : 0;
+      if (!melhor || qtdEans > melhor.qtdEans) melhor = { linhas, inicio, idx, nomeAba, qtdEans };
+    }
+
+    if (!melhor || !melhor.qtdEans) {
+      const abas = (wb?.SheetNames || []).join(', ') || 'nenhuma';
+      throw new Error(`Não encontrei EANs válidos (8 a 14 dígitos) nas planilhas: ${abas}. Confira se o arquivo contém os dados do estoque e se a coluna EAN está preenchida.`);
+    }
+
+    const { linhas, inicio, idx } = melhor;
+    const lista = [];
+    for (let i = inicio; i < linhas.length; i++) {
+      const linha = linhas[i] || [];
+      const ean = normalizarEanEstoque(linha[idx.ean]);
+      if (!ean) continue;
+      const codigoInterno = String(linha[idx.codigoInterno] ?? '').trim();
+      const descricao = String(linha[idx.descricao] ?? '').trim();
+      const secao = String(linha[idx.secao] ?? '').trim();
+      const produtoJson = (typeof mapaDescricoes === 'object' && mapaDescricoes) ? mapaDescricoes[ean] : null;
+      lista.push({
+        codigoInterno, ean,
+        produto: descricao || produtoJson?.produto || produtoJson?.descricao || codigoInterno || 'Produto sem descrição',
+        secao: secao || produtoJson?.secao || produtoJson?.seção || '',
+        quantidade: numeroEstoquePlanilha(linha[idx.saldo]),
+        encontradoNoJson: !!produtoJson
+      });
+    }
+    return lista;
+  }
   
   async function importarEstoqueOds(arquivo) {
     if (!arquivo) return;
@@ -6850,68 +6942,11 @@ document.addEventListener("submit", async function(event) {
   
       const base64 = btoa(blocos.join(''));
   
-      const wb = XLSX.read(bytes, { type: 'array' });
-      const nomeAba = wb.SheetNames[0];
-  
-      if (!nomeAba) throw new Error('O arquivo não possui abas.');
-  
-      const linhas = XLSX.utils.sheet_to_json(
-        wb.Sheets[nomeAba],
-        { header: 1, defval: '', raw: false }
-      );
-  
-      const lista = [];
-  
-      for (const linha of linhas) {
-        const codigoInterno = String(linha?.[2] ?? '').trim();
-        const descricao = String(linha?.[3] ?? '').trim();
-        const ean = String(linha?.[4] ?? '').trim();
-        const secao = String(linha?.[6] ?? '').trim();
-        const saldoTexto = String(linha?.[13] ?? '').trim();
-  
-        if (
-          !ean ||
-          /^e?an$/i.test(ean) ||
-          /^descri[cç][aã]o$/i.test(descricao) ||
-          /^(produto|c[oó]digo interno)$/i.test(codigoInterno)
-        ) continue;
-  
-        const produtoJson =
-          typeof mapaDescricoes === 'object' && mapaDescricoes
-            ? mapaDescricoes[ean]
-            : null;
-  
-        let quantidade = Number(
-          saldoTexto.replace(/\./g, '').replace(',', '.')
-        );
-  
-        if (!Number.isFinite(quantidade)) quantidade = 0;
-  
-        lista.push({
-          codigoInterno,
-          ean,
-          produto:
-            descricao ||
-            produtoJson?.produto ||
-            produtoJson?.descricao ||
-            codigoInterno ||
-            'Produto sem descrição',
-          secao:
-            secao ||
-            produtoJson?.secao ||
-            produtoJson?.seção ||
-            '',
-          quantidade,
-          encontradoNoJson: !!produtoJson
-        });
-      }
-  
-      if (!lista.length) {
-        throw new Error(
-          'Nenhum produto encontrado. Confira se existem EANs na coluna E.'
-        );
-      }
-  
+      const wb = XLSX.read(bytes, { type: 'array', cellText: true, cellDates: false });
+      const lista = extrairRegistrosEstoquePlanilha(wb);
+
+      if (!lista.length) throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
+
       // Preserva a importação local existente.
       window.estoqueOdsRegistros = lista;
       if (validadesProntas) atualizarResumoValidade(painelCache.validades || []);
@@ -7017,72 +7052,13 @@ document.addEventListener("submit", async function(event) {
       }
   
       const bytes = await resposta.arrayBuffer();
-      const wb = XLSX.read(bytes, { type: 'array' });
-      const nomeAba = wb.SheetNames[0];
-  
-      if (!nomeAba) {
-        throw new Error('O arquivo ODS não possui abas.');
-      }
-  
-      const linhas = XLSX.utils.sheet_to_json(
-        wb.Sheets[nomeAba],
-        { header: 1, defval: '', raw: false }
-      );
-  
-      const lista = [];
-  
-      for (const linha of linhas) {
-        const codigoInterno = String(linha?.[2] ?? '').trim();
-        const descricao = String(linha?.[3] ?? '').trim();
-        const ean = String(linha?.[4] ?? '').trim();
-        const secao = String(linha?.[6] ?? '').trim();
-        const saldoTexto = String(linha?.[13] ?? '').trim();
-  
-        if (
-          !ean ||
-          /^e?an$/i.test(ean) ||
-          /^descri[cç][aã]o$/i.test(descricao) ||
-          /^(produto|c[oó]digo interno)$/i.test(codigoInterno)
-        ) {
-          continue;
-        }
-  
-        const produtoJson =
-          typeof mapaDescricoes === 'object' && mapaDescricoes
-            ? mapaDescricoes[ean]
-            : null;
-  
-        let quantidade = Number(
-          saldoTexto.replace(/\./g, '').replace(',', '.')
-        );
-  
-        if (!Number.isFinite(quantidade)) quantidade = 0;
-  
-        lista.push({
-          codigoInterno,
-          ean,
-          produto:
-            descricao ||
-            produtoJson?.produto ||
-            produtoJson?.descricao ||
-            codigoInterno ||
-            'Produto sem descrição',
-          secao:
-            secao ||
-            produtoJson?.secao ||
-            produtoJson?.seção ||
-            '',
-          quantidade,
-          encontradoNoJson: !!produtoJson
-        });
-      }
-  
+      const wb = XLSX.read(bytes, { type: 'array', cellText: true, cellDates: false });
+      const lista = extrairRegistrosEstoquePlanilha(wb);
+
       if (!lista.length) {
-        throw new Error(
-          'Nenhum produto encontrado. Confira as colunas C, D, E, G e N do arquivo.'
-        );
+        throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
       }
-  
+
       window.estoqueOdsRegistros = lista;
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
