@@ -374,6 +374,7 @@ function doGetOriginal_(e) {
   if (acao === "loginDispositivoProprio") return loginDispositivoProprio_(parametros);
   if (acao === "registrarCelularProprio") return registrarCelularProprio_(parametros);
   if (acao === "gerenciarCelularProprio") return gerenciarCelularProprio_(parametros);
+  if (acao === "gerenciarCelularProprioLote") return gerenciarCelularProprioLote_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
   if (acao === "definirPermanenciaSessao") return definirPermanenciaSessao_(parametros);
@@ -499,6 +500,36 @@ function doGetOriginal_(e) {
   return ContentService
     .createTextOutput("Sistema de lançamento de produtos.")
     .setMimeType(ContentService.MimeType.TEXT);
+}
+
+function gerenciarCelularProprioLote_(p) {
+  const cb = "__celularProprioLoteCb";
+  if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
+  try {
+    const admin = obterSessaoObrigatoria_({ sessao: p.sessao });
+    if (admin.administrador !== true && admin.administradorGeral !== true) {
+      throw new Error("Ação exclusiva para administradores.");
+    }
+    let funcionarios = [];
+    try { funcionarios = JSON.parse(String(p.funcionarios || "[]")); } catch (_) {
+      throw new Error("Lista de funcionários inválida.");
+    }
+    if (!Array.isArray(funcionarios)) throw new Error("Lista de funcionários inválida.");
+    // Limite defensivo: a lista vem do cadastro já carregado pelo painel.
+    funcionarios = funcionarios.slice(0, 500);
+    const propriedades = PropertiesService.getScriptProperties().getProperties();
+    const resultado = funcionarios.map(item => {
+      const nome = String(item && item.nome || "").trim();
+      const loja = normalizarLoja_(item && item.loja || "");
+      if (!nome) return null;
+      if (admin.administradorGeral !== true && loja !== normalizarLoja_(admin.loja)) return null;
+      const k = propriedadesCelularProprio_(nome, loja);
+      return { nome: nome, loja: loja, ativo: propriedades[k.ativo] === "1", dispositivoAutorizado: !!propriedades[k.hash] };
+    }).filter(Boolean);
+    return respostaJsonp_(cb, { sucesso: true, funcionarios: resultado });
+  } catch (erro) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro), funcionarios: [] });
+  }
 }
 
 function consultarStatus_(parametros) {
@@ -6894,12 +6925,16 @@ function idPushFuncionario_(loja, nome) {
   return "mv_" + normalizarLoja_(loja) + "_" + slug;
 }
 
-function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura) {
+function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura, administrador) {
+  // Administradores sempre usam o identificador normal do perfil. A opção
+  // de celular próprio não altera o roteamento das notificações deles.
   let externalId = idPushFuncionario_(loja, nome);
-  const kCelular = propriedadesCelularProprio_(nome, loja);
-  const propsCelular = PropertiesService.getScriptProperties();
-  if (propsCelular.getProperty(kCelular.ativo) === "1" && propsCelular.getProperty(kCelular.hash)) {
-    externalId = kCelular.externalId;
+  if (administrador !== true) {
+    const kCelular = propriedadesCelularProprio_(nome, loja);
+    const propsCelular = PropertiesService.getScriptProperties();
+    if (propsCelular.getProperty(kCelular.ativo) === "1" && propsCelular.getProperty(kCelular.hash)) {
+      externalId = kCelular.externalId;
+    }
   }
   const urlSistema = "https://luisarthurdev.github.io/registro-produtos/lancamento.html";
   const plural = quantidade === 1 ? "produto vencido" : "produtos vencidos";
@@ -7051,7 +7086,7 @@ function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
     if (!forcarEnvio && assinatura === anterior) return;
 
     try {
-      const envio = enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura);
+      const envio = enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura, administrador);
       if (envio && envio.skipped) return;
       props.setProperty(propertyKey, assinatura);
       enviados++;

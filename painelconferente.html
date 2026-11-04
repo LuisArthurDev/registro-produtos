@@ -3337,7 +3337,7 @@ function carregarCadastroFuncionariosPainel() {
       "funcionarios",
       "funcionarios",
       { modo: "gestao" }
-    ).then(resposta => {
+    ).then(async resposta => {
       if (
         !resposta ||
         resposta.sucesso !== true ||
@@ -3360,6 +3360,20 @@ function carregarCadastroFuncionariosPainel() {
       FUNCIONARIOS_MAPA = [...resposta.funcionarios];
       CONTROLADOS_MAPA = [...resposta.especiais];
       funcionariosMapaCarregados = true;
+
+      // Carrega todos os estados de celular em uma única chamada, junto do cadastro.
+      // Isso evita dezenas de requisições JSONP concorrentes/serializadas ao abrir o painel.
+      try {
+        const status = await chamarFuncionarioApi("gerenciarCelularProprioLote", "__celularProprioLoteCb", {
+          funcionarios: JSON.stringify(cadastroFuncionariosPainel.detalhes.map(d => ({ nome: d.nome, loja: d.loja || "" })))
+        });
+        (status.funcionarios || []).forEach(item => {
+          const chave = norm(item.nome) + "|" + String(item.loja || "");
+          estadosCelularProprio.set(chave, item.ativo === true);
+        });
+      } catch (erroStatus) {
+        console.warn("Não foi possível carregar os estados de celular próprio em lote:", erroStatus);
+      }
   
       return cadastroFuncionariosPainel;
     }).catch(erro => {
@@ -6775,30 +6789,8 @@ document.addEventListener("submit", async function(event) {
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
     renderPainelIcons(g("page-funcionarios"));
-    // Consulta os estados pendentes em lote e redesenha a tabela apenas uma vez.
-    // Antes, cada resposta individual chamava renderFuncionarios(), provocando
-    // sucessivas reconstruções da tabela ao abrir a aba Funcionários.
-    const consultasPendentes = [];
-    rows.forEach(o => {
-      const det = detalhes.get(norm(o.nome));
-      if (!det) return;
-      const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
-      if (estadosCelularProprio.has(chaveCelular) || consultasCelularProprio.has(chaveCelular)) return;
-      consultasCelularProprio.add(chaveCelular);
-      consultasPendentes.push(
-        chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "status", nome: det.nome, loja: det.loja || "" })
-          .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); })
-          .catch(e => { console.warn("Status do celular próprio:", e); estadosCelularProprio.set(chaveCelular, false); })
-          .finally(() => consultasCelularProprio.delete(chaveCelular))
-      );
-    });
-    if (consultasPendentes.length) {
-      Promise.all(consultasPendentes).then(() => {
-        if (document.getElementById("page-funcionarios")?.classList.contains("active")) {
-          renderFuncionarios();
-        }
-      });
-    }
+    // Os estados de celular próprio já são carregados em lote junto ao cadastro
+    // inicial do painel. A renderização da tabela não dispara consultas de rede.
   }
 
   /* ---------- Funcionários: adicionar, renomear, especial e check ---------- */
