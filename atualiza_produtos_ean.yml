@@ -1,17 +1,18 @@
-
 name: Atualizar produtos EAN
 
 on:
   workflow_dispatch:
-
   push:
     paths:
       - "Items.ods"
       - "produtos_ean.json"
-      - "scripts/atualizar_produtos.py"
-      - "scripts/gerar_banco_sqlite.py"
+      - "scripts/**"
       - "catalogo-sqlite.js"
       - ".github/workflows/atualiza_produtos_ean.yml"
+      - "registro-produtos-main/Items.ods"
+      - "registro-produtos-main/produtos_ean.json"
+      - "registro-produtos-main/scripts/**"
+      - "registro-produtos-main/catalogo-sqlite.js"
 
 permissions:
   contents: write
@@ -23,15 +24,34 @@ concurrency:
 jobs:
   atualizar:
     runs-on: ubuntu-latest
-
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
+
+      - name: Identificar pasta do projeto
+        shell: bash
+        run: |
+          if [ -f "$GITHUB_WORKSPACE/scripts/atualizar_produtos.py" ] && [ -f "$GITHUB_WORKSPACE/scripts/gerar_banco_sqlite.py" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
+          elif [ -f "$GITHUB_WORKSPACE/registro-produtos-main/scripts/atualizar_produtos.py" ] && [ -f "$GITHUB_WORKSPACE/registro-produtos-main/scripts/gerar_banco_sqlite.py" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE/registro-produtos-main"
+          else
+            echo "ERRO: não encontrei scripts/atualizar_produtos.py e scripts/gerar_banco_sqlite.py na raiz nem em registro-produtos-main/."
+            find "$GITHUB_WORKSPACE" -maxdepth 4 -type f | sort | head -300
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Pasta do projeto: $PROJECT_DIR"
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Instalar dependências
         run: |
@@ -39,49 +59,40 @@ jobs:
           python -m pip install pandas odfpy
 
       - name: Verificar arquivos necessários
+        shell: bash
         run: |
-          echo "Raiz do repositório: $GITHUB_WORKSPACE"
-
-          test -f "$GITHUB_WORKSPACE/Items.ods" || {
-            echo "ERRO: Items.ods não encontrado na raiz."
-            echo "Arquivos encontrados:"
-            find . -maxdepth 3 -type f | sort
-            exit 1
-          }
-
-          test -f "$GITHUB_WORKSPACE/produtos_ean.json" || {
-            echo "ERRO: produtos_ean.json não encontrado na raiz."
-            exit 1
-          }
-
-          test -f "$GITHUB_WORKSPACE/scripts/atualizar_produtos.py" || {
-            echo "ERRO: scripts/atualizar_produtos.py não encontrado."
-            exit 1
-          }
+          cd "$PROJECT_DIR"
+          for arquivo in Items.ods produtos_ean.json scripts/atualizar_produtos.py scripts/gerar_banco_sqlite.py; do
+            if [ ! -f "$arquivo" ]; then
+              echo "ERRO: arquivo obrigatório não encontrado: $PROJECT_DIR/$arquivo"
+              exit 1
+            fi
+          done
 
       - name: Atualizar JSON
-        run: python scripts/atualizar_produtos.py
+        run: cd "$PROJECT_DIR" && python scripts/atualizar_produtos.py
 
       - name: Preparar biblioteca SQLite para o navegador
+        shell: bash
         run: |
+          cd "$PROJECT_DIR"
           npm install --prefix /tmp/sqljs sql.js@1.13.0
           mkdir -p libs/sql.js
           cp /tmp/sqljs/node_modules/sql.js/dist/sql-wasm.js libs/sql.js/
           cp /tmp/sqljs/node_modules/sql.js/dist/sql-wasm.wasm libs/sql.js/
 
       - name: Gerar banco SQLite
-        run: python scripts/gerar_banco_sqlite.py
+        run: cd "$PROJECT_DIR" && python scripts/gerar_banco_sqlite.py
 
       - name: Salvar alterações no repositório
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add produtos_ean.json produtos_ean.db catalogo_versao.json libs/sql.js/sql-wasm.js libs/sql.js/sql-wasm.wasm
-
-          if git diff --cached --quiet; then
+          git -C "$PROJECT_DIR" config user.name "github-actions[bot]"
+          git -C "$PROJECT_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$PROJECT_DIR" add produtos_ean.json produtos_ean.db catalogo_versao.json libs/sql.js/sql-wasm.js libs/sql.js/sql-wasm.wasm
+          if git -C "$PROJECT_DIR" diff --cached --quiet; then
             echo "Nenhuma alteração no catálogo JSON/SQLite."
           else
-            git commit -m "Atualiza catálogo de produtos (JSON e SQLite)"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            git -C "$PROJECT_DIR" commit -m "Atualiza catálogo de produtos (JSON e SQLite)"
+            git -C "$PROJECT_DIR" push origin "HEAD:${GITHUB_REF_NAME}"
           fi

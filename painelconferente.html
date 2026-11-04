@@ -1206,6 +1206,12 @@
     }
 
     
+
+    .pagination-size { display:flex; align-items:center; gap:8px; color:var(--muted, #64748b); font-size:13px; white-space:nowrap; }
+    .table-pagination { border-top:1px solid var(--border, #e5e7eb); color:var(--muted, #64748b); font-size:13px; }
+    .table-pagination .pagination-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .table-pagination button:disabled { opacity:.45; cursor:not-allowed; }
+
     /* Paginação dos produtos elegíveis */
     #cvElegiveisPaginacao {
       display: flex;
@@ -2199,6 +2205,7 @@ Auth.exigirAdmin().then(ok => {
             </div>
           </div>
           <div class="pagination" id="cvElegiveisPaginacao">
+            <label class="pagination-size">Itens por página <select id="cvElegiveisTamanhoPagina" class="filter-select"><option value="15" selected>15</option><option value="25">25</option><option value="50">50</option></select></label>
             <span id="cvElegiveisInfo">Mostrando 0 de 0 itens</span>
           
             <div class="pagination-actions">
@@ -2273,10 +2280,10 @@ Auth.exigirAdmin().then(ok => {
                 id="cvVencimentosSituacao"
                 aria-label="Filtrar por situação"
               >
+                <option value="Vencido" selected>Vencidos (regras de vencimento)</option>
                 <option value="">Todas as situações</option>
-                <option value="Dentro da validade">Dentro da validade</option>
-                <option value="Próximo do vencimento">Próximo do vencimento</option>
-                <option value="Vencido">Vencido</option>
+                <option value="Vendável">Dentro da validade</option>
+                <option value="A Vencer">Próximo do vencimento</option>
                 <option value="Sem validade">Sem validade</option>
               </select>
         
@@ -2297,6 +2304,7 @@ Auth.exigirAdmin().then(ok => {
                   <th>Dias restantes</th>
                   <th>Quantidade</th>
                   <th>Situação</th>
+                  <th>Funcionário / Aba</th>
                 </tr>
               </thead>
         
@@ -2405,7 +2413,7 @@ Auth.exigirAdmin().then(ok => {
         <div class="notice" id="funcionariosNotice">Carregando dados...</div>
         <div class="mini-stats"><div class="mini-stat"><span>Total de funcionários</span><strong id="funcionariosTotal">—</strong></div><div class="mini-stat"><span>Com lançamentos</span><strong id="funcionariosAtivos">—</strong></div><div class="mini-stat"><span>Com produtos vencidos</span><strong id="funcionariosVencidos">—</strong></div></div>
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Equipe e lançamentos</div><div class="toolbar-actions"><button class="button button-primary" id="addFuncionarioBtn" type="button"><i data-lucide="user-plus"></i> Adicionar funcionário</button><div class="search-box"><i data-lucide="search"></i><input id="funcionariosBusca" placeholder="Buscar funcionário..."></div><select id="funcionariosFiltro" class="filter-select"><option value="">Todos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option><option value="venc">Com produtos vencidos</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Equipe e lançamentos</div><div class="toolbar-actions"><button class="button button-primary" id="addFuncionarioBtn" type="button"><i data-lucide="user-plus"></i> Adicionar funcionário</button><div class="search-box"><i data-lucide="search"></i><input id="funcionariosBusca" placeholder="Buscar funcionário..."></div><select id="funcionariosFiltro" class="filter-select"><option value="">Todos</option><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option><option value="venc">Com produtos vencidos</option></select></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Funcionário</th><th>Perfil</th><th>Lançamentos</th><th>Unidades</th><th>Vencidos</th><th>A vencer</th><th>Último lançamento</th><th>Situação</th><th title="Marcação manual. Zera automaticamente todo dia 20.">Check<small style="display:block;font-weight:500;opacity:.7">zera dia 20</small></th><th>Ações</th></tr></thead>
             <tbody id="funcionariosTbody"></tbody>
@@ -3372,7 +3380,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   }
   
   let cvElegiveisPaginaAtual = 1;
-const CV_ELEGIVEIS_POR_PAGINA = 25;
+let CV_ELEGIVEIS_POR_PAGINA = 15;
 
 
   
@@ -3457,7 +3465,8 @@ function renderControleValidade() {
     return dias !== null && dias >= 0 && dias <= 7;
   });
 
-  const vencidos = registros.filter(r => {
+  const todosRegistrosVencimentos = [...(painelCache.validades || []), ...(painelCache.validadesQueima || [])];
+  const vencidos = todosRegistrosVencimentos.filter(r => {
     const dias = diasAte(r.validadeISO || r.validade);
     return dias !== null && estaVencidoPainel(r);
   });
@@ -3468,6 +3477,7 @@ function renderControleValidade() {
   document.getElementById("cvVencem7Dias").textContent = vencem7Dias.length;
   document.getElementById("cvVencidos").textContent = vencidos.length;
   document.getElementById("cvElegiveis").textContent = elegiveis.length;
+  renderTabelaControleVencimentos(todosRegistrosVencimentos);
 
   // Preenche o seletor com os funcionários presentes nos registros.
   const selectFuncionario = document.getElementById("cvElegiveisFuncionario");
@@ -3586,6 +3596,45 @@ function renderControleValidade() {
   document.getElementById("cvElegiveisProxima").disabled =
     cvElegiveisPaginaAtual >= totalPaginas;
 }
+
+  function renderTabelaControleVencimentos(registros) {
+    const tbody = document.getElementById('cvVencimentosTbody');
+    if (!tbody) return;
+    const situacaoFiltro = document.getElementById('cvVencimentosSituacao')?.value || 'Vencido';
+    const busca = String(document.getElementById('cvVencimentosBusca')?.value || '').toLocaleLowerCase('pt-BR').trim();
+    const unicos = new Map();
+    (Array.isArray(registros) ? registros : []).forEach(r => {
+      const chave = String(r.chaveUnica || '').trim() || [r.codigo || '', r.lote || '', r.validadeISO || r.validade || '', r.funcionario || ''].join('|');
+      if (!unicos.has(chave)) unicos.set(chave, r);
+    });
+    const filtrados = [...unicos.values()].filter(r => {
+      const situacao = situacaoPainel(r);
+      if (situacaoFiltro && situacao !== situacaoFiltro) return false;
+      const texto = [r.codigo, descricaoProduto(r), r.lote, r.funcionario, r.aba, situacao].join(' ').toLocaleLowerCase('pt-BR');
+      return texto.includes(busca);
+    }).sort((a,b) => {
+      const da = diasAte(a.validadeISO || a.validade); const db = diasAte(b.validadeISO || b.validade);
+      return (da ?? 999999) - (db ?? 999999);
+    });
+    tbody.innerHTML = filtrados.map(r => {
+      const dias = diasAte(r.validadeISO || r.validade);
+      const situacao = situacaoPainel(r);
+      const diasTexto = dias === null ? '—' : dias < 0 ? `${Math.abs(dias)} dias vencido` : dias === 0 ? 'Vence hoje' : `${dias} dias`;
+      const mapa = r.funcionario || r.aba || r.nomeAba || '—';
+      return `<tr>
+        <td class="cell-primary">${escHtml(descricaoProduto(r) || r.codigo || '')}<small style="display:block;opacity:.7">${escHtml(r.codigo || '')}</small></td>
+        <td>${escHtml(r.lote || '—')}</td>
+        <td>${escHtml(fmtData(r.validadeISO || r.validade))}</td>
+        <td>${escHtml(diasTexto)}</td>
+        <td>${escHtml(r.quantidade ?? '—')}</td>
+        <td><span class="badge ${situacao === 'Vencido' ? 'badge-danger' : situacao === 'A Vencer' ? 'badge-warning' : 'badge-success'}">${escHtml(situacao)}</span></td>
+        <td>${escHtml(mapa)}</td>
+      </tr>`;
+    }).join('');
+    const vazio = document.getElementById('cvVencimentosEmpty');
+    if (vazio) vazio.style.display = filtrados.length ? 'none' : 'block';
+    if (window.lucide) window.lucide.createIcons();
+  }
 
   function dataRegistro(r) { return r.dataLancamento || r.dataColeta || ''; }
 
@@ -5478,7 +5527,7 @@ function calcularSituacaoValidade(dataValidade) {
 }
 
   document.getElementById("cvElegiveisBusca")
-  ?.addEventListener("input", renderControleValidade);
+  ?.addEventListener("input", () => { cvElegiveisPaginaAtual = 1; renderControleValidade(); });
 
 document.getElementById("cvAtualizarElegiveis")
   ?.addEventListener("click", () => carregarMapa());
@@ -5567,6 +5616,15 @@ function exportarElegiveisCSV() {
     cvElegiveisPaginaAtual = 1;
     renderControleValidade();
   });
+
+document.getElementById("cvElegiveisTamanhoPagina")?.addEventListener("change", e => {
+  CV_ELEGIVEIS_POR_PAGINA = Math.max(15, Math.min(50, Number(e.target.value) || 15));
+  cvElegiveisPaginaAtual = 1;
+  renderControleValidade();
+});
+
+document.getElementById("cvVencimentosBusca")?.addEventListener("input", () => renderTabelaControleVencimentos([...(painelCache.validades || []), ...(painelCache.validadesQueima || [])]));
+document.getElementById("cvVencimentosSituacao")?.addEventListener("change", () => renderTabelaControleVencimentos([...(painelCache.validades || []), ...(painelCache.validadesQueima || [])]));
 
 document.getElementById("cvElegiveisAnterior")
   ?.addEventListener("click", () => {
@@ -6503,6 +6561,15 @@ document.addEventListener("submit", async function(event) {
   /* ---------- Funcionários ---------- */
   function dadosFuncionarios() {
     const mapa = new Map(FUNC.map(n => [norm(n), { nome: n, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }]));
+    // A lista FUNC contém apenas abas ativas (correto para os seletores de
+    // lançamento). Na tela de gestão, porém, também precisamos incluir todos
+    // os cadastros retornados em detalhes, inclusive funcionários inativos,
+    // para que possam ser reativados sem recriar o cadastro.
+    ((cadastroFuncionariosPainel && cadastroFuncionariosPainel.detalhes) || []).forEach(d => {
+      const k = norm(d.nome);
+      if (!k || mapa.has(k)) return;
+      mapa.set(k, { nome: d.nome, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0, administrador: !!d.administrador });
+    });
     registros().forEach(r => {
       const k = norm(r.funcionario);
       let o = mapa.get(k);
@@ -6524,12 +6591,20 @@ document.addEventListener("submit", async function(event) {
     if (!g("funcionariosTbody")) return;
     const q = norm(g("funcionariosBusca").value), f = g("funcionariosFiltro").value;
     const todos = dadosFuncionarios();
-    const rows = todos.filter(o => (!q || norm(o.nome).includes(q)) &&
-      (!f || (f === "com" ? o.lanc > 0 : f === "sem" ? o.lanc === 0 : o.venc > 0)));
+    const detalhes = detalhesFunc();
+    const rows = todos.filter(o => {
+      if (q && !norm(o.nome).includes(q)) return false;
+      const det = detalhes.get(norm(o.nome));
+      if (f === "ativos" && det && det.ativo === false) return false;
+      if (f === "inativos" && !(det && det.ativo === false)) return false;
+      if (f === "com" && o.lanc <= 0) return false;
+      if (f === "sem" && o.lanc !== 0) return false;
+      if (f === "venc" && o.venc <= 0) return false;
+      return true;
+    });
     setText("funcionariosTotal", todos.length);
     setText("funcionariosAtivos", todos.filter(o => o.lanc > 0).length);
     setText("funcionariosVencidos", todos.filter(o => o.venc > 0).length);
-    const detalhes = detalhesFunc();
     g("funcionariosTbody").innerHTML = rows.map(o => {
       const k = norm(o.nome);
       const det = detalhes.get(k);
@@ -6552,7 +6627,7 @@ document.addEventListener("submit", async function(event) {
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral"))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
+        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
@@ -7101,7 +7176,7 @@ document.addEventListener("submit", async function(event) {
   /* ---------- Produtos (catálogo SQLite) ---------- */
   
   let paginaProdutosAtual = 0;
-  const TAMANHO_PAGINA_PRODUTOS = 100;
+  let TAMANHO_PAGINA_PRODUTOS = 15;
   async function renderProdutos() {
     if (!g("produtosTbody")) return;
     try {
@@ -7136,8 +7211,9 @@ document.addEventListener("submit", async function(event) {
         paginacao.style.cssText = "display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 0;";
         g("produtosTbody").closest("table")?.insertAdjacentElement("afterend", paginacao);
       }
-      paginacao.innerHTML = '<button type="button" class="btn-secondary" data-produtos-pagina="-1" ' + (paginaProdutosAtual <= 0 ? 'disabled' : '') + '>Anterior</button><span>Página ' + (paginaProdutosAtual + 1) + ' de ' + paginaTotal + '</span><button type="button" class="btn-secondary" data-produtos-pagina="1" ' + (paginaProdutosAtual >= paginaTotal - 1 ? 'disabled' : '') + '>Próxima</button>';
+      paginacao.innerHTML = '<label class="pagination-size">Itens por página <select data-produtos-tamanho class="filter-select"><option value="15" ' + (TAMANHO_PAGINA_PRODUTOS===15?'selected':'') + '>15</option><option value="25" ' + (TAMANHO_PAGINA_PRODUTOS===25?'selected':'') + '>25</option><option value="50" ' + (TAMANHO_PAGINA_PRODUTOS===50?'selected':'') + '>50</option></select></label><button type="button" class="btn-secondary" data-produtos-pagina="-1" ' + (paginaProdutosAtual <= 0 ? 'disabled' : '') + '>Anterior</button><span>Página ' + (paginaProdutosAtual + 1) + ' de ' + paginaTotal + '</span><button type="button" class="btn-secondary" data-produtos-pagina="1" ' + (paginaProdutosAtual >= paginaTotal - 1 ? 'disabled' : '') + '>Próxima</button>';
       paginacao.querySelectorAll("button[data-produtos-pagina]").forEach(btn => btn.addEventListener("click", () => { paginaProdutosAtual += Number(btn.dataset.produtosPagina); renderProdutos(); }));
+      paginacao.querySelector("select[data-produtos-tamanho]")?.addEventListener("change", e => { TAMANHO_PAGINA_PRODUTOS = [15,25,50].includes(Number(e.target.value)) ? Number(e.target.value) : 15; paginaProdutosAtual = 0; renderProdutos(); });
       renderPainelIcons(g("page-produtos"));
     } catch (erro) {
       console.error("Falha ao renderizar catálogo SQLite:", erro);
@@ -7145,6 +7221,100 @@ document.addEventListener("submit", async function(event) {
       mostrar("produtosNotice", true);
     }
   }
+
+  // Paginação padrão das tabelas do painel: 15 por página, com opções 25 e 50.
+  // Tabelas com paginação baseada em consulta (Elegíveis e Produtos) usam seus próprios controles.
+  (function instalarPaginacaoPadraoTabelas() {
+    const tamanhosPermitidos = [15, 25, 50];
+    const estados = new WeakMap();
+    const controles = new WeakMap();
+    let sequencia = 0;
+    let agendado = false;
+    const tabelasIgnoradas = new Set(['cvElegiveisTbody', 'produtosTbody']);
+
+    function obterEstado(tabela) {
+      let estado = estados.get(tabela);
+      if (!estado) { estado = { pagina: 1, tamanho: 15 }; estados.set(tabela, estado); }
+      return estado;
+    }
+
+    function criarControle(tabela) {
+      let controle = controles.get(tabela);
+      if (controle && controle.isConnected) return controle;
+      controle = document.createElement('div');
+      controle.className = 'pagination table-pagination';
+      controle.dataset.tablePagination = '1';
+      controle.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 2px;margin-top:4px;';
+      const alvo = tabela.closest('.table-wrap') || tabela;
+      alvo.insertAdjacentElement('afterend', controle);
+      controles.set(tabela, controle);
+      return controle;
+    }
+
+    function aplicar(tabela) {
+      if (!tabela || !tabela.tBodies || !tabela.tBodies.length) return;
+      const tbody = tabela.tBodies[0];
+      if (tabelasIgnoradas.has(tbody.id)) return;
+      const linhas = Array.from(tbody.rows);
+      const estado = obterEstado(tabela);
+      const filtradas = linhas.filter(linha => linha.style.display !== 'none');
+      const total = filtradas.length;
+      const paginas = Math.max(1, Math.ceil(total / estado.tamanho));
+      estado.pagina = Math.min(Math.max(1, estado.pagina), paginas);
+      const inicio = (estado.pagina - 1) * estado.tamanho;
+      const fim = Math.min(inicio + estado.tamanho, total);
+      const conjuntoVisivel = new Set(filtradas.slice(inicio, fim));
+      linhas.forEach(linha => { linha.hidden = !conjuntoVisivel.has(linha); });
+      const controle = criarControle(tabela);
+      const info = total ? `Mostrando ${inicio + 1}–${fim} de ${total} itens` : 'Mostrando 0 de 0 itens';
+      const html = `<label class="pagination-size">Itens por página <select class="filter-select" data-table-page-size>${tamanhosPermitidos.map(n => `<option value="${n}" ${estado.tamanho===n?'selected':''}>${n}</option>`).join('')}</select></label><span>${info}</span><div class="pagination-actions"><button type="button" class="button" data-table-page="-1" ${estado.pagina<=1?'disabled':''}>Anterior</button><span>Página ${estado.pagina} de ${paginas}</span><button type="button" class="button" data-table-page="1" ${estado.pagina>=paginas?'disabled':''}>Próxima</button></div>`;
+      if (controle.innerHTML !== html) controle.innerHTML = html;
+    }
+
+    function aplicarTodas() {
+      agendado = false;
+      document.querySelectorAll('table').forEach(aplicar);
+    }
+    function agendar() {
+      if (agendado) return;
+      agendado = true;
+      setTimeout(aplicarTodas, 0);
+    }
+
+    document.addEventListener('click', e => {
+      const botao = e.target.closest('[data-table-page]');
+      if (!botao) return;
+      const controle = botao.closest('[data-table-pagination]');
+      if (!controle) return;
+      const tabela = controle.previousElementSibling?.matches('table') ? controle.previousElementSibling : controle.previousElementSibling?.querySelector('table') || controle.parentElement?.querySelector('table');
+      if (!tabela) return;
+      const estado = obterEstado(tabela);
+      estado.pagina += Number(botao.dataset.tablePage || 0);
+      aplicar(tabela);
+    });
+    document.addEventListener('change', e => {
+      if (!e.target.matches('[data-table-page-size]')) return;
+      const controle = e.target.closest('[data-table-pagination]');
+      if (!controle) return;
+      const tabela = controle.previousElementSibling?.matches('table') ? controle.previousElementSibling : controle.previousElementSibling?.querySelector('table') || controle.parentElement?.querySelector('table');
+      if (!tabela) return;
+      const estado = obterEstado(tabela);
+      estado.tamanho = tamanhosPermitidos.includes(Number(e.target.value)) ? Number(e.target.value) : 15;
+      estado.pagina = 1;
+      aplicar(tabela);
+    });
+    document.addEventListener('input', e => {
+      if (e.target.matches('.table-toolbar input, .search-box input')) {
+        document.querySelectorAll('table').forEach(tabela => { const estado = obterEstado(tabela); estado.pagina = 1; });
+        agendar();
+      }
+    });
+
+    const observador = new MutationObserver(agendar);
+    observador.observe(document.body, { childList: true, subtree: true });
+    agendar();
+  })();
+
   g("produtosBusca")?.addEventListener("input", () => { paginaProdutosAtual = 0; renderProdutos(); });
   g("produtosFiltro")?.addEventListener("change", () => { paginaProdutosAtual = 0; renderProdutos(); });
   window.renderProdutos = renderProdutos;

@@ -9,11 +9,9 @@ from pathlib import Path
 import pandas as pd
 
 
-# Localiza a raiz do repositório no GitHub Actions.
-if os.environ.get("GITHUB_WORKSPACE"):
-    ROOT = Path(os.environ["GITHUB_WORKSPACE"])
-else:
-    ROOT = Path(__file__).resolve().parents[1]
+# A raiz do projeto é a pasta que contém este diretório scripts/.
+# O repositório pode manter o site dentro de registro-produtos-main/.
+ROOT = Path(__file__).resolve().parents[1]
 
 ITEMS_PATH = ROOT / "Items.ods"
 JSON_PATH = ROOT / "produtos_ean.json"
