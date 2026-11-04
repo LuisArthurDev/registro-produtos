@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  const ONESIGNAL_APP_ID = ""; // preencher com o App ID público do OneSignal
+  const ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521"; // preencher com o App ID público do OneSignal
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
   let initPromise = null;
