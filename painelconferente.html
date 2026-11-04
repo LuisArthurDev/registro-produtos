@@ -3232,7 +3232,10 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     return consultasJsonpPainel.get(cbName);
   }
 
-  iniciarCarregamentoPainel("Atualizando informações do painel...");
+  // Consultas de status do celular próprio são auxiliares e não devem abrir
+  // o overlay global de atualização do painel a cada funcionário consultado.
+  const exibirCarregamento = action !== "gerenciarCelularProprio";
+  if (exibirCarregamento) iniciarCarregamentoPainel("Atualizando informações do painel...");
   const promessa = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     let finalizado = false;
@@ -3264,7 +3267,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
       }
 
       consultasJsonpPainel.delete(cbName);
-      finalizarCarregamentoPainel();
+      if (exibirCarregamento) finalizarCarregamentoPainel();
 
       if (erro) {
         reject(erro);
@@ -4111,7 +4114,8 @@ function imprimirMapaValidade() {
           body { print-color-adjust: exact; }
         }
       
-    .celular-proprio-btn { width:32px; min-width:32px; height:32px; padding:5px !important; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; }
+    .celular-proprio-btn { width:34px; min-width:34px; height:34px; padding:5px !important; display:inline-flex !important; align-items:center; justify-content:center; vertical-align:middle; opacity:1 !important; visibility:visible !important; }
+    .func-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:5px; min-width:150px; }
     .celular-proprio-btn svg { width:18px; height:18px; }
     .celular-proprio-ativo { color:#16a34a !important; border-color:#16a34a !important; }
     .celular-proprio-inativo { color:#dc2626 !important; border-color:#dc2626 !important; }
@@ -6763,9 +6767,10 @@ document.addEventListener("submit", async function(event) {
         botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '"' + (estadoCelular === undefined ? ' disabled' : '') + ' title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="' + iconeCelular + '"></i></button>';
       }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
+      const botaoVisualizar = o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>';
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
+        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td><div class="func-acoes">' + botaoVisualizar + botoesGestao + '</div></td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
