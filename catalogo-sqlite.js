@@ -51,5 +51,9 @@
   function prontoFn(){return pronto;}
   function quantidade(){return total;}
   const api={abrir,garantir,buscarPagina,porEAN,porCodigoInterno,pronto:prontoFn,quantidade,atualizarProduto};
-  global.CatalogoSQLite=api;
+  // Substitui qualquer implementação antiga em cache e mantém a API pública completa.
+  global.CatalogoSQLite = Object.assign(global.CatalogoSQLite || {}, api);
+  if (typeof global.CatalogoSQLite.garantir !== 'function') {
+    global.CatalogoSQLite.garantir = garantir;
+  }
 })(window);
