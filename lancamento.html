@@ -761,7 +761,7 @@ function carregarCadastroFuncionarios() {
         }).map(option =>
           `<option value="${escaparAtributo(option.value)}">` +
           `${escaparHTML(option.textContent)}</option>`
-        ).join("") + (administradorLoja ? '<option value="Estoque">Estoque · Cadastrar vencido</option>' : '');
+        ).join("") + (administradorLoja ? '<option value="Estoque">Estoque</option>' : '');
 
       select.disabled = false;
       const campoFuncionario = document.getElementById("campoFuncionario");
@@ -1449,16 +1449,68 @@ function consultarDuplicidadeNoMapa(payload) {
       action: "verificarItemMapa", callback: cb, sessao: Auth.token(),
       funcionario: payload.funcionario, codigo: payload.codigo, lote: payload.lote, validade: payload.validade
     });
-    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 20000);
+    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 10000);
     script.onerror = () => finalizar(new Error("Não foi possível consultar o mapa do funcionário."));
     script.src = APPS_SCRIPT_URL + "?" + params.toString();
     document.head.appendChild(script);
   });
 }
 
+function consultarChaveLancamento(envio) {
+  return new Promise((resolve, reject) => {
+    const cb = "__verificarChaveLancamentoCb";
+    const anterior = window[cb];
+    const script = document.createElement("script");
+    let finalizado = false;
+    const finalizar = (erro, dados) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timer);
+      script.remove();
+      if (window[cb] === receber) { if (anterior) window[cb] = anterior; else delete window[cb]; }
+      erro ? reject(erro) : resolve(dados);
+    };
+    const receber = dados => finalizar(null, dados);
+    window[cb] = receber;
+    const params = new URLSearchParams({
+      action: "verificarChaveLancamento", callback: cb, sessao: Auth.token(),
+      requestId: envio.requestId, funcionario: envio.payload.funcionario
+    });
+    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar a chave única.")), 12000);
+    script.onerror = () => finalizar(new Error("Não foi possível consultar a chave única."));
+    script.src = APPS_SCRIPT_URL + "?" + params.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function reenviarTentativaPendente() {
+  if (!envioAtual || enviando) return;
+  enviando = true;
+  btnSalvar.disabled = true;
+  btnSalvar.textContent = "Confirmando tentativa...";
+  mostrarStatus("Conferindo a chave única antes de reenviar...");
+  consultarChaveLancamento(envioAtual).then(resultado => {
+    if (resultado && resultado.sucesso && resultado.encontrado) {
+      finalizarSucesso(resultado.mensagem || "Lançamento localizado e confirmado na planilha.");
+      return;
+    }
+    if (!resultado || resultado.sucesso !== true) throw new Error(resultado?.mensagem || "Não foi possível confirmar a chave.");
+    mostrarStatus("A chave ainda não foi localizada. Reenviando a mesma tentativa, sem gerar outra chave.", "info");
+    enviarPost(envioAtual.payload, envioAtual.token);
+    iniciarPolling(envioAtual.requestId, envioAtual.token);
+  }).catch(erro => {
+    enviando = false;
+    btnSalvar.disabled = false;
+    btnSalvar.textContent = "Tentar novamente (mesma chave)";
+    mostrarStatus("Não foi possível confirmar o resultado: " + erro.message + ". Tente novamente; a mesma chave será mantida.", "error");
+  });
+}
+
 /* Envio do lançamento */
 formulario.addEventListener("submit",async evento=>{
-  evento.preventDefault();if(enviando||verificandoMapa)return;ocultarStatus();
+  evento.preventDefault();
+  if (envioAtual && envioAtual.pendenteConfirmacao) { reenviarTentativaPendente(); return; }
+  if(enviando||verificandoMapa)return;ocultarStatus();
 
   const codigo=String(codigoEl.value || "").replace(/\s+/g, "").trim(),funcionario=funcionarioEl.value.trim();
   const lote=$("lote").value.trim(),validadeTexto=validadeEl.value.trim();
@@ -1550,7 +1602,8 @@ formulario.addEventListener("submit",async evento=>{
   const token=aleatorioHex(32);
   enviando=true;btnSalvar.disabled=true;btnSalvar.textContent="Enviando...";
   mostrarStatus("Enviando lançamento para a planilha...");
-  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,descricao:$("descricaoTexto").textContent||""};
+  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,descricao:$("descricaoTexto").textContent||"",pendenteConfirmacao:false};
+  guardarJSON("lancamentoPendenteV1", envioAtual);
 
   try{enviarPost(payload,token);iniciarPolling(payload.requestId,token)}
   catch(e){finalizarErro("Não foi possível iniciar o envio: "+e.message)}
@@ -1566,9 +1619,24 @@ function enviarPost(payload,token){
 window.__statusCb=function(resposta){
   if(!resposta||!envioAtual||resposta.requestId!==envioAtual.requestId)return;
   if(resposta.status==="saved")finalizarSucesso(resposta.message||"Lançamento salvo com sucesso.");
-  else if(resposta.status==="error")finalizarErro(resposta.message||"Não foi possível salvar o lançamento.");
+  else if(resposta.status==="error")confirmarResultadoPorChave(resposta.message||"O servidor retornou um erro.");
   else mostrarStatus(resposta.message||"Processando lançamento...");
 };
+async function confirmarResultadoPorChave(mensagemFalha) {
+  if (!envioAtual) return;
+  mostrarStatus("A resposta apresentou uma falha. Conferindo se a chave única foi gravada...");
+  try {
+    const resultado = await consultarChaveLancamento(envioAtual);
+    if (resultado && resultado.sucesso && resultado.encontrado) {
+      finalizarSucesso("Lançamento confirmado pela chave única. " + (resultado.mensagem || ""));
+      return;
+    }
+    if (!resultado || resultado.sucesso !== true) throw new Error(resultado?.mensagem || "Consulta inconclusiva.");
+    finalizarErroComRetentativa(mensagemFalha + " A chave ainda não foi localizada; você pode tentar novamente com a mesma chave.");
+  } catch (erro) {
+    finalizarErroComRetentativa(mensagemFalha + " Não foi possível confirmar a gravação. Tente novamente com a mesma chave.");
+  }
+}
 function iniciarPolling(requestId,token){
   const inicio=Date.now();let tentativa=0;
   if(temporizadorPolling)clearTimeout(temporizadorPolling);
@@ -1580,7 +1648,7 @@ function iniciarPolling(requestId,token){
   function consultar(){
     if(!envioAtual||envioAtual.requestId!==requestId)return;
     if(Date.now()-inicio>90000){
-      finalizarErro("O sistema não confirmou o lançamento em 90 segundos. Verifique a planilha antes de tentar enviar novamente.");return;
+      confirmarResultadoPorChave("O sistema não recebeu a confirmação dentro de 90 segundos.");return;
     }
     if(scriptStatusAtual){scriptStatusAtual.remove();scriptStatusAtual=null}
     const script=document.createElement("script");
@@ -1592,8 +1660,33 @@ function iniciarPolling(requestId,token){
   }
   temporizadorPolling=setTimeout(consultar,250);
 }
+async function restaurarLancamentoPendente() {
+  const pendente = lerJSON("lancamentoPendenteV1");
+  if (!pendente || !pendente.requestId || !pendente.payload || !pendente.token) return;
+  if (pendente.payload.sessao !== Auth.token()) {
+    guardarJSON("lancamentoPendenteV1", null);
+    return;
+  }
+  envioAtual = { ...pendente, pendenteConfirmacao: true };
+  btnSalvar.textContent = "Confirmar tentativa anterior";
+  mostrarStatus("Existe um lançamento anterior sem confirmação. Vou conferir a chave única antes de permitir uma nova tentativa.", "info");
+  try {
+    const resultado = await consultarChaveLancamento(envioAtual);
+    if (resultado && resultado.sucesso && resultado.encontrado) {
+      finalizarSucesso("Lançamento anterior localizado e confirmado pela chave única.");
+    } else if (resultado && resultado.sucesso) {
+      mostrarStatus("A tentativa anterior não foi localizada. Clique em 'Confirmar tentativa anterior' para reenviar os mesmos dados com a mesma chave.", "error");
+    } else {
+      mostrarStatus("Não foi possível confirmar automaticamente a tentativa anterior. Clique em 'Confirmar tentativa anterior' para consultar novamente; a chave será mantida.", "error");
+    }
+  } catch (_) {
+    mostrarStatus("Não foi possível consultar a tentativa anterior agora. Clique em 'Confirmar tentativa anterior' para tentar novamente com a mesma chave.", "error");
+  }
+}
+
 function finalizarSucesso(mensagem){
   encerrarPolling();
+  guardarJSON("lancamentoPendenteV1", null);
   const manterCodigoBarras=$("mesmoProduto").checked;
   if(envioAtual&&envioAtual.payload){
     registrarNoHistorico(envioAtual.payload,envioAtual.descricao);
@@ -1605,7 +1698,19 @@ function finalizarSucesso(mensagem){
 }
 function finalizarErro(mensagem){
   encerrarPolling();enviando=false;envioAtual=null;
+  guardarJSON("lancamentoPendenteV1", null);
   btnSalvar.disabled=false;btnSalvar.textContent="Salvar lançamento";
+  mostrarStatus(mensagem,"error");
+}
+function finalizarErroComRetentativa(mensagem){
+  encerrarPolling();
+  enviando=false;
+  if (envioAtual) {
+    envioAtual.pendenteConfirmacao=true;
+    guardarJSON("lancamentoPendenteV1", envioAtual);
+  }
+  btnSalvar.disabled=false;
+  btnSalvar.textContent="Tentar novamente (mesma chave)";
   mostrarStatus(mensagem,"error");
 }
 function encerrarPolling(){
@@ -1699,6 +1804,7 @@ window.addEventListener("load", async () => {
     atualizarBotoesLimpar();
     atualizarCamposTransferencia();
     atualizarBotaoVisualizar();
+    await restaurarLancamentoPendente();
 
   } catch (erro) {
     console.error(erro);

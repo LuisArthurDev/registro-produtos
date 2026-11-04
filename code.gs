@@ -354,6 +354,7 @@ function doGetOriginal_(e) {
     return consultarValidades_(parametros);
   }
   if (acao === "verificarItemMapa") return verificarItemMapa_(parametros);
+  if (acao === "verificarChaveLancamento") return verificarChaveLancamento_(parametros);
 
   if (acao === "adicionarValidadeManual") {
     return adicionarValidadeManual_(parametros);
@@ -401,6 +402,9 @@ function doGetOriginal_(e) {
     if (callback !== "__funcionariosCb") return respostaTexto_("Callback inválido.");
     try {
       const sessao = obterSessaoObrigatoria_(parametros);
+      // Transferencias é uma opção especial exclusiva do Administrador de Loja.
+      // Ela é removida da lista-base e adicionada explicitamente abaixo para
+      // nunca aparecer para funcionários nem para o Administrador Geral.
       const nomesPermitidos = obterAbasPermitidas_(parametros).filter(n => n !== "Transferencias");
       const cadastro = obterCadastroFuncionarios_();
       const porNome = {};
@@ -415,8 +419,11 @@ function doGetOriginal_(e) {
       // precisa enxergar também as abas normais para administrar a loja.
       const modoGestao = String(parametros.modo || "") === "gestao";
       if (sessao.administrador === true && !modoGestao) funcionarios = [];
+      const podeLancarTransferencias = sessao.administrador === true && sessao.administradorGeral !== true;
       const todos = sessao.administrador
-        ? (modoGestao ? nomesPermitidos : especiais.slice())
+        ? (modoGestao
+            ? nomesPermitidos
+            : [...especiais, ...(podeLancarTransferencias ? ["Transferencias"] : [])])
         : nomesPermitidos;
       const detalhes = obterDetalhesFuncionarios_(parametros);
       return respostaJsonp_(callback, {
@@ -472,6 +479,18 @@ function exigirSessaoLancamento_(dados) {
   }
 
   const nomeInformado = String(dados.funcionario || "").trim();
+
+  // A aba Transferencias pode ser lançada diretamente pelo Administrador de
+  // Loja. A autorização é validada no servidor; o Administrador Geral e os
+  // funcionários continuam sem acesso a esse destino.
+  if (nomeInformado === "Transferencias") {
+    if (sessao.administrador !== true || sessao.administradorGeral === true) {
+      throw new Error("Somente o Administrador de Loja pode lançar Transferências.");
+    }
+    if (!normalizarLoja_(sessao.loja)) throw new Error("Administrador sem loja cadastrada.");
+    dados.funcionario = "Transferencias";
+    return sessao;
+  }
 
   // Cadastro de vencidos no Estoque é exclusivo do Administrador de Loja.
   // Administrador Geral permanece bloqueado acima.
@@ -636,33 +655,15 @@ function salvarProduto_(dados) {
   }
 
   try {
-    /*
-     * Verifica duplicidade em todas as abas cadastradas.
-     * Abas normais e especiais: coluna F.
-     * Transferencias: coluna H.
-     */
-    const nomesAbas = obterNomesAbasCadastro_();
-
-    for (const nome of nomesAbas) {
-      const abaExistente = planilha.getSheetByName(nome);
-
-      if (!abaExistente || abaExistente.getLastRow() < 2) {
-        continue;
-      }
-
-      const colunaChave = nome === "Transferencias" ? 8 : 6;
-
-      const duplicado =
-        localizarChaveNaAba_(abaExistente, colunaChave, requestId) > 0;
-
-      if (duplicado) {
-        return {
-          status: "saved",
-          message:
-            "Este lançamento já consta na planilha. " +
-            "Nenhuma quantidade foi adicionada novamente."
-        };
-      }
+    // Idempotência: verifica somente a aba de destino desta tentativa.
+    // Evita varrer todas as abas a cada lançamento e impede somar/gravar duas vezes.
+    const abaDestino = ehEstoque ? planilha.getSheetByName("Estoque") : aba;
+    const colunaChaveDestino = ehEstoque ? 9 : (ehTransferencia ? 8 : 6);
+    if (abaDestino && localizarChaveNaAba_(abaDestino, colunaChaveDestino, requestId) > 0) {
+      return {
+        status: "saved",
+        message: "Este lançamento já consta na planilha. Nenhuma quantidade foi adicionada novamente."
+      };
     }
 
     const dataLancamento = new Date();
@@ -1541,6 +1542,42 @@ function converterValidadeParaData_(valor, textoExibido) {
   return null;
 }
 
+function verificarChaveLancamento_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__verificarChaveLancamentoCb") return respostaTexto_("Callback inválido.");
+  try {
+    const chave = String(p.requestId || "").trim();
+    const funcionario = String(p.funcionario || "").trim();
+    if (!idValido_(chave) || !funcionario) throw new Error("Identificador ou destino inválido.");
+
+    let aba, coluna;
+    if (funcionario === "Estoque") {
+      const sessao = exigirAdministrador_({ sessao: p.sessao });
+      aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Estoque");
+      coluna = 9;
+      if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
+      const ultima = aba.getLastRow();
+      const valores = aba.getRange(2, coluna, ultima - 1, 1).createTextFinder(chave).matchEntireCell(true).findNext();
+      if (!valores) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
+      const lojaLinha = normalizarLoja_(aba.getRange(valores.getRow(), 8).getDisplayValue());
+      if (lojaLinha !== normalizarLoja_(sessao.loja)) throw new Error("Lançamento não pertence à sua loja.");
+      return respostaJsonp_(cb, { sucesso: true, encontrado: true, mensagem: "Produto localizado no Estoque." });
+    }
+
+    const dadosSessao = funcionario === "Transferencias" ? obterSessaoObrigatoria_({ sessao: p.sessao }) : exigirSessaoLancamento_({ sessao: p.sessao, funcionario });
+    if (funcionario === "Transferencias" && (!dadosSessao.administrador || dadosSessao.administradorGeral)) throw new Error("Somente o Administrador de Loja pode consultar Transferências.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    aba = ss.getSheetByName(funcionario);
+    coluna = funcionario === "Transferencias" ? 8 : 6;
+    if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
+    const achado = aba.getRange(2, coluna, aba.getLastRow() - 1, 1).createTextFinder(chave).matchCase(true).matchEntireCell(false).findAll()
+      .some(c => String(c.getDisplayValue() || "").trim() === chave || String(c.getDisplayValue() || "").split("|").map(v => v.trim()).includes(chave));
+    return respostaJsonp_(cb, { sucesso: true, encontrado: achado, mensagem: achado ? "Lançamento localizado na planilha." : "Chave ainda não localizada." });
+  } catch (e) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  }
+}
+
 function verificarItemMapa_(p) {
   const cb = String(p.callback || "");
   if (cb !== "__verificarItemMapaCb") return respostaTexto_("Callback inválido.");
@@ -1563,11 +1600,15 @@ function verificarItemMapa_(p) {
     if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, existe: false, quantidade: 0, ocorrencias: 0 });
     const transferencia = funcionario === "Transferencias";
     const largura = transferencia ? 8 : 6;
-    const valores = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getValues();
-    const exibidos = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getDisplayValues();
+    // Localiza primeiro apenas as linhas com o EAN informado; não carrega o mapa inteiro.
+    const ultimaLinha = aba.getLastRow();
+    const candidatos = aba.getRange(2, 1, ultimaLinha - 1, 1)
+      .createTextFinder(codigo).matchCase(true).matchEntireCell(true).findAll();
     let quantidade = 0, ocorrencias = 0;
-    for (let i = 0; i < valores.length; i++) {
-      const row = valores[i], shown = exibidos[i];
+    for (const celula of candidatos) {
+      const linha = celula.getRow();
+      const row = aba.getRange(linha, 1, 1, largura).getValues()[0];
+      const shown = aba.getRange(linha, 1, 1, largura).getDisplayValues()[0];
       if (transferencia && normalizarLoja_(shown[5]) !== sessao.loja) continue;
       const cod = String(shown[0] || "").trim();
       const lot = String(shown[1] || "").trim();
@@ -6297,6 +6338,7 @@ function bloquearSeNaoAutorizado_(p) {
     "historicoMes",
     "validades",
     "verificarItemMapa",
+    "verificarChaveLancamento",
     "funcionarios", // Lista de abas permitidas; o endpoint filtra por perfil e loja.
     "editarLancamento",
     "excluirLancamento",
