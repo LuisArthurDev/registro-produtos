@@ -3361,19 +3361,13 @@ function carregarCadastroFuncionariosPainel() {
       CONTROLADOS_MAPA = [...resposta.especiais];
       funcionariosMapaCarregados = true;
 
-      // Carrega todos os estados de celular em uma única chamada, junto do cadastro.
-      // Isso evita dezenas de requisições JSONP concorrentes/serializadas ao abrir o painel.
-      try {
-        const status = await jsonpPainel("gerenciarCelularProprioLote", "__celularProprioLoteCb", {
-          funcionarios: JSON.stringify(cadastroFuncionariosPainel.detalhes.map(d => ({ nome: d.nome, loja: d.loja || "" })))
-        });
-        (status.funcionarios || []).forEach(item => {
-          const chave = norm(item.nome) + "|" + String(item.loja || "");
-          estadosCelularProprio.set(chave, item.ativo === true);
-        });
-      } catch (erroStatus) {
-        console.warn("Não foi possível carregar os estados de celular próprio em lote:", erroStatus);
-      }
+      // O estado do celular vem na mesma resposta do cadastro, sem segunda
+      // requisição, fila ou callback adicional. Ausência equivale a desativado.
+      estadosCelularProprio.clear();
+      cadastroFuncionariosPainel.detalhes.forEach(item => {
+        const chave = norm(item.nome) + "|" + String(item.loja || "");
+        estadosCelularProprio.set(chave, item.celularProprioAtivo === true);
+      });
   
       return cadastroFuncionariosPainel;
     }).catch(erro => {
@@ -6958,22 +6952,33 @@ document.addEventListener("submit", async function(event) {
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
     else if (btn.dataset.funcAcao === "celular") {
+      ev.preventDefault();
+      ev.stopPropagation();
       const loja = btn.dataset.loja || "";
       const chaveCelular = norm(nome) + "|" + String(loja);
       const novoEstado = estadosCelularProprio.get(chaveCelular) !== true;
+      const verbo = novoEstado ? "ATIVAR" : "DESATIVAR";
+      if (!window.confirm(verbo + " o celular próprio de " + nome + "?")) return;
+      if (btn.dataset.processando === "1") return;
+      btn.dataset.processando = "1";
       btn.disabled = true;
       btn.title = novoEstado ? "Ativando celular próprio..." : "Desativando celular próprio...";
-      // A autorização é validada novamente no Apps Script; não depender da fila
-      // genérica do cadastro evita que outras consultas deixem o clique aguardando.
       jsonpPainelBruto("gerenciarCelularProprio", "__celularProprioCb", {
         modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0"
-      })
-        .then(d => {
-          if (!d || d.sucesso !== true) throw new Error(d?.mensagem || "Não foi possível alterar o celular próprio.");
-          estadosCelularProprio.set(chaveCelular, d.ativo === true);
-          renderFuncionarios();
-        })
-        .catch(e => { alert(e.message || "Falha ao alterar celular próprio."); btn.disabled = false; btn.title = novoEstado ? "Ativar celular próprio" : "Desativar celular próprio"; });
+      }).then(d => {
+        if (!d || d.sucesso !== true) throw new Error(d && d.mensagem ? d.mensagem : "O servidor não confirmou a alteração.");
+        estadosCelularProprio.set(chaveCelular, d.ativo === true);
+        const detalhe = detalhesFunc().get(norm(nome));
+        if (detalhe) detalhe.celularProprioAtivo = d.ativo === true;
+        alert(d.mensagem || (d.ativo ? "Celular próprio habilitado." : "Celular próprio desabilitado."));
+        renderFuncionarios();
+      }).catch(e => {
+        console.error("Falha ao gerenciar celular próprio:", e);
+        alert("Não foi possível alterar o celular próprio: " + (e && e.message ? e.message : String(e)));
+        btn.disabled = false;
+        btn.dataset.processando = "0";
+        btn.title = novoEstado ? "Ativar celular próprio" : "Desativar celular próprio";
+      });
     }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });

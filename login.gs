@@ -255,8 +255,13 @@ function propriedadesCelularProprio_(nome, loja) {
   return { ativo: "MV_CELULAR_" + chave + "_ATIVO", hash: "MV_CELULAR_" + chave + "_TOKEN_HASH", externalId: "mv_celular_" + normalizarLoja_(loja) + "_" + slug };
 }
 function celularProprioAtivo_(nome, loja) {
-  const k = propriedadesCelularProprio_(nome, loja);
-  return PropertiesService.getScriptProperties().getProperty(k.ativo) === "1";
+  const funcionario = buscarFuncionarioPorNome_(nome);
+  if (!funcionario || normalizarLoja_(funcionario.loja) !== normalizarLoja_(loja)) return false;
+  const planilha = typeof planilhaDaRequisicao_ === "function"
+    ? planilhaDaRequisicao_()
+    : SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = planilha.getSheetByName("Funcionarios");
+  return !!(aba && celularProprioAtivoNaLinha_(aba, funcionario.linha));
 }
 function hashTokenCelularProprio_(token) {
   return Utilities.base64EncodeWebSafe(Utilities.computeDigest(
@@ -293,7 +298,7 @@ function registrarCelularProprio_(p) {
     const sessao = obterSessaoObrigatoria_({ sessao: tokenSessao });
     const propsCelular = propriedadesCelularProprio_(sessao.nome, sessao.loja);
     const props = PropertiesService.getScriptProperties();
-    if (props.getProperty(propsCelular.ativo) !== "1") throw new Error("O administrador ainda não habilitou o celular próprio para esta conta.");
+    if (!celularProprioAtivo_(sessao.nome, sessao.loja)) throw new Error("O administrador ainda não habilitou o celular próprio para esta conta.");
     const token = String(p.tokenDispositivo || "");
     if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Chave do dispositivo inválida.");
     const funcionario = buscarFuncionarioPorNome_(sessao.nome);
@@ -319,7 +324,7 @@ function loginDispositivoProprio_(p) {
     if (!funcionario || funcionario.ativo === false || normalizarLoja_(funcionario.loja) !== loja) throw new Error("Dispositivo não autorizado.");
     const k = propriedadesCelularProprio_(funcionario.nome, funcionario.loja);
     const props = PropertiesService.getScriptProperties();
-    if (props.getProperty(k.ativo) !== "1") throw new Error("Dispositivo não autorizado.");
+    if (!celularProprioAtivo_(funcionario.nome, funcionario.loja)) throw new Error("Dispositivo não autorizado.");
     const token = String(p.tokenDispositivo || "");
     if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Dispositivo não autorizado.");
     const salvo = String(props.getProperty(k.hash) || "");
@@ -333,6 +338,7 @@ function loginDispositivoProprio_(p) {
 function gerenciarCelularProprio_(p) {
   const cb = "__celularProprioCb";
   if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
   try {
     const admin = obterSessaoObrigatoria_({ sessao: p.sessao });
     if (admin.administrador !== true && admin.administradorGeral !== true) throw new Error("Ação exclusiva para administradores.");
@@ -341,18 +347,25 @@ function gerenciarCelularProprio_(p) {
     const funcionario = buscarFuncionarioPorNome_(nome);
     if (!funcionario || normalizarLoja_(funcionario.loja) !== loja) throw new Error("Funcionário não encontrado.");
     if (admin.administradorGeral !== true && normalizarLoja_(admin.loja) !== loja) throw new Error("Você só pode gerenciar funcionários da sua loja.");
+    const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
+    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
+    const modo = String(p.modo || "status");
+    let ativo = celularProprioAtivoNaLinha_(aba, funcionario.linha);
     const k = propriedadesCelularProprio_(funcionario.nome, funcionario.loja);
     const props = PropertiesService.getScriptProperties();
-    if (String(p.modo || "status") === "alternar") {
-      const ativo = String(p.ativo || "0") === "1";
-      if (ativo && funcionario.ativo === false) throw new Error("Reative o funcionário antes de habilitar o celular próprio.");
-      props.setProperty(k.ativo, ativo ? "1" : "0");
-      if (!ativo) props.deleteProperty(k.hash);
+    if (modo === "alternar") {
+      const novoAtivo = String(p.ativo || "0") === "1";
+      if (novoAtivo && funcionario.ativo === false) throw new Error("Reative o funcionário antes de habilitar o celular próprio.");
+      lock.waitLock(15000);
+      gravarCelularProprioNaLinha_(aba, funcionario.linha, novoAtivo);
+      if (!novoAtivo) props.deleteProperty(k.hash);
+      ativo = novoAtivo;
     }
-    return respostaJsonp_(cb, { sucesso: true, nome: funcionario.nome, loja: funcionario.loja,
-      ativo: props.getProperty(k.ativo) === "1", dispositivoAutorizado: !!props.getProperty(k.hash) });
+    return respostaJsonp_(cb, { sucesso: true, nome: funcionario.nome, loja: funcionario.loja, ativo, dispositivoAutorizado: !!props.getProperty(k.hash), mensagem: ativo ? "Celular próprio habilitado." : "Celular próprio desabilitado." });
   } catch (erro) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro) });
+  } finally {
+    try { if (lock.hasLock()) lock.releaseLock(); } catch (_) {}
   }
 }
 

@@ -20,9 +20,42 @@ function linhasFuncionariosDaRequisicao_() {
   if (cache.linhasFuncionarios) return cache.linhasFuncionarios;
   const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
   if (!aba || aba.getLastRow() < 2) return (cache.linhasFuncionarios = []);
-  // A:J: inclui J (status ativo/inativo), sem perder os campos de perfil/loja.
-  cache.linhasFuncionarios = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
+  // Lê todas as colunas existentes: a coluna "Celular Próprio" é adicionada
+  // ao final da aba Funcionarios sem deslocar os campos já utilizados (A:J).
+  const largura = Math.max(10, aba.getLastColumn());
+  cache.linhasFuncionarios = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getValues();
   return cache.linhasFuncionarios;
+}
+
+
+/* ============================================================
+   CELULAR PRÓPRIO — coluna persistente na aba Funcionarios
+   A coluna é localizada pelo cabeçalho; se ainda não existir, é criada
+   ao final da planilha, sem alterar as colunas A:J existentes.
+   ============================================================ */
+function colunaCelularProprio_(aba, criar) {
+  const ultima = Math.max(1, aba.getLastColumn());
+  const cabecalhos = aba.getRange(1, 1, 1, ultima).getDisplayValues()[0];
+  let coluna = cabecalhos.findIndex(v => normalizarTexto_(v) === "celular proprio") + 1;
+  if (!coluna && criar === true) {
+    coluna = ultima + 1;
+    aba.getRange(1, coluna).setValue("Celular Próprio");
+    const linhas = Math.max(0, aba.getLastRow() - 1);
+    if (linhas) aba.getRange(2, coluna, linhas, 1).setValues(Array.from({length: linhas}, () => ["Inativo"]));
+  }
+  return coluna || 0;
+}
+
+function celularProprioAtivoNaLinha_(aba, linha) {
+  const coluna = colunaCelularProprio_(aba, false);
+  if (!coluna || !linha) return false;
+  return normalizarTexto_(aba.getRange(linha, coluna).getDisplayValue()) === "ativo";
+}
+
+function gravarCelularProprioNaLinha_(aba, linha, ativo) {
+  const coluna = colunaCelularProprio_(aba, true);
+  aba.getRange(linha, coluna).setValue(ativo ? "Ativo" : "Inativo");
+  return ativo === true;
 }
 
 const CABECALHOS_TRANSFERENCIAS = [
@@ -507,26 +540,20 @@ function gerenciarCelularProprioLote_(p) {
   if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
   try {
     const admin = obterSessaoObrigatoria_({ sessao: p.sessao });
-    if (admin.administrador !== true && admin.administradorGeral !== true) {
-      throw new Error("Ação exclusiva para administradores.");
-    }
-    let funcionarios = [];
-    try { funcionarios = JSON.parse(String(p.funcionarios || "[]")); } catch (_) {
-      throw new Error("Lista de funcionários inválida.");
-    }
-    if (!Array.isArray(funcionarios)) throw new Error("Lista de funcionários inválida.");
-    // Limite defensivo: a lista vem do cadastro já carregado pelo painel.
-    funcionarios = funcionarios.slice(0, 500);
-    const propriedades = PropertiesService.getScriptProperties().getProperties();
-    const resultado = funcionarios.map(item => {
-      const nome = String(item && item.nome || "").trim();
-      const loja = normalizarLoja_(item && item.loja || "");
-      if (!nome) return null;
+    if (admin.administrador !== true && admin.administradorGeral !== true) throw new Error("Ação exclusiva para administradores.");
+    const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
+    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
+    const dados = linhasFuncionariosDaRequisicao_();
+    const coluna = colunaCelularProprio_(aba, false);
+    const funcionarios = dados.map((linha, i) => {
+      const nome = String(linha[0] || "").trim();
+      const loja = normalizarLoja_(linha[8] || "");
+      if (!nome || normalizarTexto_(nome) === "transferencias") return null;
       if (admin.administradorGeral !== true && loja !== normalizarLoja_(admin.loja)) return null;
-      const k = propriedadesCelularProprio_(nome, loja);
-      return { nome: nome, loja: loja, ativo: propriedades[k.ativo] === "1", dispositivoAutorizado: !!propriedades[k.hash] };
+      const valor = coluna ? linha[coluna - 1] : "Inativo";
+      return { nome, loja, ativo: normalizarTexto_(valor) === "ativo", dispositivoAutorizado: !!PropertiesService.getScriptProperties().getProperty(propriedadesCelularProprio_(nome, loja).hash) };
     }).filter(Boolean);
-    return respostaJsonp_(cb, { sucesso: true, funcionarios: resultado });
+    return respostaJsonp_(cb, { sucesso: true, funcionarios });
   } catch (erro) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro), funcionarios: [] });
   }
@@ -6154,6 +6181,11 @@ function lojaDaLinhaVencidos_(aba, linha, exibidos) {
    ============================================================ */
 function obterDetalhesFuncionarios_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros || {});
+  const abaFuncionarios = planilhaDaRequisicao_().getSheetByName("Funcionarios");
+  if (!abaFuncionarios) throw new Error('A aba "Funcionarios" não foi encontrada.');
+  // Cria a coluna e preenche os cadastros existentes como Inativo na primeira leitura.
+  // A leitura das linhas ocorre depois disso para incluir a nova coluna no cache.
+  const colunaCelular = colunaCelularProprio_(abaFuncionarios, true);
   const dados = linhasFuncionariosDaRequisicao_();
   if (!dados.length) return [];
   return dados.map(linha => {
@@ -6161,8 +6193,9 @@ function obterDetalhesFuncionarios_(parametros) {
     const loja = normalizarLoja_(linha[8]);
     const administrador = ehAdministradorValor_(linha[7]);
     const ativo = !(String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false);
-    if (!nome || (!sessao.administrador && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administrador && loja !== sessao.loja)) return null;
-    return { nome, especial: linha[1] === true, check: linha[5] === true, ativo, temPin: String(linha[6] || "").includes(":"), administrador, loja };
+    const celularProprioAtivo = !!(colunaCelular && normalizarTexto_(linha[colunaCelular - 1]) === "ativo");
+    if (!nome || (!sessao.administrador && sessao.administradorGeral !== true && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administradorGeral !== true && sessao.administrador && loja !== sessao.loja)) return null;
+    return { nome, especial: linha[1] === true, check: linha[5] === true, ativo, temPin: String(linha[6] || "").includes(":"), administrador, loja, celularProprioAtivo };
   }).filter(Boolean);
 }
 
@@ -6201,8 +6234,10 @@ function obterSessaoObrigatoria_(parametros) {
 
   if (sessao.dispositivoCelularProprio === true) {
     const kCelular = propriedadesCelularProprio_(sessao.nome, sessao.loja);
+    const funcionarioCelular = buscarFuncionarioPorNome_(sessao.nome);
+    const ativoNaPlanilha = funcionarioCelular && normalizarLoja_(funcionarioCelular.loja) === normalizarLoja_(sessao.loja) && celularProprioAtivo_(sessao.nome, sessao.loja);
     const propsCelular = PropertiesService.getScriptProperties();
-    if (propsCelular.getProperty(kCelular.ativo) !== "1" || !propsCelular.getProperty(kCelular.hash)) {
+    if (!ativoNaPlanilha || !propsCelular.getProperty(kCelular.hash)) {
       removerSessao_(token);
       throw new Error("O celular próprio foi revogado pelo administrador.");
     }
@@ -6932,7 +6967,7 @@ function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, a
   if (administrador !== true) {
     const kCelular = propriedadesCelularProprio_(nome, loja);
     const propsCelular = PropertiesService.getScriptProperties();
-    if (propsCelular.getProperty(kCelular.ativo) === "1" && propsCelular.getProperty(kCelular.hash)) {
+    if (celularProprioAtivo_(nome, loja) && propsCelular.getProperty(kCelular.hash)) {
       externalId = kCelular.externalId;
     }
   }
@@ -7154,7 +7189,7 @@ function notificarTodosLoja_(p) {
     // Comunicado manual continua alcançando todos. O funcionário também recebe
     // pelo alias exclusivo do próprio aparelho, se ele estiver autorizado.
     const kCelular = propriedadesCelularProprio_(nome, loja);
-    if (PropertiesService.getScriptProperties().getProperty(kCelular.ativo) === "1" &&
+    if (celularProprioAtivo_(nome, loja) &&
         PropertiesService.getScriptProperties().getProperty(kCelular.hash)) ids.push(kCelular.externalId);
   });
   const unicos = Array.from(new Set(ids));
