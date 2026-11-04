@@ -57,11 +57,13 @@ function lerCadastroFuncionarios_() {
       const nome = String(linha[0] || "").trim();
       const especial = linha[1] === true;
       const administrador = ehAdministradorValor_(linha[7]);
+      const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
 
       if (
         !nome ||
         normalizarTexto_(nome) === "transferencias" ||
-        administrador
+        administrador ||
+        inativo
       ) {
         return;
       }
@@ -288,6 +290,12 @@ function doPost(e) {
     });
 
     const resultado = salvarProduto_(payload);
+    try {
+      const sessaoLancamento = obterSessaoObrigatoria_(payload);
+      if (sessaoLancamento && sessaoLancamento.administrador === true && resultado && resultado.sucesso !== false) {
+        gravarEventoAdministrativo_(sessaoLancamento, "Lançamento administrativo", "Lançamento realizado na aba " + String(payload.funcionario || payload.nomeAba || "—"), String(payload.codigo || payload.ean || ""));
+      }
+    } catch (erroAuditoria) { console.error("Falha ao registrar lançamento administrativo: " + erroAuditoria); }
     invalidarCacheDados_();
 
     gravarStatus_(requestId, token, resultado);
@@ -386,6 +394,7 @@ function doGetOriginal_(e) {
       if (acao === "renomearFuncionario") return renomearFuncionario_(parametros);
       if (acao === "definirEspecialFuncionario") return definirEspecialFuncionario_(parametros);
       if (acao === "marcarCheckFuncionario") return marcarCheckFuncionario_(parametros);
+  if (acao === "inativarFuncionario") return inativarFuncionario_(parametros);
 
   if (acao === "funcionarios") {
     const callback = String(parametros.callback || "");
@@ -1109,10 +1118,12 @@ function consultarHistoricoMes_(parametros) {
       });
     });
 
+    const eventosAdministrativos = consultarEventosAdministrativos_(sessao, mes, todosMeses);
     return respostaJsonp_("__historicoCb", {
       sucesso: true,
       mes: mes,
-      registros: registros
+      registros: registros,
+      eventosAdministrativos: eventosAdministrativos
     });
 
   } catch (erro) {
@@ -4714,7 +4725,7 @@ const ACOES_QUE_ALTERAM_ = [
   "subirVencidos", "subirParaVencidos", "definirPermissaoFuncionario",
   "adicionarValidadeManual", "adicionarProdutoJson", "adicionarFuncionario", "renomearFuncionario",
   "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario",
-  "criarAdminLoja"
+  "criarAdminLoja", "inativarFuncionario", "cadastrarQueimaManual", "encaminharEstoqueMapa"
 ];
 
 function doGet(e) {
@@ -4739,6 +4750,7 @@ function doGet(e) {
     }
 
     const resposta = doGetOriginal_(e);
+    registrarAuditoriaAdministrador_(acao, p, resposta);
 
     try {
       gravarCacheTexto_(chave, resposta.getContent(), segundos);
@@ -4748,12 +4760,83 @@ function doGet(e) {
   }
 
   const resposta = doGetOriginal_(e);
+  registrarAuditoriaAdministrador_(acao, p, resposta);
 
   if (ACOES_QUE_ALTERAM_.indexOf(acao) >= 0) {
     invalidarCacheDados_();
   }
 
   return resposta;
+}
+
+// Histórico persistente das ações realizadas por administradores.
+const ACOES_AUDITORIA_ADMIN_ = {
+  editarLancamento: "Edição de lançamento", excluirLancamento: "Exclusão de lançamento",
+  retirarDeLoja: "Retirada de produto", adicionarDanificado: "Cadastro de danificado",
+  adicionarAoQueima: "Envio para Queima", aprovarQueima: "Aprovação na Queima",
+  relancarQueima: "Relançamento na Queima", sinalizarLancamento: "Sinalização de produto",
+  atualizarSinalizado: "Atualização de sinalização", subirParaVencidos: "Envio para Vencidos",
+  subirVencidos: "Envio para Vencidos", definirPermissaoFuncionario: "Alteração de permissão",
+  adicionarValidadeManual: "Cadastro manual de validade", adicionarProdutoJson: "Cadastro de produto no catálogo",
+  adicionarFuncionario: "Cadastro de funcionário", renomearFuncionario: "Renomeação de funcionário",
+  definirEspecialFuncionario: "Alteração de aba especial", marcarCheckFuncionario: "Alteração de conferência",
+  definirPinFuncionario: "Definição de PIN", criarAdminLoja: "Criação de administrador de loja",
+  inativarFuncionario: "Alteração de status de funcionário", cadastrarQueimaManual: "Cadastro manual na Queima",
+  encaminharEstoqueMapa: "Encaminhamento de vencido do Estoque", registrarEstoqueVencido: "Cadastro de vencido no Estoque"
+};
+
+function registrarAuditoriaAdministrador_(acao, parametros, resposta) {
+  const tipo = ACOES_AUDITORIA_ADMIN_[acao];
+  if (!tipo || !parametros || !parametros.sessao || !resposta) return;
+  try {
+    const conteudo = resposta.getContent();
+    const match = String(conteudo || "").match(/^[^(]+\(([\s\S]*)\);?$/);
+    if (!match) return;
+    const dados = JSON.parse(match[1]);
+    if (!dados || dados.sucesso !== true) return;
+    const sessao = obterSessaoObrigatoria_(parametros);
+    if (!sessao || sessao.administrador !== true) return;
+
+    const descricao = String(dados.mensagem || tipo).slice(0, 500);
+    const referencia = String(parametros.chaveUnica || parametros.nome || parametros.codigo || parametros.funcionario || "").slice(0, 150);
+    gravarEventoAdministrativo_(sessao, tipo, descricao, referencia);
+  } catch (erro) {
+    console.error("Falha ao registrar auditoria administrativa: " + (erro.stack || erro));
+  }
+}
+
+function gravarEventoAdministrativo_(sessao, tipo, descricao, referencia) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let aba = ss.getSheetByName("HistoricoAdministrativo");
+  if (!aba) {
+    aba = ss.insertSheet("HistoricoAdministrativo");
+    aba.getRange(1, 1, 1, 8).setValues([["Data", "Loja", "Usuário", "Perfil", "Ação", "Descrição", "Referência", "Login ID"]]).setFontWeight("bold");
+    aba.setFrozenRows(1);
+    aba.getRange("A:A").setNumberFormat("dd/MM/yyyy HH:mm:ss");
+  }
+  aba.appendRow([new Date(), sessao.loja || "", sessao.nome || "Administrador",
+    sessao.administradorGeral ? "Administrador Geral" : "Administrador de Loja",
+    String(tipo || "Ação administrativa"), String(descricao || "").slice(0,500), String(referencia || "").slice(0,150), sessao.loginId || ""]);
+}
+
+function consultarEventosAdministrativos_(sessao, mes, todosMeses) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = ss.getSheetByName("HistoricoAdministrativo");
+  if (!aba || aba.getLastRow() < 2) return [];
+  const valores = aba.getRange(2, 1, aba.getLastRow() - 1, 8).getValues();
+  const fuso = ss.getSpreadsheetTimeZone();
+  return valores.filter(linha => {
+    const loja = normalizarLoja_(linha[1]);
+    if (!sessao.administradorGeral && loja !== sessao.loja) return false;
+    const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
+    if (isNaN(data.getTime())) return false;
+    return todosMeses || Utilities.formatDate(data, fuso, "yyyy-MM") === mes;
+  }).map(linha => {
+    const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
+    return { ts: data.getTime(), dataRegistro: Utilities.formatDate(data, fuso, "dd/MM/yyyy HH:mm:ss"),
+      loja: String(linha[1] || ""), usuario: String(linha[2] || ""), perfil: String(linha[3] || ""),
+      tipo: String(linha[4] || "Ação administrativa"), descricao: String(linha[5] || ""), referencia: String(linha[6] || "") };
+  }).sort((a,b) => b.ts-a.ts);
 }
 
 function versaoDados_() {
@@ -5611,6 +5694,31 @@ function definirEspecialFuncionario_(p) {
   }
 }
 
+/* ---------- ATIVAR / INATIVAR FUNCIONÁRIO (coluna J) ---------- */
+function inativarFuncionario_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__inativarFuncionarioCb") return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
+  try {
+    const admin = exigirAdministrador_(p);
+    const nome = String(p.nome || "").trim();
+    const alvo = buscarFuncionarioPorNome_(nome);
+    if (!alvo || alvo.administrador || alvo.loja !== admin.loja) throw new Error("Você só pode alterar funcionários da sua própria loja.");
+    const ativo = String(p.ativo || "") === "1";
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
+    const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
+    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
+    const linha = localizarLinhaFuncionario_(aba, nome);
+    if (!linha) throw new Error("Funcionário não encontrado.");
+    aba.getRange(1, 10).setValue("Status");
+    aba.getRange(linha, 10).setValue(ativo ? "Ativo" : "Inativo");
+    CacheService.getScriptCache().remove("cadastro_funcionarios");
+    SpreadsheetApp.flush();
+    return respostaJsonp_(cb, { sucesso: true, mensagem: ativo ? "Funcionário reativado." : "Funcionário inativado." });
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+  finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
 /* ---------- CHECK MANUAL (coluna F) ---------- */
 
 function marcarCheckFuncionario_(p) {
@@ -5740,13 +5848,14 @@ function obterDetalhesFuncionarios_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros || {});
   const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
   if (!aba || aba.getLastRow() < 2) return [];
-  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
+  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
   return dados.map(linha => {
     const nome = String(linha[0] || "").trim();
     const loja = normalizarLoja_(linha[8]);
     const administrador = ehAdministradorValor_(linha[7]);
+    const ativo = !(String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false);
     if (!nome || (!sessao.administrador && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administrador && loja !== sessao.loja)) return null;
-    return { nome, especial: linha[1] === true, check: linha[5] === true, temPin: String(linha[6] || "").includes(":"), administrador, loja };
+    return { nome, especial: linha[1] === true, check: linha[5] === true, ativo, temPin: String(linha[6] || "").includes(":"), administrador, loja };
   }).filter(Boolean);
 }
 
@@ -5803,6 +5912,10 @@ function obterSessaoObrigatoria_(parametros) {
   if (!cadastro) {
     removerSessao_(token);
     throw new Error("Usuário não encontrado no cadastro.");
+  }
+  if (cadastro.ativo === false) {
+    removerSessao_(token);
+    throw new Error("Seu cadastro foi inativado. Procure o Administrador da Loja.");
   }
 
   if (
@@ -5896,7 +6009,7 @@ function obterAbasPermitidas_(parametros) {
   }
 
   const dados = cadastro.getRange(
-    2, 1, cadastro.getLastRow() - 1, 9
+    2, 1, cadastro.getLastRow() - 1, 10
   ).getValues();
 
   const permitidas = [];
@@ -5905,8 +6018,9 @@ function obterAbasPermitidas_(parametros) {
     const nome = String(linha[0] || "").trim();
     const loja = normalizarLoja_(linha[8]);
     const administrador = ehAdministradorValor_(linha[7]);
+    const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
 
-    if (!nome || administrador) return;
+    if (!nome || administrador || inativo) return;
 
     if (sessao.administrador) {
       if (loja === sessao.loja) {
@@ -6147,6 +6261,7 @@ function bloquearSeNaoAutorizado_(p) {
     "renomearFuncionario",
     "definirEspecialFuncionario",
     "marcarCheckFuncionario",
+    "inativarFuncionario",
     "definirPinFuncionario",
     "retirarDeLoja",
     "adicionarDanificado",

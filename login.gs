@@ -200,7 +200,7 @@ function buscarFuncionarioPorNome_(nome) {
   if (!aba || aba.getLastRow() < 2) return null;
 
   const dados = aba.getRange(
-    2, 1, aba.getLastRow() - 1, 9
+    2, 1, aba.getLastRow() - 1, 10
   ).getValues();
 
   const alvo = normalizarTexto_(nome);
@@ -224,6 +224,7 @@ function buscarFuncionarioPorNome_(nome) {
       administradorGeral: ehAdministradorGeralValor_(linha[7]),
       perfil: ehAdministradorGeralValor_(linha[7]) ? "geral" : (ehAdministradorValor_(linha[7]) ? "admin" : "funcionario"),
       loja: normalizarLoja_(linha[8]),
+      ativo: !(String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false),
       linha: i + 2
     };
   }

@@ -1408,14 +1408,26 @@
 }
 
 .modal-cadastro-queima-fechar {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  line-height: 1 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08);
   width: 40px;
   min-width: 40px;
   height: 40px;
   min-height: 40px;
   padding: 0;
   font-size: 28px;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface) !important;
+  color: var(--text) !important;
 }
 
 #formCadastroQueima label {
@@ -1906,15 +1918,14 @@ Auth.exigirAdmin().then(ok => {
             <p>Gerencie os lançamentos, aprove registros e relance itens pendentes de meses anteriores.</p>
           </div>
           
-          <button class="button button-primary" type="button"
-            onclick="abrirModalCadastroQueima()">
-            <i data-lucide="scan-barcode"></i>
-            Cadastrar produto na Queima
-          </button>
-
-          <button class="button" type="button" onclick="carregarQueima()">
-            <i data-lucide="refresh-cw"></i> Atualizar
-          </button>
+          <div class="page-heading-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button class="button button-primary" type="button" onclick="abrirModalCadastroQueima()">
+              <i data-lucide="scan-barcode"></i> Cadastrar produto na Queima
+            </button>
+            <button class="button" type="button" onclick="carregarQueima()">
+              <i data-lucide="refresh-cw"></i> Atualizar
+            </button>
+          </div>
         </div>
       
         <div class="mini-stats">
@@ -2850,8 +2861,21 @@ Auth.exigirAdmin().then(ok => {
     document.getElementById("topTitle").textContent = names[0];
     document.querySelector(".page-subtitle").textContent = names[1];
 
-    if(pageName==='transferencias') renderTransferencias();
+    if(pageName==='transferencias') {
+      const notice = document.getElementById('transferenciasNotice');
+      if (!validadesProntas) {
+        if (notice) { notice.style.display = 'block'; notice.textContent = 'Carregando transferências...'; }
+        carregarMapa(false).then(() => {
+          if (validadesProntas) { renderTransferencias(); if (notice) notice.textContent = 'Transferências atualizadas.'; }
+          else { const mapaNotice = document.getElementById('mapaNotice'); if (notice) { notice.style.display = 'block'; notice.textContent = (mapaNotice && mapaNotice.textContent) || 'Não foi possível carregar as transferências. Tente atualizar novamente.'; } }
+        }).catch(err => {
+          if (notice) { notice.style.display = 'block'; notice.textContent = 'Não foi possível carregar as transferências: ' + (err.message || err); }
+        });
+      } else renderTransferencias();
+    }
+    if(pageName==='dashboard' && !estoqueOdsRegistros.length && typeof carregarEstoqueDoGitHub==='function') carregarEstoqueDoGitHub().catch(()=>{});
     if (typeof garantirAba === 'function') garantirAba(pageName);
+    if (pageName === 'historico' && typeof carregarHistoricoAdministrativo === 'function') carregarHistoricoAdministrativo();
     if (['estoque','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4677,7 +4701,23 @@ function imprimirMapaValidade() {
   document.getElementById('queimaBuscaRelancar')
     ?.addEventListener('input', renderQueima);
 
-  function atualizarResumoValidade(registros){registros = registrosVisiveisHTML(registros);const total=registros.length;let dentro=0,proximos=0,vencidos=0,sem=0;registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(estaVencidoPainel(r))vencidos++;else if(dias<=160)proximos++;else dentro++;});const set=(id,bar,n)=>{const pct=total?Math.round(n/total*100):0;document.getElementById(id).textContent=pct+'%';document.getElementById(bar).style.width=pct+'%';};set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);}
+  function atualizarResumoValidade(registros){
+    registros = registrosVisiveisHTML(registros);
+    let dentro=0, proximos=0, vencidos=0, sem=0;
+    registros.forEach(r=>{const dias=diasAte(r.validadeISO||r.validade);if(dias===null)sem++;else if(estaVencidoPainel(r))vencidos++;else if(dias<=160)proximos++;else dentro++;});
+    // O Controle de Estoque é a fonte de verdade para itens com saldo positivo
+    // que ainda não possuem correspondência em nenhum mapa de validade.
+    const mapas = registros;
+    const estoqueSemMapa = (estoqueOdsRegistros || []).filter(o => {
+      if (!(Number(o.quantidade) > 0)) return false;
+      const ean = String(o.ean || '').trim(); const interno = String(o.codigoInterno || '').trim();
+      return !mapas.some(r => { const codigo = String(r.codigo || r.ean || '').trim(); const ci = String(r.codigoInterno || '').trim(); return (ean && codigo === ean) || (interno && (codigo === interno || ci === interno)); });
+    }).length;
+    sem += estoqueSemMapa;
+    const total = dentro + proximos + vencidos + sem;
+    const set=(id,bar,n)=>{const el=document.getElementById(id),b=document.getElementById(bar);const pct=total?Math.round(n/total*100):0;if(el)el.textContent=pct+'%';if(b)b.style.width=pct+'%';};
+    set('validadeDentroPct','validadeDentroBar',dentro);set('validadeProximosPct','validadeProximosBar',proximos);set('validadeVencidosPct','validadeVencidosBar',vencidos);set('validadeSemInfoPct','validadeSemInfoBar',sem);
+  }
   
 
 
@@ -6541,6 +6581,9 @@ document.addEventListener("submit", async function(event) {
           ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
           ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="' + (det.especial ? 1 : 0) + '" title="' + textoEspecial + '" aria-label="' + textoEspecial + '"><i data-lucide="' + (det.especial ? "star-off" : "star") + '"></i></button>'
         : "";
+      if (det && !det.administrador) {
+        botoesGestao += ' <button class="button" type="button" data-func-acao="inativar" data-nome="' + nomeAttr + '" data-ativo="' + (det.ativo === false ? '0' : '1') + '" title="' + (det.ativo === false ? 'Reativar funcionário' : 'Inativar funcionário') + '" aria-label="' + (det.ativo === false ? 'Reativar funcionário' : 'Inativar funcionário') + '"><i data-lucide="' + (det.ativo === false ? 'user-check' : 'user-x') + '"></i></button>';
+      }
       if (det && det.administrador) {
         botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
       }
@@ -6703,6 +6746,7 @@ document.addEventListener("submit", async function(event) {
     if (btn.dataset.funcAcao === "renomear") abrirModalFuncionario("renomear", nome);
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
+    else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });
 
   g("funcionariosTbody")?.addEventListener("change", async ev => {
@@ -6830,6 +6874,7 @@ document.addEventListener("submit", async function(event) {
   
       // Preserva a importação local existente.
       estoqueOdsRegistros = lista;
+      if (validadesProntas) atualizarResumoValidade(painelCache.validades || []);
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
       localStorage.setItem(
@@ -7049,7 +7094,7 @@ document.addEventListener("submit", async function(event) {
     if(!g('estoqueTbody'))return;
     const q=norm(g('estoqueBusca')?.value||''), filtro=g('estoqueFiltro')?.value||'';
     const mapas=registrosVisiveisHTML(painelCache.validades||[]);
-    const todos=estoqueOdsRegistros.map(o=>{const matches=mapas.filter(r=>String(r.codigo||'').trim()===String(o.ean||'').trim()||(!o.ean&&String(r.codigo||'').trim()===String(o.codigoInterno||'').trim()));const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
+    const todos=estoqueOdsRegistros.map(o=>{const matches=mapas.filter(r=>{const codigo=String(r.codigo||r.ean||'').trim();const interno=String(r.codigoInterno||'').trim();return (!!o.ean&&codigo===String(o.ean).trim()) || (!!o.codigoInterno&&(codigo===String(o.codigoInterno).trim()||interno===String(o.codigoInterno).trim()));});const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
     const rows=todos.filter(o=>(!q||norm([o.ean,o.codigoInterno,o.produto,o.secao].join(' ')).includes(q))&&(!filtro||(filtro==='Sim'?o.mapeada:!o.mapeada)));
     setText('estoqueProdutos',num(todos.length));setText('estoqueUnidades',num(todos.reduce((t,o)=>t+(Number(o.quantidade)||0),0)));setText('estoqueVencidos',num(todos.filter(o=>o.mapeada).length));
     g('estoqueTbody').innerHTML=rows.map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
@@ -7205,6 +7250,21 @@ document.addEventListener("submit", async function(event) {
   }
 
 
+  let historicoAdministrativoCache = [];
+  let historicoAdministrativoPromise = null;
+  async function carregarHistoricoAdministrativo() {
+    if (historicoAdministrativoPromise) return historicoAdministrativoPromise;
+    historicoAdministrativoPromise = jsonpPainel('historicoMes', 'historico', { mes: 'TODOS', nocache: '1' })
+      .then(d => {
+        if (!d || !d.sucesso) throw new Error(d?.mensagem || 'Falha ao consultar histórico administrativo.');
+        historicoAdministrativoCache = Array.isArray(d.eventosAdministrativos) ? d.eventosAdministrativos : [];
+        renderHistorico();
+      })
+      .catch(e => { console.error('Histórico administrativo:', e); historicoAdministrativoCache = []; renderHistorico(); })
+      .finally(() => { historicoAdministrativoPromise = null; });
+    return historicoAdministrativoPromise;
+  }
+
   /* ---------- Histórico (lançamentos, transferências, sinalizações e perdas) ---------- */
   function eventosHistorico() {
     const ev = [];
@@ -7220,6 +7280,14 @@ document.addEventListener("submit", async function(event) {
       const s = r.acaoTomada || "Em Aberto";
       ev.push({ t, usuario: r.funcionario || "—", tipo: "Sinalização", cls: "badge-warning",
         desc: (r.descricao || r.codigo || "Produto") + " · " + (r.motivo || ""), id: r.codigo || "", sit: s, sitCls: s === "Resolvido" ? "badge-success" : s === "Negado" ? "badge-danger" : "badge-warning" });
+    });
+    (historicoAdministrativoCache || []).forEach(r => {
+      const t = Number(r.ts) || parseDataHora(r.dataRegistro);
+      if (!t) return;
+      ev.push({ t, usuario: (r.usuario || 'Administrador') + (r.loja ? ' · Loja ' + r.loja : ''),
+        tipo: r.tipo || 'Ação administrativa', cls: 'badge-purple',
+        desc: r.descricao || r.acao || 'Ação administrativa registrada', id: r.referencia || '—',
+        sit: 'Concluído', sitCls: 'badge-success' });
     });
     const venc = (typeof painelCache === "object" && painelCache.vencidos && painelCache.vencidos.retirados) || [];
     venc.forEach(r => {
@@ -7259,7 +7327,8 @@ document.addEventListener("submit", async function(event) {
    ["estoqueBusca", "input", renderEstoque], ["estoqueFiltro", "change", renderEstoque],
    ["historicoBusca", "input", renderHistorico], ["historicoFiltro", "change", renderHistorico]]
     .forEach(([id, ev, fn]) => g(id) && g(id).addEventListener(ev, fn));
-  ["refreshFuncionarios", "refreshEstoque", "refreshHistorico"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
+  ["refreshFuncionarios", "refreshEstoque"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
+  if (g("refreshHistorico")) g("refreshHistorico").addEventListener("click", async () => { await atualizarPainel(); await carregarHistoricoAdministrativo(); });
 
   carregarCadastroFuncionariosPainel()
   .then(cadastro => {
