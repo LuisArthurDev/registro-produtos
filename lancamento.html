@@ -969,7 +969,7 @@ codigoEl.addEventListener("input",()=>{
     codigoEl.value="";limparDescricao();
     mostrarStatus("Código inválido: o campo aceita apenas números. O conteúdo foi apagado.","error");return;
   }
-  codigoEl.value=semEspacos.slice(0,14);limparDescricao();
+  codigoEl.value=String(semEspacos.slice(0,14));limparDescricao();
   const codigo=codigoEl.value;if(codigo.length<8)return;
   const completo=[12,13,14].includes(codigo.length);
   temporizadorDigitacao=setTimeout(()=>{if(codigoEl.value===codigo)buscarDescricaoProduto(codigo)},completo?80:350);
@@ -1460,7 +1460,7 @@ function consultarDuplicidadeNoMapa(payload) {
 formulario.addEventListener("submit",async evento=>{
   evento.preventDefault();if(enviando||verificandoMapa)return;ocultarStatus();
 
-  const codigo=codigoEl.value.trim(),funcionario=funcionarioEl.value.trim();
+  const codigo=String(codigoEl.value || "").replace(/\s+/g, "").trim(),funcionario=funcionarioEl.value.trim();
   const lote=$("lote").value.trim(),validadeTexto=validadeEl.value.trim();
   const quantidadeTexto=$("quantidade").value.trim();
   const ehTransferencia=funcionario==="Transferencias";

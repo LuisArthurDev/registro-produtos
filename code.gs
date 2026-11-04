@@ -675,6 +675,8 @@ function salvarProduto_(dados) {
         if (chaves.includes(requestId)) return { status: "saved", message: "Este vencido já foi registrado no Estoque." };
       }
       const linhaEstoque = Math.max(estoque.getLastRow() + 1, 2);
+      // EAN deve permanecer texto para preservar zeros à esquerda.
+      estoque.getRange(linhaEstoque, 1).setNumberFormat("@");
       estoque.getRange(linhaEstoque, 1, 1, 11).setValues([[
         codigo, String(dados.codigoInterno || ""), String(dados.descricao || ""), lote,
         dataValidade, quantidade, new Date(), normalizarLoja_(sessaoEstoque.loja), requestId,
@@ -708,6 +710,8 @@ function salvarProduto_(dados) {
 
       const novaLinha = Math.max(aba.getLastRow() + 1, 2);
 
+      // Código de barras é texto, nunca número.
+      aba.getRange(novaLinha, 1).setNumberFormat("@");
       aba.getRange(novaLinha, 1, 1, 8).setValues([[
         codigo,
         lote,
@@ -838,6 +842,8 @@ function salvarProduto_(dados) {
      */
     const novaLinha = Math.max(aba.getLastRow() + 1, 2);
 
+    // Preserva EANs iniciados em zero na planilha.
+    aba.getRange(novaLinha, 1).setNumberFormat("@");
     aba.getRange(novaLinha, 1, 1, 6).setValues([[
       codigo,
       lote,
@@ -1858,6 +1864,8 @@ function editarLancamento_(parametros) {
     // A estrutura inicial dos campos é igual:
     // A = Código, B = Lote, C = Validade, D = Quantidade.
     // A chave fica em F nas abas normais e em H em Transferencias.
+    // Ao editar, mantém a coluna de código como texto.
+    aba.getRange(linha, 1).setNumberFormat("@");
     aba.getRange(linha, 1, 1, 4).setValues([[
       codigo,
       lote,
@@ -3104,6 +3112,9 @@ function subirParaVencidos_(p) {
     // Registra nas posições corretas da estrutura existente.
     const linhaDestino = vencidos.getLastRow() + 1;
 
+    // A coluna Código pode conter EAN com zero inicial.
+    vencidos.getRange(linhaDestino, 3).setNumberFormat("@");
+    vencidos.getRange(linhaDestino, 9).setNumberFormat("@");
     vencidos.getRange(linhaDestino, 1, 1, 10).setValues([[
       registro.nomeAba,   // A: Aba de origem
       registro.linha,     // B: Linha original
@@ -3363,7 +3374,9 @@ function adicionarValidadeManual_(parametros) {
       // D = Quantidade
       // E = Data do lançamento
       // F = Chave única
-      aba.getRange(novaLinha, 1, 1, 6).setValues([[
+      // Preserva EANs iniciados em zero na planilha.
+    aba.getRange(novaLinha, 1).setNumberFormat("@");
+    aba.getRange(novaLinha, 1, 1, 6).setValues([[
         codigo,
         lote,
         dataValidade,
@@ -4987,6 +5000,8 @@ function corrigirLancamentosVencidos() {
   });
 
   // Grava os registros corrigidos.
+  vencidos.getRange(2, 3, dados.length, 1).setNumberFormat("@");
+  vencidos.getRange(2, 9, dados.length, 1).setNumberFormat("@");
   vencidos.getRange(2, 1, dados.length, 10).setValues(dados);
 
   vencidos.getRange(2, 8, dados.length, 1)
@@ -5161,6 +5176,8 @@ function cadastrarQueimaManual_(p) {
 
     const linhaDestino = Math.max(aba.getLastRow() + 1, 2);
 
+    const colunaCodigoQueima = cabecalhos.findIndex(h => ["codigo de barras", "codigo", "ean"].includes(h)) + 1;
+    if (colunaCodigoQueima > 0) aba.getRange(linhaDestino, colunaCodigoQueima).setNumberFormat("@");
     aba.getRange(linhaDestino, 1, 1, novaLinha.length)
       .setValues([novaLinha]);
 
@@ -6260,7 +6277,7 @@ function encaminharEstoqueMapa_(p) {
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) throw new Error("Sistema ocupado. Tente novamente.");
     try {
-      const dados = estoque.getRange(2, 1, estoque.getLastRow() - 1, 11).getValues();
+      const dados = estoque.getRange(2, 1, estoque.getLastRow() - 1, 11).getDisplayValues();
       const idx = dados.findIndex(r => String(r[8] || "") === chave && normalizarLoja_(r[7]) === normalizarLoja_(admin.loja));
       if (idx < 0) throw new Error("Registro não encontrado para esta loja.");
       const row = dados[idx];
@@ -6269,7 +6286,13 @@ function encaminharEstoqueMapa_(p) {
       if (!mapa) throw new Error("A aba do funcionário não foi encontrada.");
       const novaChave = Utilities.getUuid();
       const novaLinha = Math.max(mapa.getLastRow() + 1, 2);
-      mapa.getRange(novaLinha, 1, 1, 6).setValues([[String(row[0] || ""), String(row[3] || ""), row[4], Number(row[5] || 0), new Date(), novaChave]]);
+      mapa.getRange(novaLinha, 1).setNumberFormat("@");
+      const partesValidadeEstoque = String(row[4] || "").split(/[\/.-]/);
+      const validadeMapa = partesValidadeEstoque.length === 3
+        ? new Date(Number(partesValidadeEstoque[2]), Number(partesValidadeEstoque[1]) - 1, Number(partesValidadeEstoque[0]))
+        : new Date(row[4]);
+      if (isNaN(validadeMapa.getTime())) throw new Error("A validade do registro no Estoque está inválida.");
+      mapa.getRange(novaLinha, 1, 1, 6).setValues([[String(row[0] || ""), String(row[3] || ""), validadeMapa, Number(row[5] || 0), new Date(), novaChave]]);
       mapa.getRange(novaLinha, 3).setNumberFormat("dd/MM/yyyy");
       mapa.getRange(novaLinha, 5).setNumberFormat("dd/MM/yyyy HH:mm");
       estoque.getRange(idx + 2, 10).setValue("Encaminhado");

@@ -239,6 +239,14 @@
     body.sidebar-collapsed .sidebar-collapse span { display: none; }
     .loading-banner { display:flex; align-items:center; gap:10px; padding:12px 15px; margin:0 0 16px; border:1px solid #cfe0fb; background:#eff6ff; color:#1d4ed8; border-radius:10px; font-size:13px; }
     .loading-spinner { width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite; }
+    #painelCarregamento[hidden] { display:none !important; }
+    #painelCarregamento { position:fixed; inset:0; z-index:20000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.28); backdrop-filter:blur(2px); }
+    #painelCarregamento .painel-carregamento-card { display:flex; align-items:center; gap:13px; padding:16px 20px; border:1px solid var(--border); border-radius:14px; background:var(--surface); color:var(--text); box-shadow:0 16px 45px rgba(15,23,42,.2); font-size:14px; font-weight:650; }
+    #painelCarregamento .painel-carregamento-circulo { width:25px; height:25px; flex:0 0 25px; border:3px solid #dbeafe; border-top-color:var(--primary); border-radius:50%; animation:spin .75s linear infinite; }
+    .button.is-loading { opacity:.72; pointer-events:none; }
+    .button.is-loading [data-lucide="refresh-cw"], .button.is-loading svg { animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
     @keyframes spin { to { transform:rotate(360deg); } }
     .attention-empty { padding:18px; text-align:center; color:var(--muted); font-size:13px; }
 
@@ -738,6 +746,31 @@
       margin: 0 auto 12px;
       width: 28px;
       height: 28px;
+    }
+
+
+    /* Abas do Controle de Estoque: mesmo padrão visual do Mapa de Validades */
+    .estoque-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 14px 0 20px;
+      padding: 0 4px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .estoque-tabs .estoque-tab {
+      min-height: 40px;
+      padding: 9px 18px;
+      border-radius: 9px;
+      white-space: nowrap;
+    }
+    .estoque-tab-panel { min-width: 0; width: 100%; }
+    .estoque-tab-panel[hidden] { display: none !important; }
+    @media (max-width: 640px) {
+      .estoque-tabs { gap: 7px; margin: 12px 0 16px; padding: 0 2px; }
+      .estoque-tabs .estoque-tab { flex: 1 1 auto; padding: 9px 12px; }
     }
 
     .page {
@@ -1348,10 +1381,10 @@
   max-height: 92vh;
   overflow-y: auto;
   padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
   background: var(--surface);
-  color: var(--ink);
+  color: var(--text);
   box-shadow: 0 15px 50px rgba(0, 0, 0, .25);
 }
 
@@ -1382,18 +1415,51 @@
   padding: 0;
   font-size: 28px;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
 }
 
 #formCadastroQueima label {
   display: block;
   margin: 12px 0 5px;
-  color: var(--ink);
+  color: var(--text);
 }
 
 #formCadastroQueima input {
+  display: block;
   width: 100%;
   min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+#formCadastroQueima input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.14);
+}
+#formCadastroQueima button {
+  min-height: 40px;
+  border-radius: 9px;
+  font-weight: 650;
+}
+#formCadastroQueima .queima-manual-codigo > button,
+#cameraQueimaManualArea button {
+  border: 1px solid var(--border);
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 9px 14px;
+}
+#formCadastroQueima .queima-manual-acoes .button-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+#formCadastroQueima button:disabled {
+  opacity: .65;
+  cursor: wait;
 }
 
 .queima-manual-codigo {
@@ -1447,7 +1513,9 @@
 
 @media (max-width: 420px) {
   .modal-cadastro-queima-conteudo {
-    padding: 15px;
+    width: min(100%, 480px);
+    padding: 18px;
+    border-radius: 13px;
   }
 
   .queima-manual-codigo {
@@ -1542,6 +1610,7 @@
 </head>
 
 <body>
+<div id="painelCarregamento" hidden role="status" aria-live="polite"><div class="painel-carregamento-card"><span class="painel-carregamento-circulo" aria-hidden="true"></span><span id="painelCarregamentoTexto">Atualizando informações...</span></div></div>
 <script>
 Auth.exigirAdmin().then(ok => {
   if (!ok) return;
@@ -1596,10 +1665,6 @@ Auth.exigirAdmin().then(ok => {
 
       <button class="nav-item" data-page="estoque">
         <i data-lucide="boxes"></i> Controle de Estoque
-      </button>
-
-      <button class="nav-item" data-page="produtos">
-        <i data-lucide="package"></i> Produtos
       </button>
 
       <div class="nav-label">Gestão</div>
@@ -2275,35 +2340,22 @@ Auth.exigirAdmin().then(ok => {
 
       <!-- CONTROLE DE ESTOQUE -->
       <section class="page" id="page-estoque">
-        <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button" onclick="document.getElementById('estoqueArquivoOds').click()"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="btnCarregarEstoqueGitHub" title="Atualizar" onclick="carregarEstoqueDoGitHub()" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
+        <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button" onclick="document.getElementById('estoqueArquivoOds').click()"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="btnNovoProdutoJson" type="button" onclick="abrirModalNovoProdutoJson()"><i data-lucide="plus"></i> Adicionar produtos</button><button class="button" id="btnCarregarEstoqueGitHub" title="Atualizar" onclick="carregarEstoqueDoGitHub()" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
         <div class="notice" id="estoqueNotice">Selecione o arquivo .ods para importar o estoque.</div>
-        <div class="table-panel" style="margin-bottom:16px"><div class="table-toolbar"><div><div class="panel-title">Vencidos cadastrados no Estoque</div><div class="panel-subtitle">Registros lançados por Administradores de Loja e ainda não encaminhados a um mapa.</div></div><label style="display:flex;align-items:center;gap:10px;font-weight:600"><span>Exibir vencidos do Estoque</span><input type="checkbox" id="estoqueSwitchVencidos" role="switch" aria-label="Exibir vencidos do Estoque" style="width:42px;height:22px;accent-color:#2563eb"></label></div><div id="estoqueVencidosArea" hidden><div class="table-toolbar"><div class="toolbar-actions"><input class="filter-select" id="estoqueVencidosBusca" placeholder="Buscar EAN, descrição, lote..."><button class="button" type="button" id="btnAtualizarVencidosEstoque">Atualizar</button></div></div><div class="table-wrap"><table><thead><tr><th>EAN</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Loja Origem</th><th>Encaminhar para</th></tr></thead><tbody id="estoqueVencidosTbody"></tbody></table></div><div class="empty-state" id="estoqueVencidosEmpty" style="display:none">Nenhum vencido disponível no Estoque.</div></div></div></div>
-        <div class="mini-stats"><div class="mini-stat"><span>Produtos no arquivo</span><strong id="estoqueProdutos">0</strong></div><div class="mini-stat"><span>Unidades em estoque</span><strong id="estoqueUnidades">0</strong></div><div class="mini-stat"><span>Produtos mapeados</span><strong id="estoqueVencidos">0</strong></div></div>
-        <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Posição por produto</div><div class="panel-subtitle" id="estoqueUltimaImportacao">Nenhum arquivo importado.</div></div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou código interno..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todos</option><option value="Sim">Mapeada</option><option value="Não">Não mapeada</option></select></div></div>
-          <div class="table-wrap"><table><thead><tr><th>EAN</th><th>Produto</th><th>Quantidade</th><th>Próxima Validade</th><th>Mapeada</th><th>Ação</th></tr></thead><tbody id="estoqueTbody"></tbody></table></div><div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado. Importe um arquivo .ods ou altere a busca.</div></div>
+        <div class="mapa-tabs estoque-tabs" role="tablist" aria-label="Visualização do controle de estoque">
+          <button type="button" class="button button-primary estoque-tab active" data-estoque-tipo="atual" role="tab" aria-selected="true" aria-controls="estoqueAtualArea">Estoque atual</button>
+          <button type="button" class="button estoque-tab" data-estoque-tipo="vencidos" role="tab" aria-selected="false" aria-controls="estoqueVencidosArea">Vencidos do Estoque</button>
+        </div>
+        <div id="estoqueAtualArea" role="tabpanel" class="estoque-tab-panel">
+          <div class="mini-stats"><div class="mini-stat"><span>Produtos no arquivo</span><strong id="estoqueProdutos">0</strong></div><div class="mini-stat"><span>Unidades em estoque</span><strong id="estoqueUnidades">0</strong></div><div class="mini-stat"><span>Produtos mapeados</span><strong id="estoqueVencidos">0</strong></div></div>
+          <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Posição por produto</div><div class="panel-subtitle" id="estoqueUltimaImportacao">Nenhum arquivo importado.</div></div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou código interno..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todos</option><option value="Sim">Mapeada</option><option value="Não">Não mapeada</option></select></div></div>
+            <div class="table-wrap"><table><thead><tr><th>EAN</th><th>Produto</th><th>Quantidade</th><th>Próxima Validade</th><th>Mapeada</th><th>Ação</th></tr></thead><tbody id="estoqueTbody"></tbody></table></div><div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado. Importe um arquivo .ods ou altere a busca.</div></div>
+        </div>
+        <div id="estoqueVencidosArea" role="tabpanel" class="estoque-tab-panel" hidden>
+          <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Vencidos cadastrados no Estoque</div><div class="panel-subtitle">Registros lançados por Administradores de Loja e ainda não encaminhados a um mapa.</div></div><div class="toolbar-actions"><input class="filter-select" id="estoqueVencidosBusca" placeholder="Buscar EAN, descrição, lote..."><button class="button" type="button" id="btnAtualizarVencidosEstoque">Atualizar</button></div></div><div class="table-wrap"><table><thead><tr><th>EAN</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Loja Origem</th><th>Encaminhar para</th></tr></thead><tbody id="estoqueVencidosTbody"></tbody></table></div><div class="empty-state" id="estoqueVencidosEmpty" style="display:none">Nenhum vencido disponível no Estoque.</div></div>
+        </div>
       </section>
       <div id="estoqueMapasModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:12000;align-items:center;justify-content:center;padding:16px" role="dialog" aria-modal="true" aria-labelledby="estoqueMapasTitulo"><div class="panel" style="background:white;width:min(900px,100%);padding:22px;border-radius:16px;max-height:90vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2 id="estoqueMapasTitulo">Mapas do produto</h2><p id="estoqueMapasSubtitulo" style="color:#64748b;font-size:13px;margin-top:5px"></p></div><button class="button" type="button" onclick="fecharModalMapasEstoque()">Fechar</button></div><div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Mapa / Funcionário</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Situação</th></tr></thead><tbody id="estoqueMapasTbody"></tbody></table></div><div class="empty-state" id="estoqueMapasEmpty" style="display:none">Este produto não consta em nenhum mapa.</div></div></div>
-
-      <!-- PRODUTOS -->
-      <section class="page" id="page-produtos">
-        <div class="page-heading">
-          <div><h2>Produtos</h2><p>Catálogo produtos_ean.json e presença de cada item no mapa.</p></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="button button-primary" id="btnNovoProdutoJson" type="button" onclick="abrirModalNovoProdutoJson()"><i data-lucide="plus"></i> Adicionar produto</button>
-            <button class="button" id="refreshProdutos" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
-          </div>
-        </div>
-        <div class="notice" id="produtosNotice">Carregando dados...</div>
-        <div class="mini-stats"><div class="mini-stat"><span>Total de produtos</span><strong id="produtosTotal">—</strong></div><div class="mini-stat"><span>Seções</span><strong id="produtosSecoes">—</strong></div><div class="mini-stat"><span>Com lançamento no mapa</span><strong id="produtosNoMapa">—</strong></div></div>
-        <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Catálogo de produtos</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="produtosBusca" placeholder="Buscar EAN, descrição ou seção..."></div><select id="produtosFiltro" class="filter-select"><option value="">Todos os produtos</option><option value="mapa">No mapa</option><option value="sem">Sem lançamento</option></select></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>EAN</th><th>Descrição</th><th>Seção</th><th>Lançamentos</th><th>Unidades</th><th>Situação</th></tr></thead>
-            <tbody id="produtosTbody"></tbody>
-          </table></div>
-          <div class="empty-state" id="produtosEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado.</div>
-        </div>
-      </section>
 
       <!-- SINALIZADOS -->
       <section class="page" id="page-sinalizados">
@@ -2776,7 +2828,6 @@ Auth.exigirAdmin().then(ok => {
     vencidos: ["Perdas", "Produtos vencidos e danificados"],
     transferencias: ["Transferências", "Movimentações entre setores"],
     estoque: ["Controle de Estoque", "Consulta de saldos e quantidades"],
-    produtos: ["Produtos", "Cadastro e consulta do catálogo"],
     sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
     historico: ["Histórico", "Registro das atividades do sistema"],
     funcionarios: ["Funcionários", "Equipe e abas de lançamento"]
@@ -2801,7 +2852,7 @@ Auth.exigirAdmin().then(ok => {
 
     if(pageName==='transferencias') renderTransferencias();
     if (typeof garantirAba === 'function') garantirAba(pageName);
-    if (['estoque','produtos','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
+    if (['estoque','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
     document.getElementById("sidebar").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -3065,6 +3116,25 @@ Auth.exigirAdmin().then(ok => {
 
   
 const consultasJsonpPainel = new Map();
+let consultasPainelAtivas = 0;
+let temporizadorCarregamentoPainel = null;
+function iniciarCarregamentoPainel(texto) {
+  consultasPainelAtivas++;
+  const overlay = document.getElementById('painelCarregamento');
+  const label = document.getElementById('painelCarregamentoTexto');
+  if (label) label.textContent = texto || 'Atualizando informações...';
+  if (temporizadorCarregamentoPainel) clearTimeout(temporizadorCarregamentoPainel);
+  temporizadorCarregamentoPainel = setTimeout(() => { if (overlay) overlay.hidden = false; }, 160);
+}
+function finalizarCarregamentoPainel() {
+  consultasPainelAtivas = Math.max(0, consultasPainelAtivas - 1);
+  if (consultasPainelAtivas === 0) {
+    if (temporizadorCarregamentoPainel) clearTimeout(temporizadorCarregamentoPainel);
+    temporizadorCarregamentoPainel = null;
+    const overlay = document.getElementById('painelCarregamento');
+    if (overlay) overlay.hidden = true;
+  }
+}
 
 /* ===== Sessão individual do administrador ===== */
 async function jsonpPainel(action, callback, extra = {}) {
@@ -3105,6 +3175,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     return consultasJsonpPainel.get(cbName);
   }
 
+  iniciarCarregamentoPainel("Atualizando informações do painel...");
   const promessa = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     let finalizado = false;
@@ -3134,6 +3205,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
       }
 
       consultasJsonpPainel.delete(cbName);
+      finalizarCarregamentoPainel();
 
       if (erro) {
         reject(erro);
@@ -4975,7 +5047,6 @@ function atualizarProdutosAtencao(registros) {
     vencidos: ['vencidos'],
     transferencias: ['mapa'],
     estoque: ['mapa'],
-    produtos: ['mapa'],
     sinalizados: ['sinalizados'],
     historico: ['mapa', 'sinalizados', 'vencidos'],
     funcionarios: ['mapa']
@@ -5007,7 +5078,7 @@ function atualizarProdutosAtencao(registros) {
     const tarefas = faltam.map(f => CARREGADORES[f](true));
     // O catálogo produtos_ean.json é grande; baixa somente quando uma tela
     // que realmente usa descrições de produtos for aberta.
-    if (['mapa', 'controle-validade', 'produtos'].includes(pagina) && !Object.keys(mapaDescricoes).length) {
+    if (['mapa', 'controle-validade'].includes(pagina) && !Object.keys(mapaDescricoes).length) {
       tarefas.push(carregarDescricoesProdutos().then(aposCatalogo));
     }
     await Promise.allSettled(tarefas);
@@ -5016,7 +5087,6 @@ function atualizarProdutosAtencao(registros) {
   // Recarrega os dados da aba (usado pelos botões Atualizar).
   async function atualizarAba(pagina) {
     const tarefas = (ATUALIZAR_ABA[pagina] || []).map(f => CARREGADORES[f](false));
-    if (pagina === 'produtos') tarefas.push(carregarDescricoesProdutos(true).then(aposCatalogo));
     if (pagina === 'dashboard') {
       // Permite tentar novamente a atualização da seção de atenção caso o catálogo
       // tenha falhado ou ficado desatualizado em uma consulta anterior.
@@ -6840,10 +6910,24 @@ document.addEventListener("submit", async function(event) {
         cache: 'no-store'
       });
   
+      if (resposta.status === 404) {
+        // A ausência do arquivo por loja é normal antes da primeira importação.
+        // Não tratar como falha fatal nem tentar carregar o estoque de outra loja.
+        estoqueOdsRegistros = [];
+        estoqueOdsAtualizadoEm = '';
+        window.renderEstoque();
+        setText(
+          'estoqueNotice',
+          `Ainda não existe um arquivo de estoque para a Loja ${numeroLoja}. Importe o arquivo .ods desta loja para iniciar o controle.`
+        );
+        mostrar('estoqueNotice', true);
+        return;
+      }
+
       if (!resposta.ok) {
         throw new Error(
           'Não foi possível baixar o arquivo do GitHub (HTTP ' +
-          resposta.status + '). Confira se o arquivo existe e se o repositório é público.'
+          resposta.status + '). Verifique a conexão e as permissões do repositório.'
         );
       }
   
@@ -7008,7 +7092,23 @@ document.addEventListener("submit", async function(event) {
     } catch (e) { alert(e.message || e); }
   }
   window.encaminharVencidoEstoque = encaminharVencidoEstoque;
-  g('estoqueSwitchVencidos')?.addEventListener('change', e => { g('estoqueVencidosArea').hidden = !e.target.checked; if (e.target.checked && !estoqueVencidosCache.length) carregarVencidosEstoque(); });
+  function ativarAbaEstoque(tipo) {
+    const vencidos = tipo === 'vencidos';
+    const atualArea = g('estoqueAtualArea');
+    const vencidosArea = g('estoqueVencidosArea');
+    if (atualArea) atualArea.hidden = vencidos;
+    if (vencidosArea) vencidosArea.hidden = !vencidos;
+    document.querySelectorAll('.estoque-tab').forEach(btn => {
+      const ativo = btn.dataset.estoqueTipo === tipo;
+      btn.classList.toggle('active', ativo);
+      btn.classList.toggle('button-primary', ativo);
+      btn.setAttribute('aria-selected', String(ativo));
+      btn.tabIndex = ativo ? 0 : -1;
+    });
+    if (vencidos && !estoqueVencidosCache.length) carregarVencidosEstoque();
+    if (typeof renderPainelIcons === 'function') renderPainelIcons(vencidos ? vencidosArea : atualArea);
+  }
+  document.querySelectorAll('.estoque-tab').forEach(btn => btn.addEventListener('click', () => ativarAbaEstoque(btn.dataset.estoqueTipo)));
   g('btnAtualizarVencidosEstoque')?.addEventListener('click', carregarVencidosEstoque);
   g('estoqueVencidosBusca')?.addEventListener('input', renderVencidosEstoque);
 
@@ -7146,7 +7246,6 @@ document.addEventListener("submit", async function(event) {
     const renderizador = {
       "page-funcionarios": renderFuncionarios,
       "page-estoque": renderEstoque,
-      "page-produtos": renderProdutos,
       "page-historico": renderHistorico
     }[pagina];
 
@@ -7158,10 +7257,9 @@ document.addEventListener("submit", async function(event) {
 
   [["funcionariosBusca", "input", renderFuncionarios], ["funcionariosFiltro", "change", renderFuncionarios],
    ["estoqueBusca", "input", renderEstoque], ["estoqueFiltro", "change", renderEstoque],
-   ["produtosBusca", "input", renderProdutos], ["produtosFiltro", "change", renderProdutos],
    ["historicoBusca", "input", renderHistorico], ["historicoFiltro", "change", renderHistorico]]
     .forEach(([id, ev, fn]) => g(id) && g(id).addEventListener(ev, fn));
-  ["refreshFuncionarios", "refreshEstoque", "refreshProdutos", "refreshHistorico"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
+  ["refreshFuncionarios", "refreshEstoque", "refreshHistorico"].forEach(id => g(id) && g(id).addEventListener("click", () => atualizarPainel()));
 
   carregarCadastroFuncionariosPainel()
   .then(cadastro => {
