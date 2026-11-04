@@ -180,11 +180,13 @@ def main() -> None:
         "w",
         encoding="utf-8",
     ) as file:
+        # JSON compacto para reduzir o tamanho transferido pelo GitHub Pages.
+        # Os EANs permanecem como chaves string, preservando zeros iniciais.
         json.dump(
             converted,
             file,
             ensure_ascii=False,
-            indent=2,
+            separators=(",", ":"),
         )
         file.write("\n")
 
