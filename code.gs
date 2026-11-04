@@ -320,6 +320,8 @@ function doGetOriginal_(e) {
   if (acao === "logout") return logout_(parametros);
   if (acao === "loginAdmin") return loginAdmin_(parametros);
   if (acao === "definirPinFuncionario") return definirPinFuncionario_(parametros);
+  if (acao === "listarAdminsLojas") return listarAdminsLojas_(parametros);
+  if (acao === "criarAdminLoja") return criarAdminLoja_(parametros);
   if (acao === "definirPermissaoFuncionario") {
     return definirPermissaoFuncionario_(parametros);
   }
@@ -4530,7 +4532,8 @@ const ACOES_QUE_ALTERAM_ = [
   "relancarQueima", "sinalizarLancamento", "atualizarSinalizado",
   "subirVencidos", "subirParaVencidos", "definirPermissaoFuncionario",
   "adicionarValidadeManual", "adicionarProdutoJson", "adicionarFuncionario", "renomearFuncionario",
-  "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario"
+  "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario",
+  "criarAdminLoja"
 ];
 
 function doGet(e) {
@@ -5566,18 +5569,14 @@ function obterDetalhesFuncionarios_(parametros) {
    SEGURANÇA — LOGIN, PERFIL E LOJA
    ============================================================ */
 
+function ehAdministradorGeralValor_(valor) {
+  return normalizarTexto_(valor) === "geral";
+}
+
 function ehAdministradorValor_(valor) {
   if (valor === true) return true;
-
   const texto = normalizarTexto_(valor);
-
-  return [
-    "true",
-    "sim",
-    "administrador",
-    "admin",
-    "1"
-  ].includes(texto);
+  return ["true", "sim", "administrador", "admin", "1", "geral"].includes(texto);
 }
 
 function normalizarLoja_(valor) {
@@ -5610,7 +5609,8 @@ function obterSessaoObrigatoria_(parametros) {
 
   if (
     cadastro.loja !== normalizarLoja_(sessao.loja) ||
-    cadastro.administrador !== (sessao.administrador === true)
+    cadastro.administrador !== (sessao.administrador === true) ||
+    cadastro.administradorGeral !== (sessao.administradorGeral === true)
   ) {
     CacheService.getScriptCache().remove("sess_" + token);
     throw new Error("Seu perfil ou sua loja foi alterado. Entre novamente.");
@@ -5621,16 +5621,70 @@ function obterSessaoObrigatoria_(parametros) {
 
 function exigirAdministrador_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros);
-
-  if (sessao.administrador !== true) {
-    throw new Error("Acesso exclusivo para administradores.");
+  if (sessao.administrador !== true || sessao.administradorGeral === true) {
+    throw new Error("Acesso exclusivo para administradores de loja.");
   }
-
-  if (!sessao.loja) {
-    throw new Error("Administrador sem loja cadastrada.");
-  }
-
+  if (!sessao.loja) throw new Error("Administrador sem loja cadastrada.");
   return sessao;
+}
+
+function exigirAdministradorGeral_(parametros) {
+  const sessao = obterSessaoObrigatoria_(parametros);
+  if (sessao.administradorGeral !== true || sessao.perfil !== "geral") {
+    throw new Error("Acesso exclusivo ao Administrador Geral.");
+  }
+  return sessao;
+}
+
+function listarAdminsLojas_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__listarAdminsLojasCb") return respostaTexto_("Callback inválido.");
+  try {
+    exigirAdministradorGeral_(p);
+    const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
+    if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, administradores: [] });
+    const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
+    const administradores = dados.map((r, i) => ({
+      nome: String(r[0] || "").trim(), loja: normalizarLoja_(r[8]),
+      temPin: String(r[6] || "").includes(":"), linha: i + 2, geral: ehAdministradorGeralValor_(r[7])
+    })).filter(x => x.nome && ehAdministradorValor_(dados[x.linha - 2][7]) && !x.geral)
+      .map(({ nome, loja, temPin }) => ({ nome, loja, temPin }));
+    return respostaJsonp_(cb, { sucesso: true, administradores });
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+}
+
+function criarAdminLoja_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__criarAdminLojaCb") return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
+  try {
+    exigirAdministradorGeral_(p);
+    const nome = String(p.nome || "").trim();
+    const loja = normalizarLoja_(p.loja);
+    const pin = String(p.pin || "").trim();
+    validarNomeFuncionario_(nome);
+    if (!/^\d{1,5}$/.test(loja)) throw new Error("Informe uma loja válida, somente números.");
+    if (!/^\d{4,6}$/.test(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const aba = ss.getSheetByName("Funcionarios");
+    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
+    if (buscarFuncionarioPorNome_(nome)) throw new Error("Já existe um cadastro com esse nome.");
+    const linha = Math.max(aba.getLastRow() + 1, 2);
+    const salt = Utilities.getUuid();
+    const hash = hashPin_(pin, salt);
+    aba.getRange(linha, 1).setValue(nome);
+    aba.getRange(linha, 2).clearContent();
+    aba.getRange(linha, 6).clearContent();
+    aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hash);
+    aba.getRange(linha, 8).insertCheckboxes().setValue(true);
+    aba.getRange(linha, 9).setNumberFormat("@").setValue(loja);
+    CacheService.getScriptCache().remove("cadastro_funcionarios");
+    SpreadsheetApp.flush();
+    return respostaJsonp_(cb, { sucesso: true, mensagem: "Administrador da loja " + loja + " criado com sucesso." });
+  } catch (e) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
 }
 
 function obterAbasPermitidas_(parametros) {
@@ -5813,7 +5867,8 @@ function bloquearSeNaoAutorizado_(p) {
     "subirVencidos",
     "subirParaVencidos",
     "adicionarProdutoJson",
-    "cadastrarQueimaManual"
+    "cadastrarQueimaManual",
+    "listarAdminsLojas", "criarAdminLoja"
   ];
 
   if (

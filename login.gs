@@ -192,6 +192,8 @@ function buscarFuncionarioPorNome_(nome) {
       especial: linha[1] === true,
       pin: String(linha[6] || "").trim(),
       administrador: ehAdministradorValor_(linha[7]),
+      administradorGeral: ehAdministradorGeralValor_(linha[7]),
+      perfil: ehAdministradorGeralValor_(linha[7]) ? "geral" : (ehAdministradorValor_(linha[7]) ? "admin" : "funcionario"),
       loja: normalizarLoja_(linha[8]),
       linha: i + 2
     };
@@ -244,7 +246,7 @@ function login_(p) {
       throw new Error("Usuário ou PIN incorretos.");
     }
 
-    if (!funcionario.loja) {
+    if (!funcionario.administradorGeral && !funcionario.loja) {
       throw new Error(
         "Sua loja não está definida no cadastro. Solicite ao administrador."
       );
@@ -258,6 +260,8 @@ function login_(p) {
       nome: funcionario.nome,
       loja: funcionario.loja,
       administrador: funcionario.administrador,
+      administradorGeral: funcionario.administradorGeral,
+      perfil: funcionario.perfil,
       especial: funcionario.especial,
       loginId: Utilities.getUuid(),
       criadaEm: Date.now()
@@ -275,6 +279,8 @@ function login_(p) {
       nome: funcionario.nome,
       loja: funcionario.loja,
       administrador: funcionario.administrador,
+      administradorGeral: funcionario.administradorGeral,
+      perfil: funcionario.perfil,
       especial: funcionario.especial,
       loginId: sessao.loginId,
       ate: Date.now() + SESSAO_SEGUNDOS_ * 1000
@@ -306,6 +312,8 @@ function consultarSessao_(p) {
       nome: sessao.nome,
       loja: sessao.loja,
       administrador: sessao.administrador,
+      administradorGeral: sessao.administradorGeral === true,
+      perfil: sessao.perfil || (sessao.administrador ? "admin" : "funcionario"),
       especial: sessao.especial,
       loginId: sessao.loginId
     });
@@ -428,8 +436,8 @@ function definirPinFuncionario_(p) {
  */
 function definirPinInicialAdmin(nome, pin) {
   const funcionario = buscarFuncionarioPorNome_(nome);
-  if (!funcionario || !funcionario.administrador) {
-    throw new Error("O nome informado não está marcado como Administrador na coluna H.");
+  if (!funcionario || !funcionario.administrador || funcionario.administradorGeral) {
+    throw new Error("O nome informado não está marcado como Administrador de Loja na coluna H.");
   }
   if (!funcionario.loja) throw new Error("Preencha a loja na coluna I antes de definir o PIN.");
   if (!pinValido_(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
@@ -439,4 +447,56 @@ function definirPinInicialAdmin(nome, pin) {
     .getRange(funcionario.linha, COLUNA_PIN_).setNumberFormat("@")
     .setValue(salt + ":" + hash);
   return "PIN inicial definido. Acesse o sistema e entre como administrador.";
+}
+
+
+/**
+ * CONFIGURAÇÃO INICIAL — execute manualmente no Apps Script uma única vez.
+ * A linha precisa existir na aba Funcionarios, com o nome na coluna A.
+ * A função grava H=GERAL, remove a validação de checkbox dessa célula,
+ * deixa I vazia e grava o PIN com hash/salt na coluna G.
+ */
+function configurarAdministradorGeralInicial() {
+  // Edite somente estes dois valores antes de executar a função no Apps Script.
+  const nome = "SUBSTITUA_PELO_NOME_DO_ADMIN_GERAL";
+  const pin = "SUBSTITUA_POR_UM_PIN_DE_4_A_6_DIGITOS";
+  if (nome.indexOf("SUBSTITUA_") === 0 || pin.indexOf("SUBSTITUA_") === 0) {
+    throw new Error("Edite o nome e o PIN no início da função antes de executar.");
+  }
+  return gravarAdministradorGeralInicial_(nome, pin);
+}
+
+function gravarAdministradorGeralInicial_(nome, pin) {
+  const nomeLimpo = String(nome || "").trim();
+  if (!nomeLimpo) throw new Error("Informe o nome do Administrador Geral.");
+  if (!pinValido_(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
+  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = planilha.getSheetByName("Funcionarios");
+  if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
+  let linha = 0;
+  if (aba.getLastRow() >= 2) {
+    const nomes = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
+    for (let i = 0; i < nomes.length; i++) {
+      if (normalizarTexto_(nomes[i][0]) === normalizarTexto_(nomeLimpo)) { linha = i + 2; break; }
+    }
+  }
+  if (!linha) linha = Math.max(2, aba.getLastRow() + 1);
+  if (aba.getLastRow() >= 2) {
+    const perfis = aba.getRange(2, 8, aba.getLastRow() - 1, 1).getDisplayValues();
+    for (let i = 0; i < perfis.length; i++) {
+      if (normalizarTexto_(perfis[i][0]) === "geral" && i + 2 !== linha) {
+        throw new Error("Já existe um Administrador Geral cadastrado. Use o mesmo nome para atualizar o PIN.");
+      }
+    }
+  }
+  const salt = Utilities.getUuid();
+  const hash = hashPin_(String(pin), salt);
+  aba.getRange(linha, 1).setValue(nomeLimpo);
+  aba.getRange(linha, 2).clearContent();
+  aba.getRange(linha, 6).clearContent();
+  aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hash);
+  aba.getRange(linha, 8).clearDataValidations().setValue("GERAL");
+  aba.getRange(linha, 9).clearContent();
+  CacheService.getScriptCache().remove("cadastro_funcionarios");
+  return "Administrador Geral configurado. Faça login com o nome e PIN definidos.";
 }

@@ -60,3 +60,27 @@ Se ainda não houver nenhum administrador com PIN válido, marque H e I para o p
 - Logout: confirmar que voltar à página protegida exige novo login.
 
 > Observação: o código foi submetido a verificações estáticas de sintaxe JavaScript. A integração real ainda precisa ser testada na implantação do Apps Script e na planilha, porque depende das permissões, cabeçalhos e dados atuais da sua conta.
+
+
+## Administrador Geral (novo)
+
+O sistema agora possui três perfis: Funcionário, Administrador de Loja e Administrador Geral. O Administrador Geral é único, não possui loja, não recebe aba de mapa e não aparece nas listas operacionais nem na gestão de funcionários do Painel Conferente. Ele utiliza a página `painelgeral.html` para criar administradores de loja.
+
+### Criar o primeiro Administrador Geral
+
+1. Na aba `Funcionarios`, crie uma linha para a pessoa que será Administrador Geral e preencha o nome na coluna A.
+2. No editor do Google Apps Script, abra `login.gs` e localize `configurarAdministradorGeralInicial`.
+3. Substitua os dois valores de exemplo no início da função pelo nome e por um PIN exclusivo de 4 a 6 números. Não compartilhe o PIN.
+4. Selecione `configurarAdministradorGeralInicial` no editor e execute manualmente. A função grava o PIN com salt e hash na coluna G, grava `GERAL` na coluna H e deixa a coluna I vazia. Ela remove a validação de checkbox apenas da célula H desse cadastro.
+5. Depois da configuração, apague o PIN em texto do código (substitua novamente pelo marcador) e publique uma nova versão da implantação do Apps Script. Entre pelo `index.html`; o Administrador Geral será direcionado automaticamente para `painelgeral.html`.
+
+### Criar administradores de loja
+
+No `painelgeral.html`, informe nome, número da loja e PIN inicial. O sistema cria o cadastro na aba `Funcionarios`, com H marcado como administrador e I preenchida com a loja. Não cria uma aba de mapa para o administrador. Somente o Administrador Geral pode usar essa função.
+
+### Observações de segurança
+
+- Não marque manualmente vários registros como `GERAL`. A função de configuração inicial impede a criação de um segundo Administrador Geral.
+- O Administrador Geral não deve receber número de loja na coluna I.
+- O Administrador de Loja continua limitado à própria loja e não pode criar outros administradores.
+- Após substituir os arquivos no projeto Apps Script/GitHub Pages, publique uma nova versão do Web App e atualize os arquivos estáticos no GitHub Pages.

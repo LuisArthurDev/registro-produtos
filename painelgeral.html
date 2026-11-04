@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administrador Geral | Registro de Mapa de Validade</title>
+  <style>
+    :root{font-family:Inter,system-ui,Segoe UI,sans-serif;color:#172b3a;background:#eef3f7}*{box-sizing:border-box}body{margin:0;padding:28px;visibility:hidden}html.auth-ok body{visibility:visible}.wrap{max-width:980px;margin:0 auto}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.top h1{font-size:25px;margin:0}.sub{color:#647789;margin-top:6px;font-size:13px}.card{background:#fff;border:1px solid #dce5ec;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 8px 24px #17354b0a}.card h2{font-size:17px;margin:0 0 16px}.grid{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;align-items:end}label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}input{width:100%;height:42px;border:1px solid #cbd7e0;border-radius:9px;padding:0 11px;font:inherit}button{height:42px;border:0;border-radius:9px;padding:0 16px;background:#12354b;color:white;font-weight:700;cursor:pointer}button.secondary{background:#e8eef3;color:#20394a}button:disabled{opacity:.6;cursor:wait}.msg{font-size:13px;margin-top:12px}.error{color:#b42318}.success{color:#027a48}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #edf1f4;font-size:13px}th{font-size:11px;text-transform:uppercase;color:#718096}.empty{padding:24px;text-align:center;color:#718096}.pill{display:inline-block;border-radius:20px;background:#eaf2ff;color:#1d4ed8;padding:4px 9px;font-size:11px;font-weight:700}.hint{font-size:12px;color:#718096;margin-top:10px}@media(max-width:700px){body{padding:16px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+  </style>
+  <script src="auth.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div><h1>Administrador Geral</h1><div class="sub" id="identidade">Gestão central de administradores por loja</div></div>
+      <button class="secondary" type="button" onclick="Auth.sair()">Sair</button>
+    </header>
+    <section class="card">
+      <h2>Criar administrador de loja</h2>
+      <form id="formAdmin" class="grid">
+        <div><label for="nome">Nome do administrador</label><input id="nome" maxlength="60" autocomplete="off" required></div>
+        <div><label for="loja">Número da loja</label><input id="loja" inputmode="numeric" maxlength="5" pattern="[0-9]{1,5}" required></div>
+        <div><label for="pin">PIN inicial (4 a 6 números)</label><input id="pin" type="password" inputmode="numeric" minlength="4" maxlength="6" pattern="[0-9]{4,6}" required></div>
+        <button id="btnCriar" type="submit">Criar administrador</button>
+      </form>
+      <div id="mensagem" class="msg" role="status"></div>
+      <p class="hint">O administrador criado será vinculado à loja informada. Ele não terá acesso a outras lojas e não aparecerá nas listas operacionais de funcionários.</p>
+    </section>
+    <section class="card">
+      <h2>Administradores de loja cadastrados</h2>
+      <div class="table-wrap"><table><thead><tr><th>Administrador</th><th>Loja</th><th>Login</th></tr></thead><tbody id="lista"><tr><td colspan="3" class="empty">Carregando...</td></tr></tbody></table></div>
+    </section>
+  </main>
+<script>
+(async function(){
+  const autorizado = await Auth.exigirAdminGeral();
+  if(!autorizado) return;
+  document.getElementById('identidade').textContent = Auth.usuario() + ' · Administrador Geral · Login ' + Auth.loginId().slice(0,8);
+  const form=document.getElementById('formAdmin'), btn=document.getElementById('btnCriar'), msg=document.getElementById('mensagem'), lista=document.getElementById('lista');
+  function mostrar(texto,tipo){msg.textContent=texto;msg.className='msg '+(tipo||'');}
+  async function carregar(){
+    lista.innerHTML='<tr><td colspan="3" class="empty">Carregando...</td></tr>';
+    try{const d=await Auth.chamar('listarAdminsLojas','__listarAdminsLojasCb',{});if(!d||!d.sucesso)throw new Error(d?.mensagem||'Não foi possível carregar.');
+      if(!d.administradores.length){lista.innerHTML='<tr><td colspan="3" class="empty">Nenhum administrador de loja cadastrado.</td></tr>';return;}
+      lista.innerHTML=d.administradores.map(a=>'<tr><td><strong>'+esc(a.nome)+'</strong></td><td><span class="pill">Loja '+esc(a.loja||'—')+'</span></td><td>'+(a.temPin?'Ativo':'PIN pendente')+'</td></tr>').join('');
+    }catch(e){lista.innerHTML='<tr><td colspan="3" class="empty">'+esc(e.message)+'</td></tr>';}
+  }
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  form.addEventListener('submit',async ev=>{ev.preventDefault();btn.disabled=true;mostrar('Criando administrador...');
+    try{const d=await Auth.chamar('criarAdminLoja','__criarAdminLojaCb',{nome:document.getElementById('nome').value.trim(),loja:document.getElementById('loja').value.trim(),pin:document.getElementById('pin').value});if(!d||!d.sucesso)throw new Error(d?.mensagem||'Não foi possível criar.');form.reset();mostrar(d.mensagem,'success');await carregar();}
+    catch(e){mostrar(e.message,'error');}finally{btn.disabled=false;}
+  });
+  await carregar();
+})();
+</script>
+</body>
+</html>

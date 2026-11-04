@@ -518,12 +518,15 @@
         if (d && d.sucesso) {
           localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
             token: sessao.token, nome: d.nome, loja: d.loja,
-            administrador: d.administrador === true, loginId: d.loginId,
+            administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
+            perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
             ate: Date.now() + 5.9 * 3600 * 1000
           }));
+          if (d.administradorGeral === true) { location.replace("painelgeral.html"); return; }
           if (d.administrador === true) {
             document.getElementById("loginForm").hidden = true;
             document.getElementById("adminAcesso").hidden = false;
+            document.getElementById("btnPainelConferente").href = "painelconferente.html";
             document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
             return;
           }
@@ -565,13 +568,17 @@
           nome: d.nome,
           loja: d.loja,
           administrador: d.administrador === true,
+          administradorGeral: d.administradorGeral === true,
+          perfil: d.perfil || (d.administrador ? "admin" : "funcionario"),
           loginId: d.loginId,
           ate: d.ate || (Date.now() + 5.9 * 3600 * 1000)
         }));
 
-        mostrarMensagem(d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando...", "success");
+        mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");
         senhaInput.value = "";
-        if (d.administrador === true) {
+        if (d.administradorGeral === true) {
+          location.replace("painelgeral.html");
+        } else if (d.administrador === true) {
           document.getElementById("loginForm").hidden = true;
           document.getElementById("adminAcesso").hidden = false;
           document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;

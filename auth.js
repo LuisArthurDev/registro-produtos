@@ -133,11 +133,19 @@
 
       if (
         perfilEsperado === "admin" &&
-        resposta.administrador !== true
+        (resposta.administrador !== true || resposta.administradorGeral === true)
       ) {
         redirecionarErro(
           "Esta página é exclusiva para administradores."
         );
+        return false;
+      }
+
+      if (
+        perfilEsperado === "geral" &&
+        resposta.administradorGeral !== true
+      ) {
+        redirecionarErro("Esta página é exclusiva para o Administrador Geral.");
         return false;
       }
 
@@ -212,10 +220,15 @@
       return !!(s && s.administrador === true);
     },
 
+    administradorGeral: function () {
+      const s = lerSessao();
+      return !!(s && s.administradorGeral === true);
+    },
+
     perfil: function () {
-      return this.administrador()
-        ? "Administrador"
-        : "Funcionário";
+      const s = lerSessao();
+      return s && s.perfil === "geral" ? "Administrador Geral" :
+        (s && s.administrador ? "Administrador de Loja" : "Funcionário");
     },
 
     chamar: chamar,
@@ -230,6 +243,10 @@
 
     exigirAdmin: function () {
       return validarPerfil("admin");
+    },
+
+    exigirAdminGeral: function () {
+      return validarPerfil("geral");
     },
 
     sair: sair,
