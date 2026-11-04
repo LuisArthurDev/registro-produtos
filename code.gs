@@ -353,6 +353,9 @@ function doGetOriginal_(e) {
   if (acao === "validades") {
     return consultarValidades_(parametros);
   }
+  if (acao === "consultarTransferencias") {
+    return consultarTransferencias_(parametros);
+  }
   if (acao === "verificarItemMapa") return verificarItemMapa_(parametros);
   if (acao === "verificarChaveLancamento") return verificarChaveLancamento_(parametros);
 
@@ -1623,6 +1626,148 @@ function verificarItemMapa_(p) {
     return respostaJsonp_(cb, { sucesso: true, existe: ocorrencias > 0, quantidade, ocorrencias, funcionario });
   } catch (e) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  }
+}
+
+function consultarTransferencias_(parametros) {
+  const callback = String(parametros.callback || "");
+  if (callback !== "__transferenciasCb") {
+    return respostaTexto_("Callback inválido.");
+  }
+
+  try {
+    const sessao = exigirAdministrador_(parametros);
+    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const fuso = planilha.getSpreadsheetTimeZone();
+    const aba = planilha.getSheetByName("Transferencias");
+    if (!aba || aba.getLastRow() < 2) {
+      return respostaJsonp_(callback, { sucesso: true, registros: [] });
+    }
+
+    // Lê a largura real da aba e identifica as colunas pelo cabeçalho.
+    // Suporta o layout atual de 10 colunas e o layout legado de 8 colunas.
+    const ultimaLinha = aba.getLastRow();
+    const ultimaColuna = Math.max(aba.getLastColumn(), 8);
+    const intervalo = aba.getRange(1, 1, ultimaLinha, ultimaColuna);
+    const valores = intervalo.getValues();
+    const exibidos = intervalo.getDisplayValues();
+    const cabecalhos = (exibidos[0] || []).map(h =>
+      normalizarTexto_(h).replace(/\s+/g, " ").trim()
+    );
+    const indice = (nomes, legado) => {
+      const i = cabecalhos.findIndex(h => nomes.includes(h));
+      return i >= 0 ? i : legado;
+    };
+    const col = {
+      codigo: indice(["codigo de barras", "ean", "codigo"], 0),
+      lote: indice(["lote"], 1),
+      validade: indice(["validade"], 2),
+      quantidade: indice(["quantidade", "qtd"], 3),
+      mes: indice(["mes de lancamento", "mes lancamento"], 4),
+      loja: indice(["loja de origem", "lojaorigem"], 5),
+      romaneio: indice(["romaneio"], 6),
+      destino: indice(["destino", "loja de destino"], 7),
+      chave: indice(["chave unica", "chave unica origem"], 7),
+      data: indice(["data de lancamento", "data lancamento"], 4)
+    };
+
+    // Mantém o comportamento anterior: transferências já enviadas à Queima
+    // não aparecem como transferências pendentes.
+    const chavesQueima = new Set();
+    const abaQueima = planilha.getSheetByName("Queima");
+    if (abaQueima && abaQueima.getLastRow() >= 2) {
+      const qLast = abaQueima.getLastRow();
+      const qRange = abaQueima.getRange(1, 1, qLast, Math.max(abaQueima.getLastColumn(), 1));
+      const qVals = qRange.getValues();
+      const qDisp = qRange.getDisplayValues();
+      const cab = (qDisp[0] || []).map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+      const idxLoja = cab.indexOf("lojaorigem");
+      const idxChave = cab.findIndex(h => ["chave unica", "chave unica origem"].includes(h));
+      const idxOrigem = cab.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
+      if (idxChave >= 0) {
+        for (let i = 1; i < qVals.length; i++) {
+          let loja = idxLoja >= 0 ? normalizarLoja_(qDisp[i][idxLoja]) : "";
+          if (!loja && idxOrigem >= 0) {
+            const nomeOrigem = String(qDisp[i][idxOrigem] || "").trim();
+            if (nomeOrigem && normalizarTexto_(nomeOrigem) !== "cadastro manual") {
+              const cadastro = buscarFuncionarioPorNome_(nomeOrigem);
+              if (cadastro && !cadastro.administrador) loja = normalizarLoja_(cadastro.loja);
+            }
+          }
+          const chave = String(qDisp[i][idxChave] || qVals[i][idxChave] || "").trim();
+          if (chave && loja === sessao.loja) chavesQueima.add(chave);
+        }
+      }
+    }
+
+    const registros = [];
+    for (let i = 1; i < valores.length; i++) {
+      const linha = valores[i] || [];
+      const exibe = exibidos[i] || [];
+      const pegar = (idx) => idx >= 0 ? exibe[idx] : "";
+      const codigo = String(pegar(col.codigo) || "").trim();
+      if (!codigo) continue;
+
+      const lojaOrigem = normalizarLoja_(pegar(col.loja));
+      if (lojaOrigem !== sessao.loja) continue;
+
+      const chaveUnica = String(pegar(col.chave) || (col.chave >= 0 ? linha[col.chave] : "") || "").trim();
+      if (chaveUnica && chavesQueima.has(chaveUnica)) continue;
+
+      const validade = converterValidadeParaData_(
+        col.validade >= 0 ? linha[col.validade] : null,
+        pegar(col.validade)
+      );
+      if (!validade) continue;
+      const validadeISO = Utilities.formatDate(validade, fuso, "yyyy-MM-dd");
+      const validadeFormatada = Utilities.formatDate(validade, fuso, "dd/MM/yyyy");
+
+      const dataValor = col.data >= 0 ? linha[col.data] : null;
+      const dataExibida = String(pegar(col.data) || "").trim();
+      const dataValida = dataValor instanceof Date && !isNaN(dataValor.getTime());
+      const mesValor = col.mes >= 0 ? linha[col.mes] : null;
+      const mesExibido = String(pegar(col.mes) || "").trim();
+      const mesDataValida = mesValor instanceof Date && !isNaN(mesValor.getTime());
+      const quantidade = Number(String(pegar(col.quantidade) || "0").replace(",", ".")) || 0;
+
+      registros.push({
+        funcionario: "Transferencias",
+        codigo: codigo,
+        lote: String(pegar(col.lote) || "").trim(),
+        validade: validadeFormatada,
+        validadeISO: validadeISO,
+        quantidade: quantidade,
+        dataLancamento: dataValida
+          ? Utilities.formatDate(dataValor, fuso, "dd/MM/yyyy HH:mm:ss")
+          : dataExibida,
+        ts: dataValida ? dataValor.getTime() : 0,
+        especial: false,
+        lojaOrigem: String(pegar(col.loja) || "").trim(),
+        romaneio: String(pegar(col.romaneio) || "").trim(),
+        destino: String(pegar(col.destino) || "").trim(),
+        chaveUnica: chaveUnica,
+        mesLancamento: mesDataValida
+          ? Utilities.formatDate(mesValor, fuso, "yyyy-MM")
+          : mesExibido
+      });
+    }
+
+    // Agrupa por EAN/lote/validade/romaneio/destino para não misturar remessas diferentes.
+    const agrupados = new Map();
+    registros.forEach(item => {
+      const chave = [item.codigo, item.lote || "SEM_LOTE", item.validadeISO, item.romaneio, item.destino].join("|");
+      if (!agrupados.has(chave)) agrupados.set(chave, { ...item, quantidade: 0 });
+      agrupados.get(chave).quantidade += Number(item.quantidade) || 0;
+    });
+
+    return respostaJsonp_(callback, { sucesso: true, registros: Array.from(agrupados.values()) });
+  } catch (erro) {
+    console.error("Erro ao consultar transferências: " + (erro && erro.stack ? erro.stack : erro));
+    return respostaJsonp_(callback, {
+      sucesso: false,
+      mensagem: mensagemErro_(erro),
+      registros: []
+    });
   }
 }
 
@@ -6295,6 +6440,7 @@ function bloquearSeNaoAutorizado_(p) {
   const acoesAdmin = [
     "dashboardPainel",
     "vencidosPainel",
+    "consultarTransferencias",
     "consultarQueima",
     "consultarSinalizados",
     "funcionariosAdmin",

@@ -2334,6 +2334,7 @@ Auth.exigirAdmin().then(ok => {
               <tr>
                 <th>Loja de Origem</th>
                 <th>Romaneio</th>
+                <th>Destino</th>
                 <th>Código</th>
                 <th>Descrição</th>
                 <th>Lote</th>
@@ -2817,6 +2818,8 @@ Auth.exigirAdmin().then(ok => {
 
 <script>
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+  // Compartilhado entre os blocos <script> do painel.
+  window.estoqueOdsRegistros = window.estoqueOdsRegistros || [];
   let cadastroFuncionariosPainel = {
     funcionarios: [],
     especiais: [],
@@ -2861,19 +2864,16 @@ Auth.exigirAdmin().then(ok => {
     document.getElementById("topTitle").textContent = names[0];
     document.querySelector(".page-subtitle").textContent = names[1];
 
-    if(pageName==='transferencias') {
-      const notice = document.getElementById('transferenciasNotice');
-      if (!validadesProntas) {
-        if (notice) { notice.style.display = 'block'; notice.textContent = 'Carregando transferências...'; }
-        carregarMapa(false).then(() => {
-          if (validadesProntas) { renderTransferencias(); if (notice) notice.textContent = 'Transferências atualizadas.'; }
-          else { const mapaNotice = document.getElementById('mapaNotice'); if (notice) { notice.style.display = 'block'; notice.textContent = (mapaNotice && mapaNotice.textContent) || 'Não foi possível carregar as transferências. Tente atualizar novamente.'; } }
-        }).catch(err => {
-          if (notice) { notice.style.display = 'block'; notice.textContent = 'Não foi possível carregar as transferências: ' + (err.message || err); }
-        });
-      } else renderTransferencias();
+    if (pageName === 'transferencias') {
+      if (!transferenciasProntas) {
+        carregarTransferencias(false);
+      } else {
+        const notice = document.getElementById('transferenciasNotice');
+        if (notice) { notice.style.display = 'none'; }
+        renderTransferencias();
+      }
     }
-    if(pageName==='dashboard' && !estoqueOdsRegistros.length && typeof carregarEstoqueDoGitHub==='function') carregarEstoqueDoGitHub().catch(()=>{});
+    if(pageName==='dashboard' && !(window.estoqueOdsRegistros || []).length && typeof carregarEstoqueDoGitHub==='function') carregarEstoqueDoGitHub().catch(()=>{});
     if (typeof garantirAba === 'function') garantirAba(pageName);
     if (pageName === 'historico' && typeof carregarHistoricoAdministrativo === 'function') carregarHistoricoAdministrativo();
     if (['estoque','historico','funcionarios'].includes(pageName) && typeof renderPaginasGestao === 'function') renderPaginasGestao();
@@ -3173,6 +3173,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     funcionarios: '__funcionariosCb',
     atualizarSinalizado: '__atualizarSinalizadoCb',
     validade: '__validadeCb',
+    transferencias: '__transferenciasCb',
     historico: '__historicoCb',
     sinalizacao: '__sinalizacaoCb',
     editar: '__editarCb',
@@ -3225,7 +3226,9 @@ function jsonpPainelBruto(action, callback, extra = {}) {
       script.remove();
 
       if (window[cbName] === receberResposta) {
-        delete window[cbName];
+        // O servidor pode concluir depois do timeout. Mantém um callback inofensivo
+        // para que uma resposta tardia não gere ReferenceError no navegador.
+        window[cbName] = function () {};
       }
 
       consultasJsonpPainel.delete(cbName);
@@ -4041,6 +4044,42 @@ function imprimirMapaValidade() {
 }
 
   
+  async function carregarTransferencias(usarCache) {
+    const notice = document.getElementById('transferenciasNotice');
+    const botao = document.getElementById('refreshTransferencias');
+    if (notice) {
+      notice.style.display = 'block';
+      notice.textContent = 'Carregando transferências...';
+    }
+    if (botao) botao.disabled = true;
+    try {
+      const resposta = await jsonpPainel('consultarTransferencias', 'transferencias', usarCache ? {} : { nocache: '1' });
+      if (!resposta || resposta.sucesso !== true) {
+        throw new Error((resposta && resposta.mensagem) || 'O servidor não retornou os dados das transferências.');
+      }
+      painelCache.validades = Array.isArray(resposta.registros) ? resposta.registros : [];
+      transferenciasProntas = true;
+      renderTransferencias();
+      if (notice) {
+        notice.textContent = painelCache.validades.length
+          ? 'Transferências atualizadas.'
+          : 'Nenhuma transferência encontrada para esta loja.';
+        notice.style.display = 'block';
+      }
+      return true;
+    } catch (erro) {
+      console.error('Erro ao carregar transferências:', erro);
+      transferenciasProntas = false;
+      if (notice) {
+        notice.textContent = 'Não foi possível carregar as transferências: ' + (erro && erro.message ? erro.message : erro);
+        notice.style.display = 'block';
+      }
+      return false;
+    } finally {
+      if (botao) botao.disabled = false;
+    }
+  }
+
   function renderTransferencias() {
     const all = (painelCache.validades || []).filter(
       r => String(r.funcionario || '') === 'Transferencias'
@@ -4100,6 +4139,7 @@ function imprimirMapaValidade() {
         <tr>
           <td>${escHtml(r.lojaOrigem || '')}</td>
           <td>${escHtml(r.romaneio || '')}</td>
+          <td>${escHtml(r.destino || '')}</td>
           <td>${escHtml(r.codigo || '')}</td>
           <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
           <td>${escHtml(r.lote || '')}</td>
@@ -4708,7 +4748,7 @@ function imprimirMapaValidade() {
     // O Controle de Estoque é a fonte de verdade para itens com saldo positivo
     // que ainda não possuem correspondência em nenhum mapa de validade.
     const mapas = registros;
-    const estoqueSemMapa = (estoqueOdsRegistros || []).filter(o => {
+    const estoqueSemMapa = (window.estoqueOdsRegistros || []).filter(o => {
       if (!(Number(o.quantidade) > 0)) return false;
       const ean = String(o.ean || '').trim(); const interno = String(o.codigoInterno || '').trim();
       return !mapas.some(r => { const codigo = String(r.codigo || r.ean || '').trim(); const ci = String(r.codigoInterno || '').trim(); return (ean && codigo === ean) || (interno && (codigo === interno || ci === interno)); });
@@ -4858,6 +4898,7 @@ function atualizarProdutosAtencao(registros) {
 
   let dashboardDados = null;
   let validadesProntas = false;
+  let transferenciasProntas = false;
   let vencidosProntos = false;
   let queimaPronta = false;
   let sinalizadosProntos = false;
@@ -5221,7 +5262,7 @@ function atualizarProdutosAtencao(registros) {
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
   document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
-  document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
+  document.getElementById('refreshTransferencias')?.addEventListener('click', () => carregarTransferencias(false));
   function normalizarBuscaPerdas(valor) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim(); }
   function aplicarBuscaPerdas(inputId, tbodyId) {
     const input = document.getElementById(inputId);
@@ -6770,7 +6811,6 @@ document.addEventListener("submit", async function(event) {
 
   /* ---------- Controle de Estoque: importação ODS ---------- */
   const ESTOQUE_ODS_STORAGE_KEY = 'painelConferente_estoqueOds_v1';
-  let estoqueOdsRegistros = [];
   let estoqueOdsAtualizadoEm = '';
   function chaveEstoque(v) { return String(v ?? '').trim().replace(/\.0$/, '').toLocaleLowerCase('pt-BR'); }
   function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
@@ -6873,7 +6913,7 @@ document.addEventListener("submit", async function(event) {
       }
   
       // Preserva a importação local existente.
-      estoqueOdsRegistros = lista;
+      window.estoqueOdsRegistros = lista;
       if (validadesProntas) atualizarResumoValidade(painelCache.validades || []);
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
@@ -6958,7 +6998,7 @@ document.addEventListener("submit", async function(event) {
       if (resposta.status === 404) {
         // A ausência do arquivo por loja é normal antes da primeira importação.
         // Não tratar como falha fatal nem tentar carregar o estoque de outra loja.
-        estoqueOdsRegistros = [];
+        window.estoqueOdsRegistros = [];
         estoqueOdsAtualizadoEm = '';
         window.renderEstoque();
         setText(
@@ -7043,7 +7083,7 @@ document.addEventListener("submit", async function(event) {
         );
       }
   
-      estoqueOdsRegistros = lista;
+      window.estoqueOdsRegistros = lista;
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
       localStorage.setItem(
@@ -7094,11 +7134,11 @@ document.addEventListener("submit", async function(event) {
     if(!g('estoqueTbody'))return;
     const q=norm(g('estoqueBusca')?.value||''), filtro=g('estoqueFiltro')?.value||'';
     const mapas=registrosVisiveisHTML(painelCache.validades||[]);
-    const todos=estoqueOdsRegistros.map(o=>{const matches=mapas.filter(r=>{const codigo=String(r.codigo||r.ean||'').trim();const interno=String(r.codigoInterno||'').trim();return (!!o.ean&&codigo===String(o.ean).trim()) || (!!o.codigoInterno&&(codigo===String(o.codigoInterno).trim()||interno===String(o.codigoInterno).trim()));});const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
+    const todos=(window.estoqueOdsRegistros || []).map(o=>{const matches=mapas.filter(r=>{const codigo=String(r.codigo||r.ean||'').trim();const interno=String(r.codigoInterno||'').trim();return (!!o.ean&&codigo===String(o.ean).trim()) || (!!o.codigoInterno&&(codigo===String(o.codigoInterno).trim()||interno===String(o.codigoInterno).trim()));});const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
     const rows=todos.filter(o=>(!q||norm([o.ean,o.codigoInterno,o.produto,o.secao].join(' ')).includes(q))&&(!filtro||(filtro==='Sim'?o.mapeada:!o.mapeada)));
     setText('estoqueProdutos',num(todos.length));setText('estoqueUnidades',num(todos.reduce((t,o)=>t+(Number(o.quantidade)||0),0)));setText('estoqueVencidos',num(todos.filter(o=>o.mapeada).length));
     g('estoqueTbody').innerHTML=rows.map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
-    mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',estoqueOdsRegistros.length?`${estoqueOdsRegistros.length} produtos importados; ${estoqueOdsRegistros.filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
+    mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',(window.estoqueOdsRegistros || []).length?`${(window.estoqueOdsRegistros || []).length} produtos importados; ${(window.estoqueOdsRegistros || []).filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
   }
   window.renderEstoque = renderEstoque;
 
