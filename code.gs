@@ -317,6 +317,7 @@ function doGetOriginal_(e) {
 
   if (acao === "login") return login_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
+  if (acao === "atividade") return registrarAtividadeSessao_(parametros);
   if (acao === "logout") return logout_(parametros);
   if (acao === "loginAdmin") return loginAdmin_(parametros);
   if (acao === "definirPinFuncionario") return definirPinFuncionario_(parametros);
@@ -5628,12 +5629,25 @@ function obterSessaoObrigatoria_(parametros) {
     throw new Error("Sessão expirada. Entre novamente.");
   }
 
+  const agora = Date.now();
+  const criadaEm = Number(sessao.criadaEm || 0);
+  const ultimaAtividade = Number(sessao.ultimaAtividade || criadaEm);
+  const expiraEm = criadaEm + SESSAO_SEGUNDOS_ * 1000;
+  if (!criadaEm || agora >= expiraEm) {
+    removerSessao_(token);
+    throw new Error("Sua sessão atingiu o limite de 8 horas. Entre novamente.");
+  }
+  if (!ultimaAtividade || agora - ultimaAtividade >= INATIVIDADE_SEGUNDOS_ * 1000) {
+    removerSessao_(token);
+    throw new Error("Sua sessão foi encerrada após 30 minutos de inatividade.");
+  }
+
   // Confere novamente o cadastro para impedir que uma sessão
   // antiga continue válida depois de uma mudança de perfil/loja.
   const cadastro = buscarFuncionarioPorNome_(sessao.nome);
 
   if (!cadastro) {
-    CacheService.getScriptCache().remove("sess_" + token);
+    removerSessao_(token);
     throw new Error("Usuário não encontrado no cadastro.");
   }
 
@@ -5642,7 +5656,7 @@ function obterSessaoObrigatoria_(parametros) {
     cadastro.administrador !== (sessao.administrador === true) ||
     cadastro.administradorGeral !== (sessao.administradorGeral === true)
   ) {
-    CacheService.getScriptCache().remove("sess_" + token);
+    removerSessao_(token);
     throw new Error("Seu perfil ou sua loja foi alterado. Entre novamente.");
   }
 
@@ -5923,7 +5937,8 @@ function bloquearSeNaoAutorizado_(p) {
     "editarLancamento",
     "excluirLancamento",
     "adicionarValidadeManual",
-    "sinalizarLancamento"
+    "sinalizarLancamento",
+    "atividade" // renova somente a janela de inatividade da sessão autenticada
   ];
 
   if (

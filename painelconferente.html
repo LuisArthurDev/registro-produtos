@@ -196,6 +196,17 @@
       margin-top: 4px;
     }
 
+    .sidebar-launch {
+      width: 100%; margin-top: 10px; display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid #344258; border-radius: 10px;
+      background: #203653; color: #e2e8f0; font: inherit; font-size: 12px;
+      font-weight: 650; cursor: pointer; text-align: left; text-decoration: none;
+    }
+    .sidebar-launch:hover { background: #29496f; border-color: #60a5fa; }
+    .sidebar-launch svg { width: 17px; height: 17px; flex: 0 0 17px; }
+    body.sidebar-collapsed .sidebar-launch { justify-content: center; padding: 10px 0; }
+    body.sidebar-collapsed .sidebar-launch span { display: none; }
+
     .sidebar-logout {
       width: 100%; margin-top: 10px; display: flex; align-items: center; gap: 10px;
       padding: 10px 12px; border: 1px solid #344258; border-radius: 10px;
@@ -1585,6 +1596,9 @@ Auth.exigirAdmin().then(ok => {
           <div class="profile-role" id="perfilAdminLoja">Painel Conferente</div>
         </div>
       </div>
+      <a class="sidebar-launch" id="btnIrLancamento" href="lancamento.html" title="Ir para lançamentos">
+        <i data-lucide="clipboard-list"></i><span>Ir para Lançamentos</span>
+      </a>
       <button class="sidebar-logout" type="button" id="btnSairPainel" onclick="Auth.sair()" title="Sair da conta">
         <i data-lucide="log-out"></i><span>Sair</span>
       </button>

@@ -10,7 +10,8 @@
    I = Loja
    ============================================================ */
 
-const SESSAO_SEGUNDOS_ = 21600;
+const SESSAO_SEGUNDOS_ = 28800; // duração máxima absoluta: 8 horas
+const INATIVIDADE_SEGUNDOS_ = 1800; // encerra após 30 minutos sem atividade
 const MAX_TENTATIVAS_ = 5;
 const BLOQUEIO_SEGUNDOS_ = 900;
 const COLUNA_PIN_ = 7;
@@ -107,19 +108,47 @@ function tokenFormatoValido_(token) {
   return /^[a-f0-9]{64}$/.test(String(token || ""));
 }
 
+function chaveSessao_(token) {
+  return "MV_SESSAO_" + String(token || "");
+}
+
 function lerSessao_(token) {
   if (!tokenFormatoValido_(token)) return null;
-
-  const valor = CacheService.getScriptCache()
-    .get("sess_" + token);
-
+  const valor = PropertiesService.getScriptProperties()
+    .getProperty(chaveSessao_(token));
   if (!valor) return null;
+  try { return JSON.parse(valor); } catch (e) { return null; }
+}
 
-  try {
-    return JSON.parse(valor);
-  } catch (e) {
-    return null;
-  }
+function salvarSessao_(token, sessao) {
+  PropertiesService.getScriptProperties()
+    .setProperty(chaveSessao_(token), JSON.stringify(sessao));
+}
+
+function removerSessao_(token) {
+  if (!tokenFormatoValido_(token)) return;
+  PropertiesService.getScriptProperties()
+    .deleteProperty(chaveSessao_(token));
+}
+
+function limparSessoesExpiradas_() {
+  const propriedades = PropertiesService.getScriptProperties();
+  const todas = propriedades.getProperties();
+  const agora = Date.now();
+  Object.keys(todas).forEach(function (chave) {
+    if (chave.indexOf("MV_SESSAO_") !== 0) return;
+    try {
+      const sessao = JSON.parse(todas[chave]);
+      const criadaEm = Number(sessao.criadaEm || 0);
+      const atividade = Number(sessao.ultimaAtividade || criadaEm);
+      if (!criadaEm || agora >= criadaEm + SESSAO_SEGUNDOS_ * 1000 ||
+          !atividade || agora - atividade >= INATIVIDADE_SEGUNDOS_ * 1000) {
+        propriedades.deleteProperty(chave);
+      }
+    } catch (_) {
+      propriedades.deleteProperty(chave);
+    }
+  });
 }
 
 /* ============================================================
@@ -254,6 +283,7 @@ function login_(p) {
 
     limparFalhas_(chave);
 
+    limparSessoesExpiradas_();
     const token = novoToken_();
 
     const sessao = {
@@ -264,14 +294,13 @@ function login_(p) {
       perfil: funcionario.perfil,
       especial: funcionario.especial,
       loginId: Utilities.getUuid(),
-      criadaEm: Date.now()
+      criadaEm: Date.now(),
+      ultimaAtividade: Date.now()
     };
 
-    CacheService.getScriptCache().put(
-      "sess_" + token,
-      JSON.stringify(sessao),
-      SESSAO_SEGUNDOS_
-    );
+    // A sessão fica em ScriptProperties para não depender da expiração
+    // antecipada/evicção do CacheService. Os prazos são validados em cada uso.
+    salvarSessao_(token, sessao);
 
     return respostaJsonp_(callback, {
       sucesso: true,
@@ -283,7 +312,9 @@ function login_(p) {
       perfil: funcionario.perfil,
       especial: funcionario.especial,
       loginId: sessao.loginId,
-      ate: Date.now() + SESSAO_SEGUNDOS_ * 1000
+      criadaEm: sessao.criadaEm,
+      atividadeEm: sessao.ultimaAtividade,
+      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000
     });
 
   } catch (erro) {
@@ -315,7 +346,44 @@ function consultarSessao_(p) {
       administradorGeral: sessao.administradorGeral === true,
       perfil: sessao.perfil || (sessao.administrador ? "admin" : "funcionario"),
       especial: sessao.especial,
-      loginId: sessao.loginId
+      loginId: sessao.loginId,
+      criadaEm: sessao.criadaEm,
+      atividadeEm: sessao.ultimaAtividade || sessao.criadaEm,
+      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000
+    });
+  } catch (erro) {
+    return respostaJsonp_(callback, {
+      sucesso: false,
+      precisaLogin: true,
+      mensagem: mensagemErro_(erro)
+    });
+  }
+}
+
+/* ============================================================
+   REGISTRAR ATIVIDADE DO USUÁRIO
+   ============================================================ */
+function registrarAtividadeSessao_(p) {
+  const callback = "__atividadeCb";
+  if (String(p.callback || "") !== callback) {
+    return respostaTexto_("Callback inválido.");
+  }
+
+  try {
+    const token = String(p.sessao || "");
+    const sessao = obterSessaoObrigatoria_({ sessao: token });
+    const agora = Date.now();
+    const expiraEm = Number(sessao.criadaEm || agora) + SESSAO_SEGUNDOS_ * 1000;
+    const restante = Math.ceil((expiraEm - agora) / 1000);
+    if (restante <= 0) throw new Error("Sessão expirada. Entre novamente.");
+
+    sessao.ultimaAtividade = agora;
+    salvarSessao_(token, sessao);
+
+    return respostaJsonp_(callback, {
+      sucesso: true,
+      atividadeEm: agora,
+      ate: expiraEm
     });
   } catch (erro) {
     return respostaJsonp_(callback, {
@@ -337,11 +405,7 @@ function logout_(p) {
     return respostaTexto_("Callback inválido.");
   }
 
-  if (tokenFormatoValido_(p.sessao)) {
-    CacheService.getScriptCache().remove(
-      "sess_" + p.sessao
-    );
-  }
+  removerSessao_(p.sessao);
 
   return respostaJsonp_(callback, {
     sucesso: true

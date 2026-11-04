@@ -415,7 +415,8 @@
     /*
      * Autenticação feita no servidor (Apps Script). Este arquivo não guarda
      * usuários nem PINs: ele envia o que foi digitado e guarda apenas o token
-     * de sessão devolvido. O token expira no servidor em 6 horas.
+     * de sessão devolvido. A sessão dura no máximo 8 horas e expira após
+     * 30 minutos sem atividade.
      */
     const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
     const CHAVE_SESSAO = "mv_sessao";
@@ -481,8 +482,58 @@
     function lerSessaoLocal() {
       try {
         const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
-        return s && s.token && s.ate > Date.now() ? s : null;
+        const agora = Date.now();
+        const atividade = Number(s && s.atividadeEm || agora);
+        return s && s.token && s.ate > agora && agora - atividade < 30 * 60 * 1000 ? s : null;
       } catch (_) { return null; }
+    }
+
+    let timerInatividadeLogin = null;
+    let ultimoPingLogin = 0;
+    let pingLoginEmAndamento = false;
+    function monitorarAtividadeAdminLogin() {
+      function programar() {
+        clearTimeout(timerInatividadeLogin);
+        const s = lerSessaoLocal();
+        if (!s) {
+          localStorage.removeItem(CHAVE_SESSAO);
+          location.replace("index.html?motivo=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
+          return;
+        }
+        const restanteIdle = 30 * 60 * 1000 - (Date.now() - Number(s.atividadeEm || Date.now()));
+        const restanteTotal = Number(s.ate) - Date.now();
+        timerInatividadeLogin = setTimeout(() => {
+          localStorage.removeItem(CHAVE_SESSAO);
+          location.replace("index.html?motivo=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
+        }, Math.max(0, Math.min(restanteIdle, restanteTotal)));
+      }
+      function atividade() {
+        const s = lerSessaoLocal();
+        if (!s) { programar(); return; }
+        const agora = Date.now();
+        s.atividadeEm = agora;
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify(s));
+        programar();
+        if (pingLoginEmAndamento || agora - ultimoPingLogin < 60000) return;
+        pingLoginEmAndamento = true;
+        chamarServidor("atividade", "__atividadeCb", { sessao: s.token }).then(r => {
+          if (r && r.sucesso) {
+            ultimoPingLogin = Date.now();
+            const atual = lerSessaoLocal();
+            if (atual) {
+              atual.atividadeEm = Math.max(Number(atual.atividadeEm || 0), Number(r.atividadeEm || Date.now()));
+              atual.ate = r.ate || atual.ate;
+              localStorage.setItem(CHAVE_SESSAO, JSON.stringify(atual));
+              programar();
+            }
+          } else if (r && r.precisaLogin) {
+            localStorage.removeItem(CHAVE_SESSAO);
+            location.replace("index.html?motivo=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
+          }
+        }).catch(() => {}).finally(() => { pingLoginEmAndamento = false; });
+      }
+      programar();
+      ["pointerdown", "keydown", "touchstart", "scroll"].forEach(ev => window.addEventListener(ev, atividade, { passive: true }));
     }
 
     document.getElementById("showPassword").addEventListener("click", () => {
@@ -521,7 +572,9 @@
             token: sessao.token, nome: d.nome, loja: d.loja,
             administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
             perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
-            ate: Date.now() + 5.9 * 3600 * 1000
+            criadaEm: d.criadaEm || sessao.criadaEm || Date.now(),
+            atividadeEm: d.atividadeEm || Date.now(),
+            ate: d.ate || ((d.criadaEm || Date.now()) + 8 * 3600 * 1000)
           }));
           if (d.administradorGeral === true) { location.replace("painelgeral.html"); return; }
           if (d.administrador === true) {
@@ -531,6 +584,7 @@
             document.getElementById("btnLancamentoEspecial").href = "lancamento.html";
             document.getElementById("btnLancamentoEspecial").hidden = false;
             document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
+            monitorarAtividadeAdminLogin();
             return;
           }
           location.replace("lancamento.html");
@@ -574,7 +628,9 @@
           administradorGeral: d.administradorGeral === true,
           perfil: d.perfil || (d.administrador ? "admin" : "funcionario"),
           loginId: d.loginId,
-          ate: d.ate || (Date.now() + 5.9 * 3600 * 1000)
+          criadaEm: d.criadaEm || Date.now(),
+          atividadeEm: d.atividadeEm || Date.now(),
+          ate: d.ate || (Date.now() + 8 * 3600 * 1000)
         }));
 
         mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");
@@ -588,6 +644,7 @@
           document.getElementById("btnLancamentoEspecial").href = "lancamento.html";
           document.getElementById("btnLancamentoEspecial").hidden = false;
           document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
+          monitorarAtividadeAdminLogin();
         } else {
           location.replace("lancamento.html");
         }

@@ -336,6 +336,24 @@ button:disabled{opacity:.55;cursor:not-allowed}
   border-radius: 12px;
 }
 
+/* Identificação visível da conta e da loja, sem expor o token da sessão. */
+.identidade-logada {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .identidade-logada { order: -1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+}
+
 
 /* Câmera em tela cheia */
 #cameraContainer.camera-fullscreen {
@@ -460,6 +478,7 @@ body.camera-aberta #cameraControles:not([hidden]) {
   </div>
 
   <div class="topbar-acoes">
+    <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
       href="index.html"
@@ -686,7 +705,8 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 Auth.exigirLancamento().then(ok => {
   if (!ok) return;
-  // O identificador técnico da sessão permanece somente no armazenamento interno.
+  // Exibe apenas nome e loja; o identificador técnico da sessão nunca vai para a interface.
+  Auth.mostrarUsuario("identidadeLogada");
   const campoFuncionario = document.getElementById("campoFuncionario");
   if (campoFuncionario) campoFuncionario.hidden = !Auth.administrador();
 });
