@@ -239,8 +239,11 @@ function doPost(e) {
         : null;
 
       if (corpo && corpo.acao === "salvarOdsNoGitHub") {
-        exigirAdministrador_({ sessao: corpo.sessao });
-        dadosUpload = corpo;
+        const sessaoUpload = exigirAdministrador_({ sessao: corpo.sessao });
+        // A loja vem da sessão validada no servidor, nunca do navegador.
+        dadosUpload = Object.assign({}, corpo, {
+          loja: normalizarLoja_(sessaoUpload.loja)
+        });
       }
     } catch (_) {
       // Continua o fluxo antigo para os lançamentos existentes.
@@ -365,6 +368,8 @@ function doGetOriginal_(e) {
   }
 
   if (acao === "dashboardPainel") return consultarDashboardPainel_(parametros);
+  if (acao === "listarEstoqueVencidos") return listarEstoqueVencidos_(parametros);
+  if (acao === "encaminharEstoqueMapa") return encaminharEstoqueMapa_(parametros);
   if (acao === "vencidosPainel") return consultarVencidosPainel_(parametros);
   if (acao === "retirarDeLoja") return retirarDeLoja_(parametros);
   if (acao === "adicionarDanificado") return adicionarDanificado_(parametros);
@@ -459,6 +464,18 @@ function exigirSessaoLancamento_(dados) {
 
   const nomeInformado = String(dados.funcionario || "").trim();
 
+  // Cadastro de vencidos no Estoque é exclusivo do Administrador de Loja.
+  // Administrador Geral permanece bloqueado acima.
+  if (nomeInformado === "Estoque") {
+    if (sessao.administrador !== true || sessao.administradorGeral === true) {
+      throw new Error("Somente o Administrador de Loja pode cadastrar vencidos no Estoque.");
+    }
+    if (!normalizarLoja_(sessao.loja)) throw new Error("Administrador sem loja cadastrada.");
+    dados.funcionario = "Estoque";
+    dados.lojaOrigem = normalizarLoja_(sessao.loja);
+    return sessao;
+  }
+
   if (sessao.administrador === true) {
     if (!nomeInformado) {
       throw new Error("Selecione uma aba especial para realizar o lançamento.");
@@ -505,12 +522,13 @@ function salvarProduto_(dados) {
   const quantidadeTexto = String(dados.quantidade ?? "").trim();
 
   const ehTransferencia = funcionario === "Transferencias";
+  const ehEstoque = funcionario === "Estoque";
 
   if (!idValido_(requestId)) {
     throw new Error("Identificador do lançamento inválido.");
   }
 
-  if (!obterCadastroFuncionarios_().todos.includes(funcionario)) {
+  if (!ehEstoque && !obterCadastroFuncionarios_().todos.includes(funcionario)) {
     throw new Error("Funcionário não reconhecido.");
   }
 
@@ -544,6 +562,13 @@ function salvarProduto_(dados) {
     dataValidade.getDate() !== partesData[2]
   ) {
     throw new Error("A data de validade não existe.");
+  }
+  if (ehEstoque) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    if (dataValidade >= hoje) {
+      throw new Error("A aba Estoque aceita somente produtos já vencidos.");
+    }
   }
 
   if (!/^\d+$/.test(quantidadeTexto)) {
@@ -589,7 +614,7 @@ function salvarProduto_(dados) {
     aba = planilha.insertSheet("Transferencias");
   }
 
-  if (!aba) {
+  if (!aba && !ehEstoque) {
     throw new Error("A aba '" + nomeAba + "' não foi encontrada.");
   }
 
@@ -632,6 +657,34 @@ function salvarProduto_(dados) {
     }
 
     const dataLancamento = new Date();
+
+    // ESTOQUE: registro de produtos vencidos cadastrados pelo Administrador de Loja.
+    if (ehEstoque) {
+      const sessaoEstoque = exigirAdministrador_({ sessao: dados.sessao });
+      let estoque = planilha.getSheetByName("Estoque");
+      if (!estoque) estoque = planilha.insertSheet("Estoque");
+      const cabecalhosEstoque = ["Código de Barras", "Código Interno", "Descrição", "Lote", "Validade", "Quantidade", "Data de Registro", "Loja Origem", "Chave Única", "Situação", "Funcionário / Mapa de Destino"];
+      if (estoque.getLastRow() === 0) estoque.getRange(1, 1, 1, cabecalhosEstoque.length).setValues([cabecalhosEstoque]);
+      else {
+        const existentes = estoque.getRange(1, 1, 1, Math.max(estoque.getLastColumn(), cabecalhosEstoque.length)).getDisplayValues()[0];
+        cabecalhosEstoque.forEach((h, i) => { if (!String(existentes[i] || "").trim()) estoque.getRange(1, i + 1).setValue(h); });
+      }
+      const ultima = estoque.getLastRow();
+      if (ultima >= 2) {
+        const chaves = estoque.getRange(2, 9, ultima - 1, 1).getDisplayValues().flat();
+        if (chaves.includes(requestId)) return { status: "saved", message: "Este vencido já foi registrado no Estoque." };
+      }
+      const linhaEstoque = Math.max(estoque.getLastRow() + 1, 2);
+      estoque.getRange(linhaEstoque, 1, 1, 11).setValues([[
+        codigo, String(dados.codigoInterno || ""), String(dados.descricao || ""), lote,
+        dataValidade, quantidade, new Date(), normalizarLoja_(sessaoEstoque.loja), requestId,
+        "Disponível", ""
+      ]]);
+      estoque.getRange(linhaEstoque, 5).setNumberFormat("dd/MM/yyyy");
+      estoque.getRange(linhaEstoque, 7).setNumberFormat("dd/MM/yyyy HH:mm");
+      SpreadsheetApp.flush();
+      return { status: "saved", message: "Produto vencido registrado no Estoque da Loja " + normalizarLoja_(sessaoEstoque.loja) + "." };
+    }
 
     /*
      * TRANSFERENCIAS
@@ -3656,7 +3709,13 @@ function salvarEstoqueOdsNoGitHub_(dados) {
     throw new Error("Envie um arquivo com extensão .ods.");
   }
 
-  const caminho = "estoque/estoque.ods";
+  const numeroLoja = String(dados.loja || "").replace(/\D/g, "");
+  if (!numeroLoja) {
+    throw new Error("Não foi possível identificar a loja da sessão.");
+  }
+
+  // Cada loja mantém seu próprio arquivo de estoque no repositório.
+  const caminho = "estoque/estoque_" + numeroLoja + ".ods";
 
   const url =
     "https://api.github.com/repos/" +
@@ -3693,7 +3752,7 @@ function salvarEstoqueOdsNoGitHub_(dados) {
   }
 
   const payload = {
-    message: "Atualiza estoque ODS pelo Painel do Conferente",
+    message: "Atualiza estoque ODS da loja " + numeroLoja + " pelo Painel do Conferente",
     content: dados.conteudoBase64,
     branch: branch
   };
@@ -6080,6 +6139,8 @@ function bloquearSeNaoAutorizado_(p) {
     "atualizarSinalizado",
     "subirVencidos",
     "subirParaVencidos",
+    "listarEstoqueVencidos",
+    "encaminharEstoqueMapa",
     "adicionarProdutoJson",
     "cadastrarQueimaManual",
     "listarAdminsLojas", "criarAdminLoja"
@@ -6158,6 +6219,68 @@ function obterMapaLojasFuncionarios_() {
  * Garante a coluna K na aba Vencidos e preenche registros antigos
  * quando a loja pode ser identificada pelo nome da aba de origem.
  */
+
+/* =========================
+   VENCIDOS DO ESTOQUE
+   ========================= */
+function listarEstoqueVencidos_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__estoqueVencidosCb") return respostaTexto_("Callback inválido.");
+  try {
+    const admin = exigirAdministrador_ (p);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName("Estoque");
+    const registros = [];
+    if (sh && sh.getLastRow() > 1) {
+      const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues();
+      vals.forEach((r, i) => {
+        if (normalizarLoja_(r[7]) !== normalizarLoja_(admin.loja)) return;
+        if (String(r[9] || "Disponível") !== "Disponível") return;
+        registros.push({ linha: i + 2, codigo: String(r[0] || ""), codigoInterno: String(r[1] || ""), descricao: String(r[2] || ""), lote: String(r[3] || ""), validade: r[4] instanceof Date ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), "dd/MM/yyyy") : String(r[4] || ""), quantidade: Number(r[5] || 0), dataRegistro: r[6] instanceof Date ? Utilities.formatDate(r[6], Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm") : String(r[6] || ""), lojaOrigem: String(r[7] || ""), chaveUnica: String(r[8] || "") });
+      });
+    }
+    return respostaJsonp_(cb, { sucesso: true, registros: registros });
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e), registros: [] }); }
+}
+
+function encaminharEstoqueMapa_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__encaminharEstoqueMapaCb") return respostaTexto_("Callback inválido.");
+  try {
+    const admin = exigirAdministrador_(p);
+    const chave = String(p.chaveUnica || "").trim();
+    const funcionario = String(p.funcionario || "").trim();
+    if (!chave || !funcionario) throw new Error("Selecione um registro e um funcionário de destino.");
+    if (funcionario === "Transferencias" || obterAbasEspeciais_().includes(funcionario)) throw new Error("Estoque só pode ser encaminhado para o mapa individual de um funcionário.");
+    const destino = buscarFuncionarioPorNome_(funcionario);
+    if (!destino || destino.administrador || destino.administradorGeral || destino.especial || destino.loja !== normalizarLoja_(admin.loja)) throw new Error("Funcionário de destino inválido para esta loja.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const estoque = ss.getSheetByName("Estoque");
+    if (!estoque || estoque.getLastRow() < 2) throw new Error("Não há vencidos cadastrados no Estoque.");
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(20000)) throw new Error("Sistema ocupado. Tente novamente.");
+    try {
+      const dados = estoque.getRange(2, 1, estoque.getLastRow() - 1, 11).getValues();
+      const idx = dados.findIndex(r => String(r[8] || "") === chave && normalizarLoja_(r[7]) === normalizarLoja_(admin.loja));
+      if (idx < 0) throw new Error("Registro não encontrado para esta loja.");
+      const row = dados[idx];
+      if (String(row[9] || "Disponível") !== "Disponível") throw new Error("Este registro já foi encaminhado ou não está disponível.");
+      const mapa = ss.getSheetByName(destino.nome);
+      if (!mapa) throw new Error("A aba do funcionário não foi encontrada.");
+      const novaChave = Utilities.getUuid();
+      const novaLinha = Math.max(mapa.getLastRow() + 1, 2);
+      mapa.getRange(novaLinha, 1, 1, 6).setValues([[String(row[0] || ""), String(row[3] || ""), row[4], Number(row[5] || 0), new Date(), novaChave]]);
+      mapa.getRange(novaLinha, 3).setNumberFormat("dd/MM/yyyy");
+      mapa.getRange(novaLinha, 5).setNumberFormat("dd/MM/yyyy HH:mm");
+      estoque.getRange(idx + 2, 10).setValue("Encaminhado");
+      estoque.getRange(idx + 2, 11).setValue(destino.nome);
+      SpreadsheetApp.flush();
+      invalidarCacheDados_();
+      return respostaJsonp_(cb, { sucesso: true, mensagem: "Vencido encaminhado para " + destino.nome + "." });
+    } finally { lock.releaseLock(); }
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+}
+
 function garantirLojaOrigemVencidos_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sh = ss.getSheetByName("Vencidos");

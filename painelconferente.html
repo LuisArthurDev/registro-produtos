@@ -2277,6 +2277,7 @@ Auth.exigirAdmin().then(ok => {
       <section class="page" id="page-estoque">
         <div class="page-heading"><div><h2>Controle de Estoque</h2><p>Estoque importado do .ods e conferência com os mapas de validade.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="estoqueArquivoOds" type="file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden><button class="button button-primary" id="btnImportarEstoqueOds" type="button" onclick="document.getElementById('estoqueArquivoOds').click()"><i data-lucide="upload"></i> Importar estoque (.ods)</button><button class="button" id="btnCarregarEstoqueGitHub" title="Atualizar" onclick="carregarEstoqueDoGitHub()" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button></div></div>
         <div class="notice" id="estoqueNotice">Selecione o arquivo .ods para importar o estoque.</div>
+        <div class="table-panel" style="margin-bottom:16px"><div class="table-toolbar"><div><div class="panel-title">Vencidos cadastrados no Estoque</div><div class="panel-subtitle">Registros lançados por Administradores de Loja e ainda não encaminhados a um mapa.</div></div><label style="display:flex;align-items:center;gap:10px;font-weight:600"><span>Exibir vencidos do Estoque</span><input type="checkbox" id="estoqueSwitchVencidos" role="switch" aria-label="Exibir vencidos do Estoque" style="width:42px;height:22px;accent-color:#2563eb"></label></div><div id="estoqueVencidosArea" hidden><div class="table-toolbar"><div class="toolbar-actions"><input class="filter-select" id="estoqueVencidosBusca" placeholder="Buscar EAN, descrição, lote..."><button class="button" type="button" id="btnAtualizarVencidosEstoque">Atualizar</button></div></div><div class="table-wrap"><table><thead><tr><th>EAN</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Loja Origem</th><th>Encaminhar para</th></tr></thead><tbody id="estoqueVencidosTbody"></tbody></table></div><div class="empty-state" id="estoqueVencidosEmpty" style="display:none">Nenhum vencido disponível no Estoque.</div></div></div></div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos no arquivo</span><strong id="estoqueProdutos">0</strong></div><div class="mini-stat"><span>Unidades em estoque</span><strong id="estoqueUnidades">0</strong></div><div class="mini-stat"><span>Produtos mapeados</span><strong id="estoqueVencidos">0</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div><div class="panel-title">Posição por produto</div><div class="panel-subtitle" id="estoqueUltimaImportacao">Nenhum arquivo importado.</div></div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="estoqueBusca" placeholder="Buscar produto, EAN ou código interno..."></div><select id="estoqueFiltro" class="filter-select"><option value="">Todos</option><option value="Sim">Mapeada</option><option value="Não">Não mapeada</option></select></div></div>
           <div class="table-wrap"><table><thead><tr><th>EAN</th><th>Produto</th><th>Quantidade</th><th>Próxima Validade</th><th>Mapeada</th><th>Ação</th></tr></thead><tbody id="estoqueTbody"></tbody></table></div><div class="empty-state" id="estoqueEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum produto encontrado. Importe um arquivo .ods ou altere a busca.</div></div>
@@ -2914,9 +2915,19 @@ Auth.exigirAdmin().then(ok => {
 
  
   let mapaDescricoes = {};
+  let indiceCodigoInternoCatalogo = {};
+  let indiceEANCatalogo = {};
   
   function normalizarCodigo(valor) {
     return String(valor ?? "").trim();
+  }
+
+  function chavesCodigoCatalogo(valor) {
+    const original = normalizarCodigo(valor);
+    if (!original) return [];
+    const semMascara = original.replace(/[\s.\/-]/g, "");
+    const somenteDigitos = original.replace(/\D/g, "");
+    return [...new Set([original, semMascara, somenteDigitos].filter(Boolean))];
   }
   
   let catalogoPromessa = null;
@@ -2942,73 +2953,109 @@ Auth.exigirAdmin().then(ok => {
   
       const dados = await resposta.json();
   
-      // Aceita JSON no formato { "EAN": {...} }
-      // ou no formato { "produtos": [...] }.
+      // Aceita catálogo indexado pela chave (normalmente EAN) ou listas de produtos.
       mapaDescricoes = {};
-  
+      indiceCodigoInternoCatalogo = {};
+      indiceEANCatalogo = {};
+
+      const registrarIndice = (indice, valor, produto) => {
+        chavesCodigoCatalogo(valor).forEach(chave => {
+          if (chave && !indice[chave]) indice[chave] = produto;
+        });
+      };
+      const registrarProduto = (produto, chaveOriginal = "") => {
+        if (!produto || typeof produto !== "object") return;
+        const eans = [
+          chaveOriginal,
+          produto.ean, produto.EAN, produto.codigoBarras,
+          produto.codigo_barras, produto.codBarras, produto.gtin
+        ];
+        const internos = [
+          produto.codigoInterno, produto.codigo_interno, produto.codInterno,
+          produto["codigo interno"], produto.codigoProduto, produto.codProduto
+        ];
+        eans.forEach(ean => registrarIndice(indiceEANCatalogo, ean, produto));
+        internos.forEach(codigo => registrarIndice(indiceCodigoInternoCatalogo, codigo, produto));
+      };
+
       if (Array.isArray(dados)) {
         dados.forEach(produto => {
-          const ean = normalizarCodigo(
-            produto.ean ?? produto.EAN ?? produto.codigo
-          );
-  
-          if (ean) mapaDescricoes[ean] = produto;
+          const ean = produto?.ean ?? produto?.EAN ?? produto?.codigoBarras ?? produto?.codigo;
+          const chave = normalizarCodigo(ean);
+          if (chave) mapaDescricoes[chave] = produto;
+          registrarProduto(produto, chave);
         });
       } else if (Array.isArray(dados.produtos)) {
         dados.produtos.forEach(produto => {
-          const ean = normalizarCodigo(
-            produto.ean ?? produto.EAN ?? produto.codigo
-          );
-  
-          if (ean) mapaDescricoes[ean] = produto;
+          const ean = produto?.ean ?? produto?.EAN ?? produto?.codigoBarras ?? produto?.codigo;
+          const chave = normalizarCodigo(ean);
+          if (chave) mapaDescricoes[chave] = produto;
+          registrarProduto(produto, chave);
         });
       } else if (dados && typeof dados === "object") {
         mapaDescricoes = dados;
+        Object.entries(dados).forEach(([chave, produto]) => registrarProduto(produto, chave));
       }
-  
+
       console.info(
         "Catálogo carregado:",
         Object.keys(mapaDescricoes).length,
-        "produtos"
+        "produtos; códigos internos:",
+        Object.keys(indiceCodigoInternoCatalogo).length,
+        "EANs:", Object.keys(indiceEANCatalogo).length
       );
   
     } catch (erro) {
       console.error("Erro ao carregar produtos_ean.json:", erro);
       mapaDescricoes = {};
+      indiceCodigoInternoCatalogo = {};
+      indiceEANCatalogo = {};
       catalogoPromessa = null;
     }
   }
   
+  function produtoCatalogoDoRegistro(r) {
+    if (!r || typeof r !== "object") return null;
+    // Os registros de Perdas podem trazer o EAN em `codigo` ou o código interno
+    // no mesmo campo, dependendo da origem. Testa todos os identificadores nos dois índices.
+    const identificadoresEAN = [r.ean, r.EAN, r.eanInterno, r.codigoBarras, r.codigo_barras, r.codigo];
+    const identificadoresInternos = [r.codigoInterno, r.codigo_interno, r.codInterno, r.codigo];
+    for (const valor of identificadoresEAN) {
+      for (const chave of chavesCodigoCatalogo(valor)) {
+        if (indiceEANCatalogo[chave]) return indiceEANCatalogo[chave];
+        if (mapaDescricoes[chave] && typeof mapaDescricoes[chave] === "object") return mapaDescricoes[chave];
+      }
+    }
+    for (const valor of identificadoresInternos) {
+      for (const chave of chavesCodigoCatalogo(valor)) {
+        if (indiceCodigoInternoCatalogo[chave]) return indiceCodigoInternoCatalogo[chave];
+      }
+    }
+    // Fallback para catálogos antigos cujo objeto é indexado diretamente pelo código.
+    for (const valor of [...identificadoresEAN, ...identificadoresInternos]) {
+      for (const chave of chavesCodigoCatalogo(valor)) {
+        if (mapaDescricoes[chave] && typeof mapaDescricoes[chave] === "object") return mapaDescricoes[chave];
+      }
+    }
+    return null;
+  }
+
+  function codigoInternoProduto(r) {
+    const produto = produtoCatalogoDoRegistro(r);
+    return String(produto?.codigoInterno ?? produto?.codigo_interno ?? produto?.codInterno ?? produto?.codigoInternoProduto ?? "").trim();
+  }
+
   function dadosProduto(r) {
-    const codigo = normalizarCodigo(r.codigo);
-    const encontrado = mapaDescricoes[codigo];
+    const encontrado = produtoCatalogoDoRegistro(r);
   
     if (typeof encontrado === "string") {
-      return {
-        descricao: encontrado,
-        secao: ""
-      };
+      return { descricao: encontrado, secao: "", codigoInterno: "" };
     }
   
     return {
-      descricao:
-        r.descricao ||
-        r.produto ||
-        encontrado?.descricao ||
-        encontrado?.Descrição ||
-        encontrado?.produto ||
-        encontrado?.nome ||
-        r.codigo ||
-        "",
-  
-      secao:
-        r.secao ||
-        r.seção ||
-        encontrado?.secao ||
-        encontrado?.seção ||
-        encontrado?.Secao ||
-        encontrado?.Seção ||
-        ""
+      descricao: r.descricao || r.produto || encontrado?.descricao || encontrado?.Descrição || encontrado?.produto || encontrado?.Produto || encontrado?.nome || r.codigo || "",
+      secao: r.secao || r.seção || encontrado?.secao || encontrado?.seção || encontrado?.Secao || encontrado?.Seção || "",
+      codigoInterno: codigoInternoProduto(r)
     };
   }
   
@@ -3046,7 +3093,9 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     aprovarQueima: '__aprovarQueimaCb',
     relancarQueima: '__relancarQueimaCb',
     adicionarQueima: '__adicionarAoQueimaCb',
-    adicionarProdutoJson: '__adicionarProdutoJsonCb'
+    adicionarProdutoJson: '__adicionarProdutoJsonCb',
+    estoqueVencidos: '__estoqueVencidosCb',
+    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb'
   };
 
   const cbName = callbackMap[callback] || callback;
@@ -4224,8 +4273,10 @@ function imprimirMapaValidade() {
         .reduce((total, r) => total + quantidadeSegura(r.quantidade), 0)
         .toLocaleString("pt-BR", { maximumFractionDigits: 3 });
   
+    const textoBuscaPerda = r => [r.codigo, r.eanInterno, codigoInternoProduto(r), descricao(r), r.lote, r.abaOrigem, r.abaOrigemInicial].filter(Boolean).join(" ");
+
     document.getElementById("retiradosTbody").innerHTML = retirados.map(r => `
-      <tr>
+      <tr data-search="${escHtml(textoBuscaPerda(r))}">
         <td>${escHtml(r.codigo || "")}</td>
         <td class="cell-primary">${escHtml(descricao(r))}</td>
         <td>${escHtml(r.lote || "")}</td>
@@ -4244,7 +4295,7 @@ function imprimirMapaValidade() {
     `).join("");
   
     document.getElementById("salaoTbody").innerHTML = salao.map(r => `
-      <tr>
+      <tr data-search="${escHtml(textoBuscaPerda(r))}">
         <td>${escHtml(r.funcionario || "")}</td>
         <td>${escHtml(r.codigo || "")}</td>
         <td class="cell-primary">${escHtml(descricao(r))}</td>
@@ -4263,7 +4314,7 @@ function imprimirMapaValidade() {
     `).join("");
   
     document.getElementById("danificadosTbody").innerHTML = danificados.map(r => `
-      <tr>
+      <tr data-search="${escHtml(textoBuscaPerda(r))}">
         <td>${escHtml(r.codigo || "")}</td>
         <td class="cell-primary">${escHtml(descricao(r))}</td>
         <td>${escHtml(r.lote || "")}</td>
@@ -4290,6 +4341,9 @@ function imprimirMapaValidade() {
       danificados.length ? "none" : "block";
   
     if (window.lucide) lucide.createIcons();
+    aplicarBuscaPerdas("retiradosBusca", "retiradosTbody");
+    aplicarBuscaPerdas("salaoBusca", "salaoTbody");
+    aplicarBuscaPerdas("danificadosBusca", "danificadosTbody");
   }
 
   async function adicionarDanificado(){const codigo=prompt('Código do produto (EAN/código):');if(codigo===null)return;const descricao=prompt('Descrição do produto:');if(descricao===null)return;const lote=prompt('Lote:');if(lote===null)return;const validade=prompt('Validade (DD/MM/AAAA):');if(validade===null)return;const quantidade=prompt('Quantidade:');if(quantidade===null)return;if(!codigo.trim()||!descricao.trim()||!validade.trim()||!quantidade.trim()){alert('Preencha código, descrição, validade e quantidade.');return;}try{const d=await jsonpPainel('adicionarDanificado','danificado',{codigo:codigo.trim(),descricao:descricao.trim(),lote:lote.trim(),validade:validade.trim(),quantidade:quantidade.trim()});alert(d.mensagem||'Resposta recebida');if(d.sucesso)await atualizarPainel();}catch(e){alert(e.message);}}
@@ -4556,9 +4610,34 @@ function imprimirMapaValidade() {
 
 
 
+let atencaoCatalogoCarregando = false;
+let atencaoCatalogoTentado = false;
+let atencaoRegistrosPendentes = [];
+
 function atualizarProdutosAtencao(registros) {
   const tbody = document.getElementById('dashboardAttentionTbody');
   if (!tbody) return;
+  atencaoRegistrosPendentes = Array.isArray(registros) ? registros : [];
+
+  // A seção (Nutrição/Conveniência) vem do catálogo. Como ele é carregado sob demanda,
+  // aguarda a leitura em segundo plano e redesenha a lista sem bloquear o dashboard.
+  if (!Object.keys(mapaDescricoes || {}).length) {
+    if (!atencaoCatalogoTentado && !atencaoCatalogoCarregando) {
+      atencaoCatalogoTentado = true;
+      atencaoCatalogoCarregando = true;
+      tbody.innerHTML = '<tr><td colspan="5" class="attention-empty">Identificando as seções dos produtos...</td></tr>';
+      carregarDescricoesProdutos().then(() => {
+        atencaoCatalogoCarregando = false;
+        if (vencidosProntos && painelCache.vencidos) renderVencidos(painelCache.vencidos);
+        atualizarProdutosAtencao(atencaoRegistrosPendentes);
+      });
+    } else if (atencaoCatalogoCarregando) {
+      tbody.innerHTML = '<tr><td colspan="5" class="attention-empty">Identificando as seções dos produtos...</td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="5" class="attention-empty">Não foi possível carregar o catálogo de produtos. Atualize a página para tentar novamente.</td></tr>';
+    }
+    return;
+  }
 
   const norm = s => String(s || '')
     .normalize('NFD')
@@ -4938,7 +5017,17 @@ function atualizarProdutosAtencao(registros) {
   async function atualizarAba(pagina) {
     const tarefas = (ATUALIZAR_ABA[pagina] || []).map(f => CARREGADORES[f](false));
     if (pagina === 'produtos') tarefas.push(carregarDescricoesProdutos(true).then(aposCatalogo));
+    if (pagina === 'dashboard') {
+      // Permite tentar novamente a atualização da seção de atenção caso o catálogo
+      // tenha falhado ou ficado desatualizado em uma consulta anterior.
+      atencaoCatalogoTentado = false;
+      atencaoCatalogoCarregando = false;
+      tarefas.push(carregarDescricoesProdutos(true).then(aposCatalogo));
+    }
     await Promise.allSettled(tarefas);
+    if (pagina === 'dashboard' && validadesProntas) {
+      atualizarProdutosAtencao([...(painelCache.validades || []), ...(painelCache.validadesQueima || [])]);
+    }
   }
 
   async function carregarFuncionarios() {
@@ -5023,8 +5112,22 @@ function atualizarProdutosAtencao(registros) {
   document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
   document.getElementById('refreshTransferencias')?.addEventListener('click',carregarMapa);
-  ['retiradosBusca','salaoBusca'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{const isR=id==='retiradosBusca';const tbody=document.getElementById(isR?'retiradosTbody':'salaoTbody');const q=document.getElementById(id).value.toLocaleLowerCase('pt-BR');tbody.querySelectorAll('tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');}));
-  document.getElementById('addDamagedBtn')?.addEventListener('click',adicionarDanificado); document.getElementById('danificadosBusca')?.addEventListener('input',()=>{const q=document.getElementById('danificadosBusca').value.toLocaleLowerCase('pt-BR');document.querySelectorAll('#danificadosTbody tr').forEach(tr=>tr.style.display=tr.innerText.toLocaleLowerCase('pt-BR').includes(q)?'':'none');});
+  function normalizarBuscaPerdas(valor) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim(); }
+  function aplicarBuscaPerdas(inputId, tbodyId) {
+    const input = document.getElementById(inputId);
+    const tbody = document.getElementById(tbodyId);
+    if (!input || !tbody) return;
+    const q = normalizarBuscaPerdas(input.value);
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const base = normalizarBuscaPerdas((tr.getAttribute('data-search') || '') + ' ' + (tr.innerText || ''));
+      tr.style.display = !q || base.includes(q) ? '' : 'none';
+    });
+  }
+  ['retiradosBusca','salaoBusca','danificadosBusca'].forEach(id => {
+    const tbodyId = id === 'retiradosBusca' ? 'retiradosTbody' : id === 'salaoBusca' ? 'salaoTbody' : 'danificadosTbody';
+    document.getElementById(id)?.addEventListener('input', () => aplicarBuscaPerdas(id, tbodyId));
+  });
+  document.getElementById('addDamagedBtn')?.addEventListener('click',adicionarDanificado);
   document.getElementById('refreshMapa')?.addEventListener('click',carregarMapa); 
   document.getElementById('imprimirMapaBtn')
   ?.addEventListener('click', imprimirMapaValidade); document.getElementById('refreshVencidos')?.addEventListener('click',carregarVencidos); document.getElementById('refreshButton').addEventListener('click',atualizarPainel);
@@ -6258,7 +6361,6 @@ document.addEventListener("submit", async function(event) {
    Usam os mesmos dados do Mapa de Validade (Apps Script) e o catálogo produtos_ean.json. */
 (function () {
   const g = id => document.getElementById(id);
-  const MAX = 300;
   let FUNC = ["Transferencias"];
   let ESPECIAIS = [];
 
@@ -6673,7 +6775,7 @@ document.addEventListener("submit", async function(event) {
   
       setText(
         'estoqueNotice',
-        `Importação local concluída: ${lista.length} produtos. Enviando arquivo ao GitHub...`
+        `Importação da Loja ${String(Auth.loja() || '').replace(/\D/g, '')} concluída: ${lista.length} produtos. Enviando ${'estoque_' + String(Auth.loja() || '').replace(/\D/g, '') + '.ods'} ao GitHub...`
       );
       mostrar('estoqueNotice', true);
   
@@ -6696,7 +6798,7 @@ document.addEventListener("submit", async function(event) {
   
       setText(
         'estoqueNotice',
-        `Importação local concluída: ${lista.length} produtos. O envio foi solicitado, mas o navegador não permite confirmar se o GitHub recebeu o arquivo.`
+        `Importação da Loja ${String(Auth.loja() || '').replace(/\D/g, '')} concluída: ${lista.length} produtos. O envio de estoque_${String(Auth.loja() || '').replace(/\D/g, '')}.ods foi solicitado, mas o navegador não permite confirmar se o GitHub recebeu o arquivo.`
       );
       mostrar('estoqueNotice', true);
   
@@ -6713,8 +6815,18 @@ document.addEventListener("submit", async function(event) {
   window.importarEstoqueOds = importarEstoqueOds;
   
   async function carregarEstoqueDoGitHub() {
+    const numeroLoja = String(Auth.loja() || '').replace(/\D/g, '');
+    if (!numeroLoja) {
+      const msg = 'Não foi possível identificar a loja da sessão para carregar o estoque.';
+      setText('estoqueNotice', msg);
+      mostrar('estoqueNotice', true);
+      alert(msg);
+      return;
+    }
+
+    const nomeArquivoEstoque = `estoque_${numeroLoja}.ods`;
     const url =
-      'https://raw.githubusercontent.com/LuisArthurDev/registro-produtos/main/estoque/estoque.ods';
+      'https://raw.githubusercontent.com/LuisArthurDev/registro-produtos/main/estoque/' + nomeArquivoEstoque;
   
     const botao = document.getElementById('btnCarregarEstoqueGitHub');
   
@@ -6810,7 +6922,7 @@ document.addEventListener("submit", async function(event) {
         JSON.stringify({
           registros: lista,
           atualizadoEm: estoqueOdsAtualizadoEm,
-          nomeArquivo: 'estoque.ods (GitHub)'
+          nomeArquivo: `${nomeArquivoEstoque} (GitHub)`
         })
       );
   
@@ -6856,10 +6968,49 @@ document.addEventListener("submit", async function(event) {
     const todos=estoqueOdsRegistros.map(o=>{const matches=mapas.filter(r=>String(r.codigo||'').trim()===String(o.ean||'').trim()||(!o.ean&&String(r.codigo||'').trim()===String(o.codigoInterno||'').trim()));const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
     const rows=todos.filter(o=>(!q||norm([o.ean,o.codigoInterno,o.produto,o.secao].join(' ')).includes(q))&&(!filtro||(filtro==='Sim'?o.mapeada:!o.mapeada)));
     setText('estoqueProdutos',num(todos.length));setText('estoqueUnidades',num(todos.reduce((t,o)=>t+(Number(o.quantidade)||0),0)));setText('estoqueVencidos',num(todos.filter(o=>o.mapeada).length));
-    g('estoqueTbody').innerHTML=rows.slice(0,MAX).map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
+    g('estoqueTbody').innerHTML=rows.map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
     mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',estoqueOdsRegistros.length?`${estoqueOdsRegistros.length} produtos importados; ${estoqueOdsRegistros.filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
   }
   window.renderEstoque = renderEstoque;
+
+  let estoqueVencidosCache = [];
+  async function carregarVencidosEstoque() {
+    const tbody = g('estoqueVencidosTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7">Carregando...</td></tr>';
+    try {
+      const r = await jsonpPainel('listarEstoqueVencidos', 'estoqueVencidos');
+      if (!r || r.sucesso !== true) throw new Error(r?.mensagem || 'Não foi possível carregar os vencidos do Estoque.');
+      estoqueVencidosCache = Array.isArray(r.registros) ? r.registros : [];
+      renderVencidosEstoque();
+    } catch (e) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7">${esc(e.message || e)}</td></tr>`;
+    }
+  }
+  function renderVencidosEstoque() {
+    const tbody = g('estoqueVencidosTbody'); if (!tbody) return;
+    const q = norm(g('estoqueVencidosBusca')?.value || '');
+    const rows = estoqueVencidosCache.filter(r => !q || norm([r.codigo,r.codigoInterno,r.descricao,r.lote].join(' ')).includes(q));
+    tbody.innerHTML = rows.map(r => {
+      const opts = (window.listaFuncionarios || []).filter(n => !((window.listaAbasEspeciais || []).includes(n)) && n !== 'Transferencias');
+      return `<tr><td>${esc(r.codigo)}</td><td>${esc(r.descricao || r.codigoInterno || r.codigo)}</td><td>${esc(r.lote)}</td><td>${esc(r.validade)}</td><td>${num(r.quantidade)}</td><td>${esc(r.lojaOrigem)}</td><td><select class="filter-select" id="destEstoque_${esc(r.chaveUnica)}"><option value="">Funcionário...</option>${opts.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select> <button class="button button-primary" type="button" onclick="encaminharVencidoEstoque('${esc(r.chaveUnica)}')">Encaminhar</button></td></tr>`;
+    }).join('');
+    mostrar('estoqueVencidosEmpty', !rows.length);
+    renderPainelIcons(g('estoqueVencidosArea'));
+  }
+  async function encaminharVencidoEstoque(chave) {
+    const sel = g('destEstoque_' + chave); const funcionario = sel?.value || '';
+    if (!funcionario) { alert('Selecione o funcionário de destino.'); return; }
+    if (!confirm('Encaminhar este vencido para o mapa de ' + funcionario + '?')) return;
+    try {
+      const r = await jsonpPainel('encaminharEstoqueMapa', 'encaminharEstoqueMapa', { chaveUnica: chave, funcionario });
+      if (!r?.sucesso) throw new Error(r?.mensagem || 'Não foi possível encaminhar.');
+      alert(r.mensagem); await carregarVencidosEstoque(); await atualizarPainel();
+    } catch (e) { alert(e.message || e); }
+  }
+  window.encaminharVencidoEstoque = encaminharVencidoEstoque;
+  g('estoqueSwitchVencidos')?.addEventListener('change', e => { g('estoqueVencidosArea').hidden = !e.target.checked; if (e.target.checked && !estoqueVencidosCache.length) carregarVencidosEstoque(); });
+  g('btnAtualizarVencidosEstoque')?.addEventListener('click', carregarVencidosEstoque);
+  g('estoqueVencidosBusca')?.addEventListener('input', renderVencidosEstoque);
 
   /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
   
@@ -6925,7 +7076,6 @@ document.addEventListener("submit", async function(event) {
     );
   
     g("produtosTbody").innerHTML = rows
-      .slice(0, MAX)
       .map(o =>
         '<tr>' +
           '<td>' + esc(o.codigo) + '</td>' +
@@ -6947,10 +7097,7 @@ document.addEventListener("submit", async function(event) {
       "produtosNotice",
       !codigos.length
         ? "Catálogo produtos_ean.json ainda não carregado. Confira se o arquivo está na mesma pasta do painel."
-        : rows.length > MAX
-          ? "Mostrando " + MAX + " de " + num(rows.length) +
-            " produtos. Use a busca para refinar."
-          : num(codigos.length) + " produto(s) no catálogo."
+        : num(codigos.length) + " produto(s) no catálogo."
     );
   
     mostrar("produtosNotice", true);
@@ -6986,10 +7133,10 @@ document.addEventListener("submit", async function(event) {
     const q = norm(g("historicoBusca").value), f = g("historicoFiltro").value;
     const todos = eventosHistorico();
     const rows = todos.filter(e => (!f || e.tipo === f) && (!q || norm(e.usuario + " " + e.desc + " " + e.id).includes(q)));
-    g("historicoTbody").innerHTML = rows.slice(0, MAX).map(e =>
+    g("historicoTbody").innerHTML = rows.map(e =>
       '<tr><td>' + esc(fmtDH(e.t)) + '</td><td>' + esc(e.usuario) + '</td><td>' + badge(e.tipo, e.cls) + '</td><td>' + esc(e.desc) + '</td><td>' + esc(e.id) + '</td><td>' + badge(e.sit, e.sitCls) + '</td></tr>').join("");
     mostrar("historicoEmpty", rows.length === 0);
-    setText("historicoNotice", rows.length > MAX ? "Mostrando os " + MAX + " eventos mais recentes de " + num(rows.length) + ". Use a busca para refinar." : num(todos.length) + " evento(s) registrado(s) nas planilhas.");
+    setText("historicoNotice", num(todos.length) + " evento(s) registrado(s) nas planilhas.");
     mostrar("historicoNotice", true);
     renderPainelIcons(g("page-historico"));
   }
@@ -7430,6 +7577,43 @@ document.getElementById("cvElegiveisBusca")
   function iniciar() { document.querySelectorAll('table').forEach(preparar); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
   else iniciar();
+})();
+</script>
+<script>
+/* Paginação geral das tabelas do Painel Conferente: mantém busca, ordenação e ações. */
+(function(){
+  const TAMANHO=25, estados=new WeakMap(), observadores=new WeakMap();
+  function preparar(tabela){
+    if(tabela.dataset.paginacaoPronta || !tabela.tBodies.length) return;
+    tabela.dataset.paginacaoPronta='1';
+    const tbody=tabela.tBodies[0];
+    const nav=document.createElement('div'); nav.className='table-pagination';
+    nav.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 14px;flex-wrap:wrap;color:#64748b;font-size:13px';
+    nav.innerHTML='<span class="pagination-info"></span><button type="button" class="button pagination-prev">Anterior</button><button type="button" class="button pagination-next">Próxima</button>';
+    const wrap=tabela.closest('.table-panel') || tabela.parentElement;
+    wrap.appendChild(nav);
+    const state={page:1,rows:[],nav}; estados.set(tabela,state);
+    nav.querySelector('.pagination-prev').addEventListener('click',()=>{state.page=Math.max(1,state.page-1);render(tabela)});
+    nav.querySelector('.pagination-next').addEventListener('click',()=>{state.page++;render(tabela)});
+    const obs=new MutationObserver(()=>{state.page=1;render(tabela)}); observadores.set(tabela,obs); obs.observe(tbody,{childList:true});
+    render(tabela);
+  }
+  function render(tabela){
+    const s=estados.get(tabela); if(!s)return;
+    s.rows=Array.from(tabela.tBodies[0].rows);
+    const total=s.rows.length, paginas=Math.max(1,Math.ceil(total/TAMANHO));
+    s.page=Math.min(Math.max(1,s.page),paginas);
+    const ini=(s.page-1)*TAMANHO, fim=ini+TAMANHO;
+    s.rows.forEach((tr,i)=>{tr.style.display=(i>=ini&&i<fim)?'':'none'});
+    s.nav.querySelector('.pagination-info').textContent=total?`Página ${s.page} de ${paginas} · ${ini+1}–${Math.min(fim,total)} de ${total}`:'0 registros';
+    s.nav.querySelector('.pagination-prev').disabled=s.page<=1;
+    s.nav.querySelector('.pagination-next').disabled=s.page>=paginas;
+    s.nav.style.display=total>TAMANHO?'flex':'none';
+  }
+  function iniciar(){document.querySelectorAll('table').forEach(preparar)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar);else iniciar();
+  const root=document.querySelector('main')||document.body;
+  new MutationObserver(()=>iniciar()).observe(root,{childList:true,subtree:true});
 })();
 </script>
 

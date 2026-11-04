@@ -53,5 +53,24 @@
   await carregar();
 })();
 </script>
+<script>
+/* Paginação uniforme para tabelas longas, sem alterar filtros ou ações existentes. */
+(function(){
+  const TAMANHO=25, estados=new WeakMap();
+  function preparar(t){
+    if(t.dataset.paginacaoPronta||!t.tBodies.length)return;
+    t.dataset.paginacaoPronta='1';const body=t.tBodies[0],wrap=t.closest('.table-panel')||t.parentElement;
+    const nav=document.createElement('div');nav.className='table-pagination';nav.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 14px;flex-wrap:wrap;color:#64748b;font-size:13px';
+    nav.innerHTML='<span class="pagination-info"></span><button type="button" class="button pagination-prev">Anterior</button><button type="button" class="button pagination-next">Próxima</button>';wrap.appendChild(nav);
+    const st={page:1,nav};estados.set(t,st);
+    nav.querySelector('.pagination-prev').addEventListener('click',()=>{st.page--;render(t)});nav.querySelector('.pagination-next').addEventListener('click',()=>{st.page++;render(t)});
+    new MutationObserver(()=>{st.page=1;render(t)}).observe(body,{childList:true});render(t);
+  }
+  function render(t){const st=estados.get(t);if(!st)return;const rows=Array.from(t.tBodies[0].rows),total=rows.length,pages=Math.max(1,Math.ceil(total/TAMANHO));st.page=Math.max(1,Math.min(st.page,pages));const start=(st.page-1)*TAMANHO,end=start+TAMANHO;rows.forEach((r,i)=>r.style.display=i>=start&&i<end?'':'none');st.nav.querySelector('.pagination-info').textContent=total?`Página ${st.page} de ${pages} · ${start+1}–${Math.min(end,total)} de ${total}`:'0 registros';st.nav.querySelector('.pagination-prev').disabled=st.page===1;st.nav.querySelector('.pagination-next').disabled=st.page===pages;st.nav.style.display=total>TAMANHO?'flex':'none';}
+  function init(){document.querySelectorAll('table').forEach(preparar)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+  new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
