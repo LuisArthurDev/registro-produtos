@@ -14,7 +14,6 @@
 })();
 </script>
 <title>Registro de Mapa de Validade</title>
-<script src="./catalogo-sqlite.js"></script>
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -39,9 +38,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-ap
 .topbar h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.2px}
 .topbar p{margin:2px 0 0;font-size:13px;color:#b9cad8}
 .topbar-actions{display:flex;align-items:center;gap:10px}
-.header-action{min-height:38px;padding:0 11px;border:1px solid rgba(255,255,255,.35);border-radius:9px;background:rgba(255,255,255,.12);color:#fff;font-size:13px;font-weight:700;white-space:nowrap}
-.header-action[hidden]{display:none}
-@media(max-width:760px){.header-action{font-size:12px;padding:0 8px;min-height:36px}.topbar{gap:8px;padding-left:10px;padding-right:10px}.topbar h1{font-size:16px}.identidade-logada{font-size:11px}}
 .theme-toggle{flex-shrink:0;width:44px;min-height:44px;padding:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center}
 .theme-toggle:hover{background:rgba(255,255,255,.24)}
 .theme-toggle svg{width:22px;height:22px}
@@ -472,19 +468,17 @@ body.camera-aberta #cameraControles:not([hidden]) {
   html.auth-ok body { visibility: visible; }
 </style>
 <script src="auth.js"></script>
-<script src="notificacoes.js" defer></script>
 </head>
 
 <body>
 <header class="topbar">
   <div class="topbar-info">
-    <h1>Registro de Mapa de Validade<sup>v1.0.1</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
   <div class="topbar-acoes">
     <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
-    <button type="button" class="header-action" id="btnAtivarNotificacoes" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
       href="index.html"
@@ -752,10 +746,18 @@ function carregarCadastroFuncionarios() {
         return;
       }
 
-      const nomes = [...new Set(resposta.todos)]
-        .filter(nome => String(nome || "").trim());
+      // Normaliza espaços e compara sem diferenciar maiúsculas/minúsculas
+      // para evitar opções duplicadas (ex.: "Estoque" e "Estoque ").
+      const nomesUnicos = new Map();
+      resposta.todos.forEach(nome => {
+        const nomeExibicao = String(nome || "").replace(/\s+/g, " ").trim();
+        if (!nomeExibicao) return;
+        const chave = nomeExibicao.normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+        if (!nomesUnicos.has(chave)) nomesUnicos.set(chave, nomeExibicao);
+      });
+      const nomes = [...nomesUnicos.values()];
 
-      const administradorLoja = Auth.administrador();
       select.innerHTML =
         '<option value="">Selecione o funcionário</option>' +
         nomes.map(nome => {
@@ -767,10 +769,11 @@ function carregarCadastroFuncionarios() {
         }).map(option =>
           `<option value="${escaparAtributo(option.value)}">` +
           `${escaparHTML(option.textContent)}</option>`
-        ).join("") + (administradorLoja ? '<option value="Estoque">Estoque</option>' : '');
+        ).join("");
 
       select.disabled = false;
       const campoFuncionario = document.getElementById("campoFuncionario");
+      const administradorLoja = Auth.administrador();
       if (campoFuncionario) campoFuncionario.hidden = !administradorLoja;
       select.required = administradorLoja;
       if (administradorLoja) {
@@ -846,18 +849,25 @@ const lojaOrigemEl=$("lojaOrigem");
 let cameraAtiva=false,enviando=false,consultaSequencia=0;
 let temporizadorDigitacao=null,temporizadorPolling=null;
 let consultaScriptAtual=null,scriptStatusAtual=null,envioAtual=null;
-let itemAtual=null,catalogoSQLiteCarregado=null,catalogoSQLitePromessa=null,catalogoSQLiteErro=null;
+let itemAtual=null,produtosJsonCache=null,produtosJsonPromessa=null,produtosJsonErro=null;
 
-function carregarCatalogoSQLite(forcar=false){
-  if(catalogoSQLiteCarregado && !forcar) return Promise.resolve(catalogoSQLiteCarregado);
-  if(catalogoSQLitePromessa && !forcar) return catalogoSQLitePromessa;
-  catalogoSQLitePromessa=window.CatalogoSQLite.abrir(forcar).then(()=>{
-    catalogoSQLiteCarregado=true;catalogoSQLiteErro=null;return catalogoSQLiteCarregado;
-  }).catch(e=>{
-    catalogoSQLiteErro=e;catalogoSQLitePromessa=null;
-    console.error("Falha ao carregar a base SQLite de EAN:",e);throw e;
-  });
-  return catalogoSQLitePromessa;
+const VERSAO_BASE_EAN="2";
+
+function carregarProdutosJson(){
+  if(produtosJsonCache)return Promise.resolve(produtosJsonCache);
+  if(produtosJsonPromessa)return produtosJsonPromessa;
+  produtosJsonPromessa=fetch("produtos_ean.json?v="+encodeURIComponent(VERSAO_BASE_EAN),{cache:"no-cache"})
+    .then(r=>{
+      if(!r.ok)throw new Error("Não foi possível carregar produtos_ean.json (HTTP "+r.status+").");
+      return r.json();
+    }).then(d=>{
+      if(!d||typeof d!=="object"||Array.isArray(d))throw new Error("O arquivo produtos_ean.json não contém um objeto JSON válido.");
+      produtosJsonCache=d;produtosJsonErro=null;return d;
+    }).catch(e=>{
+      produtosJsonErro=e;produtosJsonPromessa=null;
+      console.error("Falha ao carregar a base de EAN:",e);throw e;
+    });
+  return produtosJsonPromessa;
 }
 
 function lerJSON(chave){
@@ -919,15 +929,20 @@ function limparDescricao(){
   $("descricaoTexto").textContent="";$("descricaoStatus").textContent="";
 }
 
-function encontrarProdutoNoSQLite(_base,codigo){
-  const item=window.CatalogoSQLite?.porEAN(codigo);
-  if(!item)return null;
-  return {
-    codigoEncontrado:item.ean,
-    descricao:String(item.produto||item.descricao||"").trim(),
-    secao:String(item.secao||"").trim(),
-    codigoInterno:String(item.codigoInterno||"").trim()
-  };
+function encontrarProdutoNaBase(base,codigo){
+  const original=String(codigo||"").trim(),candidatos=[original];
+  if(/^\d{12}$/.test(original))candidatos.push("0"+original);
+  if(/^0\d{12}$/.test(original))candidatos.push(original.slice(1));
+  for(const candidato of candidatos){
+    if(!Object.prototype.hasOwnProperty.call(base,candidato))continue;
+    const item=base[candidato];
+    if(typeof item==="string"&&item.trim())return{codigoEncontrado:candidato,descricao:item.trim(),secao:""};
+    if(item&&typeof item==="object"&&!Array.isArray(item)){
+      const descricao=String(item.produto||"").trim(),secao=String(item.secao||"").trim();
+      if(descricao)return{codigoEncontrado:candidato,descricao,secao};
+    }
+  }
+  return null;
 }
 
 function buscarDescricaoProduto(codigoInformado){
@@ -935,25 +950,25 @@ function buscarDescricaoProduto(codigoInformado){
   if(!/^\d{8,14}$/.test(codigo)){$("descricaoProduto").style.display="none";return}
   const emCache=lerCache(codigo);
   if(emCache&&emCache.status==="found"){
-    mostrarDescricao("Produto encontrado no banco SQLite.","success",emCache.descricao);
+    mostrarDescricao("Produto encontrado na base JSON.","success",emCache.descricao);
     registrarNomeAtual(codigo,emCache.descricao);return;
   }
-  mostrarDescricao("Consultando o banco SQLite de produtos...");
-  carregarCatalogoSQLite().then(base=>{
+  mostrarDescricao("Consultando a base JSON de produtos...");
+  carregarProdutosJson().then(base=>{
     if(sequencia!==consultaSequencia)return;
-    const produto=encontrarProdutoNoSQLite(base,codigo);
+    const produto=encontrarProdutoNaBase(base,codigo);
     if(produto){
       gravarCache(codigo,{status:"found",descricao:produto.descricao});
-      mostrarDescricao("Produto encontrado no banco SQLite.","success",produto.descricao);
+      mostrarDescricao("Produto encontrado na base JSON.","success",produto.descricao);
       registrarNomeAtual(codigo,produto.descricao);
     }else{
       gravarCache(codigo,{status:"not_found"});
-      mostrarDescricao("EAN não encontrado no banco SQLite. O lançamento exigirá confirmação.","error");
+      mostrarDescricao("EAN não encontrado no JSON. O lançamento exigirá confirmação.","error");
       registrarNomeAtual(codigo,"Não cadastrado ("+codigo+")");
     }
   }).catch(()=>{
     if(sequencia!==consultaSequencia)return;
-    mostrarDescricao("Não foi possível carregar produtos_ean.db. O lançamento ficará bloqueado até a base ser carregada.","error");
+    mostrarDescricao("Não foi possível carregar produtos_ean.json. O lançamento ficará bloqueado até a base ser carregada.","error");
   });
 }
 
@@ -963,7 +978,7 @@ codigoEl.addEventListener("input",()=>{
     codigoEl.value="";limparDescricao();
     mostrarStatus("Código inválido: o campo aceita apenas números. O conteúdo foi apagado.","error");return;
   }
-  codigoEl.value=String(semEspacos.slice(0,14));limparDescricao();
+  codigoEl.value=semEspacos.slice(0,14);limparDescricao();
   const codigo=codigoEl.value;if(codigo.length<8)return;
   const completo=[12,13,14].includes(codigo.length);
   temporizadorDigitacao=setTimeout(()=>{if(codigoEl.value===codigo)buscarDescricaoProduto(codigo)},completo?80:350);
@@ -1004,7 +1019,7 @@ function prepararDetectores(){
   return preparandoDetectores;
 }
 window.addEventListener("load",()=>{
-  carregarCatalogoSQLite().catch(()=>mostrarStatus("Não foi possível carregar produtos_ean.db. Confira se o banco está publicado na raiz do site.","error"));
+  carregarProdutosJson().catch(()=>mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.","error"));
   setTimeout(()=>prepararDetectores().catch(()=>{}),800);
 });
 
@@ -1248,7 +1263,7 @@ function processarLeitura(texto,resultado){
     leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");return;
   }
   if(FORMATOS_GTIN.includes(formato)&&!gtinValido(codigo))return;
-  const conhecido=catalogoSQLiteCarregado&&encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo);
+  const conhecido=produtosJsonCache&&encontrarProdutoNaBase(produtosJsonCache,codigo);
   const necessarias=conhecido?1:LEITURAS_PARA_CONFIRMAR,agora=Date.now();
   if(leituraPendente.codigo===codigo&&agora-leituraPendente.t<JANELA_CONFIRMACAO_MS){
     leituraPendente.vezes++;leituraPendente.t=agora;
@@ -1443,74 +1458,21 @@ function consultarDuplicidadeNoMapa(payload) {
       action: "verificarItemMapa", callback: cb, sessao: Auth.token(),
       funcionario: payload.funcionario, codigo: payload.codigo, lote: payload.lote, validade: payload.validade
     });
-    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 10000);
+    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 20000);
     script.onerror = () => finalizar(new Error("Não foi possível consultar o mapa do funcionário."));
     script.src = APPS_SCRIPT_URL + "?" + params.toString();
     document.head.appendChild(script);
   });
 }
 
-function consultarChaveLancamento(envio) {
-  return new Promise((resolve, reject) => {
-    const cb = "__verificarChaveLancamentoCb";
-    const anterior = window[cb];
-    const script = document.createElement("script");
-    let finalizado = false;
-    const finalizar = (erro, dados) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(timer);
-      script.remove();
-      if (window[cb] === receber) { if (anterior) window[cb] = anterior; else delete window[cb]; }
-      erro ? reject(erro) : resolve(dados);
-    };
-    const receber = dados => finalizar(null, dados);
-    window[cb] = receber;
-    const params = new URLSearchParams({
-      action: "verificarChaveLancamento", callback: cb, sessao: Auth.token(),
-      requestId: envio.requestId, funcionario: envio.payload.funcionario
-    });
-    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar a chave única.")), 12000);
-    script.onerror = () => finalizar(new Error("Não foi possível consultar a chave única."));
-    script.src = APPS_SCRIPT_URL + "?" + params.toString();
-    document.head.appendChild(script);
-  });
-}
-
-function reenviarTentativaPendente() {
-  if (!envioAtual || enviando) return;
-  enviando = true;
-  btnSalvar.disabled = true;
-  btnSalvar.textContent = "Confirmando tentativa...";
-  mostrarStatus("Conferindo a chave única antes de reenviar...");
-  consultarChaveLancamento(envioAtual).then(resultado => {
-    if (resultado && resultado.sucesso && resultado.encontrado) {
-      finalizarSucesso(resultado.mensagem || "Lançamento localizado e confirmado na planilha.");
-      return;
-    }
-    if (!resultado || resultado.sucesso !== true) throw new Error(resultado?.mensagem || "Não foi possível confirmar a chave.");
-    mostrarStatus("A chave ainda não foi localizada. Reenviando a mesma tentativa, sem gerar outra chave.", "info");
-    enviarPost(envioAtual.payload, envioAtual.token);
-    iniciarPolling(envioAtual.requestId, envioAtual.token);
-  }).catch(erro => {
-    enviando = false;
-    btnSalvar.disabled = false;
-    btnSalvar.textContent = "Tentar novamente (mesma chave)";
-    mostrarStatus("Não foi possível confirmar o resultado: " + erro.message + ". Tente novamente; a mesma chave será mantida.", "error");
-  });
-}
-
 /* Envio do lançamento */
 formulario.addEventListener("submit",async evento=>{
-  evento.preventDefault();
-  if (envioAtual && envioAtual.pendenteConfirmacao) { reenviarTentativaPendente(); return; }
-  if(enviando||verificandoMapa)return;ocultarStatus();
+  evento.preventDefault();if(enviando||verificandoMapa)return;ocultarStatus();
 
-  const codigo=String(codigoEl.value || "").replace(/\s+/g, "").trim(),funcionario=funcionarioEl.value.trim();
+  const codigo=codigoEl.value.trim(),funcionario=funcionarioEl.value.trim();
   const lote=$("lote").value.trim(),validadeTexto=validadeEl.value.trim();
   const quantidadeTexto=$("quantidade").value.trim();
   const ehTransferencia=funcionario==="Transferencias";
-  const ehEstoque=funcionario==="Estoque";
   const romaneio=romaneioEl.value.trim();
   const numeroLojaOrigem=lojaOrigemEl.value.trim();
 
@@ -1539,36 +1501,34 @@ formulario.addEventListener("submit",async evento=>{
     lote,
     validade:validadeISO,
     quantidade:Number(quantidadeTexto),
-    descricao: String(catalogoSQLiteCarregado ? (encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo)?.descricao || "") : ""),
-    codigoInterno: String(catalogoSQLiteCarregado ? (encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo)?.codigoInterno || "") : ""),
     lojaOrigem:ehTransferencia?"V"+numeroLojaOrigem:"",
     romaneio:ehTransferencia?romaneio:""
   };
 
-  if(!catalogoSQLiteCarregado){
-    mostrarStatus("O banco produtos_ean.db ainda não foi carregado. Aguarde e tente salvar novamente.","error");
-    carregarCatalogoSQLite().then(()=>{if(codigoEl.value.trim()===codigo)buscarDescricaoProduto(codigo)}).catch(()=>{
-      mostrarStatus("Não foi possível carregar produtos_ean.db. Verifique se o banco está publicado na raiz do site.","error");
+  if(!produtosJsonCache){
+    mostrarStatus("A base produtos_ean.json ainda não foi carregada. Aguarde e tente salvar novamente.","error");
+    carregarProdutosJson().then(()=>{if(codigoEl.value.trim()===codigo)buscarDescricaoProduto(codigo)}).catch(()=>{
+      mostrarStatus("Não foi possível carregar produtos_ean.json. Verifique se o arquivo está junto do index.html e se a página está hospedada em um servidor.","error");
     });
     return;
   }
 
-  const produtoEncontrado=encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo);
-  const produtoExisteNoCatalogo=Boolean(produtoEncontrado);
+  const produtoEncontrado=encontrarProdutoNaBase(produtosJsonCache,codigo);
+  const produtoExisteNoJson=Boolean(produtoEncontrado);
   let textoDescricao="";
-  if(produtoExisteNoCatalogo){
+  if(produtoExisteNoJson){
     textoDescricao=produtoEncontrado.descricao;
     gravarCache(codigo,{status:"found",descricao:textoDescricao});
-    mostrarDescricao("Produto encontrado no banco SQLite.","success",textoDescricao);
+    mostrarDescricao("Produto encontrado na base JSON.","success",textoDescricao);
     registrarNomeAtual(codigo,textoDescricao);
   }else{
     gravarCache(codigo,{status:"not_found"});
-    mostrarDescricao("EAN não encontrado no banco SQLite. O lançamento exigirá confirmação.","error");
+    mostrarDescricao("EAN não encontrado no JSON. O lançamento exigirá confirmação.","error");
     registrarNomeAtual(codigo,"Não cadastrado ("+codigo+")");
   }
 
-  if(!produtoExisteNoCatalogo&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
-  if(!confirmarDuplicadoUmaVez && !ehEstoque){
+  if(!produtoExisteNoJson&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
+  if(!confirmarDuplicadoUmaVez){
     try {
       verificandoMapa = true;
       btnSalvar.disabled = true;
@@ -1596,8 +1556,7 @@ formulario.addEventListener("submit",async evento=>{
   const token=aleatorioHex(32);
   enviando=true;btnSalvar.disabled=true;btnSalvar.textContent="Enviando...";
   mostrarStatus("Enviando lançamento para a planilha...");
-  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,descricao:$("descricaoTexto").textContent||"",pendenteConfirmacao:false};
-  guardarJSON("lancamentoPendenteV1", envioAtual);
+  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,descricao:$("descricaoTexto").textContent||""};
 
   try{enviarPost(payload,token);iniciarPolling(payload.requestId,token)}
   catch(e){finalizarErro("Não foi possível iniciar o envio: "+e.message)}
@@ -1613,24 +1572,9 @@ function enviarPost(payload,token){
 window.__statusCb=function(resposta){
   if(!resposta||!envioAtual||resposta.requestId!==envioAtual.requestId)return;
   if(resposta.status==="saved")finalizarSucesso(resposta.message||"Lançamento salvo com sucesso.");
-  else if(resposta.status==="error")confirmarResultadoPorChave(resposta.message||"O servidor retornou um erro.");
+  else if(resposta.status==="error")finalizarErro(resposta.message||"Não foi possível salvar o lançamento.");
   else mostrarStatus(resposta.message||"Processando lançamento...");
 };
-async function confirmarResultadoPorChave(mensagemFalha) {
-  if (!envioAtual) return;
-  mostrarStatus("A resposta apresentou uma falha. Conferindo se a chave única foi gravada...");
-  try {
-    const resultado = await consultarChaveLancamento(envioAtual);
-    if (resultado && resultado.sucesso && resultado.encontrado) {
-      finalizarSucesso("Lançamento confirmado pela chave única. " + (resultado.mensagem || ""));
-      return;
-    }
-    if (!resultado || resultado.sucesso !== true) throw new Error(resultado?.mensagem || "Consulta inconclusiva.");
-    finalizarErroComRetentativa(mensagemFalha + " A chave ainda não foi localizada; você pode tentar novamente com a mesma chave.");
-  } catch (erro) {
-    finalizarErroComRetentativa(mensagemFalha + " Não foi possível confirmar a gravação. Tente novamente com a mesma chave.");
-  }
-}
 function iniciarPolling(requestId,token){
   const inicio=Date.now();let tentativa=0;
   if(temporizadorPolling)clearTimeout(temporizadorPolling);
@@ -1642,7 +1586,7 @@ function iniciarPolling(requestId,token){
   function consultar(){
     if(!envioAtual||envioAtual.requestId!==requestId)return;
     if(Date.now()-inicio>90000){
-      confirmarResultadoPorChave("O sistema não recebeu a confirmação dentro de 90 segundos.");return;
+      finalizarErro("O sistema não confirmou o lançamento em 90 segundos. Verifique a planilha antes de tentar enviar novamente.");return;
     }
     if(scriptStatusAtual){scriptStatusAtual.remove();scriptStatusAtual=null}
     const script=document.createElement("script");
@@ -1654,33 +1598,8 @@ function iniciarPolling(requestId,token){
   }
   temporizadorPolling=setTimeout(consultar,250);
 }
-async function restaurarLancamentoPendente() {
-  const pendente = lerJSON("lancamentoPendenteV1");
-  if (!pendente || !pendente.requestId || !pendente.payload || !pendente.token) return;
-  if (pendente.payload.sessao !== Auth.token()) {
-    guardarJSON("lancamentoPendenteV1", null);
-    return;
-  }
-  envioAtual = { ...pendente, pendenteConfirmacao: true };
-  btnSalvar.textContent = "Confirmar tentativa anterior";
-  mostrarStatus("Existe um lançamento anterior sem confirmação. Vou conferir a chave única antes de permitir uma nova tentativa.", "info");
-  try {
-    const resultado = await consultarChaveLancamento(envioAtual);
-    if (resultado && resultado.sucesso && resultado.encontrado) {
-      finalizarSucesso("Lançamento anterior localizado e confirmado pela chave única.");
-    } else if (resultado && resultado.sucesso) {
-      mostrarStatus("A tentativa anterior não foi localizada. Clique em 'Confirmar tentativa anterior' para reenviar os mesmos dados com a mesma chave.", "error");
-    } else {
-      mostrarStatus("Não foi possível confirmar automaticamente a tentativa anterior. Clique em 'Confirmar tentativa anterior' para consultar novamente; a chave será mantida.", "error");
-    }
-  } catch (_) {
-    mostrarStatus("Não foi possível consultar a tentativa anterior agora. Clique em 'Confirmar tentativa anterior' para tentar novamente com a mesma chave.", "error");
-  }
-}
-
 function finalizarSucesso(mensagem){
   encerrarPolling();
-  guardarJSON("lancamentoPendenteV1", null);
   const manterCodigoBarras=$("mesmoProduto").checked;
   if(envioAtual&&envioAtual.payload){
     registrarNoHistorico(envioAtual.payload,envioAtual.descricao);
@@ -1692,19 +1611,7 @@ function finalizarSucesso(mensagem){
 }
 function finalizarErro(mensagem){
   encerrarPolling();enviando=false;envioAtual=null;
-  guardarJSON("lancamentoPendenteV1", null);
   btnSalvar.disabled=false;btnSalvar.textContent="Salvar lançamento";
-  mostrarStatus(mensagem,"error");
-}
-function finalizarErroComRetentativa(mensagem){
-  encerrarPolling();
-  enviando=false;
-  if (envioAtual) {
-    envioAtual.pendenteConfirmacao=true;
-    guardarJSON("lancamentoPendenteV1", envioAtual);
-  }
-  btnSalvar.disabled=false;
-  btnSalvar.textContent="Tentar novamente (mesma chave)";
   mostrarStatus(mensagem,"error");
 }
 function encerrarPolling(){
@@ -1798,9 +1705,6 @@ window.addEventListener("load", async () => {
     atualizarBotoesLimpar();
     atualizarCamposTransferencia();
     atualizarBotaoVisualizar();
-    await restaurarLancamentoPendente();
-    verificarAvisoValidade();
-    if (window.MVNotificacoes) window.MVNotificacoes.iniciar();
 
   } catch (erro) {
     console.error(erro);
@@ -1914,9 +1818,7 @@ function buscarValidadesParaAviso() {
 
     const parametros = new URLSearchParams({
       action: "validades",
-      callback,
-      sessao: Auth.token(),
-      nocache: "1"
+      callback
     });
 
     script.src =
@@ -1991,7 +1893,7 @@ function verificarAvisoValidade() {
 
   Promise.all([
     buscarValidadesParaAviso(),
-    carregarCatalogoSQLite().catch(() => null)
+    carregarProdutosJson()
   ])
     .then(([registros]) => {
       // Impede que uma consulta antiga mostre o popup para outro funcionário.
@@ -2004,14 +1906,6 @@ function verificarAvisoValidade() {
 
       if (quantidade > 0) {
         mostrarAvisoValidade(quantidade, funcionario);
-        if (window.MVNotificacoes) {
-          window.MVNotificacoes.notificarDesktop({
-            nome: funcionario,
-            quantidade: quantidade,
-            loja: Auth.loja(),
-            url: "visualizacao.html?funcionario=" + encodeURIComponent(funcionario)
-          });
-        }
       } else {
         fecharAvisoValidade();
       }
@@ -2054,25 +1948,6 @@ document.addEventListener("keydown", evento => {
 });
 
 
-</script>
-<script>
-/* Paginação uniforme para tabelas longas, sem alterar filtros ou ações existentes. */
-(function(){
-  const TAMANHO=25, estados=new WeakMap();
-  function preparar(t){
-    if(t.dataset.paginacaoPronta||!t.tBodies.length)return;
-    t.dataset.paginacaoPronta='1';const body=t.tBodies[0],wrap=t.closest('.table-panel')||t.parentElement;
-    const nav=document.createElement('div');nav.className='table-pagination';nav.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 14px;flex-wrap:wrap;color:#64748b;font-size:13px';
-    nav.innerHTML='<span class="pagination-info"></span><button type="button" class="button pagination-prev">Anterior</button><button type="button" class="button pagination-next">Próxima</button>';wrap.appendChild(nav);
-    const st={page:1,nav};estados.set(t,st);
-    nav.querySelector('.pagination-prev').addEventListener('click',()=>{st.page--;render(t)});nav.querySelector('.pagination-next').addEventListener('click',()=>{st.page++;render(t)});
-    new MutationObserver(()=>{st.page=1;render(t)}).observe(body,{childList:true});render(t);
-  }
-  function render(t){const st=estados.get(t);if(!st)return;const rows=Array.from(t.tBodies[0].rows),total=rows.length,pages=Math.max(1,Math.ceil(total/TAMANHO));st.page=Math.max(1,Math.min(st.page,pages));const start=(st.page-1)*TAMANHO,end=start+TAMANHO;rows.forEach((r,i)=>r.style.display=i>=start&&i<end?'':'none');st.nav.querySelector('.pagination-info').textContent=total?`Página ${st.page} de ${pages} · ${start+1}–${Math.min(end,total)} de ${total}`:'0 registros';st.nav.querySelector('.pagination-prev').disabled=st.page===1;st.nav.querySelector('.pagination-next').disabled=st.page===pages;st.nav.style.display=total>TAMANHO?'flex':'none';}
-  function init(){document.querySelectorAll('table').forEach(preparar)}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-  new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
-})();
 </script>
 </body>
 </html>
