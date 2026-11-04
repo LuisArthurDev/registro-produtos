@@ -345,6 +345,12 @@ function doGetOriginal_(e) {
   const parametros = e && e.parameter ? e.parameter : {};
   const acao = String(parametros.action || "");
 
+  if (acao === "configNotificacoes") {
+    const callback = String(parametros.callback || "");
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(callback)) return respostaTexto_("Callback inválido.");
+    const appId = String(PropertiesService.getScriptProperties().getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
+    return respostaJsonp_(callback, { sucesso: !!appId, appId: appId });
+  }
   if (acao === "login") return login_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
@@ -401,6 +407,14 @@ function doGetOriginal_(e) {
     return cadastrarQueimaManual_(parametros);
   }
 
+  if (acao === "notificarTodos") {
+    try { return notificarTodosLoja_(parametros); }
+    catch (erro) { return respostaJsonp_(String(parametros.callback || ""), { sucesso: false, mensagem: mensagemErro_(erro) }); }
+  }
+  if (acao === "notificarVencidosManual") {
+    try { return notificarVencidosManual_(parametros); }
+    catch (erro) { return respostaJsonp_(String(parametros.callback || ""), { sucesso: false, mensagem: mensagemErro_(erro) }); }
+  }
   if (acao === "dashboardPainel") return consultarDashboardPainel_(parametros);
   if (acao === "listarEstoqueVencidos") return listarEstoqueVencidos_(parametros);
   if (acao === "encaminharEstoqueMapa") return encaminharEstoqueMapa_(parametros);
@@ -4984,6 +4998,7 @@ function doGet(e) {
 
 // Histórico persistente das ações realizadas por administradores.
 const ACOES_AUDITORIA_ADMIN_ = {
+  notificarTodos: "Envio de notificação geral", notificarVencidosManual: "Envio manual de aviso de vencidos",
   editarLancamento: "Edição de lançamento", excluirLancamento: "Exclusão de lançamento",
   retirarDeLoja: "Retirada de produto", adicionarDanificado: "Cadastro de danificado",
   adicionarAoQueima: "Envio para Queima", aprovarQueima: "Aprovação na Queima",
@@ -6542,6 +6557,7 @@ function bloquearSeNaoAutorizado_(p) {
   const publicas = [
     "login",
     "sessao",
+    "configNotificacoes",
     "logout"
   ];
 
@@ -6570,6 +6586,8 @@ function bloquearSeNaoAutorizado_(p) {
   const acoesAdmin = [
     "dashboardPainel",
     "vencidosPainel",
+    "notificarTodos",
+    "notificarVencidosManual",
     "consultarTransferencias",
     "consultarQueima",
     "consultarSinalizados",
@@ -6873,7 +6891,9 @@ function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, a
   return dados;
 }
 
-function verificarNotificacoesVencidos() {
+function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
+  lojaFiltro = normalizarLoja_(lojaFiltro || "");
+  forcarEnvio = forcarEnvio === true;
   const props = PropertiesService.getScriptProperties();
   const appId = String(props.getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
   const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
@@ -6924,6 +6944,7 @@ function verificarNotificacoesVencidos() {
     const loja = normalizarLoja_(cadastro[8]);
     const inativo = String(cadastro[9] || "").toLowerCase() === "inativo" || cadastro[9] === false;
     if (!nome || especial || administrador || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
+    if (lojaFiltro && loja !== lojaFiltro) return;
 
     const abaMapa = planilha.getSheetByName(nome);
     if (!abaMapa || abaMapa.getLastRow() < 2) {
@@ -6959,7 +6980,7 @@ function verificarNotificacoesVencidos() {
       Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, assinaturaTexto, Utilities.Charset.UTF_8)
     ).replace(/=+$/g, "");
     const anterior = String(props.getProperty(propertyKey) || "");
-    if (assinatura === anterior) return;
+    if (!forcarEnvio && assinatura === anterior) return;
 
     try {
       enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura);
@@ -6984,4 +7005,86 @@ function configurarAgendamentoNotificacoesVencidos() {
   ScriptApp.newTrigger("verificarNotificacoesVencidos").timeBased().everyHours(1).create();
   console.log("Agendamento de notificações de vencidos criado: verificação a cada hora.");
   return "Agendamento criado. Execute verificarNotificacoesVencidos uma vez para o primeiro teste.";
+}
+
+
+/** Envia um comunicado push para todos os usuários ativos da loja do administrador.
+ * Administrador Geral, se usar este painel, pode alcançar todas as lojas.
+ */
+function notificarTodosLoja_(p) {
+  const sessao = obterSessaoObrigatoria_(p);
+  if (sessao.administrador !== true) throw new Error("Ação exclusiva para administradores.");
+  const titulo = String(p.titulo || "Aviso da farmácia").trim().slice(0, 80);
+  const mensagem = String(p.mensagem || "").trim().slice(0, 500);
+  if (!titulo || !mensagem) throw new Error("Informe o título e a mensagem da notificação.");
+
+  const props = PropertiesService.getScriptProperties();
+  const appId = String(props.getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
+  const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
+  if (!appId || !apiKey) throw new Error("As credenciais do OneSignal não estão configuradas no Apps Script.");
+
+  const lojaSessao = normalizarLoja_(sessao.loja || "");
+  if (sessao.administradorGeral !== true && !lojaSessao) throw new Error("Não foi possível identificar a loja da sua sessão.");
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh = ss.getSheetByName("Funcionarios");
+  if (!sh || sh.getLastRow() < 2) throw new Error("Nenhum usuário cadastrado para receber notificações.");
+  const registros = sh.getRange(2, 1, sh.getLastRow() - 1, 10).getValues();
+  const ids = [];
+  registros.forEach(function (r) {
+    const nome = String(r[0] || "").trim();
+    const especial = r[1] === true || String(r[1] || "").toLowerCase() === "true";
+    const loja = normalizarLoja_(r[8]);
+    const inativo = r[9] === false || String(r[9] || "").toLowerCase() === "inativo";
+    if (!nome || especial || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
+    if (sessao.administradorGeral !== true && loja !== lojaSessao) return;
+    ids.push(idPushFuncionario_(loja, nome));
+  });
+  const unicos = Array.from(new Set(ids));
+  if (!unicos.length) throw new Error("Não há usuários ativos com loja definida para receber a notificação.");
+
+  let envios = 0;
+  for (let i = 0; i < unicos.length; i += 2000) {
+    const lote = unicos.slice(i, i + 2000);
+    const payload = {
+      app_id: appId,
+      target_channel: "push",
+      include_aliases: { external_id: lote },
+      headings: { pt: titulo },
+      contents: { pt: mensagem },
+      web_url: "https://luisarthurdev.github.io/registro-produtos/",
+      data: { tipo: "comunicado", loja: sessao.administradorGeral === true ? "todas" : lojaSessao }
+    };
+    const resposta = UrlFetchApp.fetch("https://api.onesignal.com/notifications", {
+      method: "post", contentType: "application/json",
+      headers: { Authorization: "Key " + apiKey, Accept: "application/json" },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    });
+    const status = resposta.getResponseCode();
+    const corpo = resposta.getContentText();
+    let dados = {};
+    try { dados = JSON.parse(corpo || "{}"); } catch (_) {}
+    if (status < 200 || status >= 300 || !dados.id) {
+      throw new Error("O OneSignal não confirmou o envio: HTTP " + status + " — " + corpo);
+    }
+    envios++;
+  }
+  return respostaJsonp_(String(p.callback || ""), { sucesso: true, destinatarios: unicos.length, lotes: envios, mensagem: "Notificação enviada para " + unicos.length + " usuários cadastrados. Somente dispositivos com permissão ativa receberão o push." });
+}
+
+/** Dispara imediatamente os avisos de vencidos apenas para a loja autenticada.
+ * O envio manual força novo aviso mesmo que a lista não tenha mudado.
+ */
+function notificarVencidosManual_(p) {
+  const sessao = obterSessaoObrigatoria_(p);
+  if (sessao.administrador !== true) throw new Error("Ação exclusiva para administradores.");
+  const loja = sessao.administradorGeral === true ? "" : normalizarLoja_(sessao.loja || "");
+  if (sessao.administradorGeral !== true && !loja) throw new Error("Não foi possível identificar a loja da sua sessão.");
+  const resultado = verificarNotificacoesVencidos(loja, true);
+  return respostaJsonp_(String(p.callback || ""), {
+    sucesso: true,
+    enviados: Number(resultado.enviados || 0),
+    mensagem: Number(resultado.enviados || 0)
+      ? "Avisos de vencidos enviados para " + resultado.enviados + " funcionário(s) com produtos vencidos."
+      : "Nenhum funcionário com produtos vencidos foi encontrado nesta abrangência."
+  });
 }

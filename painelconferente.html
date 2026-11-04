@@ -1736,6 +1736,11 @@ Auth.exigirAdmin().then(ok => {
       <button class="nav-item" data-page="funcionarios">
         <i data-lucide="users"></i> Funcionários
       </button>
+
+      <div class="nav-label">Sistema</div>
+      <button class="nav-item" data-page="configuracoes">
+        <i data-lucide="settings"></i> Configurações
+      </button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -2470,6 +2475,35 @@ Auth.exigirAdmin().then(ok => {
         </div>
       </section>
 
+      <!-- CONFIGURAÇÕES E NOTIFICAÇÕES -->
+      <section class="page" id="page-configuracoes">
+        <div class="page-heading">
+          <div><h2>Configurações</h2><p>Gerencie os avisos enviados aos dispositivos com notificações ativadas.</p></div>
+        </div>
+        <div class="panel" style="padding:20px;margin-bottom:16px">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <i data-lucide="bell" style="width:24px;height:24px;color:#2563eb;flex:0 0 auto"></i>
+            <div><h3 style="margin:0 0 6px">Permissão de notificações</h3><p style="margin:0;color:#64748b;font-size:13px">Ative as notificações neste dispositivo para receber comunicados e avisos de produtos vencidos, inclusive quando o navegador estiver fechado, desde que o sistema e o navegador permitam.</p></div>
+          </div>
+          <button type="button" class="button button-primary" style="margin-top:14px" onclick="MVNotificacoes.ativar()"><i data-lucide="bell-ring"></i> Ativar notificações neste dispositivo</button>
+        </div>
+        <div class="panel" style="padding:20px;margin-bottom:16px">
+          <h3 style="margin:0 0 6px">Notificar a todos</h3>
+          <p style="color:#64748b;font-size:13px;margin:0 0 14px">Envia um comunicado para os usuários ativos da sua loja. O servidor valida a loja da sua sessão; Administrador Geral pode alcançar todas as lojas.</p>
+          <label for="notificacaoTodosTitulo" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Título</label>
+          <input id="notificacaoTodosTitulo" class="filter-select" maxlength="80" value="Aviso da farmácia" style="width:100%;margin-bottom:12px">
+          <label for="notificacaoTodosMensagem" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Mensagem</label>
+          <textarea id="notificacaoTodosMensagem" class="filter-select" maxlength="500" rows="4" placeholder="Digite o comunicado que deseja enviar..." style="width:100%;resize:vertical"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px"><button type="button" class="button button-primary" id="btnNotificarTodos" onclick="enviarNotificacaoTodos()"><i data-lucide="send"></i> Notificar a todos</button></div>
+        </div>
+        <div class="panel" style="padding:20px">
+          <h3 style="margin:0 0 6px">Notificar Vencidos</h3>
+          <p style="color:#64748b;font-size:13px;margin:0 0 14px">Verifica os mapas da abrangência autorizada e envia um aviso individual aos funcionários que possuem produtos vencidos em sua sessão.</p>
+          <button type="button" class="button" id="btnNotificarVencidos" onclick="enviarNotificacaoVencidos()"><i data-lucide="package-x"></i> Notificar Vencidos</button>
+        </div>
+        <p id="configNotificacoesStatus" role="status" aria-live="polite" style="font-size:13px;margin-top:14px;color:#475569"></p>
+      </section>
+
       <!-- MODAL: DIGITAÇÃO MANUAL DE MAPA -->
       <div
         id="modalDigitacaoManualMapa"
@@ -2902,7 +2936,8 @@ Auth.exigirAdmin().then(ok => {
     estoque: ["Controle de Estoque", "Consulta de saldos e quantidades"],
     sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
     historico: ["Histórico", "Registro das atividades do sistema"],
-    funcionarios: ["Funcionários", "Equipe e abas de lançamento"]
+    funcionarios: ["Funcionários", "Equipe e abas de lançamento"],
+    configuracoes: ["Configurações", "Notificações e preferências do sistema"]
   };
 
   function navigate(pageName) {
@@ -3181,7 +3216,9 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     adicionarQueima: '__adicionarAoQueimaCb',
     adicionarProdutoJson: '__adicionarProdutoJsonCb',
     estoqueVencidos: '__estoqueVencidosCb',
-    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb'
+    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb',
+    notificarTodos: '__notificarTodosCb',
+    notificarVencidosManual: '__notificarVencidosManualCb'
   };
 
   const cbName = callbackMap[callback] || callback;
@@ -3253,7 +3290,38 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   return promessa;
 }
 
-  function carregarCadastroFuncionariosPainel() {
+  
+async function enviarNotificacaoTodos() {
+  const titulo = document.getElementById("notificacaoTodosTitulo").value.trim();
+  const mensagem = document.getElementById("notificacaoTodosMensagem").value.trim();
+  const botao = document.getElementById("btnNotificarTodos");
+  const status = document.getElementById("configNotificacoesStatus");
+  if (!titulo || !mensagem) { status.textContent = "Informe o título e a mensagem."; return; }
+  if (!confirm("Enviar este comunicado aos usuários ativos da abrangência autorizada?")) return;
+  botao.disabled = true; status.textContent = "Enviando notificações...";
+  try {
+    const resposta = await jsonpPainel("notificarTodos", "notificarTodos", { titulo, mensagem });
+    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar o comunicado.");
+    status.textContent = resposta.mensagem || "Notificação enviada.";
+    document.getElementById("notificacaoTodosMensagem").value = "";
+  } catch (erro) { status.textContent = erro.message || "Falha ao enviar notificações."; }
+  finally { botao.disabled = false; }
+}
+
+async function enviarNotificacaoVencidos() {
+  const botao = document.getElementById("btnNotificarVencidos");
+  const status = document.getElementById("configNotificacoesStatus");
+  if (!confirm("Enviar agora os avisos de produtos vencidos aos funcionários que possuem vencidos na abrangência autorizada?")) return;
+  botao.disabled = true; status.textContent = "Verificando mapas e enviando avisos...";
+  try {
+    const resposta = await jsonpPainel("notificarVencidosManual", "notificarVencidosManual");
+    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar os avisos.");
+    status.textContent = resposta.mensagem || "Verificação concluída.";
+  } catch (erro) { status.textContent = erro.message || "Falha ao enviar avisos de vencidos."; }
+  finally { botao.disabled = false; }
+}
+
+function carregarCadastroFuncionariosPainel() {
     if (cadastroFuncionariosPromise) {
       return cadastroFuncionariosPromise;
     }

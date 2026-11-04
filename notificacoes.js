@@ -4,7 +4,8 @@
  */
 (function () {
   "use strict";
-  const ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521"; // preencher com o App ID público do OneSignal
+  let ONESIGNAL_APP_ID = "";
+  const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
   let initPromise = null;
@@ -18,6 +19,28 @@
     const nome = window.Auth?.usuario?.() || "";
     return loja && nome ? "mv_" + loja + "_" + normalizarSlug(nome) : "";
   }
+  function obterAppId() {
+    if (ONESIGNAL_APP_ID) return Promise.resolve(ONESIGNAL_APP_ID);
+    if (window.__mvOneSignalAppIdPromise) return window.__mvOneSignalAppIdPromise;
+    window.__mvOneSignalAppIdPromise = new Promise((resolve, reject) => {
+      const callback = "__mvOneSignalConfig_" + Math.random().toString(36).slice(2, 10);
+      const script = document.createElement("script");
+      const timeout = setTimeout(() => finalizar(new Error("Tempo esgotado ao carregar a configuração de notificações.")), 15000);
+      function finalizar(erro, dados) {
+        clearTimeout(timeout); delete window[callback]; script.remove();
+        if (erro) { window.__mvOneSignalAppIdPromise = null; reject(erro); return; }
+        ONESIGNAL_APP_ID = String(dados && dados.appId || "").trim();
+        if (!ONESIGNAL_APP_ID) { window.__mvOneSignalAppIdPromise = null; reject(new Error("O App ID do OneSignal não está configurado nas Propriedades do Script.")); return; }
+        resolve(ONESIGNAL_APP_ID);
+      }
+      window[callback] = dados => finalizar(null, dados);
+      script.onerror = () => finalizar(new Error("Não foi possível consultar a configuração de notificações."));
+      script.src = API_URL + "?action=configNotificacoes&callback=" + encodeURIComponent(callback) + "&t=" + Date.now();
+      document.head.appendChild(script);
+    });
+    return window.__mvOneSignalAppIdPromise;
+  }
+
   function carregarSdk() {
     if (window.OneSignal) return Promise.resolve();
     if (window.__mvOneSignalSdkPromise) return window.__mvOneSignalSdkPromise;
@@ -32,9 +55,9 @@
     return window.__mvOneSignalSdkPromise;
   }
   async function iniciarOneSignal() {
-    if (!ONESIGNAL_APP_ID) return null;
     if (initPromise) return initPromise;
     initPromise = (async () => {
+      await obterAppId();
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       await carregarSdk();
       return new Promise((resolve, reject) => {
@@ -48,6 +71,18 @@
             });
             const id = externalId();
             if (id) await OneSignal.login(id);
+            // Exibe o aviso visual do OneSignal na primeira abertura.
+            // A permissão nativa só é solicitada depois que a pessoa interage com o aviso.
+            if ("Notification" in window && Notification.permission === "default") {
+              let jaSolicitou = false;
+              try { jaSolicitou = localStorage.getItem("mv_onesignal_prompt_apresentado") === "1"; } catch (_) {}
+              if (!jaSolicitou && OneSignal.Slidedown && typeof OneSignal.Slidedown.promptPush === "function") {
+                try {
+                  await OneSignal.Slidedown.promptPush();
+                  try { localStorage.setItem("mv_onesignal_prompt_apresentado", "1"); } catch (_) {}
+                } catch (promptErro) { console.warn("Não foi possível exibir o aviso de permissão:", promptErro); }
+              }
+            }
             resolve(OneSignal);
           } catch (erro) { initPromise = null; reject(erro); }
         });
@@ -110,11 +145,11 @@
     notificacao.onclick = function () { window.focus(); if (dados.url) window.location.href = dados.url; notificacao.close(); };
   }
   async function iniciar() {
-    if (ONESIGNAL_APP_ID) {
+    if (window.Auth && window.Auth.token()) {
       try { await iniciarOneSignal(); } catch (erro) { console.warn("OneSignal ainda não inicializado:", erro); }
     }
     document.querySelectorAll("#btnAtivarNotificacoes, #btnAtivarNotificacoesPainel").forEach(btn => {
-      btn.hidden = false;
+      btn.hidden = !("Notification" in window) || Notification.permission === "granted";
     });
   }
   async function sair() {

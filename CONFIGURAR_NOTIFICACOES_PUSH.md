@@ -15,7 +15,7 @@
 3. Escolha configuração de site típico / Custom Code, conforme as opções apresentadas pelo OneSignal.
 4. Configure o site como `https://luisarthurdev.github.io/registro-produtos/`.
 5. Em Settings / Keys & IDs, copie o **App ID** e a **REST API Key**.
-6. No arquivo `notificacoes.js`, substitua a string vazia em `ONESIGNAL_APP_ID` pelo App ID público. Não coloque a REST API Key nesse arquivo.
+6. Guarde o App ID e a REST API Key nas Propriedades do Script conforme a seção seguinte. O App ID é lido pelo site por uma ação pública que retorna somente esse identificador; não é necessário editar `notificacoes.js`.
 7. Faça commit dos arquivos do projeto no GitHub Pages. O arquivo `OneSignalSDKWorker.js` precisa ficar na raiz publicada do site.
 
 ## 2. Guardar a chave privada no Apps Script
@@ -25,7 +25,7 @@
 3. Adicione estas duas propriedades:
    - `MV_ONESIGNAL_APP_ID` = App ID do OneSignal
    - `MV_ONESIGNAL_REST_API_KEY` = REST API Key do OneSignal
-4. Salve. A chave privada fica no servidor, não no GitHub.
+4. Salve. A chave privada fica no servidor, não no GitHub. O `notificacoes.js` consulta automaticamente o App ID por meio do Apps Script.
 
 ## 3. Ativar o envio automático
 
@@ -48,4 +48,6 @@ No celular, o usuário precisa aceitar as notificações do site. A entrega em s
 - A rotina de servidor envia notificações direcionadas ao funcionário e à loja cadastrados; não envia dados de outras lojas.
 - O Push é enviado quando a lista de produtos vencidos muda. Se os mesmos itens continuarem vencidos, não haverá repetição horária. Se a lista zerar e depois voltar a ter vencidos, um novo aviso será enviado.
 - A opção **Manter conectado** é exclusiva de computadores e desativa apenas o limite de inatividade. O limite absoluto de 8 horas continua valendo.
+- No Painel Conferente, a aba **Configurações** oferece **Notificar a todos** (comunicado livre para os usuários ativos da loja da sessão) e **Notificar Vencidos** (aviso imediato aos funcionários da abrangência autorizada que possuem vencidos). O servidor valida a loja e o perfil; Administrador Geral pode alcançar todas as lojas.
+- Ao retornar ao aplicativo após ficar em segundo plano por pelo menos um minuto, a página é atualizada para buscar a versão publicada mais recente. Uma página restaurada pelo cache de navegação também é recarregada.
 - Não compartilhe a REST API Key e não a coloque em arquivos `.js`, HTML ou no repositório GitHub.
