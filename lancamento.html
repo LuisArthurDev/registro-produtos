@@ -482,9 +482,11 @@ body.camera-aberta #cameraControles:not([hidden]) {
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
       href="painelconferente.html"
+      id="btnPainelConferente"
       class="theme-toggle header-icon-btn"
       title="Painel Conferente"
       aria-label="Painel Conferente"
+      hidden
     >
       <svg viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
@@ -706,17 +708,15 @@ body.camera-aberta #cameraControles:not([hidden]) {
 Auth.exigirLancamento().then(ok => {
   if (!ok) return;
 
-  const identidade = document.getElementById("identidadeLogada");
+  Auth.mostrarUsuario("identidadeLogada");
 
-  if (identidade) {
-    identidade.textContent = `${Auth.usuario()} · Loja ${Auth.loja()}`;
-    identidade.hidden = false;
+  const btnPainel = document.getElementById("btnPainelConferente");
+  if (btnPainel) {
+    btnPainel.hidden = !Auth.administrador();
   }
 
   const campoFuncionario = document.getElementById("campoFuncionario");
-  if (campoFuncionario) {
-    campoFuncionario.hidden = !Auth.administrador();
-  }
+  if (campoFuncionario) campoFuncionario.hidden = !Auth.administrador();
 });
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
