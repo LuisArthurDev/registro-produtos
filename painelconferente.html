@@ -6770,17 +6770,30 @@ document.addEventListener("submit", async function(event) {
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
     renderPainelIcons(g("page-funcionarios"));
+    // Consulta os estados pendentes em lote e redesenha a tabela apenas uma vez.
+    // Antes, cada resposta individual chamava renderFuncionarios(), provocando
+    // sucessivas reconstruções da tabela ao abrir a aba Funcionários.
+    const consultasPendentes = [];
     rows.forEach(o => {
       const det = detalhes.get(norm(o.nome));
       if (!det) return;
       const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
       if (estadosCelularProprio.has(chaveCelular) || consultasCelularProprio.has(chaveCelular)) return;
       consultasCelularProprio.add(chaveCelular);
-      chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "status", nome: det.nome, loja: det.loja || "" })
-        .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); renderFuncionarios(); })
-        .catch(e => { console.warn("Status do celular próprio:", e); estadosCelularProprio.set(chaveCelular, false); renderFuncionarios(); })
-        .finally(() => consultasCelularProprio.delete(chaveCelular));
+      consultasPendentes.push(
+        chamarFuncionarioApi("gerenciarCelularProprio", "__celularProprioCb", { modo: "status", nome: det.nome, loja: det.loja || "" })
+          .then(d => { estadosCelularProprio.set(chaveCelular, d.ativo === true); })
+          .catch(e => { console.warn("Status do celular próprio:", e); estadosCelularProprio.set(chaveCelular, false); })
+          .finally(() => consultasCelularProprio.delete(chaveCelular))
+      );
     });
+    if (consultasPendentes.length) {
+      Promise.all(consultasPendentes).then(() => {
+        if (document.getElementById("page-funcionarios")?.classList.contains("active")) {
+          renderFuncionarios();
+        }
+      });
+    }
   }
 
   /* ---------- Funcionários: adicionar, renomear, especial e check ---------- */
