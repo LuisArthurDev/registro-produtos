@@ -3,61 +3,6 @@ const SPREADSHEET_ID = "1X3JOGGeO_aBFoSpP5mFvjBYQiFzfrU0jLDAioH4gtfg";
 
 const TEMPO_CACHE_SEGUNDOS = 21600;
 
-// Cache restrito à execução atual do Web App. Evita reler a aba Funcionarios
-// várias vezes na mesma requisição, sem manter permissões antigas entre chamadas.
-let CACHE_REQUISICAO_ = null;
-function cacheDaRequisicao_() {
-  if (!CACHE_REQUISICAO_) CACHE_REQUISICAO_ = {};
-  return CACHE_REQUISICAO_;
-}
-function planilhaDaRequisicao_() {
-  const cache = cacheDaRequisicao_();
-  if (!cache.planilha) cache.planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return cache.planilha;
-}
-function linhasFuncionariosDaRequisicao_() {
-  const cache = cacheDaRequisicao_();
-  if (cache.linhasFuncionarios) return cache.linhasFuncionarios;
-  const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
-  if (!aba || aba.getLastRow() < 2) return (cache.linhasFuncionarios = []);
-  // Lê todas as colunas existentes: a coluna "Celular Próprio" é adicionada
-  // ao final da aba Funcionarios sem deslocar os campos já utilizados (A:J).
-  const largura = Math.max(10, aba.getLastColumn());
-  cache.linhasFuncionarios = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getValues();
-  return cache.linhasFuncionarios;
-}
-
-
-/* ============================================================
-   CELULAR PRÓPRIO — coluna persistente na aba Funcionarios
-   A coluna é localizada pelo cabeçalho; se ainda não existir, é criada
-   ao final da planilha, sem alterar as colunas A:J existentes.
-   ============================================================ */
-function colunaCelularProprio_(aba, criar) {
-  const ultima = Math.max(1, aba.getLastColumn());
-  const cabecalhos = aba.getRange(1, 1, 1, ultima).getDisplayValues()[0];
-  let coluna = cabecalhos.findIndex(v => normalizarTexto_(v) === "celular proprio") + 1;
-  if (!coluna && criar === true) {
-    coluna = ultima + 1;
-    aba.getRange(1, coluna).setValue("Celular Próprio");
-    const linhas = Math.max(0, aba.getLastRow() - 1);
-    if (linhas) aba.getRange(2, coluna, linhas, 1).setValues(Array.from({length: linhas}, () => ["Inativo"]));
-  }
-  return coluna || 0;
-}
-
-function celularProprioAtivoNaLinha_(aba, linha) {
-  const coluna = colunaCelularProprio_(aba, false);
-  if (!coluna || !linha) return false;
-  return normalizarTexto_(aba.getRange(linha, coluna).getDisplayValue()) === "ativo";
-}
-
-function gravarCelularProprioNaLinha_(aba, linha, ativo) {
-  const coluna = colunaCelularProprio_(aba, true);
-  aba.getRange(linha, coluna).setValue(ativo ? "Ativo" : "Inativo");
-  return ativo === true;
-}
-
 const CABECALHOS_TRANSFERENCIAS = [
   "Código de Barras",
   "Lote",
@@ -79,43 +24,44 @@ function obterCadastroFuncionarios_() {
   if (CADASTRO_MEMO_) return CADASTRO_MEMO_;           // dentro da mesma execução
 
   const cache = CacheService.getScriptCache();
-  const salvo = cache.get("cadastro_funcionarios_v2");    // entre execuções
+  const salvo = cache.get("cadastro_funcionarios");    // entre execuções
   if (salvo) {
     CADASTRO_MEMO_ = JSON.parse(salvo);
     return CADASTRO_MEMO_;
   }
 
   const resultado = lerCadastroFuncionarios_();
-  cache.put("cadastro_funcionarios_v2", JSON.stringify(resultado), 300);
+  cache.put("cadastro_funcionarios", JSON.stringify(resultado), 300);
   CADASTRO_MEMO_ = resultado;
   return resultado;
 }
 
 
 function lerCadastroFuncionarios_() {
-  const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
+  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = planilha.getSheetByName("Funcionarios");
 
   if (!aba) {
     throw new Error('A aba "Funcionarios" não foi encontrada.');
   }
 
-  const dados = linhasFuncionariosDaRequisicao_();
+  const ultimaLinha = aba.getLastRow();
   const funcionarios = [];
   const especiais = [];
 
-  if (dados.length) {
-    // A = Nome | B = Especial | H = Administrador | J = Status
+  if (ultimaLinha >= 2) {
+    // A = Nome | B = Especial | H = Administrador
+    const dados = aba.getRange(2, 1, ultimaLinha - 1, 9).getValues();
+
     dados.forEach(linha => {
       const nome = String(linha[0] || "").trim();
       const especial = linha[1] === true;
       const administrador = ehAdministradorValor_(linha[7]);
-      const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
 
       if (
         !nome ||
         normalizarTexto_(nome) === "transferencias" ||
-        administrador ||
-        inativo
+        administrador
       ) {
         return;
       }
@@ -293,11 +239,8 @@ function doPost(e) {
         : null;
 
       if (corpo && corpo.acao === "salvarOdsNoGitHub") {
-        const sessaoUpload = exigirAdministrador_({ sessao: corpo.sessao });
-        // A loja vem da sessão validada no servidor, nunca do navegador.
-        dadosUpload = Object.assign({}, corpo, {
-          loja: normalizarLoja_(sessaoUpload.loja)
-        });
+        exigirAdministrador_({ sessao: corpo.sessao });
+        dadosUpload = corpo;
       }
     } catch (_) {
       // Continua o fluxo antigo para os lançamentos existentes.
@@ -342,12 +285,6 @@ function doPost(e) {
     });
 
     const resultado = salvarProduto_(payload);
-    try {
-      const sessaoLancamento = obterSessaoObrigatoria_(payload);
-      if (sessaoLancamento && sessaoLancamento.administrador === true && resultado && resultado.sucesso !== false) {
-        gravarEventoAdministrativo_(sessaoLancamento, "Lançamento administrativo", "Lançamento realizado na aba " + String(payload.funcionario || payload.nomeAba || "—"), String(payload.codigo || payload.ean || ""));
-      }
-    } catch (erroAuditoria) { console.error("Falha ao registrar lançamento administrativo: " + erroAuditoria); }
     invalidarCacheDados_();
 
     gravarStatus_(requestId, token, resultado);
@@ -378,46 +315,14 @@ function doGetOriginal_(e) {
   const parametros = e && e.parameter ? e.parameter : {};
   const acao = String(parametros.action || "");
 
-  if (acao === "funcionariosLogin") {
-    const callback = String(parametros.callback || "");
-    if (callback !== "__funcionariosLoginCb") return respostaTexto_("Callback inválido.");
-    try {
-      // Publica somente nomes de usuários ativos para preencher o autocomplete do login.
-      // PIN, loja, perfil e demais dados permanecem exclusivamente no servidor.
-      const nomes = [...new Set(linhasFuncionariosDaRequisicao_()
-        .filter(linha => {
-          const nome = String(linha[0] || "").trim();
-          const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
-          return nome && normalizarTexto_(nome) !== "transferencias" && !inativo && !ehAdministradorGeralValor_(linha[7]);
-        })
-        .map(linha => String(linha[0]).trim()))];
-      return respostaJsonp_(callback, { sucesso: true, funcionarios: nomes });
-    } catch (erro) {
-      return respostaJsonp_(callback, { sucesso: false, funcionarios: [], mensagem: mensagemErro_(erro) });
-    }
-  }
-
-  if (acao === "configNotificacoes") {
-    const callback = String(parametros.callback || "");
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(callback)) return respostaTexto_("Callback inválido.");
-    const appId = String(PropertiesService.getScriptProperties().getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
-    return respostaJsonp_(callback, { sucesso: !!appId, appId: appId });
-  }
   if (acao === "login") return login_(parametros);
-  if (acao === "loginDispositivoProprio") return loginDispositivoProprio_(parametros);
-  if (acao === "registrarCelularProprio") return registrarCelularProprio_(parametros);
-  if (acao === "gerenciarCelularProprio") return gerenciarCelularProprio_(parametros);
-  if (acao === "gerenciarCelularProprioLote") return gerenciarCelularProprioLote_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
-  if (acao === "definirPermanenciaSessao") return definirPermanenciaSessao_(parametros);
   if (acao === "logout") return logout_(parametros);
   if (acao === "loginAdmin") return loginAdmin_(parametros);
   if (acao === "definirPinFuncionario") return definirPinFuncionario_(parametros);
   if (acao === "listarAdminsLojas") return listarAdminsLojas_(parametros);
   if (acao === "criarAdminLoja") return criarAdminLoja_(parametros);
-  if (acao === "editarUsuarioAdminGeral") return editarUsuarioAdminGeral_(parametros);
-  if (acao === "excluirUsuarioAdminGeral") return excluirUsuarioAdminGeral_(parametros);
   if (acao === "definirPermissaoFuncionario") {
     return definirPermissaoFuncionario_(parametros);
   }
@@ -437,11 +342,7 @@ function doGetOriginal_(e) {
   if (acao === "validades") {
     return consultarValidades_(parametros);
   }
-  if (acao === "consultarTransferencias") {
-    return consultarTransferencias_(parametros);
-  }
   if (acao === "verificarItemMapa") return verificarItemMapa_(parametros);
-  if (acao === "verificarChaveLancamento") return verificarChaveLancamento_(parametros);
 
   if (acao === "adicionarValidadeManual") {
     return adicionarValidadeManual_(parametros);
@@ -463,17 +364,7 @@ function doGetOriginal_(e) {
     return cadastrarQueimaManual_(parametros);
   }
 
-  if (acao === "notificarTodos") {
-    try { return notificarTodosLoja_(parametros); }
-    catch (erro) { return respostaJsonp_(String(parametros.callback || ""), { sucesso: false, mensagem: mensagemErro_(erro) }); }
-  }
-  if (acao === "notificarVencidosManual") {
-    try { return notificarVencidosManual_(parametros); }
-    catch (erro) { return respostaJsonp_(String(parametros.callback || ""), { sucesso: false, mensagem: mensagemErro_(erro) }); }
-  }
   if (acao === "dashboardPainel") return consultarDashboardPainel_(parametros);
-  if (acao === "listarEstoqueVencidos") return listarEstoqueVencidos_(parametros);
-  if (acao === "encaminharEstoqueMapa") return encaminharEstoqueMapa_(parametros);
   if (acao === "vencidosPainel") return consultarVencidosPainel_(parametros);
   if (acao === "retirarDeLoja") return retirarDeLoja_(parametros);
   if (acao === "adicionarDanificado") return adicionarDanificado_(parametros);
@@ -490,16 +381,12 @@ function doGetOriginal_(e) {
       if (acao === "renomearFuncionario") return renomearFuncionario_(parametros);
       if (acao === "definirEspecialFuncionario") return definirEspecialFuncionario_(parametros);
       if (acao === "marcarCheckFuncionario") return marcarCheckFuncionario_(parametros);
-  if (acao === "inativarFuncionario") return inativarFuncionario_(parametros);
 
   if (acao === "funcionarios") {
     const callback = String(parametros.callback || "");
     if (callback !== "__funcionariosCb") return respostaTexto_("Callback inválido.");
     try {
       const sessao = obterSessaoObrigatoria_(parametros);
-      // Transferencias é uma opção especial exclusiva do Administrador de Loja.
-      // Ela é removida da lista-base e adicionada explicitamente abaixo para
-      // nunca aparecer para funcionários nem para o Administrador Geral.
       const nomesPermitidos = obterAbasPermitidas_(parametros).filter(n => n !== "Transferencias");
       const cadastro = obterCadastroFuncionarios_();
       const porNome = {};
@@ -514,11 +401,8 @@ function doGetOriginal_(e) {
       // precisa enxergar também as abas normais para administrar a loja.
       const modoGestao = String(parametros.modo || "") === "gestao";
       if (sessao.administrador === true && !modoGestao) funcionarios = [];
-      const podeLancarTransferencias = sessao.administrador === true && sessao.administradorGeral !== true;
       const todos = sessao.administrador
-        ? (modoGestao
-            ? nomesPermitidos
-            : [...especiais, ...(podeLancarTransferencias ? ["Transferencias"] : [])])
+        ? (modoGestao ? nomesPermitidos : especiais.slice())
         : nomesPermitidos;
       const detalhes = obterDetalhesFuncionarios_(parametros);
       return respostaJsonp_(callback, {
@@ -533,30 +417,6 @@ function doGetOriginal_(e) {
   return ContentService
     .createTextOutput("Sistema de lançamento de produtos.")
     .setMimeType(ContentService.MimeType.TEXT);
-}
-
-function gerenciarCelularProprioLote_(p) {
-  const cb = "__celularProprioLoteCb";
-  if (String(p.callback || "") !== cb) return respostaTexto_("Callback inválido.");
-  try {
-    const admin = obterSessaoObrigatoria_({ sessao: p.sessao });
-    if (admin.administrador !== true && admin.administradorGeral !== true) throw new Error("Ação exclusiva para administradores.");
-    const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
-    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
-    const dados = linhasFuncionariosDaRequisicao_();
-    const coluna = colunaCelularProprio_(aba, false);
-    const funcionarios = dados.map((linha, i) => {
-      const nome = String(linha[0] || "").trim();
-      const loja = normalizarLoja_(linha[8] || "");
-      if (!nome || normalizarTexto_(nome) === "transferencias") return null;
-      if (admin.administradorGeral !== true && loja !== normalizarLoja_(admin.loja)) return null;
-      const valor = coluna ? linha[coluna - 1] : "Inativo";
-      return { nome, loja, ativo: normalizarTexto_(valor) === "ativo", dispositivoAutorizado: !!PropertiesService.getScriptProperties().getProperty(propriedadesCelularProprio_(nome, loja).hash) };
-    }).filter(Boolean);
-    return respostaJsonp_(cb, { sucesso: true, funcionarios });
-  } catch (erro) {
-    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(erro), funcionarios: [] });
-  }
 }
 
 function consultarStatus_(parametros) {
@@ -598,30 +458,6 @@ function exigirSessaoLancamento_(dados) {
   }
 
   const nomeInformado = String(dados.funcionario || "").trim();
-
-  // A aba Transferencias pode ser lançada diretamente pelo Administrador de
-  // Loja. A autorização é validada no servidor; o Administrador Geral e os
-  // funcionários continuam sem acesso a esse destino.
-  if (nomeInformado === "Transferencias") {
-    if (sessao.administrador !== true || sessao.administradorGeral === true) {
-      throw new Error("Somente o Administrador de Loja pode lançar Transferências.");
-    }
-    if (!normalizarLoja_(sessao.loja)) throw new Error("Administrador sem loja cadastrada.");
-    dados.funcionario = "Transferencias";
-    return sessao;
-  }
-
-  // Cadastro de vencidos no Estoque é exclusivo do Administrador de Loja.
-  // Administrador Geral permanece bloqueado acima.
-  if (nomeInformado === "Estoque") {
-    if (sessao.administrador !== true || sessao.administradorGeral === true) {
-      throw new Error("Somente o Administrador de Loja pode cadastrar vencidos no Estoque.");
-    }
-    if (!normalizarLoja_(sessao.loja)) throw new Error("Administrador sem loja cadastrada.");
-    dados.funcionario = "Estoque";
-    dados.lojaOrigem = normalizarLoja_(sessao.loja);
-    return sessao;
-  }
 
   if (sessao.administrador === true) {
     if (!nomeInformado) {
@@ -669,13 +505,12 @@ function salvarProduto_(dados) {
   const quantidadeTexto = String(dados.quantidade ?? "").trim();
 
   const ehTransferencia = funcionario === "Transferencias";
-  const ehEstoque = funcionario === "Estoque";
 
   if (!idValido_(requestId)) {
     throw new Error("Identificador do lançamento inválido.");
   }
 
-  if (!ehEstoque && !obterCadastroFuncionarios_().todos.includes(funcionario)) {
+  if (!obterCadastroFuncionarios_().todos.includes(funcionario)) {
     throw new Error("Funcionário não reconhecido.");
   }
 
@@ -709,13 +544,6 @@ function salvarProduto_(dados) {
     dataValidade.getDate() !== partesData[2]
   ) {
     throw new Error("A data de validade não existe.");
-  }
-  if (ehEstoque) {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    if (dataValidade >= hoje) {
-      throw new Error("A aba Estoque aceita somente produtos já vencidos.");
-    }
   }
 
   if (!/^\d+$/.test(quantidadeTexto)) {
@@ -761,7 +589,7 @@ function salvarProduto_(dados) {
     aba = planilha.insertSheet("Transferencias");
   }
 
-  if (!aba && !ehEstoque) {
+  if (!aba) {
     throw new Error("A aba '" + nomeAba + "' não foi encontrada.");
   }
 
@@ -774,48 +602,36 @@ function salvarProduto_(dados) {
   }
 
   try {
-    // Idempotência: verifica somente a aba de destino desta tentativa.
-    // Evita varrer todas as abas a cada lançamento e impede somar/gravar duas vezes.
-    const abaDestino = ehEstoque ? planilha.getSheetByName("Estoque") : aba;
-    const colunaChaveDestino = ehEstoque ? 9 : (ehTransferencia ? 8 : 6);
-    if (abaDestino && localizarChaveNaAba_(abaDestino, colunaChaveDestino, requestId) > 0) {
-      return {
-        status: "saved",
-        message: "Este lançamento já consta na planilha. Nenhuma quantidade foi adicionada novamente."
-      };
+    /*
+     * Verifica duplicidade em todas as abas cadastradas.
+     * Abas normais e especiais: coluna F.
+     * Transferencias: coluna H.
+     */
+    const nomesAbas = obterNomesAbasCadastro_();
+
+    for (const nome of nomesAbas) {
+      const abaExistente = planilha.getSheetByName(nome);
+
+      if (!abaExistente || abaExistente.getLastRow() < 2) {
+        continue;
+      }
+
+      const colunaChave = nome === "Transferencias" ? 8 : 6;
+
+      const duplicado =
+        localizarChaveNaAba_(abaExistente, colunaChave, requestId) > 0;
+
+      if (duplicado) {
+        return {
+          status: "saved",
+          message:
+            "Este lançamento já consta na planilha. " +
+            "Nenhuma quantidade foi adicionada novamente."
+        };
+      }
     }
 
     const dataLancamento = new Date();
-
-    // ESTOQUE: registro de produtos vencidos cadastrados pelo Administrador de Loja.
-    if (ehEstoque) {
-      const sessaoEstoque = exigirAdministrador_({ sessao: dados.sessao });
-      let estoque = planilha.getSheetByName("Estoque");
-      if (!estoque) estoque = planilha.insertSheet("Estoque");
-      const cabecalhosEstoque = ["Código de Barras", "Código Interno", "Descrição", "Lote", "Validade", "Quantidade", "Data de Registro", "Loja Origem", "Chave Única", "Situação", "Funcionário / Mapa de Destino"];
-      if (estoque.getLastRow() === 0) estoque.getRange(1, 1, 1, cabecalhosEstoque.length).setValues([cabecalhosEstoque]);
-      else {
-        const existentes = estoque.getRange(1, 1, 1, Math.max(estoque.getLastColumn(), cabecalhosEstoque.length)).getDisplayValues()[0];
-        cabecalhosEstoque.forEach((h, i) => { if (!String(existentes[i] || "").trim()) estoque.getRange(1, i + 1).setValue(h); });
-      }
-      const ultima = estoque.getLastRow();
-      if (ultima >= 2) {
-        const chaves = estoque.getRange(2, 9, ultima - 1, 1).getDisplayValues().flat();
-        if (chaves.includes(requestId)) return { status: "saved", message: "Este vencido já foi registrado no Estoque." };
-      }
-      const linhaEstoque = Math.max(estoque.getLastRow() + 1, 2);
-      // EAN deve permanecer texto para preservar zeros à esquerda.
-      estoque.getRange(linhaEstoque, 1).setNumberFormat("@");
-      estoque.getRange(linhaEstoque, 1, 1, 11).setValues([[
-        codigo, String(dados.codigoInterno || ""), String(dados.descricao || ""), lote,
-        dataValidade, quantidade, new Date(), normalizarLoja_(sessaoEstoque.loja), requestId,
-        "Disponível", ""
-      ]]);
-      estoque.getRange(linhaEstoque, 5).setNumberFormat("dd/MM/yyyy");
-      estoque.getRange(linhaEstoque, 7).setNumberFormat("dd/MM/yyyy HH:mm");
-      SpreadsheetApp.flush();
-      return { status: "saved", message: "Produto vencido registrado no Estoque da Loja " + normalizarLoja_(sessaoEstoque.loja) + "." };
-    }
 
     /*
      * TRANSFERENCIAS
@@ -839,8 +655,6 @@ function salvarProduto_(dados) {
 
       const novaLinha = Math.max(aba.getLastRow() + 1, 2);
 
-      // Código de barras é texto, nunca número.
-      aba.getRange(novaLinha, 1).setNumberFormat("@");
       aba.getRange(novaLinha, 1, 1, 8).setValues([[
         codigo,
         lote,
@@ -971,8 +785,6 @@ function salvarProduto_(dados) {
      */
     const novaLinha = Math.max(aba.getLastRow() + 1, 2);
 
-    // Preserva EANs iniciados em zero na planilha.
-    aba.getRange(novaLinha, 1).setNumberFormat("@");
     aba.getRange(novaLinha, 1, 1, 6).setValues([[
       codigo,
       lote,
@@ -1128,7 +940,7 @@ function consultarHistoricoMes_(parametros) {
   }
 
   try {
-    const planilha = planilhaDaRequisicao_();
+    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
     const fuso = planilha.getSpreadsheetTimeZone();
     const sessao = obterSessaoObrigatoria_(parametros);
     const nomesAbas = obterAbasPermitidas_(parametros);
@@ -1238,12 +1050,10 @@ function consultarHistoricoMes_(parametros) {
       });
     });
 
-    const eventosAdministrativos = consultarEventosAdministrativos_(sessao, mes, todosMeses);
     return respostaJsonp_("__historicoCb", {
       sucesso: true,
       mes: mes,
-      registros: registros,
-      eventosAdministrativos: eventosAdministrativos
+      registros: registros
     });
 
   } catch (erro) {
@@ -1661,42 +1471,6 @@ function converterValidadeParaData_(valor, textoExibido) {
   return null;
 }
 
-function verificarChaveLancamento_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__verificarChaveLancamentoCb") return respostaTexto_("Callback inválido.");
-  try {
-    const chave = String(p.requestId || "").trim();
-    const funcionario = String(p.funcionario || "").trim();
-    if (!idValido_(chave) || !funcionario) throw new Error("Identificador ou destino inválido.");
-
-    let aba, coluna;
-    if (funcionario === "Estoque") {
-      const sessao = exigirAdministrador_({ sessao: p.sessao });
-      aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Estoque");
-      coluna = 9;
-      if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
-      const ultima = aba.getLastRow();
-      const valores = aba.getRange(2, coluna, ultima - 1, 1).createTextFinder(chave).matchEntireCell(true).findNext();
-      if (!valores) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
-      const lojaLinha = normalizarLoja_(aba.getRange(valores.getRow(), 8).getDisplayValue());
-      if (lojaLinha !== normalizarLoja_(sessao.loja)) throw new Error("Lançamento não pertence à sua loja.");
-      return respostaJsonp_(cb, { sucesso: true, encontrado: true, mensagem: "Produto localizado no Estoque." });
-    }
-
-    const dadosSessao = funcionario === "Transferencias" ? obterSessaoObrigatoria_({ sessao: p.sessao }) : exigirSessaoLancamento_({ sessao: p.sessao, funcionario });
-    if (funcionario === "Transferencias" && (!dadosSessao.administrador || dadosSessao.administradorGeral)) throw new Error("Somente o Administrador de Loja pode consultar Transferências.");
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    aba = ss.getSheetByName(funcionario);
-    coluna = funcionario === "Transferencias" ? 8 : 6;
-    if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, encontrado: false });
-    const achado = aba.getRange(2, coluna, aba.getLastRow() - 1, 1).createTextFinder(chave).matchCase(true).matchEntireCell(false).findAll()
-      .some(c => String(c.getDisplayValue() || "").trim() === chave || String(c.getDisplayValue() || "").split("|").map(v => v.trim()).includes(chave));
-    return respostaJsonp_(cb, { sucesso: true, encontrado: achado, mensagem: achado ? "Lançamento localizado na planilha." : "Chave ainda não localizada." });
-  } catch (e) {
-    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
-  }
-}
-
 function verificarItemMapa_(p) {
   const cb = String(p.callback || "");
   if (cb !== "__verificarItemMapaCb") return respostaTexto_("Callback inválido.");
@@ -1719,15 +1493,11 @@ function verificarItemMapa_(p) {
     if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, existe: false, quantidade: 0, ocorrencias: 0 });
     const transferencia = funcionario === "Transferencias";
     const largura = transferencia ? 8 : 6;
-    // Localiza primeiro apenas as linhas com o EAN informado; não carrega o mapa inteiro.
-    const ultimaLinha = aba.getLastRow();
-    const candidatos = aba.getRange(2, 1, ultimaLinha - 1, 1)
-      .createTextFinder(codigo).matchCase(true).matchEntireCell(true).findAll();
+    const valores = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getValues();
+    const exibidos = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getDisplayValues();
     let quantidade = 0, ocorrencias = 0;
-    for (const celula of candidatos) {
-      const linha = celula.getRow();
-      const row = aba.getRange(linha, 1, 1, largura).getValues()[0];
-      const shown = aba.getRange(linha, 1, 1, largura).getDisplayValues()[0];
+    for (let i = 0; i < valores.length; i++) {
+      const row = valores[i], shown = exibidos[i];
       if (transferencia && normalizarLoja_(shown[5]) !== sessao.loja) continue;
       const cod = String(shown[0] || "").trim();
       const lot = String(shown[1] || "").trim();
@@ -1742,152 +1512,6 @@ function verificarItemMapa_(p) {
     return respostaJsonp_(cb, { sucesso: true, existe: ocorrencias > 0, quantidade, ocorrencias, funcionario });
   } catch (e) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
-  }
-}
-
-function consultarTransferencias_(parametros) {
-  const callback = String(parametros.callback || "");
-  if (callback !== "__transferenciasCb") {
-    return respostaTexto_("Callback inválido.");
-  }
-
-  try {
-    const sessao = exigirAdministrador_(parametros);
-    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const fuso = planilha.getSpreadsheetTimeZone();
-    const aba = planilha.getSheetByName("Transferencias");
-    if (!aba || aba.getLastRow() < 2) {
-      return respostaJsonp_(callback, { sucesso: true, registros: [] });
-    }
-
-    // Lê a largura real da aba e identifica as colunas pelo cabeçalho.
-    // Suporta o layout atual de 10 colunas e o layout legado de 8 colunas.
-    const ultimaLinha = aba.getLastRow();
-    const ultimaColuna = Math.max(aba.getLastColumn(), 8);
-    const intervalo = aba.getRange(1, 1, ultimaLinha, ultimaColuna);
-    const valores = intervalo.getValues();
-    const exibidos = intervalo.getDisplayValues();
-    const cabecalhos = (exibidos[0] || []).map(h =>
-      normalizarTexto_(h).replace(/\s+/g, " ").trim()
-    );
-    const indice = (nomes, legado) => {
-      const i = cabecalhos.findIndex(h => nomes.includes(h));
-      return i >= 0 ? i : legado;
-    };
-    const col = {
-      codigo: indice(["codigo de barras", "ean", "codigo"], 0),
-      lote: indice(["lote"], 1),
-      validade: indice(["validade"], 2),
-      quantidade: indice(["quantidade", "qtd"], 3),
-      mes: indice(["mes de lancamento", "mes lancamento"], 4),
-      loja: indice(["loja de origem", "lojaorigem"], 5),
-      romaneio: indice(["romaneio"], 6),
-      destino: indice(["destino", "loja de destino"], 7),
-      chave: indice(["chave unica", "chave unica origem"], 7),
-      data: indice(["data de lancamento", "data lancamento"], 4)
-    };
-
-    // Mantém o comportamento anterior: transferências já enviadas à Queima
-    // não aparecem como transferências pendentes.
-    const chavesQueima = new Set();
-    const abaQueima = planilha.getSheetByName("Queima");
-    if (abaQueima && abaQueima.getLastRow() >= 2) {
-      const qLast = abaQueima.getLastRow();
-      const qRange = abaQueima.getRange(1, 1, qLast, Math.max(abaQueima.getLastColumn(), 1));
-      const qVals = qRange.getValues();
-      const qDisp = qRange.getDisplayValues();
-      const cab = (qDisp[0] || []).map(h => normalizarTexto_(h).replace(/\s+/g, " "));
-      const idxLoja = cab.indexOf("lojaorigem");
-      const idxChave = cab.findIndex(h => ["chave unica", "chave unica origem"].includes(h));
-      const idxOrigem = cab.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
-      if (idxChave >= 0) {
-        for (let i = 1; i < qVals.length; i++) {
-          let loja = idxLoja >= 0 ? normalizarLoja_(qDisp[i][idxLoja]) : "";
-          if (!loja && idxOrigem >= 0) {
-            const nomeOrigem = String(qDisp[i][idxOrigem] || "").trim();
-            if (nomeOrigem && normalizarTexto_(nomeOrigem) !== "cadastro manual") {
-              const cadastro = buscarFuncionarioPorNome_(nomeOrigem);
-              if (cadastro && !cadastro.administrador) loja = normalizarLoja_(cadastro.loja);
-            }
-          }
-          const chave = String(qDisp[i][idxChave] || qVals[i][idxChave] || "").trim();
-          if (chave && loja === sessao.loja) chavesQueima.add(chave);
-        }
-      }
-    }
-
-    const registros = [];
-    for (let i = 1; i < valores.length; i++) {
-      const linha = valores[i] || [];
-      const exibe = exibidos[i] || [];
-      const pegar = (idx) => idx >= 0 ? exibe[idx] : "";
-      const codigo = String(pegar(col.codigo) || "").trim();
-      if (!codigo) continue;
-
-      // A transferência pertence ao painel da loja DESTINO (coluna H).
-      // A loja de origem (coluna F) é apenas a procedência do produto.
-      const lojaDestino = normalizarLoja_(pegar(col.destino));
-      if (!lojaDestino || lojaDestino !== sessao.loja) continue;
-
-      const lojaOrigem = String(pegar(col.loja) || "").trim();
-      const chaveUnica = String(pegar(col.chave) || (col.chave >= 0 ? linha[col.chave] : "") || "").trim();
-      if (chaveUnica && chavesQueima.has(chaveUnica)) continue;
-
-      const validade = converterValidadeParaData_(
-        col.validade >= 0 ? linha[col.validade] : null,
-        pegar(col.validade)
-      );
-      if (!validade) continue;
-      const validadeISO = Utilities.formatDate(validade, fuso, "yyyy-MM-dd");
-      const validadeFormatada = Utilities.formatDate(validade, fuso, "dd/MM/yyyy");
-
-      const dataValor = col.data >= 0 ? linha[col.data] : null;
-      const dataExibida = String(pegar(col.data) || "").trim();
-      const dataValida = dataValor instanceof Date && !isNaN(dataValor.getTime());
-      const mesValor = col.mes >= 0 ? linha[col.mes] : null;
-      const mesExibido = String(pegar(col.mes) || "").trim();
-      const mesDataValida = mesValor instanceof Date && !isNaN(mesValor.getTime());
-      const quantidade = Number(String(pegar(col.quantidade) || "0").replace(",", ".")) || 0;
-
-      registros.push({
-        funcionario: "Transferencias",
-        codigo: codigo,
-        lote: String(pegar(col.lote) || "").trim(),
-        validade: validadeFormatada,
-        validadeISO: validadeISO,
-        quantidade: quantidade,
-        dataLancamento: dataValida
-          ? Utilities.formatDate(dataValor, fuso, "dd/MM/yyyy HH:mm:ss")
-          : dataExibida,
-        ts: dataValida ? dataValor.getTime() : 0,
-        especial: false,
-        lojaOrigem: String(pegar(col.loja) || "").trim(),
-        romaneio: String(pegar(col.romaneio) || "").trim(),
-        destino: String(pegar(col.destino) || "").trim(),
-        chaveUnica: chaveUnica,
-        mesLancamento: mesDataValida
-          ? Utilities.formatDate(mesValor, fuso, "yyyy-MM")
-          : mesExibido
-      });
-    }
-
-    // Agrupa por EAN/lote/validade/romaneio/destino para não misturar remessas diferentes.
-    // O filtro de acesso já foi aplicado pela loja de destino, não pela origem.
-    const agrupados = new Map();
-    registros.forEach(item => {
-      const chave = [item.codigo, item.lote || "SEM_LOTE", item.validadeISO, item.romaneio, item.destino].join("|");
-      if (!agrupados.has(chave)) agrupados.set(chave, { ...item, quantidade: 0 });
-      agrupados.get(chave).quantidade += Number(item.quantidade) || 0;
-    });
-
-    return respostaJsonp_(callback, { sucesso: true, registros: Array.from(agrupados.values()) });
-  } catch (erro) {
-    console.error("Erro ao consultar transferências: " + (erro && erro.stack ? erro.stack : erro));
-    return respostaJsonp_(callback, {
-      sucesso: false,
-      mensagem: mensagemErro_(erro),
-      registros: []
-    });
   }
 }
 
@@ -2181,8 +1805,6 @@ function editarLancamento_(parametros) {
     // A estrutura inicial dos campos é igual:
     // A = Código, B = Lote, C = Validade, D = Quantidade.
     // A chave fica em F nas abas normais e em H em Transferencias.
-    // Ao editar, mantém a coluna de código como texto.
-    aba.getRange(linha, 1).setNumberFormat("@");
     aba.getRange(linha, 1, 1, 4).setValues([[
       codigo,
       lote,
@@ -2282,7 +1904,7 @@ function consultarDashboardPainel_(parametros) {
   const callback = String(parametros.callback || "");
   if (callback !== "__dashboardPainelCb") return respostaTexto_("Callback inválido.");
   try {
-    const planilha = planilhaDaRequisicao_();
+    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
     const fuso = planilha.getSpreadsheetTimeZone();
     const agora = new Date();
     const mesAtual = Utilities.formatDate(agora, fuso, "yyyy-MM");
@@ -2298,6 +1920,7 @@ function consultarDashboardPainel_(parametros) {
       const aba = planilha.getSheetByName(nome);
       if (!aba || aba.getLastRow() < 2) return;
       const transferencia = nome === "Transferencias";
+      const especial = obterAbasEspeciais_().includes(nome);
       const n = aba.getLastRow() - 1;
       const valores = aba.getRange(2, 1, n, transferencia ? 8 : 6).getValues();
       valores.forEach(linha => {
@@ -3428,9 +3051,6 @@ function subirParaVencidos_(p) {
     // Registra nas posições corretas da estrutura existente.
     const linhaDestino = vencidos.getLastRow() + 1;
 
-    // A coluna Código pode conter EAN com zero inicial.
-    vencidos.getRange(linhaDestino, 3).setNumberFormat("@");
-    vencidos.getRange(linhaDestino, 9).setNumberFormat("@");
     vencidos.getRange(linhaDestino, 1, 1, 10).setValues([[
       registro.nomeAba,   // A: Aba de origem
       registro.linha,     // B: Linha original
@@ -3690,9 +3310,7 @@ function adicionarValidadeManual_(parametros) {
       // D = Quantidade
       // E = Data do lançamento
       // F = Chave única
-      // Preserva EANs iniciados em zero na planilha.
-    aba.getRange(novaLinha, 1).setNumberFormat("@");
-    aba.getRange(novaLinha, 1, 1, 6).setValues([[
+      aba.getRange(novaLinha, 1, 1, 6).setValues([[
         codigo,
         lote,
         dataValidade,
@@ -3734,28 +3352,24 @@ function adicionarValidadeManual_(parametros) {
 
 
 /* =========================================
-   CADASTRO DIRETO NO produtos_ean.json
+   CATÁLOGO DE PRODUTOS — CLOUDFLARE D1
    ========================================= */
 
 /**
- * Cadastra um produto no produtos_ean.json do GitHub.
+ * Cadastra ou edita um produto diretamente no Cloudflare D1,
+ * usando o Worker como API e mantendo o segredo apenas no Apps Script.
  *
  * Propriedades do script necessárias:
- * GITHUB_TOKEN
- * GITHUB_OWNER
- * GITHUB_REPO
- * GITHUB_BRANCH
- * GITHUB_JSON_PATH
+ * D1_WORKER_URL
+ * D1_API_SECRET
  */
 function adicionarProdutoJson_(p) {
   const callback = String(p.callback || "");
-
   if (callback !== "__adicionarProdutoJsonCb") {
     return respostaTexto_("Callback inválido.");
   }
 
   const lock = LockService.getScriptLock();
-
   try {
     const modo = String(p.modo || "adicionar").trim();
     const codigoInterno = String(p.codigoInterno || "").trim();
@@ -3763,226 +3377,54 @@ function adicionarProdutoJson_(p) {
     const produto = String(p.produto || "").trim();
     const secao = String(p.secao || "").trim();
 
-    if (!["adicionar", "editar"].includes(modo)) {
-      throw new Error("Operação inválida.");
-    }
-
-    if (!codigoInterno || !ean || !produto || !secao) {
-      throw new Error(
-        "Preencha Código Interno, EAN, Descrição e Seção."
-      );
-    }
-
-    if (!/^\d{8,14}$/.test(ean)) {
-      throw new Error("O EAN deve conter de 8 a 14 dígitos.");
-    }
-
-    if (
-      codigoInterno.length > 80 ||
-      produto.length > 250 ||
-      secao.length > 120
-    ) {
-      throw new Error("Um dos campos ultrapassa o tamanho permitido.");
-    }
-
-    if (!lock.tryLock(15000)) {
-      throw new Error("Sistema ocupado. Tente novamente.");
-    }
+    if (!["adicionar", "editar"].includes(modo)) throw new Error("Operação inválida.");
+    if (!codigoInterno || !ean || !produto || !secao) throw new Error("Preencha Código Interno, EAN, Descrição e Seção.");
+    if (!/^\d{8,14}$/.test(ean)) throw new Error("O EAN deve conter de 8 a 14 dígitos.");
+    if (codigoInterno.length > 80 || produto.length > 250 || secao.length > 120) throw new Error("Um dos campos ultrapassa o tamanho permitido.");
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
 
     const props = PropertiesService.getScriptProperties();
-    const token = props.getProperty("GITHUB_TOKEN");
-    const owner = props.getProperty("GITHUB_OWNER");
-    const repo = props.getProperty("GITHUB_REPO");
-    const branch = props.getProperty("GITHUB_BRANCH") || "main";
-    const caminho =
-      props.getProperty("GITHUB_JSON_PATH") || "produtos_ean.json";
+    const workerUrl = String(props.getProperty("D1_WORKER_URL") || "https://registro-produtos-api.luisarthurofficial.workers.dev").replace(/\/+$/, "");
+    const apiSecret = props.getProperty("D1_API_SECRET");
+    if (!workerUrl || !apiSecret) throw new Error("Configure D1_WORKER_URL e D1_API_SECRET nas Propriedades do script.");
 
-    if (!token || !owner || !repo) {
-      throw new Error(
-        "Configure GITHUB_TOKEN, GITHUB_OWNER e GITHUB_REPO."
-      );
-    }
-
-    const url =
-      "https://api.github.com/repos/" +
-      encodeURIComponent(owner) + "/" +
-      encodeURIComponent(repo) +
-      "/contents/" +
-      caminho.split("/").map(encodeURIComponent).join("/");
-
-    const opcoesGet = {
-      method: "get",
-      headers: {
-        Authorization: "Bearer " + token,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      },
-      muteHttpExceptions: true
-    };
-
-    const respostaGet = UrlFetchApp.fetch(
-      url + "?ref=" + encodeURIComponent(branch),
-      opcoesGet
-    );
-
-    if (respostaGet.getResponseCode() !== 200) {
-      throw new Error(
-        "Falha ao consultar o JSON no GitHub (HTTP " +
-        respostaGet.getResponseCode() +
-        "). Confira o repositório, a branch e o token."
-      );
-    }
-
-    const arquivo = JSON.parse(respostaGet.getContentText());
-
-    if (!arquivo.sha) {
-      throw new Error("O GitHub não retornou o SHA do arquivo.");
-    }
-
-    let textoJson = "";
-
-    // Suporta arquivos cujo conteúdo não veio em Base64.
-    if (arquivo.content && arquivo.encoding === "base64") {
-      textoJson = Utilities.newBlob(
-        Utilities.base64Decode(
-          String(arquivo.content).replace(/\s/g, "")
-        )
-      ).getDataAsString("UTF-8");
-    } else if (arquivo.download_url) {
-      const respostaRaw = UrlFetchApp.fetch(arquivo.download_url, {
-        headers: {
-          Authorization: "Bearer " + token,
-          Accept: "application/vnd.github.raw+json"
-        },
-        muteHttpExceptions: true
-      });
-
-      if (respostaRaw.getResponseCode() !== 200) {
-        throw new Error("Não foi possível baixar o JSON atual do GitHub.");
-      }
-
-      textoJson = respostaRaw.getContentText("UTF-8");
-    } else {
-      throw new Error("O GitHub não retornou o conteúdo do JSON.");
-    }
-
-    let catalogo;
-
-    try {
-      catalogo = JSON.parse(textoJson);
-    } catch (e) {
-      throw new Error("O produtos_ean.json contém JSON inválido.");
-    }
-
-    if (
-      !catalogo ||
-      typeof catalogo !== "object" ||
-      Array.isArray(catalogo)
-    ) {
-      throw new Error("A estrutura do JSON precisa ser um objeto.");
-    }
-
-    const existe = Object.prototype.hasOwnProperty.call(catalogo, ean);
-
-    if (modo === "adicionar" && existe) {
-      return respostaJsonp_(callback, {
-        sucesso: false,
-        duplicado: true,
-        mensagem: "Este EAN já está cadastrado. Escolha Editar para corrigir os dados.",
-        produto: {
-          ean: ean,
-          codigoInterno: catalogo[ean].codigoInterno || "",
-          produto:
-            typeof catalogo[ean] === "string"
-              ? catalogo[ean]
-              : catalogo[ean].produto || "",
-          secao:
-            typeof catalogo[ean] === "object"
-              ? catalogo[ean].secao || ""
-              : ""
-        }
-      });
-    }
-
-    if (modo === "editar" && !existe) {
-      throw new Error(
-        "Este EAN não existe no catálogo. Atualize a lista e tente novamente."
-      );
-    }
-
-    catalogo[ean] = {
-      codigoInterno: codigoInterno,
-      produto: produto,
-      secao: secao
-    };
-
-    const novoJson = JSON.stringify(catalogo, null, 2) + "\n";
-
-    const conteudoBase64 = Utilities.base64Encode(
-      Utilities.newBlob(novoJson, "application/json").getBytes()
-    );
-
-    const respostaPut = UrlFetchApp.fetch(url, {
-      method: "put",
+    const resposta = UrlFetchApp.fetch(workerUrl + "/api/produtos", {
+      method: "post",
       contentType: "application/json",
-      headers: {
-        Authorization: "Bearer " + token,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      },
-      payload: JSON.stringify({
-        message:
-          (modo === "editar" ? "Editar produto " : "Adicionar produto ") +
-          ean,
-        content: conteudoBase64,
-        sha: arquivo.sha,
-        branch: branch
-      }),
+      headers: { Authorization: "Bearer " + apiSecret },
+      payload: JSON.stringify({ modo, codigoInterno, ean, produto, secao }),
       muteHttpExceptions: true
     });
 
-    const statusPut = respostaPut.getResponseCode();
+    const status = resposta.getResponseCode();
+    let dados;
+    try { dados = JSON.parse(resposta.getContentText()); }
+    catch (_) { throw new Error("O Worker retornou uma resposta inválida (HTTP " + status + ")."); }
 
-    if (statusPut !== 200 && statusPut !== 201) {
-      console.error(respostaPut.getContentText());
-      throw new Error(
-        "O GitHub não conseguiu salvar as alterações (HTTP " +
-        statusPut + "). Confira as permissões do token."
-      );
+    if (status < 200 || status >= 300 || dados.sucesso !== true) {
+      const erro = new Error(dados.mensagem || "Não foi possível gravar o produto no Cloudflare D1.");
+      erro.status = status;
+      erro.duplicado = dados.duplicado === true;
+      throw erro;
     }
 
     return respostaJsonp_(callback, {
       sucesso: true,
       modo: modo,
-      mensagem:
-        modo === "editar"
-          ? "Produto atualizado com sucesso no GitHub."
-          : "Produto cadastrado com sucesso no GitHub.",
-      produto: {
-        codigoInterno: codigoInterno,
-        ean: ean,
-        produto: produto,
-        secao: secao
-      }
+      mensagem: dados.mensagem || (modo === "editar" ? "Produto atualizado e confirmado no Cloudflare D1." : "Produto cadastrado e confirmado no Cloudflare D1."),
+      produto: dados.produto || { codigoInterno, ean, produto, secao }
     });
-
   } catch (erro) {
-    console.error(
-      "Erro ao salvar produto no JSON: " + (erro.stack || erro)
-    );
-
+    console.error("Erro ao salvar produto no Cloudflare D1: " + (erro.stack || erro));
     return respostaJsonp_(callback, {
       sucesso: false,
+      duplicado: erro.duplicado === true,
       mensagem: mensagemErro_(erro)
     });
-
   } finally {
-    if (lock.hasLock()) {
-      lock.releaseLock();
-    }
+    if (lock.hasLock()) lock.releaseLock();
   }
 }
-
 
 /**
  * Extrai uma mensagem útil da resposta da API do GitHub.
@@ -4038,13 +3480,7 @@ function salvarEstoqueOdsNoGitHub_(dados) {
     throw new Error("Envie um arquivo com extensão .ods.");
   }
 
-  const numeroLoja = String(dados.loja || "").replace(/\D/g, "");
-  if (!numeroLoja) {
-    throw new Error("Não foi possível identificar a loja da sessão.");
-  }
-
-  // Cada loja mantém seu próprio arquivo de estoque no repositório.
-  const caminho = "estoque/estoque_" + numeroLoja + ".ods";
+  const caminho = "estoque/estoque.ods";
 
   const url =
     "https://api.github.com/repos/" +
@@ -4081,7 +3517,7 @@ function salvarEstoqueOdsNoGitHub_(dados) {
   }
 
   const payload = {
-    message: "Atualiza estoque ODS da loja " + numeroLoja + " pelo Painel do Conferente",
+    message: "Atualiza estoque ODS pelo Painel do Conferente",
     content: dados.conteudoBase64,
     branch: branch
   };
@@ -4757,62 +4193,25 @@ function continuarMigracaoProdutosEAN() {
  */
 function consultarProdutoPorEAN(eanInformado) {
   const ean = String(eanInformado || "").trim();
+  if (!/^\d{8,14}$/.test(ean)) return { encontrado: false, ean: ean, mensagem: "Informe um EAN válido." };
 
-  if (!ean) {
-    return {
-      encontrado: false,
-      mensagem: "Informe um EAN."
-    };
-  }
+  const props = PropertiesService.getScriptProperties();
+  const workerUrl = String(props.getProperty("D1_WORKER_URL") || "https://registro-produtos-api.luisarthurofficial.workers.dev").replace(/\/+$/, "");
+  if (!workerUrl) throw new Error("Configure D1_WORKER_URL nas Propriedades do script.");
 
-  const config = obterConfiguracaoProdutos_();
-
-  const url = config.url +
-    "/rest/v1/produtos" +
-    "?select=ean,codigo_interno,produto,secao" +
-    "&ean=eq." + encodeURIComponent(ean) +
-    "&limit=1";
-
-  const resposta = UrlFetchApp.fetch(url, {
+  const resposta = UrlFetchApp.fetch(workerUrl + "/api/produtos/" + encodeURIComponent(ean), {
     method: "get",
-    headers: {
-      apikey: config.chave,
-      Authorization: "Bearer " + config.chave
-    },
     muteHttpExceptions: true
   });
-
   const status = resposta.getResponseCode();
-
-  if (status < 200 || status >= 300) {
-    throw new Error(
-      "Erro ao consultar produto no Supabase. HTTP " +
-      status + ": " +
-      resposta.getContentText().slice(0, 1000)
-    );
-  }
-
-  const dados = JSON.parse(resposta.getContentText());
-
-  if (!Array.isArray(dados) || dados.length === 0) {
-    return {
-      encontrado: false,
-      ean: ean,
-      mensagem: "EAN não encontrado."
-    };
-  }
-
-  const item = dados[0];
-
-  return {
-    encontrado: true,
-    ean: item.ean,
-    produto: item.produto,
-    codigoInterno: item.codigo_interno || "",
-    secao: item.secao || ""
-  };
+  let dados;
+  try { dados = JSON.parse(resposta.getContentText()); }
+  catch (_) { throw new Error("O Worker retornou uma resposta inválida (HTTP " + status + ")."); }
+  if (status < 200 || status >= 300 || dados.sucesso !== true) throw new Error(dados.mensagem || "Erro ao consultar o catálogo Cloudflare D1.");
+  const item = dados.produto;
+  if (!dados.encontrado || !item) return { encontrado: false, ean: ean, mensagem: "EAN não encontrado." };
+  return { encontrado: true, ean: item.ean, produto: item.produto || item.descricao || "", codigoInterno: item.codigoInterno || "", secao: item.secao || "" };
 }
-
 
 /**
  * Mostra o estado da migração no registro de execução.
@@ -5030,12 +4429,10 @@ const ACOES_QUE_ALTERAM_ = [
   "subirVencidos", "subirParaVencidos", "definirPermissaoFuncionario",
   "adicionarValidadeManual", "adicionarProdutoJson", "adicionarFuncionario", "renomearFuncionario",
   "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario",
-  "criarAdminLoja", "editarUsuarioAdminGeral", "excluirUsuarioAdminGeral", "inativarFuncionario", "cadastrarQueimaManual", "encaminharEstoqueMapa"
+  "criarAdminLoja"
 ];
 
 function doGet(e) {
-  CACHE_REQUISICAO_ = {};
-  CADASTRO_MEMO_ = null;
   const p = (e && e.parameter) || {};
   const acao = String(p.action || "");
   const bloqueio = bloquearSeNaoAutorizado_(p);
@@ -5057,7 +4454,6 @@ function doGet(e) {
     }
 
     const resposta = doGetOriginal_(e);
-    registrarAuditoriaAdministrador_(acao, p, resposta);
 
     try {
       gravarCacheTexto_(chave, resposta.getContent(), segundos);
@@ -5067,7 +4463,6 @@ function doGet(e) {
   }
 
   const resposta = doGetOriginal_(e);
-  registrarAuditoriaAdministrador_(acao, p, resposta);
 
   if (ACOES_QUE_ALTERAM_.indexOf(acao) >= 0) {
     invalidarCacheDados_();
@@ -5076,105 +4471,13 @@ function doGet(e) {
   return resposta;
 }
 
-// Histórico persistente das ações realizadas por administradores.
-const ACOES_AUDITORIA_ADMIN_ = {
-  notificarTodos: "Envio de notificação geral", notificarVencidosManual: "Envio manual de aviso de vencidos",
-  editarLancamento: "Edição de lançamento", excluirLancamento: "Exclusão de lançamento",
-  retirarDeLoja: "Retirada de produto", adicionarDanificado: "Cadastro de danificado",
-  adicionarAoQueima: "Envio para Queima", aprovarQueima: "Aprovação na Queima",
-  relancarQueima: "Relançamento na Queima", sinalizarLancamento: "Sinalização de produto",
-  atualizarSinalizado: "Atualização de sinalização", subirParaVencidos: "Envio para Vencidos",
-  subirVencidos: "Envio para Vencidos", definirPermissaoFuncionario: "Alteração de permissão",
-  adicionarValidadeManual: "Cadastro manual de validade", adicionarProdutoJson: "Cadastro de produto no catálogo",
-  adicionarFuncionario: "Cadastro de funcionário", renomearFuncionario: "Renomeação de funcionário",
-  definirEspecialFuncionario: "Alteração de aba especial", marcarCheckFuncionario: "Alteração de conferência",
-  definirPinFuncionario: "Definição de PIN", criarAdminLoja: "Criação de administrador de loja",
-  inativarFuncionario: "Alteração de status de funcionário", editarUsuarioAdminGeral: "Edição de usuário administrador", excluirUsuarioAdminGeral: "Exclusão de usuário administrador", cadastrarQueimaManual: "Cadastro manual na Queima",
-  encaminharEstoqueMapa: "Encaminhamento de vencido do Estoque", registrarEstoqueVencido: "Cadastro de vencido no Estoque"
-};
-
-function registrarAuditoriaAdministrador_(acao, parametros, resposta) {
-  const tipo = ACOES_AUDITORIA_ADMIN_[acao];
-  if (!tipo || !parametros || !parametros.sessao || !resposta) return;
-  try {
-    const conteudo = resposta.getContent();
-    const match = String(conteudo || "").match(/^[^(]+\(([\s\S]*)\);?$/);
-    if (!match) return;
-    const dados = JSON.parse(match[1]);
-    if (!dados || dados.sucesso !== true) return;
-    // A autorização da requisição já foi validada antes da execução da ação.
-    // Lê o snapshot da sessão para também auditar renomeação/exclusão do próprio usuário.
-    const sessao = lerSessao_(String(parametros.sessao || ""));
-    if (!sessao || (sessao.administrador !== true && sessao.administradorGeral !== true)) return;
-
-    const descricao = String(dados.mensagem || tipo).slice(0, 500);
-    const referencia = String(parametros.chaveUnica || parametros.nome || parametros.nomeAtual || parametros.codigo || parametros.funcionario || "").slice(0, 150);
-    // Para ações do Administrador Geral, associa o evento à loja afetada.
-    // Em exclusões, a loja é enviada pelo painel porque o cadastro já foi removido.
-    let lojaEvento = sessao.loja || normalizarLoja_(parametros.loja);
-    if (!lojaEvento && parametros.nome) {
-      try { const alvo = buscarFuncionarioPorNome_(String(parametros.nome)); if (alvo) lojaEvento = alvo.loja; } catch (_) {}
-    }
-    if (!lojaEvento && parametros.nomeAtual) {
-      try { const alvo = buscarFuncionarioPorNome_(String(parametros.nomeAtual)); if (alvo) lojaEvento = alvo.loja; } catch (_) {}
-    }
-    gravarEventoAdministrativo_(Object.assign({}, sessao, { loja: lojaEvento }), tipo, descricao, referencia);
-  } catch (erro) {
-    console.error("Falha ao registrar auditoria administrativa: " + (erro.stack || erro));
-  }
-}
-
-function gravarEventoAdministrativo_(sessao, tipo, descricao, referencia) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let aba = ss.getSheetByName("HistoricoAdministrativo");
-  if (!aba) {
-    aba = ss.insertSheet("HistoricoAdministrativo");
-    aba.getRange(1, 1, 1, 8).setValues([["Data", "Loja", "Usuário", "Perfil", "Ação", "Descrição", "Referência", "Login ID"]]).setFontWeight("bold");
-    aba.setFrozenRows(1);
-    aba.getRange("A:A").setNumberFormat("dd/MM/yyyy HH:mm:ss");
-  }
-  aba.appendRow([new Date(), sessao.loja || "", sessao.nome || "Administrador",
-    sessao.administradorGeral ? "Administrador Geral" : "Administrador de Loja",
-    String(tipo || "Ação administrativa"), String(descricao || "").slice(0,500), String(referencia || "").slice(0,150), sessao.loginId || ""]);
-}
-
-function consultarEventosAdministrativos_(sessao, mes, todosMeses) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const aba = ss.getSheetByName("HistoricoAdministrativo");
-  if (!aba || aba.getLastRow() < 2) return [];
-  const valores = aba.getRange(2, 1, aba.getLastRow() - 1, 8).getValues();
-  const fuso = ss.getSpreadsheetTimeZone();
-  return valores.filter(linha => {
-    // O histórico exibido no Painel Conferente é restrito às ações
-    // dos Administradores de Loja. Ações do Administrador Geral
-    // permanecem gravadas na auditoria central, mas não são exibidas aqui.
-    const perfilEvento = String(linha[3] || "").trim();
-    if (perfilEvento === "Administrador Geral") return false;
-
-    // O histórico do Painel Conferente é sempre limitado à loja da sessão,
-    // inclusive se a sessão for de um perfil com permissões mais amplas.
-    // Sem loja identificada, nenhum evento administrativo deve ser exibido.
-    const loja = normalizarLoja_(linha[1]);
-    const lojaSessao = normalizarLoja_(sessao && sessao.loja);
-    if (!lojaSessao || !loja || loja !== lojaSessao) return false;
-    const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
-    if (isNaN(data.getTime())) return false;
-    return todosMeses || Utilities.formatDate(data, fuso, "yyyy-MM") === mes;
-  }).map(linha => {
-    const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
-    return { ts: data.getTime(), dataRegistro: Utilities.formatDate(data, fuso, "dd/MM/yyyy HH:mm:ss"),
-      loja: String(linha[1] || ""), usuario: String(linha[2] || ""), perfil: String(linha[3] || ""),
-      tipo: String(linha[4] || "Ação administrativa"), descricao: String(linha[5] || ""), referencia: String(linha[6] || "") };
-  }).sort((a,b) => b.ts-a.ts);
-}
-
 function versaoDados_() {
   return CacheService.getScriptCache().get("dados_versao") || "0";
 }
 
 function invalidarCacheDados_() {
   CacheService.getScriptCache().put("dados_versao", String(Date.now()), 21600);
-  CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
+  CacheService.getScriptCache().remove("cadastro_funcionarios");
 }
 
 function chaveCache_(acao, parametros) {
@@ -5412,8 +4715,6 @@ function corrigirLancamentosVencidos() {
   });
 
   // Grava os registros corrigidos.
-  vencidos.getRange(2, 3, dados.length, 1).setNumberFormat("@");
-  vencidos.getRange(2, 9, dados.length, 1).setNumberFormat("@");
   vencidos.getRange(2, 1, dados.length, 10).setValues(dados);
 
   vencidos.getRange(2, 8, dados.length, 1)
@@ -5588,8 +4889,6 @@ function cadastrarQueimaManual_(p) {
 
     const linhaDestino = Math.max(aba.getLastRow() + 1, 2);
 
-    const colunaCodigoQueima = cabecalhos.findIndex(h => ["codigo de barras", "codigo", "ean"].includes(h)) + 1;
-    if (colunaCodigoQueima > 0) aba.getRange(linhaDestino, colunaCodigoQueima).setNumberFormat("@");
     aba.getRange(linhaDestino, 1, 1, novaLinha.length)
       .setValues([novaLinha]);
 
@@ -6005,10 +5304,6 @@ function definirEspecialFuncionario_(p) {
     if (!linha) throw new Error("Funcionário não encontrado no cadastro.");
 
     cadastro.getRange(linha, 2).setValue(especial);
-    if (especial) {
-      // Abas especiais não possuem autenticação individual por PIN.
-      cadastro.getRange(linha, 7).clearContent();
-    }
     SpreadsheetApp.flush();
 
     return respostaJsonp_(cb, {
@@ -6025,31 +5320,6 @@ function definirEspecialFuncionario_(p) {
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
-}
-
-/* ---------- ATIVAR / INATIVAR FUNCIONÁRIO (coluna J) ---------- */
-function inativarFuncionario_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__inativarFuncionarioCb") return respostaTexto_("Callback inválido.");
-  const lock = LockService.getScriptLock();
-  try {
-    const admin = exigirAdministrador_(p);
-    const nome = String(p.nome || "").trim();
-    const alvo = buscarFuncionarioPorNome_(nome);
-    if (!alvo || alvo.administrador || alvo.loja !== admin.loja) throw new Error("Você só pode alterar funcionários da sua própria loja.");
-    const ativo = String(p.ativo || "") === "1";
-    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
-    const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
-    if (!aba) throw new Error('A aba "Funcionarios" não foi encontrada.');
-    const linha = localizarLinhaFuncionario_(aba, nome);
-    if (!linha) throw new Error("Funcionário não encontrado.");
-    aba.getRange(1, 10).setValue("Status");
-    aba.getRange(linha, 10).setValue(ativo ? "Ativo" : "Inativo");
-    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
-    SpreadsheetApp.flush();
-    return respostaJsonp_(cb, { sucesso: true, mensagem: ativo ? "Funcionário reativado." : "Funcionário inativado." });
-  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
-  finally { if (lock.hasLock()) lock.releaseLock(); }
 }
 
 /* ---------- CHECK MANUAL (coluna F) ---------- */
@@ -6135,9 +5405,9 @@ function salvarCiclo_(ciclo) {
       "definirEspecialFuncionario", "marcarCheckFuncionario"
 
    4) Se você aplicou a otimização de cache do cadastro
-      ("cadastro_funcionarios_v2"), acrescente em invalidarCacheDados_():
+      ("cadastro_funcionarios"), acrescente em invalidarCacheDados_():
 
-      CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
+      CacheService.getScriptCache().remove("cadastro_funcionarios");
 
    5) Publique uma NOVA VERSÃO da implantação.
 
@@ -6167,9 +5437,7 @@ function exigirOrigemQueimaDaLoja_(sessao, aba, linha) {
 }
 
 function lojaDaLinhaVencidos_(aba, linha, exibidos) {
-  // A consulta do Dashboard já leu as colunas A:K em lote; usa K da linha
-  // recebida e evita uma chamada getRange por registro.
-  const lojaGravada = normalizarLoja_(exibidos && exibidos.length >= 11 ? exibidos[10] : "");
+  const lojaGravada = normalizarLoja_(aba.getLastColumn() >= 11 ? aba.getRange(linha, 11).getDisplayValue() : "");
   if (lojaGravada) return lojaGravada;
   const origem = String(exibidos[0] || "").trim();
   const funcionario = buscarFuncionarioPorNome_(origem);
@@ -6181,21 +5449,15 @@ function lojaDaLinhaVencidos_(aba, linha, exibidos) {
    ============================================================ */
 function obterDetalhesFuncionarios_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros || {});
-  const abaFuncionarios = planilhaDaRequisicao_().getSheetByName("Funcionarios");
-  if (!abaFuncionarios) throw new Error('A aba "Funcionarios" não foi encontrada.');
-  // Cria a coluna e preenche os cadastros existentes como Inativo na primeira leitura.
-  // A leitura das linhas ocorre depois disso para incluir a nova coluna no cache.
-  const colunaCelular = colunaCelularProprio_(abaFuncionarios, true);
-  const dados = linhasFuncionariosDaRequisicao_();
-  if (!dados.length) return [];
+  const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
+  if (!aba || aba.getLastRow() < 2) return [];
+  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
   return dados.map(linha => {
     const nome = String(linha[0] || "").trim();
     const loja = normalizarLoja_(linha[8]);
     const administrador = ehAdministradorValor_(linha[7]);
-    const ativo = !(String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false);
-    const celularProprioAtivo = !!(colunaCelular && normalizarTexto_(linha[colunaCelular - 1]) === "ativo");
-    if (!nome || (!sessao.administrador && sessao.administradorGeral !== true && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administradorGeral !== true && sessao.administrador && loja !== sessao.loja)) return null;
-    return { nome, especial: linha[1] === true, check: linha[5] === true, ativo, temPin: String(linha[6] || "").includes(":"), administrador, loja, celularProprioAtivo };
+    if (!nome || (!sessao.administrador && normalizarTexto_(nome) !== normalizarTexto_(sessao.nome)) || (sessao.administrador && loja !== sessao.loja)) return null;
+    return { nome, especial: linha[1] === true, check: linha[5] === true, temPin: String(linha[6] || "").includes(":"), administrador, loja };
   }).filter(Boolean);
 }
 
@@ -6232,17 +5494,6 @@ function obterSessaoObrigatoria_(parametros) {
     throw new Error("Sessão expirada. Entre novamente.");
   }
 
-  if (sessao.dispositivoCelularProprio === true) {
-    const kCelular = propriedadesCelularProprio_(sessao.nome, sessao.loja);
-    const funcionarioCelular = buscarFuncionarioPorNome_(sessao.nome);
-    const ativoNaPlanilha = funcionarioCelular && normalizarLoja_(funcionarioCelular.loja) === normalizarLoja_(sessao.loja) && celularProprioAtivo_(sessao.nome, sessao.loja);
-    const propsCelular = PropertiesService.getScriptProperties();
-    if (!ativoNaPlanilha || !propsCelular.getProperty(kCelular.hash)) {
-      removerSessao_(token);
-      throw new Error("O celular próprio foi revogado pelo administrador.");
-    }
-  }
-
   const agora = Date.now();
   const criadaEm = Number(sessao.criadaEm || 0);
   const ultimaAtividade = Number(sessao.ultimaAtividade || criadaEm);
@@ -6251,7 +5502,7 @@ function obterSessaoObrigatoria_(parametros) {
     removerSessao_(token);
     throw new Error("Sua sessão atingiu o limite de 8 horas. Entre novamente.");
   }
-  if (sessao.manterConectado !== true && (!ultimaAtividade || agora - ultimaAtividade >= INATIVIDADE_SEGUNDOS_ * 1000)) {
+  if (!ultimaAtividade || agora - ultimaAtividade >= INATIVIDADE_SEGUNDOS_ * 1000) {
     removerSessao_(token);
     throw new Error("Sua sessão foi encerrada após 30 minutos de inatividade.");
   }
@@ -6263,10 +5514,6 @@ function obterSessaoObrigatoria_(parametros) {
   if (!cadastro) {
     removerSessao_(token);
     throw new Error("Usuário não encontrado no cadastro.");
-  }
-  if (cadastro.ativo === false) {
-    removerSessao_(token);
-    throw new Error("Seu cadastro foi inativado. Procure o Administrador da Loja.");
   }
 
   if (
@@ -6305,99 +5552,14 @@ function listarAdminsLojas_(p) {
     exigirAdministradorGeral_(p);
     const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
     if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, administradores: [] });
-    const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
-    const usuarios = dados.map(r => {
-      const nome = String(r[0] || "").trim();
-      const valorPerfil = r[7];
-      const geral = ehAdministradorGeralValor_(valorPerfil);
-      const administrador = ehAdministradorValor_(valorPerfil);
-      return {
-        nome,
-        loja: normalizarLoja_(r[8]),
-        temPin: String(r[6] || "").includes(":"),
-        geral,
-        administrador,
-        perfil: geral ? "Administrador Geral" : administrador ? "Administrador de Loja" : (r[1] === true ? "Aba especial" : "Funcionário"),
-        ativo: !(String(r[9] || "").toLowerCase() === "inativo" || r[9] === false)
-      };
-    }).filter(x => x.nome && normalizarTexto_(x.nome) !== "transferencias" && (x.administrador || x.geral));
-    return respostaJsonp_(cb, { sucesso: true, administradores: usuarios });
+    const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
+    const administradores = dados.map((r, i) => ({
+      nome: String(r[0] || "").trim(), loja: normalizarLoja_(r[8]),
+      temPin: String(r[6] || "").includes(":"), linha: i + 2, geral: ehAdministradorGeralValor_(r[7])
+    })).filter(x => x.nome && ehAdministradorValor_(dados[x.linha - 2][7]) && !x.geral)
+      .map(({ nome, loja, temPin }) => ({ nome, loja, temPin }));
+    return respostaJsonp_(cb, { sucesso: true, administradores });
   } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
-}
-
-function editarUsuarioAdminGeral_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__editarUsuarioAdminGeralCb") return respostaTexto_("Callback inválido.");
-  const lock = LockService.getScriptLock();
-  try {
-    exigirAdministradorGeral_(p);
-    const nomeAtual = String(p.nomeAtual || "").trim();
-    const novoNome = String(p.nome || "").trim();
-    const lojaInformada = normalizarLoja_(p.loja);
-    const pin = String(p.pin || "").trim();
-    const alvo = buscarFuncionarioPorNome_(nomeAtual);
-    if (!alvo) throw new Error("Usuário não encontrado.");
-    const loja = lojaInformada || alvo.loja;
-    validarNomeFuncionario_(novoNome);
-    if (!/^\d{1,5}$/.test(loja) && !alvo.administradorGeral) throw new Error("Informe uma loja válida, somente números.");
-    if (pin && !/^\d{4,6}$/.test(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
-    if (normalizarTexto_(novoNome) !== normalizarTexto_(nomeAtual) && buscarFuncionarioPorNome_(novoNome)) throw new Error("Já existe um usuário com esse nome.");
-    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const aba = ss.getSheetByName("Funcionarios");
-    const linha = localizarLinhaFuncionario_(aba, nomeAtual);
-    if (!linha) throw new Error("Usuário não encontrado no cadastro.");
-    if (normalizarTexto_(novoNome) !== normalizarTexto_(nomeAtual) && !alvo.administrador) {
-      const mapa = ss.getSheetByName(nomeAtual);
-      if (!mapa) throw new Error('A aba de mapa "' + nomeAtual + '" não foi encontrada.');
-      if (existeAbaComNome_(ss, novoNome, nomeAtual)) throw new Error("Já existe uma aba com o novo nome.");
-      mapa.setName(novoNome);
-      try {
-        const sinal = ss.getSheetByName("Sinalizacao");
-        substituirValorColuna_(sinal, indiceColuna_(sinal, ["funcionario"]), nomeAtual, novoNome);
-        const queima = ss.getSheetByName("Queima");
-        substituirValorColuna_(queima, indiceColuna_(queima, ["aba de origem", "aba origem", "funcionario", "mapa de origem"]), nomeAtual, novoNome);
-        substituirValorColuna_(ss.getSheetByName("Vencidos"), 1, nomeAtual, novoNome);
-      } catch (erroRef) {
-        console.error("Falha ao atualizar referências do usuário renomeado: " + (erroRef.stack || erroRef));
-      }
-    }
-    aba.getRange(linha, 1).setValue(novoNome);
-    if (!alvo.administradorGeral) aba.getRange(linha, 9).setNumberFormat("@").setValue(loja);
-    if (pin) {
-      const salt = Utilities.getUuid();
-      aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hashPin_(pin, salt));
-    }
-    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
-    SpreadsheetApp.flush();
-    return respostaJsonp_(cb, { sucesso: true, mensagem: "Usuário atualizado. Se o nome foi alterado, será necessário entrar novamente com o novo nome." });
-  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
-  finally { if (lock.hasLock()) lock.releaseLock(); }
-}
-
-function excluirUsuarioAdminGeral_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__excluirUsuarioAdminGeralCb") return respostaTexto_("Callback inválido.");
-  const lock = LockService.getScriptLock();
-  try {
-    const sessao = exigirAdministradorGeral_(p);
-    const nome = String(p.nome || "").trim();
-    const alvo = buscarFuncionarioPorNome_(nome);
-    if (!alvo) throw new Error("Usuário não encontrado.");
-    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const aba = ss.getSheetByName("Funcionarios");
-    const linha = localizarLinhaFuncionario_(aba, nome);
-    if (!linha) throw new Error("Usuário não encontrado no cadastro.");
-    // Remove apenas o acesso/cadastro. Os mapas e históricos permanecem intactos.
-    aba.deleteRow(linha);
-    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
-    // A sessão será invalidada naturalmente na próxima requisição por ausência do cadastro.
-    // Mantê-la até o wrapper de doGet permite registrar a própria exclusão na auditoria.
-    SpreadsheetApp.flush();
-    return respostaJsonp_(cb, { sucesso: true, mensagem: "Usuário excluído do cadastro. Os dados históricos foram preservados.", proprioUsuario: normalizarTexto_(nome) === normalizarTexto_(sessao.nome) });
-  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
-  finally { if (lock.hasLock()) lock.releaseLock(); }
 }
 
 function criarAdminLoja_(p) {
@@ -6426,7 +5588,7 @@ function criarAdminLoja_(p) {
     aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hash);
     aba.getRange(linha, 8).insertCheckboxes().setValue(true);
     aba.getRange(linha, 9).setNumberFormat("@").setValue(loja);
-    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
+    CacheService.getScriptCache().remove("cadastro_funcionarios");
     SpreadsheetApp.flush();
     return respostaJsonp_(cb, { sucesso: true, mensagem: "Administrador da loja " + loja + " criado com sucesso." });
   } catch (e) {
@@ -6437,8 +5599,16 @@ function criarAdminLoja_(p) {
 function obterAbasPermitidas_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros);
 
-  const dados = linhasFuncionariosDaRequisicao_();
-  if (!dados.length) return [];
+  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const cadastro = planilha.getSheetByName("Funcionarios");
+
+  if (!cadastro || cadastro.getLastRow() < 2) {
+    return [];
+  }
+
+  const dados = cadastro.getRange(
+    2, 1, cadastro.getLastRow() - 1, 9
+  ).getValues();
 
   const permitidas = [];
 
@@ -6446,9 +5616,8 @@ function obterAbasPermitidas_(parametros) {
     const nome = String(linha[0] || "").trim();
     const loja = normalizarLoja_(linha[8]);
     const administrador = ehAdministradorValor_(linha[7]);
-    const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
 
-    if (!nome || administrador || inativo) return;
+    if (!nome || administrador) return;
 
     if (sessao.administrador) {
       if (loja === sessao.loja) {
@@ -6653,10 +5822,7 @@ function bloquearSeNaoAutorizado_(p) {
   // Ações públicas necessárias para a tela de login.
   const publicas = [
     "login",
-    "loginDispositivoProprio",
-    "funcionariosLogin",
     "sessao",
-    "configNotificacoes",
     "logout"
   ];
 
@@ -6685,9 +5851,6 @@ function bloquearSeNaoAutorizado_(p) {
   const acoesAdmin = [
     "dashboardPainel",
     "vencidosPainel",
-    "notificarTodos",
-    "notificarVencidosManual",
-    "consultarTransferencias",
     "consultarQueima",
     "consultarSinalizados",
     "funcionariosAdmin",
@@ -6695,9 +5858,7 @@ function bloquearSeNaoAutorizado_(p) {
     "renomearFuncionario",
     "definirEspecialFuncionario",
     "marcarCheckFuncionario",
-    "inativarFuncionario",
     "definirPinFuncionario",
-    "gerenciarCelularProprio",
     "retirarDeLoja",
     "adicionarDanificado",
     "adicionarAoQueima",
@@ -6706,17 +5867,14 @@ function bloquearSeNaoAutorizado_(p) {
     "atualizarSinalizado",
     "subirVencidos",
     "subirParaVencidos",
-    "listarEstoqueVencidos",
-    "encaminharEstoqueMapa",
     "adicionarProdutoJson",
     "cadastrarQueimaManual",
-    "listarAdminsLojas", "criarAdminLoja", "editarUsuarioAdminGeral", "excluirUsuarioAdminGeral"
+    "listarAdminsLojas", "criarAdminLoja"
   ];
 
   if (
     acoesAdmin.includes(acao) &&
-    sessao.administrador !== true &&
-    !(acao === "gerenciarCelularProprio" && sessao.administradorGeral === true)
+    sessao.administrador !== true
   ) {
     const callback = String(p.callback || "");
 
@@ -6733,14 +5891,12 @@ function bloquearSeNaoAutorizado_(p) {
     "historicoMes",
     "validades",
     "verificarItemMapa",
-    "verificarChaveLancamento",
     "funcionarios", // Lista de abas permitidas; o endpoint filtra por perfil e loja.
     "editarLancamento",
     "excluirLancamento",
     "adicionarValidadeManual",
     "sinalizarLancamento",
-    "atividade", // renova somente a janela de inatividade da sessão autenticada
-    "registrarCelularProprio"
+    "atividade" // renova somente a janela de inatividade da sessão autenticada
   ];
 
   if (
@@ -6789,74 +5945,6 @@ function obterMapaLojasFuncionarios_() {
  * Garante a coluna K na aba Vencidos e preenche registros antigos
  * quando a loja pode ser identificada pelo nome da aba de origem.
  */
-
-/* =========================
-   VENCIDOS DO ESTOQUE
-   ========================= */
-function listarEstoqueVencidos_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__estoqueVencidosCb") return respostaTexto_("Callback inválido.");
-  try {
-    const admin = exigirAdministrador_ (p);
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sh = ss.getSheetByName("Estoque");
-    const registros = [];
-    if (sh && sh.getLastRow() > 1) {
-      const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues();
-      vals.forEach((r, i) => {
-        if (normalizarLoja_(r[7]) !== normalizarLoja_(admin.loja)) return;
-        if (String(r[9] || "Disponível") !== "Disponível") return;
-        registros.push({ linha: i + 2, codigo: String(r[0] || ""), codigoInterno: String(r[1] || ""), descricao: String(r[2] || ""), lote: String(r[3] || ""), validade: r[4] instanceof Date ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), "dd/MM/yyyy") : String(r[4] || ""), quantidade: Number(r[5] || 0), dataRegistro: r[6] instanceof Date ? Utilities.formatDate(r[6], Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm") : String(r[6] || ""), lojaOrigem: String(r[7] || ""), chaveUnica: String(r[8] || "") });
-      });
-    }
-    return respostaJsonp_(cb, { sucesso: true, registros: registros });
-  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e), registros: [] }); }
-}
-
-function encaminharEstoqueMapa_(p) {
-  const cb = String(p.callback || "");
-  if (cb !== "__encaminharEstoqueMapaCb") return respostaTexto_("Callback inválido.");
-  try {
-    const admin = exigirAdministrador_(p);
-    const chave = String(p.chaveUnica || "").trim();
-    const funcionario = String(p.funcionario || "").trim();
-    if (!chave || !funcionario) throw new Error("Selecione um registro e um funcionário de destino.");
-    if (funcionario === "Transferencias" || obterAbasEspeciais_().includes(funcionario)) throw new Error("Estoque só pode ser encaminhado para o mapa individual de um funcionário.");
-    const destino = buscarFuncionarioPorNome_(funcionario);
-    if (!destino || destino.administrador || destino.administradorGeral || destino.especial || destino.loja !== normalizarLoja_(admin.loja)) throw new Error("Funcionário de destino inválido para esta loja.");
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const estoque = ss.getSheetByName("Estoque");
-    if (!estoque || estoque.getLastRow() < 2) throw new Error("Não há vencidos cadastrados no Estoque.");
-    const lock = LockService.getScriptLock();
-    if (!lock.tryLock(20000)) throw new Error("Sistema ocupado. Tente novamente.");
-    try {
-      const dados = estoque.getRange(2, 1, estoque.getLastRow() - 1, 11).getDisplayValues();
-      const idx = dados.findIndex(r => String(r[8] || "") === chave && normalizarLoja_(r[7]) === normalizarLoja_(admin.loja));
-      if (idx < 0) throw new Error("Registro não encontrado para esta loja.");
-      const row = dados[idx];
-      if (String(row[9] || "Disponível") !== "Disponível") throw new Error("Este registro já foi encaminhado ou não está disponível.");
-      const mapa = ss.getSheetByName(destino.nome);
-      if (!mapa) throw new Error("A aba do funcionário não foi encontrada.");
-      const novaChave = Utilities.getUuid();
-      const novaLinha = Math.max(mapa.getLastRow() + 1, 2);
-      mapa.getRange(novaLinha, 1).setNumberFormat("@");
-      const partesValidadeEstoque = String(row[4] || "").split(/[\/.-]/);
-      const validadeMapa = partesValidadeEstoque.length === 3
-        ? new Date(Number(partesValidadeEstoque[2]), Number(partesValidadeEstoque[1]) - 1, Number(partesValidadeEstoque[0]))
-        : new Date(row[4]);
-      if (isNaN(validadeMapa.getTime())) throw new Error("A validade do registro no Estoque está inválida.");
-      mapa.getRange(novaLinha, 1, 1, 6).setValues([[String(row[0] || ""), String(row[3] || ""), validadeMapa, Number(row[5] || 0), new Date(), novaChave]]);
-      mapa.getRange(novaLinha, 3).setNumberFormat("dd/MM/yyyy");
-      mapa.getRange(novaLinha, 5).setNumberFormat("dd/MM/yyyy HH:mm");
-      estoque.getRange(idx + 2, 10).setValue("Encaminhado");
-      estoque.getRange(idx + 2, 11).setValue(destino.nome);
-      SpreadsheetApp.flush();
-      invalidarCacheDados_();
-      return respostaJsonp_(cb, { sucesso: true, mensagem: "Vencido encaminhado para " + destino.nome + "." });
-    } finally { lock.releaseLock(); }
-  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
-}
-
 function garantirLojaOrigemVencidos_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sh = ss.getSheetByName("Vencidos");
@@ -6948,312 +6036,3 @@ function garantirLojaOrigemSinalizacao_() {
   SpreadsheetApp.flush();
 }
 
-
-
-/* ============================================================
-   NOTIFICAÇÕES PUSH DE PRODUTOS VENCIDOS (ONESIGNAL)
-   Configurar em Script Properties:
-   MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY
-   ============================================================ */
-function idPushFuncionario_(loja, nome) {
-  const slug = normalizarTexto_(nome).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return "mv_" + normalizarLoja_(loja) + "_" + slug;
-}
-
-function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura, administrador) {
-  // Administradores sempre usam o identificador normal do perfil. A opção
-  // de celular próprio não altera o roteamento das notificações deles.
-  let externalId = idPushFuncionario_(loja, nome);
-  if (administrador !== true) {
-    const kCelular = propriedadesCelularProprio_(nome, loja);
-    const propsCelular = PropertiesService.getScriptProperties();
-    if (celularProprioAtivo_(nome, loja) && propsCelular.getProperty(kCelular.hash)) {
-      externalId = kCelular.externalId;
-    }
-  }
-  const urlSistema = "https://luisarthurdev.github.io/registro-produtos/lancamento.html";
-  const plural = quantidade === 1 ? "produto vencido" : "produtos vencidos";
-  const payload = {
-    app_id: appId,
-    target_channel: "push",
-    include_aliases: { external_id: [externalId] },
-    headings: { pt: "Atenção: produtos vencidos", en: "Expired products" },
-    contents: {
-      pt: nome + " tem " + quantidade + " " + plural + " na sua sessão.",
-      en: nome + " has " + quantidade + " expired products in their map."
-    },
-    web_url: urlSistema,
-    data: { tipo: "vencidos", loja: normalizarLoja_(loja), funcionario: nome, assinatura: assinatura }
-  };
-  const resposta = UrlFetchApp.fetch("https://api.onesignal.com/notifications", {
-    method: "post",
-    contentType: "application/json",
-    headers: { Authorization: "Key " + apiKey, Accept: "application/json" },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
-  const status = resposta.getResponseCode();
-  const corpo = resposta.getContentText();
-  let dados = {};
-  try { dados = JSON.parse(corpo || "{}"); } catch (_) {}
-  if (status < 200 || status >= 300 || !dados.id) {
-    throw new Error("OneSignal não confirmou o envio para " + nome + ": HTTP " + status + " — " + corpo);
-  }
-  return dados;
-}
-
-function obterAbaMapaFuncionario_(planilha, nomeFuncionario) {
-  const nomeNormalizado = normalizarTexto_(nomeFuncionario);
-  const direta = planilha.getSheetByName(String(nomeFuncionario || "").trim());
-  if (direta) return direta;
-  // Recupera diferenças de acentuação, caixa e espaços sem abrir acesso a outras lojas.
-  return planilha.getSheets().find(function (aba) {
-    return normalizarTexto_(aba.getName()) === nomeNormalizado;
-  }) || null;
-}
-
-function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
-  lojaFiltro = normalizarLoja_(lojaFiltro || "");
-  forcarEnvio = forcarEnvio === true;
-  const props = PropertiesService.getScriptProperties();
-  const appId = String(props.getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
-  const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
-  if (!appId || !apiKey) {
-    console.warn("Push de vencidos não configurado: defina MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY em Script Properties.");
-    return { configurado: false, verificados: 0, comVencidos: 0, registrosVencidos: 0, enviados: 0, falhas: [] };
-  }
-
-  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const abaFuncionarios = planilha.getSheetByName("Funcionarios");
-  if (!abaFuncionarios || abaFuncionarios.getLastRow() < 2) {
-    return { configurado: true, verificados: 0, comVencidos: 0, registrosVencidos: 0, enviados: 0, falhas: [] };
-  }
-  const fuso = planilha.getSpreadsheetTimeZone() || "America/Sao_Paulo";
-  const hojeISO = Utilities.formatDate(new Date(), fuso, "yyyy-MM-dd");
-  const ultimaLinha = abaFuncionarios.getLastRow();
-  const cadastros = abaFuncionarios.getRange(2, 1, ultimaLinha - 1, 10).getValues();
-
-  // Mantém a mesma regra do popup do Lançamento: registros já enviados à Queima
-  // não voltam a ser considerados vencidos no mapa original.
-  const chavesQueimaPorLojaFuncionario = new Set();
-  const abaQueimaPush = planilha.getSheetByName("Queima");
-  if (abaQueimaPush && abaQueimaPush.getLastRow() >= 2) {
-    const qValores = abaQueimaPush.getDataRange().getValues();
-    const qExibidos = abaQueimaPush.getDataRange().getDisplayValues();
-    const qCabecalho = (qExibidos[0] || []).map(h => normalizarTexto_(h).replace(/\s+/g, " "));
-    const qOrigem = qCabecalho.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
-    const qLoja = qCabecalho.indexOf("lojaorigem");
-    const qChave = qCabecalho.findIndex(h => ["chave unica", "chave unica origem"].includes(h));
-    if (qOrigem >= 0 && qChave >= 0) {
-      for (let qi = 1; qi < qValores.length; qi++) {
-        const origem = String(qExibidos[qi][qOrigem] || "").trim();
-        const chave = String(qExibidos[qi][qChave] || qValores[qi][qChave] || "").trim();
-        if (!origem || !chave) continue;
-        let lojaRegistro = qLoja >= 0 ? normalizarLoja_(qExibidos[qi][qLoja]) : "";
-        if (!lojaRegistro && normalizarTexto_(origem) !== "cadastro manual") {
-          const cadastroOrigem = cadastros.find(c => normalizarTexto_(c[0]) === normalizarTexto_(origem));
-          if (cadastroOrigem) lojaRegistro = normalizarLoja_(cadastroOrigem[8]);
-        }
-        chavesQueimaPorLojaFuncionario.add(lojaRegistro + "|" + normalizarTexto_(origem) + "|" + chave);
-      }
-    }
-  }
-
-  let verificados = 0;
-  let comVencidos = 0;
-  let registrosVencidos = 0;
-  let enviados = 0;
-  const falhas = [];
-
-  cadastros.forEach(function (cadastro) {
-    const nome = String(cadastro[0] || "").trim();
-    const especial = cadastro[1] === true || String(cadastro[1] || "").toLowerCase() === "true";
-    const administrador = ehAdministradorValor_(cadastro[7]);
-    const loja = normalizarLoja_(cadastro[8]);
-    const status = String(cadastro[9] == null ? "" : cadastro[9]).trim().toLowerCase();
-    const inativo = status === "inativo" || cadastro[9] === false;
-    if (!nome || especial || administrador || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
-    if (lojaFiltro && loja !== lojaFiltro) return;
-
-    verificados++;
-    const abaMapa = obterAbaMapaFuncionario_(planilha, nome);
-    const propertyKey = "MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome);
-    if (!abaMapa || abaMapa.getLastRow() < 2) {
-      props.setProperty(propertyKey, "");
-      return;
-    }
-
-    const ultimaLinhaMapa = abaMapa.getLastRow();
-    const linhas = abaMapa.getRange(2, 1, ultimaLinhaMapa - 1, 6).getValues();
-    const exibidos = abaMapa.getRange(2, 1, ultimaLinhaMapa - 1, 6).getDisplayValues();
-    const itens = new Map();
-
-    linhas.forEach(function (linha, i) {
-      const exibido = exibidos[i] || [];
-      const codigo = String(exibido[0] || linha[0] || "").trim();
-      if (!codigo) return;
-      const chaveMapa = String(linha[5] || exibido[5] || "").trim();
-      if (chaveMapa && chavesQueimaPorLojaFuncionario.has(loja + "|" + normalizarTexto_(nome) + "|" + chaveMapa)) return;
-
-      // Usa a mesma conversão e o mesmo fuso da consulta de validades do Lançamento.
-      const data = converterValidadeParaData_(linha[2], exibido[2]);
-      if (!data) return;
-      const validadeISO = Utilities.formatDate(data, fuso, "yyyy-MM-dd");
-      if (validadeISO >= hojeISO) return;
-
-      const lote = String(exibido[1] || linha[1] || "").trim();
-      const chave = [codigo, lote, validadeISO].join("|");
-      if (!itens.has(chave)) itens.set(chave, { codigo: codigo, lote: lote, validade: validadeISO });
-    });
-
-    if (!itens.size) {
-      props.setProperty(propertyKey, "");
-      return;
-    }
-
-    comVencidos++;
-    registrosVencidos += itens.size;
-    const assinaturaTexto = Array.from(itens.keys()).sort().join("\n");
-    const assinatura = Utilities.base64EncodeWebSafe(
-      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, assinaturaTexto, Utilities.Charset.UTF_8)
-    ).replace(/=+$/g, "");
-    const anterior = String(props.getProperty(propertyKey) || "");
-    if (!forcarEnvio && assinatura === anterior) return;
-
-    try {
-      const envio = enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura, administrador);
-      if (envio && envio.skipped) return;
-      props.setProperty(propertyKey, assinatura);
-      enviados++;
-    } catch (erro) {
-      const detalhe = nome + " (loja " + loja + "): " + String(erro && erro.message || erro);
-      falhas.push(detalhe);
-      console.error("Falha no push de vencidos: " + detalhe);
-    }
-  });
-
-  return {
-    configurado: true,
-    verificados: verificados,
-    comVencidos: comVencidos,
-    registrosVencidos: registrosVencidos,
-    enviados: enviados,
-    falhas: falhas
-  };
-}
-
-function configurarAgendamentoNotificacoesVencidos() {
-  const props = PropertiesService.getScriptProperties();
-  if (!props.getProperty("MV_ONESIGNAL_APP_ID") || !props.getProperty("MV_ONESIGNAL_REST_API_KEY")) {
-    throw new Error("Antes, configure MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY em Configurações do projeto > Propriedades do script.");
-  }
-  ScriptApp.getProjectTriggers().forEach(function (gatilho) {
-    if (gatilho.getHandlerFunction() === "verificarNotificacoesVencidos") ScriptApp.deleteTrigger(gatilho);
-  });
-  ScriptApp.newTrigger("verificarNotificacoesVencidos").timeBased().everyHours(6).create();
-  console.log("Agendamento de notificações de vencidos criado: verificação a cada 6 horas.");
-  return "Agendamento criado. Execute verificarNotificacoesVencidos uma vez para o primeiro teste.";
-}
-
-
-/** Envia um comunicado push para todos os usuários ativos da loja do administrador.
- * Administrador Geral, se usar este painel, pode alcançar todas as lojas.
- */
-function notificarTodosLoja_(p) {
-  const sessao = obterSessaoObrigatoria_(p);
-  if (sessao.administrador !== true) throw new Error("Ação exclusiva para administradores.");
-  const titulo = String(p.titulo || "Aviso da farmácia").trim().slice(0, 80);
-  const mensagem = String(p.mensagem || "").trim().slice(0, 500);
-  if (!titulo || !mensagem) throw new Error("Informe o título e a mensagem da notificação.");
-
-  const props = PropertiesService.getScriptProperties();
-  const appId = String(props.getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
-  const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
-  if (!appId || !apiKey) throw new Error("As credenciais do OneSignal não estão configuradas no Apps Script.");
-
-  const lojaSessao = normalizarLoja_(sessao.loja || "");
-  if (sessao.administradorGeral !== true && !lojaSessao) throw new Error("Não foi possível identificar a loja da sua sessão.");
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sh = ss.getSheetByName("Funcionarios");
-  if (!sh || sh.getLastRow() < 2) throw new Error("Nenhum usuário cadastrado para receber notificações.");
-  const registros = sh.getRange(2, 1, sh.getLastRow() - 1, 10).getValues();
-  const ids = [];
-  registros.forEach(function (r) {
-    const nome = String(r[0] || "").trim();
-    const especial = r[1] === true || String(r[1] || "").toLowerCase() === "true";
-    const loja = normalizarLoja_(r[8]);
-    const inativo = r[9] === false || String(r[9] || "").toLowerCase() === "inativo";
-    if (!nome || especial || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
-    if (sessao.administradorGeral !== true && loja !== lojaSessao) return;
-    ids.push(idPushFuncionario_(loja, nome));
-    // Comunicado manual continua alcançando todos. O funcionário também recebe
-    // pelo alias exclusivo do próprio aparelho, se ele estiver autorizado.
-    const kCelular = propriedadesCelularProprio_(nome, loja);
-    if (celularProprioAtivo_(nome, loja) &&
-        PropertiesService.getScriptProperties().getProperty(kCelular.hash)) ids.push(kCelular.externalId);
-  });
-  const unicos = Array.from(new Set(ids));
-  if (!unicos.length) throw new Error("Não há usuários ativos com loja definida para receber a notificação.");
-
-  let envios = 0;
-  for (let i = 0; i < unicos.length; i += 2000) {
-    const lote = unicos.slice(i, i + 2000);
-    const payload = {
-      app_id: appId,
-      target_channel: "push",
-      include_aliases: { external_id: lote },
-      // OneSignal exige conteúdo em Any/English como fallback obrigatório.
-      // Mantemos também pt para dispositivos configurados em português.
-      headings: { en: titulo, pt: titulo },
-      contents: { en: mensagem, pt: mensagem },
-      web_url: "https://luisarthurdev.github.io/registro-produtos/",
-      data: { tipo: "comunicado", loja: sessao.administradorGeral === true ? "todas" : lojaSessao }
-    };
-    const resposta = UrlFetchApp.fetch("https://api.onesignal.com/notifications", {
-      method: "post", contentType: "application/json",
-      headers: { Authorization: "Key " + apiKey, Accept: "application/json" },
-      payload: JSON.stringify(payload), muteHttpExceptions: true
-    });
-    const status = resposta.getResponseCode();
-    const corpo = resposta.getContentText();
-    let dados = {};
-    try { dados = JSON.parse(corpo || "{}"); } catch (_) {}
-    if (status < 200 || status >= 300 || !dados.id) {
-      throw new Error("O OneSignal não confirmou o envio: HTTP " + status + " — " + corpo);
-    }
-    envios++;
-  }
-  return respostaJsonp_(String(p.callback || ""), { sucesso: true, destinatarios: unicos.length, lotes: envios, mensagem: "Notificação enviada para " + unicos.length + " usuários cadastrados. Somente dispositivos com permissão ativa receberão o push." });
-}
-
-/** Dispara imediatamente os avisos de vencidos apenas para a loja autenticada.
- * O envio manual força novo aviso mesmo que a lista não tenha mudado.
- */
-function notificarVencidosManual_(p) {
-  const sessao = obterSessaoObrigatoria_(p);
-  if (sessao.administrador !== true) throw new Error("Ação exclusiva para administradores.");
-  const loja = sessao.administradorGeral === true ? "" : normalizarLoja_(sessao.loja || "");
-  if (sessao.administradorGeral !== true && !loja) throw new Error("Não foi possível identificar a loja da sua sessão.");
-  const resultado = verificarNotificacoesVencidos(loja, true);
-  if (resultado.configurado === false) {
-    throw new Error("As credenciais do OneSignal não estão configuradas.");
-  }
-  let mensagem;
-  if (Number(resultado.comVencidos || 0) === 0) {
-    mensagem = "Foram verificados " + Number(resultado.verificados || 0) + " funcionários ativos nesta abrangência, mas nenhum mapa apresentou produtos vencidos não encaminhados à Queima.";
-  } else if (Number(resultado.enviados || 0) > 0) {
-    mensagem = "Encontrados produtos vencidos em " + resultado.comVencidos + " funcionário(s). O OneSignal aceitou " + resultado.enviados + " envio(s), abrangendo " + resultado.registrosVencidos + " registros vencidos.";
-    if (resultado.falhas && resultado.falhas.length) mensagem += " Falhas: " + resultado.falhas.join("; ");
-  } else {
-    mensagem = "Foram encontrados produtos vencidos em " + resultado.comVencidos + " funcionário(s), mas o OneSignal não confirmou nenhum envio. " + (resultado.falhas || []).join("; ");
-  }
-  return respostaJsonp_(String(p.callback || ""), {
-    sucesso: true,
-    verificados: Number(resultado.verificados || 0),
-    comVencidos: Number(resultado.comVencidos || 0),
-    registrosVencidos: Number(resultado.registrosVencidos || 0),
-    enviados: Number(resultado.enviados || 0),
-    falhas: resultado.falhas || [],
-    mensagem: mensagem
-  });
-}

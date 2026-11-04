@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="manifest" href="/registro-produtos/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/registro-produtos/icon-192.png">
-<meta name="theme-color" content="#101827">
+  <meta name="theme-color" content="#101827">
   <title>Painel do Conferente</title>
 
   <script src="https://unpkg.com/lucide@0.468.0"></script>
@@ -1654,8 +1652,6 @@
     }
   </style>
   <script src="auth.js"></script>
-<script src="notificacoes.js" defer></script>
-  <script src="/registro-produtos/pwa.js" defer></script>
 </head>
 
 <body>
@@ -1677,7 +1673,6 @@ Auth.exigirAdmin().then(ok => {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", atualizarIdentidade);
   else atualizarIdentidade();
-  if (window.MVNotificacoes) window.MVNotificacoes.iniciar();
 });
 </script>
 <div class="app">
@@ -1736,11 +1731,6 @@ Auth.exigirAdmin().then(ok => {
       <button class="nav-item" data-page="funcionarios">
         <i data-lucide="users"></i> Funcionários
       </button>
-
-      <div class="nav-label">Sistema</div>
-      <button class="nav-item" data-page="configuracoes">
-        <i data-lucide="settings"></i> Configurações
-      </button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -1774,7 +1764,6 @@ Auth.exigirAdmin().then(ok => {
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
-        <button type="button" class="button" id="btnAtivarNotificacoesPainel" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
         </button>
@@ -1794,11 +1783,6 @@ Auth.exigirAdmin().then(ok => {
         </div>
 
         <div class="loading-banner" id="dashboardLoading"><span class="loading-spinner"></span><span>Carregando informações dos mapas e indicadores...</span></div>
-        <div id="avisoVencidosLoja" hidden style="margin:0 0 16px;padding:14px 16px;border:1px solid #f2b45b;border-left:5px solid #d97706;border-radius:12px;background:#fff7e8;color:#7c3f09;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div><strong id="avisoVencidosTitulo">Atenção: existem produtos vencidos nesta loja.</strong><div id="avisoVencidosTexto" style="font-size:13px;margin-top:3px">Confira os mapas dos funcionários.</div></div>
-          <button type="button" class="button button-primary" id="btnVerVencidosPainel">Ver vencidos</button>
-        </div>
-
         <div class="stats">
           <div class="stat-card">
             <div class="stat-top">
@@ -2149,10 +2133,8 @@ Auth.exigirAdmin().then(ok => {
           </div>
         </div>
         <div class="notice" id="mapaNotice">Carregando dados reais das abas de lançamento...</div>
-        <div class="mapa-tabs" role="tablist" aria-label="Categorias de mapas" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
+        <div class="mapa-tabs" role="tablist" aria-label="Mapas de funcionários" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
           <button type="button" class="button button-primary mapa-tab active" data-mapa-tipo="funcionarios" role="tab" aria-selected="true">Funcionários</button>
-          <button type="button" class="button mapa-tab" data-mapa-tipo="controlados" role="tab" aria-selected="false">Controlados</button>
-          <button type="button" class="button mapa-tab" data-mapa-tipo="todos" role="tab" aria-selected="false">Todos os mapas</button>
         </div>
         <div class="mini-stats"><div class="mini-stat"><span>Produtos mapeados</span><strong id="mapaTotal">—</strong></div><div class="mini-stat"><span>Lotes identificados</span><strong id="mapaLotes">—</strong></div><div class="mini-stat"><span>Validades neste mês</span><strong id="mapaMes">—</strong></div></div>
         <div class="table-panel"><div class="table-toolbar"><div class="panel-title">Mapa por lote</div><div class="toolbar-actions"><select class="filter-select" id="mapaFuncionario"><option value="">Todos os funcionários</option></select><input class="filter-select" id="mapaProduto" placeholder="Produto / código"><input class="filter-select" id="mapaLote" placeholder="Lote">
@@ -2443,7 +2425,7 @@ Auth.exigirAdmin().then(ok => {
         <div class="notice" id="historicoNotice">Carregando dados...</div>
         
         <div class="table-panel">
-          <div class="table-toolbar"><div class="panel-title">Registro de atividades</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="historicoBusca" placeholder="Buscar atividade..."></div><select id="historicoFiltro" class="filter-select"><option value="">Todos os eventos</option><option value="Lançamento">Lançamento</option><option value="Transferência">Transferência</option><option value="Sinalização">Sinalização</option><option value="Perda">Perda</option><option value="administrativas">Ações administrativas</option></select></div></div>
+          <div class="table-toolbar"><div class="panel-title">Registro de atividades</div><div class="toolbar-actions"><div class="search-box"><i data-lucide="search"></i><input id="historicoBusca" placeholder="Buscar atividade..."></div><select id="historicoFiltro" class="filter-select"><option value="">Todos os eventos</option><option value="Lançamento">Lançamento</option><option value="Transferência">Transferência</option><option value="Sinalização">Sinalização</option><option value="Perda">Perda</option></select></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Data e horário</th><th>Usuário</th><th>Evento</th><th>Descrição</th><th>Identificação</th><th>Situação</th></tr></thead>
             <tbody id="historicoTbody"></tbody>
@@ -2459,10 +2441,6 @@ Auth.exigirAdmin().then(ok => {
           <button class="button" id="refreshFuncionarios" title="Atualizar" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
         </div>
         <div class="notice" id="funcionariosNotice">Carregando dados...</div>
-        <div class="toolbar-actions" role="tablist" aria-label="Categoria de cadastros" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px">
-          <button class="button button-primary" type="button" data-func-categoria="funcionarios" role="tab" aria-selected="true">Funcionários</button>
-          <button class="button" type="button" data-func-categoria="especiais" role="tab" aria-selected="false">Abas especiais</button>
-        </div>
         <div class="mini-stats"><div class="mini-stat"><span>Total de funcionários</span><strong id="funcionariosTotal">—</strong></div><div class="mini-stat"><span>Com lançamentos</span><strong id="funcionariosAtivos">—</strong></div><div class="mini-stat"><span>Com produtos vencidos</span><strong id="funcionariosVencidos">—</strong></div></div>
         <div class="table-panel">
           <div class="table-toolbar"><div class="panel-title">Equipe e lançamentos</div><div class="toolbar-actions"><button class="button button-primary" id="addFuncionarioBtn" type="button"><i data-lucide="user-plus"></i> Adicionar funcionário</button><div class="search-box"><i data-lucide="search"></i><input id="funcionariosBusca" placeholder="Buscar funcionário..."></div><select id="funcionariosFiltro" class="filter-select"><option value="">Todos</option><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option><option value="venc">Com produtos vencidos</option></select></div></div>
@@ -2472,35 +2450,6 @@ Auth.exigirAdmin().then(ok => {
           </table></div>
           <div class="empty-state" id="funcionariosEmpty" style="display:none"><i data-lucide="search-x"></i>Nenhum funcionário encontrado.</div>
         </div>
-      </section>
-
-      <!-- CONFIGURAÇÕES E NOTIFICAÇÕES -->
-      <section class="page" id="page-configuracoes">
-        <div class="page-heading">
-          <div><h2>Configurações</h2><p>Gerencie os avisos enviados aos dispositivos com notificações ativadas.</p></div>
-        </div>
-        <div class="panel" style="padding:20px;margin-bottom:16px">
-          <div style="display:flex;align-items:flex-start;gap:12px">
-            <i data-lucide="bell" style="width:24px;height:24px;color:#2563eb;flex:0 0 auto"></i>
-            <div><h3 style="margin:0 0 6px">Permissão de notificações</h3><p style="margin:0;color:#64748b;font-size:13px">Ative as notificações neste dispositivo para receber comunicados e avisos de produtos vencidos, inclusive quando o navegador estiver fechado, desde que o sistema e o navegador permitam.</p></div>
-          </div>
-          <button type="button" class="button button-primary" style="margin-top:14px" onclick="MVNotificacoes.ativar()"><i data-lucide="bell-ring"></i> Ativar notificações neste dispositivo</button>
-        </div>
-        <div class="panel" style="padding:20px;margin-bottom:16px">
-          <h3 style="margin:0 0 6px">Notificar a todos</h3>
-          <p style="color:#64748b;font-size:13px;margin:0 0 14px">Envia um comunicado para os usuários ativos da sua loja. O servidor valida a loja da sua sessão; Administrador Geral pode alcançar todas as lojas.</p>
-          <label for="notificacaoTodosTitulo" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Título</label>
-          <input id="notificacaoTodosTitulo" class="filter-select" maxlength="80" value="Aviso da farmácia" style="width:100%;margin-bottom:12px">
-          <label for="notificacaoTodosMensagem" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Mensagem</label>
-          <textarea id="notificacaoTodosMensagem" class="filter-select" maxlength="500" rows="4" placeholder="Digite o comunicado que deseja enviar..." style="width:100%;resize:vertical"></textarea>
-          <div style="display:flex;justify-content:flex-end;margin-top:12px"><button type="button" class="button button-primary" id="btnNotificarTodos" onclick="enviarNotificacaoTodos()"><i data-lucide="send"></i> Notificar a todos</button></div>
-        </div>
-        <div class="panel" style="padding:20px">
-          <h3 style="margin:0 0 6px">Notificar Vencidos</h3>
-          <p style="color:#64748b;font-size:13px;margin:0 0 14px">Verifica os mapas da abrangência autorizada e envia um aviso individual aos funcionários que possuem produtos vencidos em sua sessão.</p>
-          <button type="button" class="button" id="btnNotificarVencidos" onclick="enviarNotificacaoVencidos()"><i data-lucide="package-x"></i> Notificar Vencidos</button>
-        </div>
-        <p id="configNotificacoesStatus" role="status" aria-live="polite" style="font-size:13px;margin-top:14px;color:#475569"></p>
       </section>
 
       <!-- MODAL: DIGITAÇÃO MANUAL DE MAPA -->
@@ -2839,15 +2788,14 @@ Auth.exigirAdmin().then(ok => {
   </main>
 </div>
 
-<!-- MODAL: ADICIONAR PRODUTO AO CATÁLOGO JSON -->
+<!-- MODAL: ADICIONAR PRODUTO AO CATÁLOGO CLOUDFLARE D1 -->
 <div id="modalNovoProdutoJson" class="produto-json-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tituloModalNovoProduto">
   <div class="produto-json-card">
     <div class="produto-json-header">
-      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p id="descricaoModalNovoProduto">O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.</p></div>
+      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p>O produto será gravado diretamente no catálogo central Cloudflare D1.</p></div>
       <button type="button" class="icon-button" onclick="fecharModalNovoProdutoJson()" aria-label="Fechar">×</button>
     </div>
     <form id="formNovoProdutoJson" onsubmit="salvarNovoProdutoJson(event)">
-      <input type="hidden" id="novoProdutoModo" value="adicionar">
       <label for="novoProdutoCodigo">Código interno</label>
       <input id="novoProdutoCodigo" autocomplete="off" required maxlength="80" placeholder="Ex.: 12345">
       <label for="novoProdutoEan">EAN / código de barras</label>
@@ -2855,9 +2803,7 @@ Auth.exigirAdmin().then(ok => {
       <label for="novoProdutoDescricao">Descrição do produto</label>
       <input id="novoProdutoDescricao" autocomplete="off" required maxlength="200" placeholder="Ex.: Leite Integral 1L">
       <label for="novoProdutoSecao">Seção</label>
-      <input id="novoProdutoSecao" list="listaSecoesProdutos" autocomplete="off" required maxlength="100" placeholder="Digite para pesquisar uma seção">
-      <datalist id="listaSecoesProdutos"></datalist>
-      <small style="display:block;color:var(--muted);margin:4px 0 10px">Selecione uma das seções existentes no catálogo.</small>
+      <input id="novoProdutoSecao" autocomplete="off" required maxlength="100" placeholder="Ex.: Mercearia">
       <div id="novoProdutoJsonStatus" class="produto-json-status" role="status"></div>
       <div class="produto-json-actions">
         <button type="button" class="button" onclick="fecharModalNovoProdutoJson()">Cancelar</button>
@@ -2921,15 +2867,12 @@ Auth.exigirAdmin().then(ok => {
   
   let funcionariosMapaCarregados = false;
   let cadastroFuncionariosPromise = null;
-  const estadosCelularProprio = new Map();
-  const consultasCelularProprio = new Set();
   
   const mapaSelecionados = new Set();
   let mapaVisiveisChaves = [];
   let mapaAcaoEmAndamento = false;
   let FUNCIONARIOS_MAPA = [];
   let CONTROLADOS_MAPA = [];
-  let funcionariosCategoriaAtual = "funcionarios";
   const pageNames = {
     dashboard: ["Dashboard", "Visão geral das operações"],
     lancamentos: ["Queima de estoque", "Consulta e registro de produtos para queima de estoque"],
@@ -2940,8 +2883,7 @@ Auth.exigirAdmin().then(ok => {
     estoque: ["Controle de Estoque", "Consulta de saldos e quantidades"],
     sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
     historico: ["Histórico", "Registro das atividades do sistema"],
-    funcionarios: ["Funcionários", "Equipe e abas de lançamento"],
-    configuracoes: ["Configurações", "Notificações e preferências do sistema"]
+    funcionarios: ["Funcionários", "Equipe e abas de lançamento"]
   };
 
   function navigate(pageName) {
@@ -3073,8 +3015,6 @@ Auth.exigirAdmin().then(ok => {
   const painelCache = { validades: [], validadesQueima: [], vencidos: [], queima: [] };
 
   // A condição de Queima vem da planilha, calculada no servidor por chave e loja.
-  document.getElementById("btnVerVencidosPainel")?.addEventListener("click", () => navigate("controle-validade"));
-
   function obterChavesQueimaHTML() {
     return new Set((painelCache.validades || []).filter(r => r.emQueima).map(r => String(r.chaveUnica || '').trim()).filter(Boolean));
   }
@@ -3220,9 +3160,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     adicionarQueima: '__adicionarAoQueimaCb',
     adicionarProdutoJson: '__adicionarProdutoJsonCb',
     estoqueVencidos: '__estoqueVencidosCb',
-    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb',
-    notificarTodos: '__notificarTodosCb',
-    notificarVencidosManual: '__notificarVencidosManualCb'
+    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb'
   };
 
   const cbName = callbackMap[callback] || callback;
@@ -3232,10 +3170,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     return consultasJsonpPainel.get(cbName);
   }
 
-  // Consultas de status do celular próprio são auxiliares e não devem abrir
-  // o overlay global de atualização do painel a cada funcionário consultado.
-  const exibirCarregamento = action !== "gerenciarCelularProprio" && action !== "gerenciarCelularProprioLote";
-  if (exibirCarregamento) iniciarCarregamentoPainel("Atualizando informações do painel...");
+  iniciarCarregamentoPainel("Atualizando informações do painel...");
   const promessa = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     let finalizado = false;
@@ -3267,7 +3202,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
       }
 
       consultasJsonpPainel.delete(cbName);
-      if (exibirCarregamento) finalizarCarregamentoPainel();
+      finalizarCarregamentoPainel();
 
       if (erro) {
         reject(erro);
@@ -3297,38 +3232,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   return promessa;
 }
 
-  
-async function enviarNotificacaoTodos() {
-  const titulo = document.getElementById("notificacaoTodosTitulo").value.trim();
-  const mensagem = document.getElementById("notificacaoTodosMensagem").value.trim();
-  const botao = document.getElementById("btnNotificarTodos");
-  const status = document.getElementById("configNotificacoesStatus");
-  if (!titulo || !mensagem) { status.textContent = "Informe o título e a mensagem."; return; }
-  if (!confirm("Enviar este comunicado aos usuários ativos da abrangência autorizada?")) return;
-  botao.disabled = true; status.textContent = "Enviando notificações...";
-  try {
-    const resposta = await jsonpPainel("notificarTodos", "notificarTodos", { titulo, mensagem });
-    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar o comunicado.");
-    status.textContent = resposta.mensagem || "Notificação enviada.";
-    document.getElementById("notificacaoTodosMensagem").value = "";
-  } catch (erro) { status.textContent = erro.message || "Falha ao enviar notificações."; }
-  finally { botao.disabled = false; }
-}
-
-async function enviarNotificacaoVencidos() {
-  const botao = document.getElementById("btnNotificarVencidos");
-  const status = document.getElementById("configNotificacoesStatus");
-  if (!confirm("Enviar agora os avisos de produtos vencidos aos funcionários que possuem vencidos na abrangência autorizada?")) return;
-  botao.disabled = true; status.textContent = "Verificando mapas e enviando avisos...";
-  try {
-    const resposta = await jsonpPainel("notificarVencidosManual", "notificarVencidosManual");
-    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar os avisos.");
-    status.textContent = resposta.mensagem || "Verificação concluída.";
-  } catch (erro) { status.textContent = erro.message || "Falha ao enviar avisos de vencidos."; }
-  finally { botao.disabled = false; }
-}
-
-function carregarCadastroFuncionariosPainel() {
+  function carregarCadastroFuncionariosPainel() {
     if (cadastroFuncionariosPromise) {
       return cadastroFuncionariosPromise;
     }
@@ -3337,7 +3241,7 @@ function carregarCadastroFuncionariosPainel() {
       "funcionarios",
       "funcionarios",
       { modo: "gestao" }
-    ).then(async resposta => {
+    ).then(resposta => {
       if (
         !resposta ||
         resposta.sucesso !== true ||
@@ -3360,14 +3264,6 @@ function carregarCadastroFuncionariosPainel() {
       FUNCIONARIOS_MAPA = [...resposta.funcionarios];
       CONTROLADOS_MAPA = [...resposta.especiais];
       funcionariosMapaCarregados = true;
-
-      // O estado do celular vem na mesma resposta do cadastro, sem segunda
-      // requisição, fila ou callback adicional. Ausência equivale a desativado.
-      estadosCelularProprio.clear();
-      cadastroFuncionariosPainel.detalhes.forEach(item => {
-        const chave = String(item.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim() + "|" + String(item.loja || "");
-        estadosCelularProprio.set(chave, item.celularProprioAtivo === true);
-      });
   
       return cadastroFuncionariosPainel;
     }).catch(erro => {
@@ -3472,30 +3368,6 @@ function carregarCadastroFuncionariosPainel() {
     const dias = diasAte(r.validadeISO || r.validade);
     if (dias === null) return false;
     return dias <= limiteVencimentoPainel(r);
-  }
-
-  function atualizarAvisoVencidosLoja() {
-    const registros = [...(painelCache.validades || []), ...(painelCache.validadesQueima || [])];
-    const vencidos = registros.filter(estaVencidoPainel);
-    const nomes = [...new Set(vencidos.map(r => String(r.funcionario || "").trim()).filter(Boolean))];
-    const aviso = document.getElementById("avisoVencidosLoja");
-    const titulo = document.getElementById("avisoVencidosTitulo");
-    const texto = document.getElementById("avisoVencidosTexto");
-    if (!aviso) return;
-    aviso.hidden = vencidos.length === 0;
-    aviso.style.display = vencidos.length ? "flex" : "none";
-    if (vencidos.length) {
-      if (titulo) titulo.textContent = vencidos.length + (vencidos.length === 1 ? " registro vencido" : " registros vencidos") + " encontrados nesta loja.";
-      if (texto) texto.textContent = nomes.length + (nomes.length === 1 ? " funcionário possui" : " funcionários possuem") + " produtos que precisam de conferência.";
-      if (window.MVNotificacoes) {
-        window.MVNotificacoes.notificarDesktop({
-          nome: "Loja " + Auth.loja(),
-          quantidade: vencidos.length,
-          loja: Auth.loja(),
-          url: "painelconferente.html"
-        });
-      }
-    }
   }
 
   function situacaoPainel(r) {
@@ -3817,27 +3689,27 @@ function renderControleValidade() {
     const validade=document.getElementById('mapaValidade').value;
     const lancamentoMes=document.getElementById('mapaLancamento').value;
     const sit=document.getElementById('mapaSituacao').value;
-    // A categoria Funcionários exclui somente as abas especiais.
-    // Controlados mostra as abas especiais; Todos os mapas reúne ambas.
-    // Transferencias permanece fora do Mapa de Validade, em sua página própria.
-    const todosOsMapas = [...new Set([...FUNCIONARIOS_MAPA, ...CONTROLADOS_MAPA])];
-    const nomesCategoria = tipoMapaAtivo === 'controlados'
-      ? CONTROLADOS_MAPA
-      : tipoMapaAtivo === 'todos'
-        ? todosOsMapas
-        : FUNCIONARIOS_MAPA;
-    const registrosMapa = registrosVisiveisHTML(painelCache.validades).filter(r => {
-      const nome = String(r.funcionario || '').trim();
-      return nome !== 'Transferencias' && todosOsMapas.includes(nome);
-    });
-    const base = registrosMapa.filter(r => nomesCategoria.includes(String(r.funcionario || '').trim()));
+    // O painel Conferente exibe exclusivamente os mapas dos funcionários.
+    // Abas especiais (Termolabil, Psicotropicos e Antibioticos) e
+    // Transferencias continuam disponíveis nos fluxos próprios, mas não
+    // entram nesta listagem.
+    const base=registrosVisiveisHTML(painelCache.validades).filter(r =>
+      FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim())
+    );
     const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value;
-    const names = [...new Set(base.map(r => String(r.funcionario || '').trim()).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const funcionariosAtuais = Array.isArray(window.listaFuncionarios)
+      ? window.listaFuncionarios
+      : FUNCIONARIOS_MAPA;
+
+    const names = funcionariosAtuais.filter(n =>
+      todos.some(r =>
+        String(r.funcionario || '').trim() === n
+      )
+    );
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
     
@@ -3959,18 +3831,15 @@ function imprimirMapaValidade() {
   const lancamentoFiltro = document.getElementById('mapaLancamento').value;
   const situacaoFiltro = document.getElementById('mapaSituacao').value;
 
-  const todosOsMapas = [...new Set([...FUNCIONARIOS_MAPA, ...CONTROLADOS_MAPA])];
-  const nomesCategoria = tipoMapaAtivo === 'controlados'
-    ? CONTROLADOS_MAPA
-    : tipoMapaAtivo === 'todos'
-      ? todosOsMapas
-      : FUNCIONARIOS_MAPA;
+  const funcionarios = Array.isArray(FUNCIONARIOS_MAPA)
+    ? FUNCIONARIOS_MAPA
+    : [];
 
   let registros = registrosVisiveisHTML(painelCache.validades)
     .filter(r => {
       const nome = String(r.funcionario || '').trim();
 
-      if (nome === 'Transferencias' || !nomesCategoria.includes(nome)) return false;
+      if (!funcionarios.includes(nome)) return false;
 
       if (funcionario && nome !== funcionario) return false;
 
@@ -4121,14 +3990,7 @@ function imprimirMapaValidade() {
         @media print {
           body { print-color-adjust: exact; }
         }
-      
-    .celular-proprio-btn { width:34px; min-width:34px; height:34px; padding:5px !important; display:inline-flex !important; align-items:center; justify-content:center; vertical-align:middle; opacity:1 !important; visibility:visible !important; position:relative; }
-    .func-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:5px; min-width:150px; }
-    .celular-proprio-btn svg { width:18px; height:18px; }
-    .celular-proprio-ativo { color:#16a34a !important; border-color:#16a34a !important; }
-    .celular-proprio-inativo { color:#dc2626 !important; border-color:#dc2626 !important; }
-    .celular-proprio-inativo::after { content:""; position:absolute; width:23px; height:2px; background:#dc2626; transform:rotate(-48deg); border-radius:2px; pointer-events:none; }
-</style>
+      </style>
     </head>
     <body>
       <table>
@@ -4353,7 +4215,6 @@ function imprimirMapaValidade() {
         ? d.registrosQueima.map(r => ({ ...r, emQueima: true }))
         : [];
       validadesProntas = true;
-      atualizarAvisoVencidosLoja();
   
       // Atualiza o Mapa de Validade.
       renderMapa();
@@ -5382,7 +5243,7 @@ function atualizarProdutosAtencao(registros) {
   });
   ['mapaProduto','mapaLote','mapaValidade','mapaLancamento'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
-  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo||'funcionarios';document.getElementById('mapaFuncionario').value='';renderMapa();}));
+  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo='funcionarios';document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
   document.getElementById('refreshTransferencias')?.addEventListener('click', () => carregarTransferencias(false));
   function normalizarBuscaPerdas(valor) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim(); }
@@ -6629,7 +6490,7 @@ document.addEventListener("submit", async function(event) {
    Usam os mesmos dados do Mapa de Validade (Apps Script) e o catálogo SQLite. */
 (function () {
   const g = id => document.getElementById(id);
-  let FUNC = [];
+  let FUNC = ["Transferencias"];
   let ESPECIAIS = [];
 
   const norm = s => String(s == null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
@@ -6698,7 +6559,7 @@ document.addEventListener("submit", async function(event) {
 
   /* ---------- Funcionários ---------- */
   function dadosFuncionarios() {
-    const mapa = new Map(FUNC.filter(n => norm(n) !== "transferencias").map(n => [norm(n), { nome: n, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }]));
+    const mapa = new Map(FUNC.map(n => [norm(n), { nome: n, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }]));
     // A lista FUNC contém apenas abas ativas (correto para os seletores de
     // lançamento). Na tela de gestão, porém, também precisamos incluir todos
     // os cadastros retornados em detalhes, inclusive funcionários inativos,
@@ -6709,7 +6570,6 @@ document.addEventListener("submit", async function(event) {
       mapa.set(k, { nome: d.nome, lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0, administrador: !!d.administrador });
     });
     registros().forEach(r => {
-      if (norm(r.funcionario) === "transferencias") return;
       const k = norm(r.funcionario);
       let o = mapa.get(k);
       if (!o) { o = { nome: r.funcionario || "—", lanc: 0, un: 0, venc: 0, avenc: 0, ult: 0 }; mapa.set(k, o); }
@@ -6732,8 +6592,6 @@ document.addEventListener("submit", async function(event) {
     const todos = dadosFuncionarios();
     const detalhes = detalhesFunc();
     const rows = todos.filter(o => {
-      const ehEspecial = ESPECIAIS.includes(norm(o.nome));
-      if (funcionariosCategoriaAtual === "especiais" ? !ehEspecial : ehEspecial) return false;
       if (q && !norm(o.nome).includes(q)) return false;
       const det = detalhes.get(norm(o.nome));
       if (f === "ativos" && det && det.ativo === false) return false;
@@ -6743,10 +6601,9 @@ document.addEventListener("submit", async function(event) {
       if (f === "venc" && o.venc <= 0) return false;
       return true;
     });
-    const baseCategoria = todos.filter(o => funcionariosCategoriaAtual === "especiais" ? ESPECIAIS.includes(norm(o.nome)) : !ESPECIAIS.includes(norm(o.nome)));
-    setText("funcionariosTotal", baseCategoria.length);
-    setText("funcionariosAtivos", baseCategoria.filter(o => o.lanc > 0).length);
-    setText("funcionariosVencidos", baseCategoria.filter(o => o.venc > 0).length);
+    setText("funcionariosTotal", todos.length);
+    setText("funcionariosAtivos", todos.filter(o => o.lanc > 0).length);
+    setText("funcionariosVencidos", todos.filter(o => o.venc > 0).length);
     g("funcionariosTbody").innerHTML = rows.map(o => {
       const k = norm(o.nome);
       const det = detalhes.get(k);
@@ -6756,36 +6613,24 @@ document.addEventListener("submit", async function(event) {
         : '<td style="text-align:center" data-sort="-1">—</td>';
       const textoEspecial = det && det.especial ? "Tirar definição de especial" : "Definir como especial";
       let botoesGestao = det
-        ? (!det.especial ? ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="' + (det.temPin ? "Redefinir PIN de acesso" : "Definir PIN de acesso") + '" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>' : '') +
-          ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear ' + (det.especial ? 'aba especial' : 'funcionário') + '" aria-label="Renomear"><i data-lucide="pencil"></i></button>' +
-          (det.especial ? ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="1" title="Remover da categoria de abas especiais" aria-label="Remover da categoria de abas especiais"><i data-lucide="star-off"></i></button>' :
-          ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="0" title="Definir como aba especial" aria-label="Definir como especial"><i data-lucide="star"></i></button>')
+        ? ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="' + (det.temPin ? "Redefinir PIN de acesso" : "Definir PIN de acesso") + '" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>' +
+          ' <button class="button" type="button" data-func-acao="renomear" data-nome="' + nomeAttr + '" title="Renomear funcionário" aria-label="Renomear funcionário"><i data-lucide="pencil"></i></button>' +
+          ' <button class="button" type="button" data-func-acao="especial" data-nome="' + nomeAttr + '" data-especial="' + (det.especial ? 1 : 0) + '" title="' + textoEspecial + '" aria-label="' + textoEspecial + '"><i data-lucide="' + (det.especial ? "star-off" : "star") + '"></i></button>'
         : "";
       if (det && !det.administrador) {
         botoesGestao += ' <button class="button" type="button" data-func-acao="inativar" data-nome="' + nomeAttr + '" data-ativo="' + (det.ativo === false ? '0' : '1') + '" title="' + (det.ativo === false ? 'Reativar funcionário' : 'Inativar funcionário') + '" aria-label="' + (det.ativo === false ? 'Reativar funcionário' : 'Inativar funcionário') + '"><i data-lucide="' + (det.ativo === false ? 'user-check' : 'user-x') + '"></i></button>';
       }
-      if (det && det.administrador && !det.especial) {
+      if (det && det.administrador) {
         botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
       }
-      if (det) {
-        const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
-        // Estado ausente ou ainda não consultado é tratado visualmente como desativado.
-        // O botão permanece habilitado para que a falha da consulta em lote não bloqueie a ação.
-        const ativoCelular = estadosCelularProprio.get(chaveCelular) === true;
-        const rotuloCelular = ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio";
-        botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '" title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="smartphone"></i></button>';
-      }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
-      const botaoVisualizar = o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>';
-      return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
+      return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td><div class="func-acoes">' + botaoVisualizar + botoesGestao + '</div></td></tr>';
+        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
     renderPainelIcons(g("page-funcionarios"));
-    // Os estados de celular próprio já são carregados em lote junto ao cadastro
-    // inicial do painel. A renderização da tabela não dispara consultas de rede.
   }
 
   /* ---------- Funcionários: adicionar, renomear, especial e check ---------- */
@@ -6809,7 +6654,7 @@ document.addEventListener("submit", async function(event) {
   async function recarregarCadastroFuncionarios() {
     cadastroFuncionariosPromise = null;
     const c = await carregarCadastroFuncionariosPainel();
-    FUNC = [...c.funcionarios, ...c.especiais].filter(n => norm(n) !== "transferencias");
+    FUNC = [...c.funcionarios, ...c.especiais, "Transferencias"];
     ESPECIAIS = c.especiais.map(norm);
     window.listaFuncionarios = [...c.funcionarios];
     window.listaAbasEspeciais = [...c.especiais];
@@ -6851,7 +6696,7 @@ document.addEventListener("submit", async function(event) {
         : "Será criada uma aba com o mesmo nome na planilha.";
     g("funcModalNome").value = nome || "";
     g("funcModalNome").readOnly = ehPin;
-    g("funcModalEspecial").checked = modo === "adicionar" && funcionariosCategoriaAtual === "especiais";
+    g("funcModalEspecial").checked = false;
     g("funcModalEspecialWrap").style.display = modo === "adicionar" ? "flex" : "none";
     g("funcModalPinWrap").style.display = ehPin ? "block" : "none";
     g("funcModalPin").value = "";
@@ -6923,20 +6768,6 @@ document.addEventListener("submit", async function(event) {
     } catch (e) { alert("Erro: " + e.message); }
   }
 
-  document.querySelectorAll("[data-func-categoria]").forEach(botao => botao.addEventListener("click", () => {
-    funcionariosCategoriaAtual = botao.dataset.funcCategoria === "especiais" ? "especiais" : "funcionarios";
-    document.querySelectorAll("[data-func-categoria]").forEach(b => {
-      const ativo = b === botao;
-      b.classList.toggle("button-primary", ativo);
-      b.setAttribute("aria-selected", ativo ? "true" : "false");
-    });
-    const titulo = document.querySelector("#page-funcionarios .table-toolbar .panel-title");
-    if (titulo) titulo.textContent = funcionariosCategoriaAtual === "especiais" ? "Abas especiais" : "Equipe e lançamentos";
-    const busca = g("funcionariosBusca"); if (busca) busca.placeholder = funcionariosCategoriaAtual === "especiais" ? "Buscar aba especial..." : "Buscar funcionário...";
-    const adicionar = g("addFuncionarioBtn"); if (adicionar) adicionar.innerHTML = funcionariosCategoriaAtual === "especiais" ? '<i data-lucide="folder-plus"></i> Adicionar aba especial' : '<i data-lucide="user-plus"></i> Adicionar funcionário';
-    renderFuncionarios();
-  }));
-
   g("addFuncionarioBtn")?.addEventListener("click", () => abrirModalFuncionario("adicionar"));
   g("funcModalCancelar")?.addEventListener("click", fecharModalFuncionario);
   g("funcModalForm")?.addEventListener("submit", salvarModalFuncionario);
@@ -6951,35 +6782,6 @@ document.addEventListener("submit", async function(event) {
     if (btn.dataset.funcAcao === "renomear") abrirModalFuncionario("renomear", nome);
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
-    else if (btn.dataset.funcAcao === "celular") {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const loja = btn.dataset.loja || "";
-      const chaveCelular = norm(nome) + "|" + String(loja);
-      const novoEstado = estadosCelularProprio.get(chaveCelular) !== true;
-      const verbo = novoEstado ? "ATIVAR" : "DESATIVAR";
-      if (!window.confirm(verbo + " o celular próprio de " + nome + "?")) return;
-      if (btn.dataset.processando === "1") return;
-      btn.dataset.processando = "1";
-      btn.disabled = true;
-      btn.title = novoEstado ? "Ativando celular próprio..." : "Desativando celular próprio...";
-      jsonpPainelBruto("gerenciarCelularProprio", "__celularProprioCb", {
-        modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0"
-      }).then(d => {
-        if (!d || d.sucesso !== true) throw new Error(d && d.mensagem ? d.mensagem : "O servidor não confirmou a alteração.");
-        estadosCelularProprio.set(chaveCelular, d.ativo === true);
-        const detalhe = detalhesFunc().get(norm(nome));
-        if (detalhe) detalhe.celularProprioAtivo = d.ativo === true;
-        alert(d.mensagem || (d.ativo ? "Celular próprio habilitado." : "Celular próprio desabilitado."));
-        renderFuncionarios();
-      }).catch(e => {
-        console.error("Falha ao gerenciar celular próprio:", e);
-        alert("Não foi possível alterar o celular próprio: " + (e && e.message ? e.message : String(e)));
-        btn.disabled = false;
-        btn.dataset.processando = "0";
-        btn.title = novoEstado ? "Ativar celular próprio" : "Desativar celular próprio";
-      });
-    }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });
 
@@ -7553,7 +7355,7 @@ document.addEventListener("submit", async function(event) {
       ev.push({ t, usuario: (r.usuario || 'Administrador') + (r.loja ? ' · Loja ' + r.loja : ''),
         tipo: r.tipo || 'Ação administrativa', cls: 'badge-purple',
         desc: r.descricao || r.acao || 'Ação administrativa registrada', id: r.referencia || '—',
-        sit: 'Concluído', sitCls: 'badge-success', administrativa: true });
+        sit: 'Concluído', sitCls: 'badge-success' });
     });
     const venc = (typeof painelCache === "object" && painelCache.vencidos && painelCache.vencidos.retirados) || [];
     venc.forEach(r => {
@@ -7566,7 +7368,7 @@ document.addEventListener("submit", async function(event) {
     if (!g("historicoTbody")) return;
     const q = norm(g("historicoBusca").value), f = g("historicoFiltro").value;
     const todos = eventosHistorico();
-    const rows = todos.filter(e => (!f || (f === "administrativas" ? e.administrativa === true : e.tipo === f)) && (!q || norm(e.usuario + " " + e.desc + " " + e.id).includes(q)));
+    const rows = todos.filter(e => (!f || e.tipo === f) && (!q || norm(e.usuario + " " + e.desc + " " + e.id).includes(q)));
     g("historicoTbody").innerHTML = rows.map(e =>
       '<tr><td>' + esc(fmtDH(e.t)) + '</td><td>' + esc(e.usuario) + '</td><td>' + badge(e.tipo, e.cls) + '</td><td>' + esc(e.desc) + '</td><td>' + esc(e.id) + '</td><td>' + badge(e.sit, e.sitCls) + '</td></tr>').join("");
     mostrar("historicoEmpty", rows.length === 0);
@@ -7600,8 +7402,9 @@ document.addEventListener("submit", async function(event) {
   .then(cadastro => {
     FUNC = [
       ...cadastro.funcionarios,
-      ...cadastro.especiais
-    ].filter(n => norm(n) !== "transferencias");
+      ...cadastro.especiais,
+      "Transferencias"
+    ];
 
     ESPECIAIS = cadastro.especiais.map(norm);
 
@@ -7625,75 +7428,15 @@ document.addEventListener("submit", async function(event) {
     return produto ? { ean: produto.ean, codigoInterno: produto.codigoInterno, descricao: produto.produto || produto.descricao || "" } : null;
   }
 
-  /* ---------- Cadastro/edição de produto no catálogo via Apps Script/GitHub ---------- */
-  function definirModoProdutoJson(modo, produto) {
-    const editar = modo === "editar";
-    gProdutoJson("novoProdutoModo").value = editar ? "editar" : "adicionar";
-    gProdutoJson("tituloModalNovoProduto").textContent = editar ? "Editar produto existente" : "Adicionar produto";
-    gProdutoJson("descricaoModalNovoProduto").textContent = editar
-      ? "Produto encontrado no catálogo. Altere os dados necessários e salve a atualização."
-      : "O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.";
-    gProdutoJson("btnSalvarNovoProdutoJson").innerHTML = editar
-      ? '<i data-lucide="save"></i> Salvar alterações'
-      : '<i data-lucide="save"></i> Salvar produto';
-    if (produto) {
-      gProdutoJson("novoProdutoCodigo").value = produto.codigoInterno || "";
-      gProdutoJson("novoProdutoDescricao").value = produto.produto || produto.descricao || "";
-      gProdutoJson("novoProdutoSecao").value = produto.secao || "";
-    }
-    renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
-  }
-
-  async function carregarSecoesProdutoJson() {
-    await window.CatalogoSQLite.abrir();
-    const secoes = window.CatalogoSQLite.listarSecoes();
-    const lista = gProdutoJson("listaSecoesProdutos");
-    lista.innerHTML = secoes.map(secao => '<option value="' + escHtml(secao) + '"></option>').join("");
-    return secoes;
-  }
-
-  async function identificarProdutoJson() {
-    const ean = gProdutoJson("novoProdutoEan").value.trim();
-    if (!ean) {
-      definirModoProdutoJson("adicionar");
-      return;
-    }
-    const status = gProdutoJson("novoProdutoJsonStatus");
-    try {
-      await window.CatalogoSQLite.abrir();
-      const encontrado = window.CatalogoSQLite.porEAN(ean);
-      if (encontrado) {
-        definirModoProdutoJson("editar", encontrado);
-        status.className = "produto-json-status info";
-        status.textContent = "Este produto já existe no catálogo. Você está editando o cadastro existente.";
-      } else {
-        definirModoProdutoJson("adicionar");
-        status.className = "produto-json-status";
-        status.textContent = "EAN não encontrado no catálogo. Um novo produto será cadastrado.";
-      }
-    } catch (erro) {
-      status.className = "produto-json-status error";
-      status.textContent = "Não foi possível consultar o catálogo SQLite: " + (erro.message || erro);
-    }
-  }
-
+  /* ---------- Cadastro de produto no catálogo Cloudflare D1 via Apps Script ---------- */
   function abrirModalNovoProdutoJson() {
     const modal = gProdutoJson("modalNovoProdutoJson");
     if (!modal) return;
     gProdutoJson("formNovoProdutoJson").reset();
-    gProdutoJson("novoProdutoModo").value = "adicionar";
-    definirModoProdutoJson("adicionar");
     const status = gProdutoJson("novoProdutoJsonStatus");
-    status.textContent = "Carregando catálogo e seções...";
-    status.className = "produto-json-status info";
+    status.textContent = "";
+    status.className = "produto-json-status";
     modal.style.display = "flex";
-    carregarSecoesProdutoJson().then(() => {
-      status.textContent = "Informe o EAN para verificar se o produto já existe.";
-      status.className = "produto-json-status";
-    }).catch(erro => {
-      status.className = "produto-json-status error";
-      status.textContent = "Falha ao carregar seções do catálogo: " + (erro.message || erro);
-    });
     setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
     renderPainelIcons(modal);
   }
@@ -7703,9 +7446,6 @@ document.addEventListener("submit", async function(event) {
     if (modal) modal.style.display = "none";
   }
 
-  gProdutoJson("novoProdutoEan")?.addEventListener("change", identificarProdutoJson);
-  gProdutoJson("novoProdutoEan")?.addEventListener("blur", identificarProdutoJson);
-
   async function salvarNovoProdutoJson(event) {
     event.preventDefault();
     const btn = gProdutoJson("btnSalvarNovoProdutoJson");
@@ -7714,90 +7454,50 @@ document.addEventListener("submit", async function(event) {
     const ean = gProdutoJson("novoProdutoEan").value.trim();
     const produto = gProdutoJson("novoProdutoDescricao").value.trim();
     const secao = gProdutoJson("novoProdutoSecao").value.trim();
-    let modo = gProdutoJson("novoProdutoModo").value || "adicionar";
 
     if (!codigoInterno || !ean || !produto || !secao) {
       status.className = "produto-json-status error";
       status.textContent = "Preencha todos os campos.";
       return;
     }
-    if (!/^\d{8,14}$/.test(ean)) {
-      status.className = "produto-json-status error";
-      status.textContent = "O EAN deve conter de 8 a 14 dígitos.";
-      return;
-    }
-
-    let secoes;
-    try {
-      secoes = await carregarSecoesProdutoJson();
-      const secaoValida = secoes.find(item => item.localeCompare(secao, "pt-BR", { sensitivity: "base" }) === 0);
-      if (!secaoValida) {
-        status.className = "produto-json-status error";
-        status.textContent = "Selecione uma seção existente na lista do catálogo.";
-        gProdutoJson("novoProdutoSecao").focus();
-        return;
-      }
-      gProdutoJson("novoProdutoSecao").value = secaoValida;
-      const existente = window.CatalogoSQLite.porEAN(ean);
-      if (existente && modo !== "editar") {
-        definirModoProdutoJson("editar", existente);
-        status.className = "produto-json-status info";
-        status.textContent = "O EAN já existe. Os dados foram carregados para edição; revise e salve novamente.";
-        return;
-      }
-      if (!existente && modo === "editar") {
-        modo = "adicionar";
-        definirModoProdutoJson("adicionar");
-      }
-    } catch (erroCatalogo) {
+    try { await carregarDescricoesProdutos(); } catch (erroCatalogo) {
       status.className = "produto-json-status error";
       status.textContent = "Não foi possível validar o catálogo SQLite: " + (erroCatalogo.message || erroCatalogo);
       return;
     }
+    if (mapaDescricoes[ean]) {
+      status.className = "produto-json-status error";
+      status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
+      return;
+    }
 
     btn.disabled = true;
-    btn.textContent = modo === "editar" ? "Atualizando..." : "Salvando...";
+    btn.textContent = "Salvando...";
     status.className = "produto-json-status info";
-    status.textContent = modo === "editar" ? "Enviando alterações ao GitHub..." : "Enviando cadastro ao GitHub...";
+    status.textContent = "Gravando produto no Cloudflare D1...";
 
     try {
       const resposta = await jsonpPainel("adicionarProdutoJson", "__adicionarProdutoJsonCb", {
-        modo, codigoInterno, ean, produto, secao
+        codigoInterno, ean, produto, secao
       });
       if (!resposta || resposta.sucesso !== true) {
-        if (resposta?.duplicado && resposta.produto) {
-          definirModoProdutoJson("editar", resposta.produto);
-        }
         throw new Error((resposta && (resposta.mensagem || resposta.erro)) || "Não foi possível salvar o produto.");
       }
 
+      if (resposta.produto && window.CatalogoSQLite?.atualizarProduto) {
+        window.CatalogoSQLite.atualizarProduto(resposta.produto);
+      }
       status.className = "produto-json-status success";
-      status.textContent = resposta.mensagem || (modo === "editar" ? "Produto atualizado no catálogo." : "Produto adicionado ao catálogo com sucesso.");
-
-      (async () => {
-        for (let tentativa = 0; tentativa < 12; tentativa++) {
-          await new Promise(resolve => setTimeout(resolve, tentativa === 0 ? 2500 : 5000));
-          try {
-            await carregarDescricoesProdutos(true);
-            const atualizado = window.CatalogoSQLite.porEAN(ean);
-            if (atualizado && String(atualizado.produto || atualizado.descricao) === produto && String(atualizado.secao || "") === secao) {
-              status.textContent = "Produto " + (modo === "editar" ? "atualizado" : "cadastrado") + " e disponível no banco SQLite.";
-              window.renderProdutos?.();
-              return;
-            }
-          } catch (erroAtualizacao) {
-            console.warn("Aguardando publicação do banco SQLite:", erroAtualizacao);
-          }
-        }
-        status.textContent = "Alteração salva no catálogo de origem. A atualização do banco SQLite ainda está em processamento; atualize o painel em alguns instantes.";
-      })();
+      status.textContent = resposta.mensagem || "Produto cadastrado e confirmado no Cloudflare D1.";
+      gProdutoJson("formNovoProdutoJson").reset();
+      window.renderProdutos?.();
     } catch (erro) {
       status.className = "produto-json-status error";
       status.textContent = "Erro ao salvar: " + (erro.message || erro) +
-        "\nVerifique a rota adicionarProdutoJson no Code.gs e as Propriedades do script do GitHub.";
+        "\nVerifique D1_WORKER_URL e D1_API_SECRET nas Propriedades do script e o secret API_SECRET no Worker.";
     } finally {
       btn.disabled = false;
-      definirModoProdutoJson(gProdutoJson("novoProdutoModo").value || modo);
+      btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
       renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
     }
   }
