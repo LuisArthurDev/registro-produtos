@@ -67,11 +67,31 @@
     header {
       background: var(--brand);
       color: white;
-      padding: 18px;
+      padding: 16px 20px 18px;
     }
 
+    .cabecalho-conteudo { width: min(100%, 1000px); margin: 0 auto; }
+    .cabecalho-acoes {
+      display: flex; justify-content: flex-end; align-items: center;
+      gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    #usuarioSessao { color: #c5d4df; font-size: 12px; margin-right: 4px; }
+    .cabecalho-acoes .btn-cabecalho {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: auto; min-width: 0; min-height: 34px; height: 34px;
+      padding: 6px 12px; border: 1px solid rgba(255,255,255,.22);
+      border-radius: 8px; background: rgba(255,255,255,.10);
+      color: #fff; font-size: 13px; line-height: 1.2; text-decoration: none;
+      white-space: nowrap;
+    }
+    .cabecalho-acoes .btn-cabecalho:hover { background: rgba(255,255,255,.19); }
     header h1 { margin: 0; font-size: 20px; }
     header p { margin: 4px 0 0; color: #c5d4df; font-size: 13px; }
+    @media (max-width: 560px) {
+      header { padding: 13px 12px 16px; }
+      .cabecalho-acoes { justify-content: space-between; }
+      #usuarioSessao { flex: 1 1 100%; }
+    }
 
     main {
       width: min(100% - 24px, 1000px);
@@ -503,12 +523,15 @@ button{border-radius:9px;font-weight:650}
 </div>
 
 <header>
-  <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:8px;font-size:12px">
-    <span id="usuarioSessao"></span>
-    <button type="button" onclick="Auth.sair()">Sair</button>
+  <div class="cabecalho-conteudo">
+    <div class="cabecalho-acoes">
+      <span id="usuarioSessao"></span>
+      <a id="btnPainelConferente" class="btn-cabecalho" href="painelconferente.html" hidden>Painel do Conferente</a>
+      <button class="btn-cabecalho" type="button" onclick="Auth.sair()">Sair</button>
+    </div>
+    <h1>Visualização dos Lançamentos</h1>
+    <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
   </div>
-  <h1>Visualização dos Lançamentos</h1>
-  <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
 </header>
 
 <main>
@@ -549,7 +572,7 @@ button{border-radius:9px;font-weight:650}
         </select>
       </div>
 
-      <div>
+      <div id="campoFuncionario">
         <label for="funcionario">Funcionário</label>
         <select id="funcionario">
           <option value="">Todos os funcionários</option>
@@ -966,10 +989,16 @@ function carregarCadastroFuncionarios() {
       const select = document.getElementById("funcionario");
       const selecionado = select.value;
 
-      select.innerHTML =
-        '<option value="">Todos os funcionários e abas</option>';
+      // A visualização administrativa reúne os mapas de funcionários,
+      // mas a aba técnica Transferencias não é um funcionário e não deve
+      // aparecer como opção de consulta.
+      const nomesVisiveis = (Array.isArray(resposta.todos) ? resposta.todos : [])
+        .filter(nome => String(nome || "").trim().toLocaleLowerCase("pt-BR") !== "transferencias");
 
-      resposta.todos.forEach(nome => {
+      select.innerHTML =
+        '<option value="">Todos os funcionários</option>';
+
+      nomesVisiveis.forEach(nome => {
         const option = document.createElement("option");
         option.value = nome;
         option.textContent = nome;
@@ -977,18 +1006,19 @@ function carregarCadastroFuncionarios() {
       });
 
       if (Auth.administrador()) {
-        if (resposta.todos.includes(selecionado)) select.value = selecionado;
+        if (nomesVisiveis.includes(selecionado)) select.value = selecionado;
       } else {
+        // Funcionário consulta exclusivamente o próprio mapa: o seletor
+        // fica oculto e o filtro não pode ser alterado por URL.
         select.value = Auth.usuario();
         select.disabled = true;
-        const primeira = select.options[0];
-        if (primeira) primeira.textContent = Auth.usuario();
+        document.getElementById("campoFuncionario").hidden = true;
       }
 
       const funcionarioURL =
         new URLSearchParams(window.location.search).get("funcionario");
 
-      if (funcionarioURL && resposta.todos.includes(funcionarioURL)) {
+      if (Auth.administrador() && funcionarioURL && nomesVisiveis.includes(funcionarioURL)) {
         select.value = funcionarioURL;
       }
 
@@ -1889,6 +1919,8 @@ Auth.exigirLogin().then(ok => {
   if (!ok) return;
   const usuario = document.getElementById("usuarioSessao");
   if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja();
+  const botaoPainel = document.getElementById("btnPainelConferente");
+  if (botaoPainel && Auth.administrador()) botaoPainel.hidden = false;
 });
 
 carregarCadastroFuncionarios()

@@ -1624,11 +1624,43 @@
     .modal-overlay [aria-label="Fechar"], .modal-overlay [title="Fechar"] { flex: 0 0 auto; }
     @media (prefers-reduced-motion: reduce) { .modal-overlay, .modal-overlay * { animation: none !important; transition: none !important; } }
 </style>
-  <style>body{visibility:hidden}html.auth-ok body{visibility:visible}</style>
+  <style>
+    /* A página pode exibir o estado de autenticação imediatamente, mas o painel
+       protegido só fica visível após a confirmação da sessão pelo servidor. */
+    body { visibility: visible; }
+    .app { visibility: hidden; }
+    html.auth-ok .app { visibility: visible; }
+    #authCarregando {
+      position: fixed; inset: 0; z-index: 30000; display: flex;
+      align-items: center; justify-content: center; padding: 24px;
+      background: #f4f7fb; color: #172033;
+      font-family: inherit;
+    }
+    #authCarregando .auth-carregando-card {
+      display: flex; align-items: center; gap: 14px; max-width: 420px;
+      padding: 20px 24px; border: 1px solid #dbe3ee; border-radius: 14px;
+      background: #fff; box-shadow: 0 12px 36px rgba(15,23,42,.09);
+      font-size: 14px; font-weight: 600;
+    }
+    #authCarregando .auth-carregando-spinner {
+      width: 24px; height: 24px; flex: 0 0 24px; border: 3px solid #dbeafe;
+      border-top-color: #2563eb; border-radius: 50%; animation: spin .75s linear infinite;
+    }
+    html.auth-ok #authCarregando { display: none; }
+    @media (prefers-reduced-motion: reduce) {
+      #authCarregando .auth-carregando-spinner { animation: none; }
+    }
+  </style>
   <script src="auth.js"></script>
 </head>
 
 <body>
+<div id="authCarregando" role="status" aria-live="polite">
+  <div class="auth-carregando-card">
+    <span class="auth-carregando-spinner" aria-hidden="true"></span>
+    <span>Validando sua sessão e preparando o painel...</span>
+  </div>
+</div>
 <div id="painelCarregamento" hidden role="status" aria-live="polite"><div class="painel-carregamento-card"><span class="painel-carregamento-circulo" aria-hidden="true"></span><span id="painelCarregamentoTexto">Atualizando informações...</span></div></div>
 <script>
 Auth.exigirAdmin().then(ok => {
@@ -2101,7 +2133,7 @@ Auth.exigirAdmin().then(ok => {
           </div>
         </div>
         <div class="notice" id="mapaNotice">Carregando dados reais das abas de lançamento...</div>
-        <div class="mapa-tabs" role="tablist" aria-label="Categoria de mapas" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
+        <div class="mapa-tabs" role="tablist" aria-label="Categorias de mapas" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px">
           <button type="button" class="button button-primary mapa-tab active" data-mapa-tipo="funcionarios" role="tab" aria-selected="true">Funcionários</button>
           <button type="button" class="button mapa-tab" data-mapa-tipo="controlados" role="tab" aria-selected="false">Controlados</button>
           <button type="button" class="button mapa-tab" data-mapa-tipo="todos" role="tab" aria-selected="false">Todos os mapas</button>
@@ -3659,46 +3691,27 @@ function renderControleValidade() {
     const validade=document.getElementById('mapaValidade').value;
     const lancamentoMes=document.getElementById('mapaLancamento').value;
     const sit=document.getElementById('mapaSituacao').value;
-    const todos=registrosVisiveisHTML(painelCache.validades).filter(r=>String(r.funcionario||'').trim()!=='Transferencias');
-    const categoria = r => {
-      const nome = String(r.funcionario || "").trim();
-    
-      if (CONTROLADOS_MAPA.includes(nome)) {
-        return "controlados";
-      }
-    
-      if (FUNCIONARIOS_MAPA.includes(nome)) {
-        return "funcionarios";
-      }
-    
-      return "outros";
-    };
-    const base=todos.filter(r=> tipoMapaAtivo==='todos' ? true : categoria(r)===tipoMapaAtivo);
+    // A categoria Funcionários exclui somente as abas especiais.
+    // Controlados mostra as abas especiais; Todos os mapas reúne ambas.
+    // Transferencias permanece fora do Mapa de Validade, em sua página própria.
+    const todosOsMapas = [...new Set([...FUNCIONARIOS_MAPA, ...CONTROLADOS_MAPA])];
+    const nomesCategoria = tipoMapaAtivo === 'controlados'
+      ? CONTROLADOS_MAPA
+      : tipoMapaAtivo === 'todos'
+        ? todosOsMapas
+        : FUNCIONARIOS_MAPA;
+    const registrosMapa = registrosVisiveisHTML(painelCache.validades).filter(r => {
+      const nome = String(r.funcionario || '').trim();
+      return nome !== 'Transferencias' && todosOsMapas.includes(nome);
+    });
+    const base = registrosMapa.filter(r => nomesCategoria.includes(String(r.funcionario || '').trim()));
     const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
     const sel=document.getElementById('mapaFuncionario'); const prior=sel.value;
-    const funcionariosAtuais = Array.isArray(window.listaFuncionarios)
-      ? window.listaFuncionarios
-      : [];
-    
-    const especiaisAtuais = Array.isArray(window.listaAbasEspeciais)
-      ? window.listaAbasEspeciais
-      : [];
-    
-    const nomesCategoria =
-      tipoMapaAtivo === 'funcionarios'
-        ? funcionariosAtuais
-        : tipoMapaAtivo === 'controlados'
-          ? especiaisAtuais
-          : [...funcionariosAtuais, ...especiaisAtuais];
-    
-    const names = nomesCategoria.filter(n =>
-      todos.some(r =>
-        String(r.funcionario || '').trim() === n
-      )
-    );
+    const names = [...new Set(base.map(r => String(r.funcionario || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
     
@@ -3820,27 +3833,18 @@ function imprimirMapaValidade() {
   const lancamentoFiltro = document.getElementById('mapaLancamento').value;
   const situacaoFiltro = document.getElementById('mapaSituacao').value;
 
-  const funcionarios = [
-    'Alice', 'Altino', 'Ana Carolina', 'Anielle', 'Gabriela',
-    'Gabriele', 'Isabela', 'Livia', 'Paola', 'Rafaela',
-    'Ramon', 'Rillary', 'Sulaima', 'Thomaz'
-  ];
-
-  const controlados = [
-    'Termolabil', 'Psicotropicos', 'Antibioticos'
-  ];
+  const todosOsMapas = [...new Set([...FUNCIONARIOS_MAPA, ...CONTROLADOS_MAPA])];
+  const nomesCategoria = tipoMapaAtivo === 'controlados'
+    ? CONTROLADOS_MAPA
+    : tipoMapaAtivo === 'todos'
+      ? todosOsMapas
+      : FUNCIONARIOS_MAPA;
 
   let registros = registrosVisiveisHTML(painelCache.validades)
     .filter(r => {
       const nome = String(r.funcionario || '').trim();
 
-      if (nome === 'Transferencias') return false;
-
-      if (tipoMapaAtivo === 'funcionarios' &&
-          !funcionarios.includes(nome)) return false;
-
-      if (tipoMapaAtivo === 'controlados' &&
-          !controlados.includes(nome)) return false;
+      if (nome === 'Transferencias' || !nomesCategoria.includes(nome)) return false;
 
       if (funcionario && nome !== funcionario) return false;
 
@@ -5244,7 +5248,7 @@ function atualizarProdutosAtencao(registros) {
   });
   ['mapaProduto','mapaLote','mapaValidade','mapaLancamento'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderMapa));
   ['mapaSituacao','mapaFuncionario'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderMapa));
-  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo;document.getElementById('mapaFuncionario').value='';renderMapa();}));
+  document.querySelectorAll('.mapa-tab').forEach(btn=>btn.addEventListener('click',()=>{tipoMapaAtivo=btn.dataset.mapaTipo||'funcionarios';document.getElementById('mapaFuncionario').value='';renderMapa();}));
   ['transferenciasProduto','transferenciasLote','transferenciasValidade','transferenciasSituacao'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderTransferencias));
   document.getElementById('refreshTransferencias')?.addEventListener('click', () => carregarTransferencias(false));
   function normalizarBuscaPerdas(valor) { return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim(); }
