@@ -3059,9 +3059,9 @@ Auth.exigirAdmin().then(ok => {
 
   async function carregarDescricoesProdutosInterno(forcar) {
     try {
-      await window.CatalogoSQLite.abrir(forcar === true);
+      await window.CatalogoSQLite.abrir();
       catalogoCarregado = true;
-      console.info("Catálogo SQLite carregado:", window.CatalogoSQLite.quantidade(), "produtos.");
+      console.info("Catálogo D1 disponível:", window.CatalogoSQLite.quantidade(), "produtos no servidor; nenhum catálogo completo foi baixado.");
     } catch (erro) {
       console.error("Erro ao carregar produtos_ean.db:", erro);
       catalogoCarregado = false;
@@ -3706,9 +3706,7 @@ function renderControleValidade() {
       : FUNCIONARIOS_MAPA;
 
     const names = funcionariosAtuais.filter(n =>
-      todos.some(r =>
-        String(r.funcionario || '').trim() === n
-      )
+      base.some(r => String(r.funcionario || '').trim() === n)
     );
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if(names.includes(prior))sel.value=prior;
@@ -4214,6 +4212,8 @@ function imprimirMapaValidade() {
       painelCache.validadesQueima = Array.isArray(d.registrosQueima)
         ? d.registrosQueima.map(r => ({ ...r, emQueima: true }))
         : [];
+      // Busca no D1 somente os produtos efetivamente presentes nos mapas carregados.
+      await window.CatalogoSQLite.garantir([...(painelCache.validades || []), ...(painelCache.validadesQueima || [])]);
       validadesProntas = true;
   
       // Atualiza o Mapa de Validade.
@@ -6943,6 +6943,11 @@ document.addEventListener("submit", async function(event) {
       const lista = extrairRegistrosEstoquePlanilha(wb);
 
       if (!lista.length) throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
+      await window.CatalogoSQLite.garantir(lista);
+      lista.forEach(item => {
+        const produto = window.CatalogoSQLite.porEAN(item.ean) || window.CatalogoSQLite.porCodigoInterno(item.codigoInterno);
+        if (produto) { item.produto = produto.produto || produto.descricao || item.produto; item.secao = produto.secao || item.secao; item.encontradoNoJson = true; }
+      });
 
       // Preserva a importação local existente.
       window.estoqueOdsRegistros = lista;
@@ -7057,6 +7062,11 @@ document.addEventListener("submit", async function(event) {
       if (!lista.length) {
         throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
       }
+      await window.CatalogoSQLite.garantir(lista);
+      lista.forEach(item => {
+        const produto = window.CatalogoSQLite.porEAN(item.ean) || window.CatalogoSQLite.porCodigoInterno(item.codigoInterno);
+        if (produto) { item.produto = produto.produto || produto.descricao || item.produto; item.secao = produto.secao || item.secao; item.encontradoNoJson = true; }
+      });
 
       window.estoqueOdsRegistros = lista;
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
@@ -7185,39 +7195,32 @@ document.addEventListener("submit", async function(event) {
       const resumo = typeof dadosProdutos === "function" ? dadosProdutos() : new Map();
       const mapaCodigos = resumo && typeof resumo.keys === "function" ? Array.from(resumo.keys()).flatMap(candidatos) : [];
       const filtroSql = !f ? "" : (f === "mapa" ? "mapa" : "sem-mapa");
-      const total = window.CatalogoSQLite.contarBusca(q, filtroSql, mapaCodigos);
+      const resposta = await window.CatalogoSQLite.buscarPagina({ query:q, filtro:filtroSql, mapaCodigos, limit:TAMANHO_PAGINA_PRODUTOS, offset:paginaProdutosAtual*TAMANHO_PAGINA_PRODUTOS });
+      const total = Number(resposta.total || 0);
       const paginaTotal = Math.max(1, Math.ceil(total / TAMANHO_PAGINA_PRODUTOS));
       paginaProdutosAtual = Math.min(paginaProdutosAtual, paginaTotal - 1);
-      const produtos = window.CatalogoSQLite.listar({ query: q, filtro: filtroSql, mapaCodigos, limit: TAMANHO_PAGINA_PRODUTOS, offset: paginaProdutosAtual * TAMANHO_PAGINA_PRODUTOS });
+      const produtos = paginaProdutosAtual * TAMANHO_PAGINA_PRODUTOS === Number(resposta.offset) ? resposta.produtos : (await window.CatalogoSQLite.buscarPagina({query:q,filtro:filtroSql,mapaCodigos,limit:TAMANHO_PAGINA_PRODUTOS,offset:paginaProdutosAtual*TAMANHO_PAGINA_PRODUTOS})).produtos;
       const lista = produtos.map(p => {
         let r = null;
-        if (resumo && typeof resumo.has === "function") {
-          for (const k of candidatos(p.ean)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
-        }
+        if (resumo && typeof resumo.has === "function") for (const k of candidatos(p.ean)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
         return { codigo:p.ean, descricao:p.produto || p.descricao, secao:p.secao, lanc:r ? r.lanc : 0, un:r ? r.un : 0 };
       });
-      const rows = lista;
       setText("produtosTotal", num(total));
-      setText("produtosSecoes", num(window.CatalogoSQLite.contarSecoes()));
-      setText("produtosNoMapa", num(window.CatalogoSQLite.contarBusca("", "mapa", mapaCodigos)));
-      g("produtosTbody").innerHTML = rows.map(o => '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + '</td><td>' + esc(o.secao || "—") + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' + (o.lanc ? badge("No mapa", "badge-success") : badge("Sem lançamento", "badge-neutral")) + '</td></tr>').join("");
-      mostrar("produtosEmpty", total > 0 && rows.length === 0);
-      setText("produtosNotice", total ? `${num(total)} produto(s) encontrados. Exibindo ${num(paginaProdutosAtual * TAMANHO_PAGINA_PRODUTOS + 1)}–${num(Math.min((paginaProdutosAtual + 1) * TAMANHO_PAGINA_PRODUTOS, total))}.` : "Nenhum produto encontrado no catálogo SQLite.");
+      setText("produtosSecoes", num(resposta.secoes || 0));
+      setText("produtosNoMapa", num(resposta.noMapa || 0));
+      g("produtosTbody").innerHTML = lista.map(o => '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + '</td><td>' + esc(o.secao || "—") + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' + (o.lanc ? badge("No mapa", "badge-success") : badge("Sem lançamento", "badge-neutral")) + '</td></tr>').join("");
+      mostrar("produtosEmpty", total === 0);
+      setText("produtosNotice", total ? `${num(total)} produto(s) encontrados. Exibindo ${num(paginaProdutosAtual*TAMANHO_PAGINA_PRODUTOS+1)}–${num(Math.min((paginaProdutosAtual+1)*TAMANHO_PAGINA_PRODUTOS,total))}.` : "Nenhum produto encontrado no catálogo D1.");
       mostrar("produtosNotice", true);
       let paginacao = g("produtosPaginacao");
-      if (!paginacao) {
-        paginacao = document.createElement("div"); paginacao.id = "produtosPaginacao";
-        paginacao.style.cssText = "display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 0;";
-        g("produtosTbody").closest("table")?.insertAdjacentElement("afterend", paginacao);
-      }
-      paginacao.innerHTML = '<label class="pagination-size">Itens por página <select data-produtos-tamanho class="filter-select"><option value="15" ' + (TAMANHO_PAGINA_PRODUTOS===15?'selected':'') + '>15</option><option value="25" ' + (TAMANHO_PAGINA_PRODUTOS===25?'selected':'') + '>25</option><option value="50" ' + (TAMANHO_PAGINA_PRODUTOS===50?'selected':'') + '>50</option></select></label><button type="button" class="btn-secondary" data-produtos-pagina="-1" ' + (paginaProdutosAtual <= 0 ? 'disabled' : '') + '>Anterior</button><span>Página ' + (paginaProdutosAtual + 1) + ' de ' + paginaTotal + '</span><button type="button" class="btn-secondary" data-produtos-pagina="1" ' + (paginaProdutosAtual >= paginaTotal - 1 ? 'disabled' : '') + '>Próxima</button>';
-      paginacao.querySelectorAll("button[data-produtos-pagina]").forEach(btn => btn.addEventListener("click", () => { paginaProdutosAtual += Number(btn.dataset.produtosPagina); renderProdutos(); }));
-      paginacao.querySelector("select[data-produtos-tamanho]")?.addEventListener("change", e => { TAMANHO_PAGINA_PRODUTOS = [15,25,50].includes(Number(e.target.value)) ? Number(e.target.value) : 15; paginaProdutosAtual = 0; renderProdutos(); });
+      if (!paginacao) { paginacao=document.createElement("div"); paginacao.id="produtosPaginacao"; paginacao.style.cssText="display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 0;"; g("produtosTbody").closest("table")?.insertAdjacentElement("afterend",paginacao); }
+      paginacao.innerHTML = '<label class="pagination-size">Itens por página <select data-produtos-tamanho class="filter-select"><option value="15" '+(TAMANHO_PAGINA_PRODUTOS===15?'selected':'')+'>15</option><option value="25" '+(TAMANHO_PAGINA_PRODUTOS===25?'selected':'')+'>25</option><option value="50" '+(TAMANHO_PAGINA_PRODUTOS===50?'selected':'')+'>50</option></select></label><button type="button" class="btn-secondary" data-produtos-pagina="-1" '+(paginaProdutosAtual<=0?'disabled':'')+'>Anterior</button><span>Página '+(paginaProdutosAtual+1)+' de '+paginaTotal+'</span><button type="button" class="btn-secondary" data-produtos-pagina="1" '+(paginaProdutosAtual>=paginaTotal-1?'disabled':'')+'>Próxima</button>';
+      paginacao.querySelectorAll("button[data-produtos-pagina]").forEach(btn=>btn.addEventListener("click",()=>{paginaProdutosAtual+=Number(btn.dataset.produtosPagina);renderProdutos();}));
+      paginacao.querySelector("select[data-produtos-tamanho]")?.addEventListener("change",e=>{TAMANHO_PAGINA_PRODUTOS=[15,25,50].includes(Number(e.target.value))?Number(e.target.value):15;paginaProdutosAtual=0;renderProdutos();});
       renderPainelIcons(g("page-produtos"));
     } catch (erro) {
-      console.error("Falha ao renderizar catálogo SQLite:", erro);
-      setText("produtosNotice", "Não foi possível carregar produtos_ean.db: " + (erro.message || erro));
-      mostrar("produtosNotice", true);
+      console.error("Falha ao renderizar catálogo D1:",erro);
+      setText("produtosNotice","Não foi possível consultar o catálogo D1: "+(erro.message||erro)); mostrar("produtosNotice",true);
     }
   }
 
