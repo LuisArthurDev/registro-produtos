@@ -8,6 +8,7 @@
 
   <script src="https://unpkg.com/lucide@0.468.0"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="./catalogo-sqlite.js"></script>
 
   <style>
     :root {
@@ -2753,7 +2754,7 @@ Auth.exigirAdmin().then(ok => {
 <div id="modalNovoProdutoJson" class="produto-json-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tituloModalNovoProduto">
   <div class="produto-json-card">
     <div class="produto-json-header">
-      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p>O produto será incluído no catálogo produtos_ean.json do GitHub.</p></div>
+      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p>O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.</p></div>
       <button type="button" class="icon-button" onclick="fecharModalNovoProdutoJson()" aria-label="Fechar">×</button>
     </div>
     <form id="formNovoProdutoJson" onsubmit="salvarNovoProdutoJson(event)">
@@ -2989,25 +2990,29 @@ Auth.exigirAdmin().then(ok => {
   }
 
  
-  let mapaDescricoes = {};
-  let indiceCodigoInternoCatalogo = {};
-  let indiceEANCatalogo = {};
-  
-  function normalizarCodigo(valor) {
-    return String(valor ?? "").trim();
-  }
+  let catalogoCarregado = false;
+  const mapaDescricoes = new Proxy(Object.create(null), {
+    get(_alvo, chave) {
+      if (typeof chave !== "string" || !window.CatalogoSQLite?.pronto()) return undefined;
+      return window.CatalogoSQLite.porEAN(chave) || undefined;
+    },
+    has(_alvo, chave) {
+      return typeof chave === "string" && Boolean(window.CatalogoSQLite?.porEAN(chave));
+    },
+    getOwnPropertyDescriptor(_alvo, chave) {
+      const valor = typeof chave === "string" ? window.CatalogoSQLite?.porEAN(chave) : null;
+      return valor ? { configurable: true, enumerable: true, writable: false, value: valor } : undefined;
+    }
+  });
 
+  function normalizarCodigo(valor) { return String(valor ?? "").trim(); }
   function chavesCodigoCatalogo(valor) {
     const original = normalizarCodigo(valor);
     if (!original) return [];
-    const semMascara = original.replace(/[\s.\/-]/g, "");
-    const somenteDigitos = original.replace(/\D/g, "");
-    return [...new Set([original, semMascara, somenteDigitos].filter(Boolean))];
+    return [...new Set([original, original.replace(/[\s.\/-]/g, ""), original.replace(/\D/g, "")].filter(Boolean))];
   }
-  
-  let catalogoPromessa = null;
 
-  // Sem argumento: reaproveita o catálogo já carregado. Com true: baixa de novo (ex.: após adicionar produto).
+  let catalogoPromessa = null;
   function carregarDescricoesProdutos(forcar) {
     if (forcar !== true && catalogoPromessa) return catalogoPromessa;
     catalogoPromessa = carregarDescricoesProdutosInterno(forcar === true);
@@ -3016,101 +3021,28 @@ Auth.exigirAdmin().then(ok => {
 
   async function carregarDescricoesProdutosInterno(forcar) {
     try {
-      const resposta = await fetch("./produtos_ean.json", {
-        cache: forcar ? "reload" : "default"
-      });
-  
-      if (!resposta.ok) {
-        throw new Error(
-          `Não foi possível carregar produtos_ean.json: HTTP ${resposta.status}`
-        );
-      }
-  
-      const dados = await resposta.json();
-  
-      // Aceita catálogo indexado pela chave (normalmente EAN) ou listas de produtos.
-      mapaDescricoes = {};
-      indiceCodigoInternoCatalogo = {};
-      indiceEANCatalogo = {};
-
-      const registrarIndice = (indice, valor, produto) => {
-        chavesCodigoCatalogo(valor).forEach(chave => {
-          if (chave && !indice[chave]) indice[chave] = produto;
-        });
-      };
-      const registrarProduto = (produto, chaveOriginal = "") => {
-        if (!produto || typeof produto !== "object") return;
-        const eans = [
-          chaveOriginal,
-          produto.ean, produto.EAN, produto.codigoBarras,
-          produto.codigo_barras, produto.codBarras, produto.gtin
-        ];
-        const internos = [
-          produto.codigoInterno, produto.codigo_interno, produto.codInterno,
-          produto["codigo interno"], produto.codigoProduto, produto.codProduto
-        ];
-        eans.forEach(ean => registrarIndice(indiceEANCatalogo, ean, produto));
-        internos.forEach(codigo => registrarIndice(indiceCodigoInternoCatalogo, codigo, produto));
-      };
-
-      if (Array.isArray(dados)) {
-        dados.forEach(produto => {
-          const ean = produto?.ean ?? produto?.EAN ?? produto?.codigoBarras ?? produto?.codigo;
-          const chave = normalizarCodigo(ean);
-          if (chave) mapaDescricoes[chave] = produto;
-          registrarProduto(produto, chave);
-        });
-      } else if (Array.isArray(dados.produtos)) {
-        dados.produtos.forEach(produto => {
-          const ean = produto?.ean ?? produto?.EAN ?? produto?.codigoBarras ?? produto?.codigo;
-          const chave = normalizarCodigo(ean);
-          if (chave) mapaDescricoes[chave] = produto;
-          registrarProduto(produto, chave);
-        });
-      } else if (dados && typeof dados === "object") {
-        mapaDescricoes = dados;
-        Object.entries(dados).forEach(([chave, produto]) => registrarProduto(produto, chave));
-      }
-
-      console.info(
-        "Catálogo carregado:",
-        Object.keys(mapaDescricoes).length,
-        "produtos; códigos internos:",
-        Object.keys(indiceCodigoInternoCatalogo).length,
-        "EANs:", Object.keys(indiceEANCatalogo).length
-      );
-  
+      await window.CatalogoSQLite.abrir(forcar === true);
+      catalogoCarregado = true;
+      console.info("Catálogo SQLite carregado:", window.CatalogoSQLite.quantidade(), "produtos.");
     } catch (erro) {
-      console.error("Erro ao carregar produtos_ean.json:", erro);
-      mapaDescricoes = {};
-      indiceCodigoInternoCatalogo = {};
-      indiceEANCatalogo = {};
+      console.error("Erro ao carregar produtos_ean.db:", erro);
+      catalogoCarregado = false;
       catalogoPromessa = null;
+      throw erro;
     }
   }
-  
+
   function produtoCatalogoDoRegistro(r) {
-    if (!r || typeof r !== "object") return null;
-    // Os registros de Perdas podem trazer o EAN em `codigo` ou o código interno
-    // no mesmo campo, dependendo da origem. Testa todos os identificadores nos dois índices.
-    const identificadoresEAN = [r.ean, r.EAN, r.eanInterno, r.codigoBarras, r.codigo_barras, r.codigo];
-    const identificadoresInternos = [r.codigoInterno, r.codigo_interno, r.codInterno, r.codigo];
-    for (const valor of identificadoresEAN) {
-      for (const chave of chavesCodigoCatalogo(valor)) {
-        if (indiceEANCatalogo[chave]) return indiceEANCatalogo[chave];
-        if (mapaDescricoes[chave] && typeof mapaDescricoes[chave] === "object") return mapaDescricoes[chave];
-      }
+    if (!r || typeof r !== "object" || !window.CatalogoSQLite?.pronto()) return null;
+    const eans = [r.ean, r.EAN, r.eanInterno, r.codigoBarras, r.codigo_barras, r.codigo];
+    const internos = [r.codigoInterno, r.codigo_interno, r.codInterno, r.codigo];
+    for (const valor of eans) {
+      const encontrado = window.CatalogoSQLite.porEAN(valor);
+      if (encontrado) return encontrado;
     }
-    for (const valor of identificadoresInternos) {
-      for (const chave of chavesCodigoCatalogo(valor)) {
-        if (indiceCodigoInternoCatalogo[chave]) return indiceCodigoInternoCatalogo[chave];
-      }
-    }
-    // Fallback para catálogos antigos cujo objeto é indexado diretamente pelo código.
-    for (const valor of [...identificadoresEAN, ...identificadoresInternos]) {
-      for (const chave of chavesCodigoCatalogo(valor)) {
-        if (mapaDescricoes[chave] && typeof mapaDescricoes[chave] === "object") return mapaDescricoes[chave];
-      }
+    for (const valor of internos) {
+      const encontrado = window.CatalogoSQLite.porCodigoInterno(valor);
+      if (encontrado) return encontrado;
     }
     return null;
   }
@@ -3370,7 +3302,8 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   }
 
   function secaoProdutoPainel(r) {
-    const p = mapaDescricoes[String(r?.codigo || '').trim()] || {};
+    const chave = String(r?.codigo || '').trim();
+    const p = window.CatalogoSQLite?.porEAN(chave) || window.CatalogoSQLite?.porCodigoInterno(chave) || {};
     return String(p.secao || r?.secao || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
@@ -4773,7 +4706,7 @@ function atualizarProdutosAtencao(registros) {
 
   // A seção (Nutrição/Conveniência) vem do catálogo. Como ele é carregado sob demanda,
   // aguarda a leitura em segundo plano e redesenha a lista sem bloquear o dashboard.
-  if (!Object.keys(mapaDescricoes || {}).length) {
+  if (!catalogoCarregado) {
     if (!atencaoCatalogoTentado && !atencaoCatalogoCarregando) {
       atencaoCatalogoTentado = true;
       atencaoCatalogoCarregando = true;
@@ -4800,7 +4733,8 @@ function atualizarProdutosAtencao(registros) {
 
   const rows = (Array.isArray(registros) ? registros : [])
     .filter(r => {
-      const p = mapaDescricoes[String(r.codigo || '').trim()] || {};
+      const chave = String(r.codigo || '').trim();
+      const p = window.CatalogoSQLite?.porEAN(chave) || window.CatalogoSQLite?.porCodigoInterno(chave) || {};
       const sec = norm(p.secao || r.secao || '');
       const dias = diasAte(r.validadeISO || r.validade);
 
@@ -5157,9 +5091,9 @@ function atualizarProdutosAtencao(registros) {
   async function garantirAba(pagina) {
     const faltam = (FONTES_ABA[pagina] || []).filter(f => !PRONTOS[f]());
     const tarefas = faltam.map(f => CARREGADORES[f](true));
-    // O catálogo produtos_ean.json é grande; baixa somente quando uma tela
+    // O banco SQLite é carregado somente quando uma tela
     // que realmente usa descrições de produtos for aberta.
-    if (['mapa', 'controle-validade'].includes(pagina) && !Object.keys(mapaDescricoes).length) {
+    if (['mapa', 'controle-validade'].includes(pagina) && !catalogoCarregado) {
       tarefas.push(carregarDescricoesProdutos().then(aposCatalogo));
     }
     await Promise.allSettled(tarefas);
@@ -5714,27 +5648,13 @@ let indiceCodigoInternoRef = null;
 
 // Índice código interno -> produto, montado uma vez por catálogo carregado.
 function buscarPorCodigoInternoManual(codigoInterno) {
-  if (!indiceCodigoInternoManual || indiceCodigoInternoRef !== mapaDescricoes) {
-    indiceCodigoInternoManual = new Map();
-
-    for (const [ean, registro] of Object.entries(mapaDescricoes || {})) {
-      if (!registro || typeof registro !== "object") continue;
-
-      const codigo = normalizarCodigoManualMapa(registro.codigoInterno || registro.codigo || "");
-
-      if (codigo && !indiceCodigoInternoManual.has(codigo)) {
-        indiceCodigoInternoManual.set(codigo, {
-          ean,
-          codigoInterno: codigo,
-          descricao: String(registro.produto || registro.descricao || registro.nome || "").trim()
-        });
-      }
-    }
-
-    indiceCodigoInternoRef = mapaDescricoes;
-  }
-
-  return indiceCodigoInternoManual.get(codigoInterno) || null;
+  const encontrado = window.CatalogoSQLite?.porCodigoInterno(codigoInterno);
+  if (!encontrado) return null;
+  return {
+    ean: encontrado.ean,
+    codigoInterno: encontrado.codigoInterno,
+    descricao: encontrado.produto || encontrado.descricao || ""
+  };
 }
 
 function normalizarCodigoManualMapa(valor) {
@@ -5742,7 +5662,7 @@ function normalizarCodigoManualMapa(valor) {
 }
 
 /*
- * Consulta a base produtos_ean.json.
+ * Consulta a base produtos_ean.db.
  * Aceita registros no formato:
  * {
  *   "7890000000012": {
@@ -6509,7 +6429,7 @@ document.addEventListener("submit", async function(event) {
 </script>
 <script>
 /* ===== Páginas de gestão com dados reais (Funcionários, Estoque, Produtos e Histórico) =====
-   Usam os mesmos dados do Mapa de Validade (Apps Script) e o catálogo produtos_ean.json. */
+   Usam os mesmos dados do Mapa de Validade (Apps Script) e o catálogo SQLite. */
 (function () {
   const g = id => document.getElementById(id);
   let FUNC = ["Transferencias"];
@@ -6813,7 +6733,7 @@ document.addEventListener("submit", async function(event) {
   const ESTOQUE_ODS_STORAGE_KEY = 'painelConferente_estoqueOds_v1';
   let estoqueOdsAtualizadoEm = '';
   function chaveEstoque(v) { return String(v ?? '').trim().replace(/\.0$/, '').toLocaleLowerCase('pt-BR'); }
-  function buscarProdutoPorCodigoInterno(codigo) { const k=chaveEstoque(codigo); if(!k)return null; for(const [ean,p] of Object.entries(mapaDescricoes||{})){if(chaveEstoque(p?.codigoInterno)===k)return {ean,produto:p};} return null; }
+  function buscarProdutoPorCodigoInterno(codigo) { const p=window.CatalogoSQLite?.porCodigoInterno(chaveEstoque(codigo)); return p ? {ean:p.ean,produto:p} : null; }
 
 
   // Lê o estoque por nomes de cabeçalho e, quando necessário, detecta a coluna
@@ -6909,6 +6829,8 @@ document.addEventListener("submit", async function(event) {
   
   async function importarEstoqueOds(arquivo) {
     if (!arquivo) return;
+    try { await carregarDescricoesProdutos(); }
+    catch (erroCatalogo) { throw new Error("Não foi possível carregar o catálogo SQLite para identificar os produtos: " + (erroCatalogo.message || erroCatalogo)); }
   
     if (!window.XLSX) {
       const msg = 'A biblioteca de leitura de planilhas não carregou. Verifique sua conexão e atualize a página.';
@@ -7051,6 +6973,8 @@ document.addEventListener("submit", async function(event) {
         );
       }
   
+      try { await carregarDescricoesProdutos(); }
+      catch (erroCatalogo) { console.warn('Catálogo SQLite indisponível durante a leitura do estoque; usando os dados da planilha.', erroCatalogo); }
       const bytes = await resposta.arrayBuffer();
       const wb = XLSX.read(bytes, { type: 'array', cellText: true, cellDates: false });
       const lista = extrairRegistrosEstoquePlanilha(wb);
@@ -7173,98 +7097,56 @@ document.addEventListener("submit", async function(event) {
   g('btnAtualizarVencidosEstoque')?.addEventListener('click', carregarVencidosEstoque);
   g('estoqueVencidosBusca')?.addEventListener('input', renderVencidosEstoque);
 
-  /* ---------- Produtos (catálogo produtos_ean.json) ---------- */
+  /* ---------- Produtos (catálogo SQLite) ---------- */
   
-  function renderProdutos() {
+  let paginaProdutosAtual = 0;
+  const TAMANHO_PAGINA_PRODUTOS = 100;
+  async function renderProdutos() {
     if (!g("produtosTbody")) return;
-  
-    const catalogo =
-      (typeof mapaDescricoes === "object" && mapaDescricoes)
-        ? mapaDescricoes
-        : {};
-  
-    const codigos = Object.keys(catalogo);
-  
-    // Não depende do estoque.ods.
-    // Mantém a tabela funcional enquanto os totais de lançamentos
-    // não estiverem conectados à função dadosProdutos().
-    const resumo = typeof dadosProdutos === "function"
-      ? dadosProdutos()
-      : new Map();
-  
-    const q = norm(g("produtosBusca")?.value || "");
-    const f = g("produtosFiltro")?.value || "";
-  
-    const lista = codigos.map(c => {
-      const i = info(c);
-      let r = null;
-  
-      if (resumo && typeof resumo.has === "function") {
-        for (const k of candidatos(c)) {
-          if (resumo.has(k)) {
-            r = resumo.get(k);
-            break;
-          }
+    try {
+      await carregarDescricoesProdutos();
+      const q = String(g("produtosBusca")?.value || "").trim();
+      const f = g("produtosFiltro")?.value || "";
+      const resumo = typeof dadosProdutos === "function" ? dadosProdutos() : new Map();
+      const mapaCodigos = resumo && typeof resumo.keys === "function" ? Array.from(resumo.keys()).flatMap(candidatos) : [];
+      const filtroSql = !f ? "" : (f === "mapa" ? "mapa" : "sem-mapa");
+      const total = window.CatalogoSQLite.contarBusca(q, filtroSql, mapaCodigos);
+      const paginaTotal = Math.max(1, Math.ceil(total / TAMANHO_PAGINA_PRODUTOS));
+      paginaProdutosAtual = Math.min(paginaProdutosAtual, paginaTotal - 1);
+      const produtos = window.CatalogoSQLite.listar({ query: q, filtro: filtroSql, mapaCodigos, limit: TAMANHO_PAGINA_PRODUTOS, offset: paginaProdutosAtual * TAMANHO_PAGINA_PRODUTOS });
+      const lista = produtos.map(p => {
+        let r = null;
+        if (resumo && typeof resumo.has === "function") {
+          for (const k of candidatos(p.ean)) { if (resumo.has(k)) { r = resumo.get(k); break; } }
         }
+        return { codigo:p.ean, descricao:p.produto || p.descricao, secao:p.secao, lanc:r ? r.lanc : 0, un:r ? r.un : 0 };
+      });
+      const rows = lista;
+      setText("produtosTotal", num(total));
+      setText("produtosSecoes", num(window.CatalogoSQLite.contarSecoes()));
+      setText("produtosNoMapa", num(window.CatalogoSQLite.contarBusca("", "mapa", mapaCodigos)));
+      g("produtosTbody").innerHTML = rows.map(o => '<tr><td>' + esc(o.codigo) + '</td><td class="cell-primary">' + esc(o.descricao) + '</td><td>' + esc(o.secao || "—") + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' + (o.lanc ? badge("No mapa", "badge-success") : badge("Sem lançamento", "badge-neutral")) + '</td></tr>').join("");
+      mostrar("produtosEmpty", total > 0 && rows.length === 0);
+      setText("produtosNotice", total ? `${num(total)} produto(s) encontrados. Exibindo ${num(paginaProdutosAtual * TAMANHO_PAGINA_PRODUTOS + 1)}–${num(Math.min((paginaProdutosAtual + 1) * TAMANHO_PAGINA_PRODUTOS, total))}.` : "Nenhum produto encontrado no catálogo SQLite.");
+      mostrar("produtosNotice", true);
+      let paginacao = g("produtosPaginacao");
+      if (!paginacao) {
+        paginacao = document.createElement("div"); paginacao.id = "produtosPaginacao";
+        paginacao.style.cssText = "display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 0;";
+        g("produtosTbody").closest("table")?.insertAdjacentElement("afterend", paginacao);
       }
-  
-      return {
-        codigo: c,
-        descricao: i.descricao,
-        secao: i.secao,
-        lanc: r ? r.lanc : 0,
-        un: r ? r.un : 0
-      };
-    });
-  
-    const rows = lista.filter(o =>
-      (!q || norm(
-        o.codigo + " " + o.descricao + " " + o.secao
-      ).includes(q)) &&
-      (!f || (f === "mapa" ? o.lanc > 0 : o.lanc === 0))
-    );
-  
-    setText("produtosTotal", num(lista.length));
-  
-    setText(
-      "produtosSecoes",
-      num(new Set(lista.map(o => o.secao).filter(Boolean)).size)
-    );
-  
-    setText(
-      "produtosNoMapa",
-      num(lista.filter(o => o.lanc > 0).length)
-    );
-  
-    g("produtosTbody").innerHTML = rows
-      .map(o =>
-        '<tr>' +
-          '<td>' + esc(o.codigo) + '</td>' +
-          '<td class="cell-primary">' + esc(o.descricao) + '</td>' +
-          '<td>' + esc(o.secao || "—") + '</td>' +
-          '<td>' + num(o.lanc) + '</td>' +
-          '<td>' + num(o.un) + '</td>' +
-          '<td>' +
-            (o.lanc
-              ? badge("No mapa", "badge-success")
-              : badge("Sem lançamento", "badge-neutral")) +
-          '</td>' +
-        '</tr>'
-      ).join("");
-  
-    mostrar("produtosEmpty", codigos.length > 0 && rows.length === 0);
-  
-    setText(
-      "produtosNotice",
-      !codigos.length
-        ? "Catálogo produtos_ean.json ainda não carregado. Confira se o arquivo está na mesma pasta do painel."
-        : num(codigos.length) + " produto(s) no catálogo."
-    );
-  
-    mostrar("produtosNotice", true);
-    renderPainelIcons(g("page-produtos"));
+      paginacao.innerHTML = '<button type="button" class="btn-secondary" data-produtos-pagina="-1" ' + (paginaProdutosAtual <= 0 ? 'disabled' : '') + '>Anterior</button><span>Página ' + (paginaProdutosAtual + 1) + ' de ' + paginaTotal + '</span><button type="button" class="btn-secondary" data-produtos-pagina="1" ' + (paginaProdutosAtual >= paginaTotal - 1 ? 'disabled' : '') + '>Próxima</button>';
+      paginacao.querySelectorAll("button[data-produtos-pagina]").forEach(btn => btn.addEventListener("click", () => { paginaProdutosAtual += Number(btn.dataset.produtosPagina); renderProdutos(); }));
+      renderPainelIcons(g("page-produtos"));
+    } catch (erro) {
+      console.error("Falha ao renderizar catálogo SQLite:", erro);
+      setText("produtosNotice", "Não foi possível carregar produtos_ean.db: " + (erro.message || erro));
+      mostrar("produtosNotice", true);
+    }
   }
-
+  g("produtosBusca")?.addEventListener("input", () => { paginaProdutosAtual = 0; renderProdutos(); });
+  g("produtosFiltro")?.addEventListener("change", () => { paginaProdutosAtual = 0; renderProdutos(); });
+  window.renderProdutos = renderProdutos;
 
   let historicoAdministrativoCache = [];
   let historicoAdministrativoPromise = null;
@@ -7372,22 +7254,11 @@ document.addEventListener("submit", async function(event) {
   const gProdutoJson = id => document.getElementById(id);
 
   function buscarProdutoPorCodigoInterno(codigoInterno) {
-  const codigo = String(codigoInterno).trim();
-
-  for (const [ean, produto] of Object.entries(produtosEAN)) {
-    if (String(produto.codigoInterno).trim() === codigo) {
-      return {
-        ean: ean,
-        codigoInterno: produto.codigoInterno,
-        descricao: produto.produto || ""
-      };
-    }
+    const produto = window.CatalogoSQLite?.porCodigoInterno(String(codigoInterno || "").trim());
+    return produto ? { ean: produto.ean, codigoInterno: produto.codigoInterno, descricao: produto.produto || produto.descricao || "" } : null;
   }
 
-  return null;
-}
-
-  /* ---------- Cadastro de produto no produtos_ean.json via Apps Script/GitHub ---------- */
+  /* ---------- Cadastro de produto no catálogo via Apps Script/GitHub ---------- */
   function abrirModalNovoProdutoJson() {
     const modal = gProdutoJson("modalNovoProdutoJson");
     if (!modal) return;
@@ -7419,6 +7290,11 @@ document.addEventListener("submit", async function(event) {
       status.textContent = "Preencha todos os campos.";
       return;
     }
+    try { await carregarDescricoesProdutos(); } catch (erroCatalogo) {
+      status.className = "produto-json-status error";
+      status.textContent = "Não foi possível validar o catálogo SQLite: " + (erroCatalogo.message || erroCatalogo);
+      return;
+    }
     if (mapaDescricoes[ean]) {
       status.className = "produto-json-status error";
       status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
@@ -7442,14 +7318,24 @@ document.addEventListener("submit", async function(event) {
       status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
       gProdutoJson("formNovoProdutoJson").reset();
 
-      setTimeout(async () => {
-        try {
-          await carregarDescricoesProdutos(true);
-          renderProdutos();
-        } catch (erroAtualizacao) {
-          console.warn("Produto salvo; catálogo visual será atualizado quando a publicação terminar.", erroAtualizacao);
+      (async () => {
+        // O Apps Script atualiza o JSON no GitHub; o Actions gera o SQLite em seguida.
+        // Aguarda a nova versão do banco sem bloquear o restante do painel.
+        for (let tentativa = 0; tentativa < 12; tentativa++) {
+          await new Promise(resolve => setTimeout(resolve, tentativa === 0 ? 2500 : 5000));
+          try {
+            await carregarDescricoesProdutos(true);
+            if (window.CatalogoSQLite.temEAN(ean)) {
+              status.textContent = "Produto cadastrado e disponível no banco SQLite.";
+              window.renderProdutos?.();
+              return;
+            }
+          } catch (erroAtualizacao) {
+            console.warn("Aguardando publicação do banco SQLite:", erroAtualizacao);
+          }
         }
-      }, 1500);
+        status.textContent = "Produto salvo no catálogo de origem. A atualização do banco SQLite ainda está em processamento; atualize o painel em alguns instantes.";
+      })();
     } catch (erro) {
       status.className = "produto-json-status error";
       status.textContent = "Erro ao salvar: " + (erro.message || erro) +

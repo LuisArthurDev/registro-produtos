@@ -17,6 +17,7 @@
   <title>Visualização dos Lançamentos</title>
   <style>body{visibility:hidden}html.auth-ok body{visibility:visible}</style>
   <script src="auth.js"></script>
+  <script src="./catalogo-sqlite.js"></script>
 
   <style>
     :root {
@@ -753,23 +754,15 @@ function ocultarCarregamento() {
    ========================= */
 
 function carregarDescricoes() {
-  return fetch("produtos_ean.json?v=2", {
-    cache: "no-cache"
-  })
-    .then(resposta => {
-      if (!resposta.ok) {
-        throw new Error("Não foi possível carregar produtos_ean.json.");
+  return window.CatalogoSQLite.abrir().then(() => {
+    descricoesEAN = new Proxy(Object.create(null), {
+      get(_alvo, chave) { return typeof chave === "string" ? window.CatalogoSQLite.porEAN(chave) || undefined : undefined; },
+      getOwnPropertyDescriptor(_alvo, chave) {
+        const valor = typeof chave === "string" ? window.CatalogoSQLite.porEAN(chave) : null;
+        return valor ? { configurable: true, enumerable: true, value: valor } : undefined;
       }
-
-      return resposta.json();
-    })
-    .then(dados => {
-      if (!dados || typeof dados !== "object" || Array.isArray(dados)) {
-        throw new Error("A base de produtos não é um JSON válido.");
-      }
-
-      descricoesEAN = dados;
     });
+  });
 }
 
 function candidatosEAN(ean) {
@@ -788,32 +781,9 @@ function candidatosEAN(ean) {
 }
 
 function obterProdutoEAN(ean) {
-  for (const candidato of candidatosEAN(ean)) {
-    if (
-      Object.prototype.hasOwnProperty.call(descricoesEAN, candidato)
-    ) {
-      const item = descricoesEAN[candidato];
-
-      if (typeof item === "string") {
-        return {
-          produto: item,
-          secao: ""
-        };
-      }
-
-      if (item && typeof item === "object") {
-        return {
-          produto: String(item.produto || "Descrição não encontrada"),
-          secao: String(item.secao || "").trim()
-        };
-      }
-    }
-  }
-
-  return {
-    produto: "Descrição não encontrada",
-    secao: ""
-  };
+  const item = window.CatalogoSQLite?.porEAN(ean);
+  if (!item) return { produto: "Descrição não encontrada", secao: "" };
+  return { produto: String(item.produto || item.descricao || "Descrição não encontrada"), secao: String(item.secao || "").trim() };
 }
 
 function obterDescricao(ean) {

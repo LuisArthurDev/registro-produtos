@@ -14,6 +14,7 @@
 })();
 </script>
 <title>Registro de Mapa de Validade</title>
+<script src="./catalogo-sqlite.js"></script>
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -840,25 +841,18 @@ const lojaOrigemEl=$("lojaOrigem");
 let cameraAtiva=false,enviando=false,consultaSequencia=0;
 let temporizadorDigitacao=null,temporizadorPolling=null;
 let consultaScriptAtual=null,scriptStatusAtual=null,envioAtual=null;
-let itemAtual=null,produtosJsonCache=null,produtosJsonPromessa=null,produtosJsonErro=null;
+let itemAtual=null,catalogoSQLiteCarregado=null,catalogoSQLitePromessa=null,catalogoSQLiteErro=null;
 
-const VERSAO_BASE_EAN="2";
-
-function carregarProdutosJson(){
-  if(produtosJsonCache)return Promise.resolve(produtosJsonCache);
-  if(produtosJsonPromessa)return produtosJsonPromessa;
-  produtosJsonPromessa=fetch("produtos_ean.json?v="+encodeURIComponent(VERSAO_BASE_EAN),{cache:"no-cache"})
-    .then(r=>{
-      if(!r.ok)throw new Error("Não foi possível carregar produtos_ean.json (HTTP "+r.status+").");
-      return r.json();
-    }).then(d=>{
-      if(!d||typeof d!=="object"||Array.isArray(d))throw new Error("O arquivo produtos_ean.json não contém um objeto JSON válido.");
-      produtosJsonCache=d;produtosJsonErro=null;return d;
-    }).catch(e=>{
-      produtosJsonErro=e;produtosJsonPromessa=null;
-      console.error("Falha ao carregar a base de EAN:",e);throw e;
-    });
-  return produtosJsonPromessa;
+function carregarCatalogoSQLite(forcar=false){
+  if(catalogoSQLiteCarregado && !forcar) return Promise.resolve(catalogoSQLiteCarregado);
+  if(catalogoSQLitePromessa && !forcar) return catalogoSQLitePromessa;
+  catalogoSQLitePromessa=window.CatalogoSQLite.abrir(forcar).then(()=>{
+    catalogoSQLiteCarregado=true;catalogoSQLiteErro=null;return catalogoSQLiteCarregado;
+  }).catch(e=>{
+    catalogoSQLiteErro=e;catalogoSQLitePromessa=null;
+    console.error("Falha ao carregar a base SQLite de EAN:",e);throw e;
+  });
+  return catalogoSQLitePromessa;
 }
 
 function lerJSON(chave){
@@ -920,20 +914,15 @@ function limparDescricao(){
   $("descricaoTexto").textContent="";$("descricaoStatus").textContent="";
 }
 
-function encontrarProdutoNaBase(base,codigo){
-  const original=String(codigo||"").trim(),candidatos=[original];
-  if(/^\d{12}$/.test(original))candidatos.push("0"+original);
-  if(/^0\d{12}$/.test(original))candidatos.push(original.slice(1));
-  for(const candidato of candidatos){
-    if(!Object.prototype.hasOwnProperty.call(base,candidato))continue;
-    const item=base[candidato];
-    if(typeof item==="string"&&item.trim())return{codigoEncontrado:candidato,descricao:item.trim(),secao:""};
-    if(item&&typeof item==="object"&&!Array.isArray(item)){
-      const descricao=String(item.produto||"").trim(),secao=String(item.secao||"").trim();
-      if(descricao)return{codigoEncontrado:candidato,descricao,secao,codigoInterno:String(item.codigoInterno||item.codigo_interno||"").trim()};
-    }
-  }
-  return null;
+function encontrarProdutoNoSQLite(_base,codigo){
+  const item=window.CatalogoSQLite?.porEAN(codigo);
+  if(!item)return null;
+  return {
+    codigoEncontrado:item.ean,
+    descricao:String(item.produto||item.descricao||"").trim(),
+    secao:String(item.secao||"").trim(),
+    codigoInterno:String(item.codigoInterno||"").trim()
+  };
 }
 
 function buscarDescricaoProduto(codigoInformado){
@@ -941,25 +930,25 @@ function buscarDescricaoProduto(codigoInformado){
   if(!/^\d{8,14}$/.test(codigo)){$("descricaoProduto").style.display="none";return}
   const emCache=lerCache(codigo);
   if(emCache&&emCache.status==="found"){
-    mostrarDescricao("Produto encontrado na base JSON.","success",emCache.descricao);
+    mostrarDescricao("Produto encontrado no banco SQLite.","success",emCache.descricao);
     registrarNomeAtual(codigo,emCache.descricao);return;
   }
-  mostrarDescricao("Consultando a base JSON de produtos...");
-  carregarProdutosJson().then(base=>{
+  mostrarDescricao("Consultando o banco SQLite de produtos...");
+  carregarCatalogoSQLite().then(base=>{
     if(sequencia!==consultaSequencia)return;
-    const produto=encontrarProdutoNaBase(base,codigo);
+    const produto=encontrarProdutoNoSQLite(base,codigo);
     if(produto){
       gravarCache(codigo,{status:"found",descricao:produto.descricao});
-      mostrarDescricao("Produto encontrado na base JSON.","success",produto.descricao);
+      mostrarDescricao("Produto encontrado no banco SQLite.","success",produto.descricao);
       registrarNomeAtual(codigo,produto.descricao);
     }else{
       gravarCache(codigo,{status:"not_found"});
-      mostrarDescricao("EAN não encontrado no JSON. O lançamento exigirá confirmação.","error");
+      mostrarDescricao("EAN não encontrado no banco SQLite. O lançamento exigirá confirmação.","error");
       registrarNomeAtual(codigo,"Não cadastrado ("+codigo+")");
     }
   }).catch(()=>{
     if(sequencia!==consultaSequencia)return;
-    mostrarDescricao("Não foi possível carregar produtos_ean.json. O lançamento ficará bloqueado até a base ser carregada.","error");
+    mostrarDescricao("Não foi possível carregar produtos_ean.db. O lançamento ficará bloqueado até a base ser carregada.","error");
   });
 }
 
@@ -1010,7 +999,7 @@ function prepararDetectores(){
   return preparandoDetectores;
 }
 window.addEventListener("load",()=>{
-  carregarProdutosJson().catch(()=>mostrarStatus("Não foi possível carregar produtos_ean.json. Confira se o arquivo está na mesma pasta e se a página está hospedada em um servidor.","error"));
+  carregarCatalogoSQLite().catch(()=>mostrarStatus("Não foi possível carregar produtos_ean.db. Confira se o banco está publicado na raiz do site.","error"));
   setTimeout(()=>prepararDetectores().catch(()=>{}),800);
 });
 
@@ -1254,7 +1243,7 @@ function processarLeitura(texto,resultado){
     leituraInvalida("Leitura inválida: o código precisa ter apenas números (8 a 14 dígitos). Tente novamente.");return;
   }
   if(FORMATOS_GTIN.includes(formato)&&!gtinValido(codigo))return;
-  const conhecido=produtosJsonCache&&encontrarProdutoNaBase(produtosJsonCache,codigo);
+  const conhecido=catalogoSQLiteCarregado&&encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo);
   const necessarias=conhecido?1:LEITURAS_PARA_CONFIRMAR,agora=Date.now();
   if(leituraPendente.codigo===codigo&&agora-leituraPendente.t<JANELA_CONFIRMACAO_MS){
     leituraPendente.vezes++;leituraPendente.t=agora;
@@ -1545,35 +1534,35 @@ formulario.addEventListener("submit",async evento=>{
     lote,
     validade:validadeISO,
     quantidade:Number(quantidadeTexto),
-    descricao: String(produtosJsonCache ? (encontrarProdutoNaBase(produtosJsonCache,codigo)?.descricao || "") : ""),
-    codigoInterno: String(produtosJsonCache ? (encontrarProdutoNaBase(produtosJsonCache,codigo)?.codigoInterno || "") : ""),
+    descricao: String(catalogoSQLiteCarregado ? (encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo)?.descricao || "") : ""),
+    codigoInterno: String(catalogoSQLiteCarregado ? (encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo)?.codigoInterno || "") : ""),
     lojaOrigem:ehTransferencia?"V"+numeroLojaOrigem:"",
     romaneio:ehTransferencia?romaneio:""
   };
 
-  if(!produtosJsonCache){
-    mostrarStatus("A base produtos_ean.json ainda não foi carregada. Aguarde e tente salvar novamente.","error");
-    carregarProdutosJson().then(()=>{if(codigoEl.value.trim()===codigo)buscarDescricaoProduto(codigo)}).catch(()=>{
-      mostrarStatus("Não foi possível carregar produtos_ean.json. Verifique se o arquivo está junto do index.html e se a página está hospedada em um servidor.","error");
+  if(!catalogoSQLiteCarregado){
+    mostrarStatus("O banco produtos_ean.db ainda não foi carregado. Aguarde e tente salvar novamente.","error");
+    carregarCatalogoSQLite().then(()=>{if(codigoEl.value.trim()===codigo)buscarDescricaoProduto(codigo)}).catch(()=>{
+      mostrarStatus("Não foi possível carregar produtos_ean.db. Verifique se o banco está publicado na raiz do site.","error");
     });
     return;
   }
 
-  const produtoEncontrado=encontrarProdutoNaBase(produtosJsonCache,codigo);
-  const produtoExisteNoJson=Boolean(produtoEncontrado);
+  const produtoEncontrado=encontrarProdutoNoSQLite(catalogoSQLiteCarregado,codigo);
+  const produtoExisteNoCatalogo=Boolean(produtoEncontrado);
   let textoDescricao="";
-  if(produtoExisteNoJson){
+  if(produtoExisteNoCatalogo){
     textoDescricao=produtoEncontrado.descricao;
     gravarCache(codigo,{status:"found",descricao:textoDescricao});
-    mostrarDescricao("Produto encontrado na base JSON.","success",textoDescricao);
+    mostrarDescricao("Produto encontrado no banco SQLite.","success",textoDescricao);
     registrarNomeAtual(codigo,textoDescricao);
   }else{
     gravarCache(codigo,{status:"not_found"});
-    mostrarDescricao("EAN não encontrado no JSON. O lançamento exigirá confirmação.","error");
+    mostrarDescricao("EAN não encontrado no banco SQLite. O lançamento exigirá confirmação.","error");
     registrarNomeAtual(codigo,"Não cadastrado ("+codigo+")");
   }
 
-  if(!produtoExisteNoJson&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
+  if(!produtoExisteNoCatalogo&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
   if(!confirmarDuplicadoUmaVez && !ehEstoque){
     try {
       verificandoMapa = true;
@@ -1993,7 +1982,7 @@ function verificarAvisoValidade() {
 
   Promise.all([
     buscarValidadesParaAviso(),
-    carregarProdutosJson()
+    carregarCatalogoSQLite()
   ])
     .then(([registros]) => {
       // Impede que uma consulta antiga mostre o popup para outro funcionário.
