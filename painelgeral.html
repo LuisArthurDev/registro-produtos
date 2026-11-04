@@ -35,7 +35,7 @@
 (async function(){
   const autorizado = await Auth.exigirAdminGeral();
   if(!autorizado) return;
-  document.getElementById('identidade').textContent = Auth.usuario() + ' · Administrador Geral · Login ' + Auth.loginId().slice(0,8);
+  document.getElementById('identidade').textContent = Auth.usuario() + ' · Administrador Geral';
   const form=document.getElementById('formAdmin'), btn=document.getElementById('btnCriar'), msg=document.getElementById('mensagem'), lista=document.getElementById('lista');
   function mostrar(texto,tipo){msg.textContent=texto;msg.className='msg '+(tipo||'');}
   async function carregar(){

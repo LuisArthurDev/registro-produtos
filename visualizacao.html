@@ -1918,7 +1918,7 @@ if (funcionarioURL) {
 Auth.exigirLogin().then(ok => {
   if (!ok) return;
   const usuario = document.getElementById("usuarioSessao");
-  if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja() + " · Login " + Auth.loginId().slice(0,8);
+  if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja();
 });
 
 carregarCadastroFuncionarios()

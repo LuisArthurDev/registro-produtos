@@ -460,13 +460,12 @@ body.camera-aberta #cameraControles:not([hidden]) {
   </div>
 
   <div class="topbar-acoes">
-    <span id="identidadeLogin" style="font-size:11px;opacity:.85"></span>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
-      href="painelconferente.html"
+      href="index.html"
       class="theme-toggle header-icon-btn"
-      title="Painel"
-      aria-label="Painel"
+      title="Entrar"
+      aria-label="Entrar"
     >
       <svg viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
@@ -566,7 +565,7 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 <section class="card">
   <h2>Lançamento</h2>
-  <div class="field">
+  <div class="field" id="campoFuncionario">
     <label for="funcionario">Funcionário</label>
     <div class="funcionario-linha">
       <select id="funcionario" name="funcionario" required disabled>
@@ -687,8 +686,9 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 Auth.exigirLancamento().then(ok => {
   if (!ok) return;
-  const identidade = document.getElementById("identidadeLogin");
-  if (identidade) identidade.textContent = Auth.usuario() + " · Loja " + Auth.loja() + " · " + Auth.loginId().slice(0,8);
+  // O identificador técnico da sessão permanece somente no armazenamento interno.
+  const campoFuncionario = document.getElementById("campoFuncionario");
+  if (campoFuncionario) campoFuncionario.hidden = !Auth.administrador();
 });
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
@@ -752,7 +752,11 @@ function carregarCadastroFuncionarios() {
         ).join("");
 
       select.disabled = false;
-      if (Auth.administrador()) {
+      const campoFuncionario = document.getElementById("campoFuncionario");
+      const administradorLoja = Auth.administrador();
+      if (campoFuncionario) campoFuncionario.hidden = !administradorLoja;
+      select.required = administradorLoja;
+      if (administradorLoja) {
         // Administrador de Loja escolhe somente entre as abas especiais
         // devolvidas pelo servidor. A autorização definitiva é validada no POST.
         select.value = "";
