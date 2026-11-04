@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  let ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521";
+  let ONESIGNAL_APP_ID = "";
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
@@ -44,23 +44,66 @@
   function carregarSdk() {
     if (window.OneSignal) return Promise.resolve();
     if (window.__mvOneSignalSdkPromise) return window.__mvOneSignalSdkPromise;
-    window.__mvOneSignalSdkPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
-      script.defer = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Não foi possível carregar o serviço de notificações."));
-      document.head.appendChild(script);
+
+    const promise = new Promise((resolve, reject) => {
+      let script = document.querySelector('script[data-mv-onesignal-sdk="1"]');
+      let finalizado = false;
+      const timeout = setTimeout(() => finalizar(new Error("Tempo esgotado ao carregar o serviço de notificações.")), 20000);
+
+      function finalizar(erro) {
+        if (finalizado) return;
+        finalizado = true;
+        clearTimeout(timeout);
+        if (erro) {
+          if (script) script.remove();
+          reject(erro);
+        } else {
+          resolve();
+        }
+      }
+
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+        script.defer = true;
+        script.async = true;
+        script.dataset.mvOnesignalSdk = "1";
+      }
+      script.onload = () => finalizar(null);
+      script.onerror = () => finalizar(new Error("Não foi possível carregar o serviço de notificações. Verifique a conexão ou bloqueios de conteúdo do navegador e tente novamente."));
+      if (!script.isConnected) document.head.appendChild(script);
     });
-    return window.__mvOneSignalSdkPromise;
+
+    window.__mvOneSignalSdkPromise = promise;
+    // Uma falha não pode ficar armazenada: a próxima chamada precisa tentar novamente.
+    promise.catch(() => {
+      if (window.__mvOneSignalSdkPromise === promise) {
+        window.__mvOneSignalSdkPromise = null;
+      }
+    });
+    return promise;
   }
+
   async function iniciarOneSignal() {
     if (initPromise) return initPromise;
-    initPromise = (async () => {
+
+    const tentativa = (async () => {
       await obterAppId();
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       await carregarSdk();
+
       return new Promise((resolve, reject) => {
+        let finalizado = false;
+        const timeout = setTimeout(() => finalizar(new Error("O OneSignal demorou demais para inicializar. Tente novamente.")), 20000);
+
+        function finalizar(erro, valor) {
+          if (finalizado) return;
+          finalizado = true;
+          clearTimeout(timeout);
+          if (erro) reject(erro);
+          else resolve(valor);
+        }
+
         window.OneSignalDeferred.push(async function (OneSignal) {
           try {
             await OneSignal.init({
@@ -83,12 +126,22 @@
                 } catch (promptErro) { console.warn("Não foi possível exibir o aviso de permissão:", promptErro); }
               }
             }
-            resolve(OneSignal);
-          } catch (erro) { initPromise = null; reject(erro); }
+            finalizar(null, OneSignal);
+          } catch (erro) {
+            finalizar(erro);
+          }
         });
       });
     })();
-    return initPromise;
+
+    initPromise = tentativa;
+    try {
+      return await tentativa;
+    } catch (erro) {
+      // Libera o estado da inicialização para permitir nova tentativa nesta mesma sessão.
+      if (initPromise === tentativa) initPromise = null;
+      throw erro;
+    }
   }
   function ehDesktop() {
     return !(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) &&
@@ -98,25 +151,18 @@
     const botao = document.getElementById("btnAtivarNotificacoes") || document.getElementById("btnAtivarNotificacoesPainel");
     if (botao) botao.disabled = true;
     try {
-      if (ONESIGNAL_APP_ID) {
-        const OneSignal = await iniciarOneSignal();
-        await OneSignal.Notifications.requestPermission();
-        if (OneSignal.Notifications.permission) {
-          alert("Notificações ativadas neste dispositivo. Você poderá receber avisos mesmo com o navegador fechado, conforme o suporte do navegador e do sistema.");
-        } else {
-          alert("A permissão de notificações não foi concedida. Você pode ativá-la nas configurações do navegador.");
-        }
-      } else if ("Notification" in window) {
-        const permissao = await Notification.requestPermission();
-        if (permissao === "granted") {
-          alert(ehDesktop()
-            ? "Permissão ativada. O computador avisará quando você abrir o sistema e houver produtos vencidos. Para receber push com o navegador fechado, falta configurar o aplicativo OneSignal."
-            : "Permissão do navegador ativada. Para receber notificações com o navegador fechado, falta configurar o aplicativo OneSignal.");
-        } else {
-          alert("A permissão não foi concedida. Ative as notificações nas configurações do navegador.");
-        }
-      } else {
+      if (!("Notification" in window)) {
         alert("Este navegador não oferece suporte a notificações.");
+        return;
+      }
+      // O App ID é obtido de forma assíncrona do Apps Script; não testar
+      // ONESIGNAL_APP_ID antes de iniciar, pois ele começa vazio nesta página.
+      const OneSignal = await iniciarOneSignal();
+      await OneSignal.Notifications.requestPermission();
+      if (OneSignal.Notifications.permission) {
+        alert("Notificações ativadas neste dispositivo. Você poderá receber avisos mesmo com o navegador fechado, conforme o suporte do navegador e do sistema.");
+      } else {
+        alert("A permissão de notificações não foi concedida. Você pode ativá-la nas configurações do navegador.");
       }
     } catch (erro) {
       console.error("Falha ao ativar notificações:", erro);
@@ -136,10 +182,11 @@
     if (anterior && agora - Number(anterior.em || 0) < 6 * 60 * 60 * 1000 && Number(anterior.quantidade) === quantidade) return;
     try { localStorage.setItem(chave, JSON.stringify({ em: agora, quantidade })); } catch (_) {}
     const nome = String(dados.nome || "Sua loja");
+    const singular = quantidade === 1;
     const titulo = dados.url === "painelconferente.html" ? "Produtos vencidos na loja" : "Produtos vencidos no mapa";
     const corpo = dados.url === "painelconferente.html"
-      ? "Existem produtos vencidos que precisam de conferência na " + nome + "."
-      : nome + " possui produtos vencidos.";
+      ? quantidade + (singular ? " registro vencido" : " registros vencidos") + " precisam de conferência na " + nome + "."
+      : nome + (singular ? " possui 1 produto vencido." : " possui " + quantidade + " produtos vencidos.");
     const notificacao = new Notification(titulo, { body: corpo, tag: chave, renotify: false });
     notificacao.onclick = function () { window.focus(); if (dados.url) window.location.href = dados.url; notificacao.close(); };
   }
