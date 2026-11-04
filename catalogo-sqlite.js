@@ -217,16 +217,20 @@
     finally { stmt.free(); }
   }
 
+  function listarSecoes() {
+    if (!db) return [];
+    const r = db.exec("SELECT DISTINCT TRIM(secao) AS secao FROM produtos WHERE TRIM(secao) <> '' ORDER BY TRIM(secao) COLLATE NOCASE");
+    return (r?.[0]?.values || []).map(linha => String(linha[0] || '').trim()).filter(Boolean);
+  }
+
   function contarSecoes() {
-    if (!db) return 0;
-    const r = db.exec("SELECT COUNT(DISTINCT secao) FROM produtos WHERE TRIM(secao) <> ''");
-    return Number(r?.[0]?.values?.[0]?.[0] || 0);
+    return listarSecoes().length;
   }
 
   function temEAN(valor) { return Boolean(porEAN(valor)); }
   function pronto() { return Boolean(db); }
   function quantidade() { return total; }
 
-  const api = { abrir, porEAN, porCodigoInterno, listar, contarBusca, contarSecoes, temEAN, pronto, quantidade };
+  const api = { abrir, porEAN, porCodigoInterno, listar, contarBusca, listarSecoes, contarSecoes, temEAN, pronto, quantidade };
   global.CatalogoSQLite = api;
 })(window);

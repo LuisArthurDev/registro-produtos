@@ -1649,8 +1649,9 @@
       border-top-color: #2563eb; border-radius: 50%; animation: spin .75s linear infinite;
     }
     html.auth-ok #authCarregando { display: none; }
-    /* O indicador de validação permanece animado para deixar claro que a sessão está sendo verificada. */
-    #authCarregando .auth-carregando-spinner { animation: spin .75s linear infinite !important; }
+    @media (prefers-reduced-motion: reduce) {
+      #authCarregando .auth-carregando-spinner { animation: none; }
+    }
   </style>
   <script src="auth.js"></script>
 <script src="notificacoes.js" defer></script>
@@ -1773,6 +1774,7 @@ Auth.exigirAdmin().then(ok => {
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
+        <button type="button" class="button" id="btnManterConectadoPainel" data-manter-conectado hidden>Manter conectado</button>
         <button type="button" class="button" id="btnAtivarNotificacoesPainel" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
@@ -2842,10 +2844,11 @@ Auth.exigirAdmin().then(ok => {
 <div id="modalNovoProdutoJson" class="produto-json-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tituloModalNovoProduto">
   <div class="produto-json-card">
     <div class="produto-json-header">
-      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p>O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.</p></div>
+      <div><h3 id="tituloModalNovoProduto">Adicionar produto</h3><p id="descricaoModalNovoProduto">O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.</p></div>
       <button type="button" class="icon-button" onclick="fecharModalNovoProdutoJson()" aria-label="Fechar">×</button>
     </div>
     <form id="formNovoProdutoJson" onsubmit="salvarNovoProdutoJson(event)">
+      <input type="hidden" id="novoProdutoModo" value="adicionar">
       <label for="novoProdutoCodigo">Código interno</label>
       <input id="novoProdutoCodigo" autocomplete="off" required maxlength="80" placeholder="Ex.: 12345">
       <label for="novoProdutoEan">EAN / código de barras</label>
@@ -2853,7 +2856,9 @@ Auth.exigirAdmin().then(ok => {
       <label for="novoProdutoDescricao">Descrição do produto</label>
       <input id="novoProdutoDescricao" autocomplete="off" required maxlength="200" placeholder="Ex.: Leite Integral 1L">
       <label for="novoProdutoSecao">Seção</label>
-      <input id="novoProdutoSecao" autocomplete="off" required maxlength="100" placeholder="Ex.: Mercearia">
+      <input id="novoProdutoSecao" list="listaSecoesProdutos" autocomplete="off" required maxlength="100" placeholder="Digite para pesquisar uma seção">
+      <datalist id="listaSecoesProdutos"></datalist>
+      <small style="display:block;color:var(--muted);margin:4px 0 10px">Selecione uma das seções existentes no catálogo.</small>
       <div id="novoProdutoJsonStatus" class="produto-json-status" role="status"></div>
       <div class="produto-json-actions">
         <button type="button" class="button" onclick="fecharModalNovoProdutoJson()">Cancelar</button>
@@ -3790,14 +3795,13 @@ function renderControleValidade() {
     return m ? m[1] + '-' + m[2] : '';
   }
   let tipoMapaAtivo = "funcionarios";
-  let funcionarioMapaInicial = "";
   function renderMapa() {
     if (!funcionariosMapaCarregados) {
       return;
     }
     const q=(document.getElementById('mapaProduto').value||'').toLocaleLowerCase('pt-BR').trim();
     const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
-    let func=document.getElementById('mapaFuncionario').value;
+    const func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
     const lancamentoMes=document.getElementById('mapaLancamento').value;
     const sit=document.getElementById('mapaSituacao').value;
@@ -3823,13 +3827,7 @@ function renderControleValidade() {
     const names = [...new Set(base.map(r => String(r.funcionario || '').trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    if (funcionarioMapaInicial && names.includes(funcionarioMapaInicial)) {
-      sel.value = funcionarioMapaInicial;
-      funcionarioMapaInicial = "";
-    } else if(names.includes(prior)) {
-      sel.value=prior;
-    }
-    func = sel.value;
+    if(names.includes(prior))sel.value=prior;
     
     mapaVisiveisChaves = rows
       .filter(r => !func || r.funcionario === func)
@@ -5359,20 +5357,6 @@ function atualizarProdutosAtencao(registros) {
     if (typeof renderPaginasGestao === "function") {
       renderPaginasGestao();
     }
-
-    const parametrosInicializacao = new URLSearchParams(window.location.search);
-    const paginaInicial = parametrosInicializacao.get("pagina");
-    const funcionarioInicial = parametrosInicializacao.get("funcionario");
-    if (paginaInicial === "mapa") {
-      tipoMapaAtivo = "funcionarios";
-      funcionarioMapaInicial = funcionarioInicial || "";
-      const abaFuncionarios = document.querySelector('.mapa-tab[data-mapa-tipo="funcionarios"]');
-      if (abaFuncionarios) {
-        document.querySelectorAll('.mapa-tab').forEach(btn => btn.setAttribute('aria-selected', String(btn === abaFuncionarios)));
-      }
-      if (validadesProntas) renderMapa();
-      navigate("mapa");
-    }
   })
   .catch(erro => {
     console.error("Falha ao carregar cadastro de funcionários:", erro);
@@ -6767,7 +6751,7 @@ document.addEventListener("submit", async function(event) {
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="painelconferente.html?pagina=mapa&amp;funcionario=' + encodeURIComponent(o.nome) + '" title="Abrir mapa do funcionário" aria-label="Abrir mapa do funcionário"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
+        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
@@ -7582,15 +7566,75 @@ document.addEventListener("submit", async function(event) {
     return produto ? { ean: produto.ean, codigoInterno: produto.codigoInterno, descricao: produto.produto || produto.descricao || "" } : null;
   }
 
-  /* ---------- Cadastro de produto no catálogo via Apps Script/GitHub ---------- */
+  /* ---------- Cadastro/edição de produto no catálogo via Apps Script/GitHub ---------- */
+  function definirModoProdutoJson(modo, produto) {
+    const editar = modo === "editar";
+    gProdutoJson("novoProdutoModo").value = editar ? "editar" : "adicionar";
+    gProdutoJson("tituloModalNovoProduto").textContent = editar ? "Editar produto existente" : "Adicionar produto";
+    gProdutoJson("descricaoModalNovoProduto").textContent = editar
+      ? "Produto encontrado no catálogo. Altere os dados necessários e salve a atualização."
+      : "O produto será incluído no catálogo central e disponibilizado no banco SQLite após a atualização automática do GitHub.";
+    gProdutoJson("btnSalvarNovoProdutoJson").innerHTML = editar
+      ? '<i data-lucide="save"></i> Salvar alterações'
+      : '<i data-lucide="save"></i> Salvar produto';
+    if (produto) {
+      gProdutoJson("novoProdutoCodigo").value = produto.codigoInterno || "";
+      gProdutoJson("novoProdutoDescricao").value = produto.produto || produto.descricao || "";
+      gProdutoJson("novoProdutoSecao").value = produto.secao || "";
+    }
+    renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
+  }
+
+  async function carregarSecoesProdutoJson() {
+    await window.CatalogoSQLite.abrir();
+    const secoes = window.CatalogoSQLite.listarSecoes();
+    const lista = gProdutoJson("listaSecoesProdutos");
+    lista.innerHTML = secoes.map(secao => '<option value="' + escHtml(secao) + '"></option>').join("");
+    return secoes;
+  }
+
+  async function identificarProdutoJson() {
+    const ean = gProdutoJson("novoProdutoEan").value.trim();
+    if (!ean) {
+      definirModoProdutoJson("adicionar");
+      return;
+    }
+    const status = gProdutoJson("novoProdutoJsonStatus");
+    try {
+      await window.CatalogoSQLite.abrir();
+      const encontrado = window.CatalogoSQLite.porEAN(ean);
+      if (encontrado) {
+        definirModoProdutoJson("editar", encontrado);
+        status.className = "produto-json-status info";
+        status.textContent = "Este produto já existe no catálogo. Você está editando o cadastro existente.";
+      } else {
+        definirModoProdutoJson("adicionar");
+        status.className = "produto-json-status";
+        status.textContent = "EAN não encontrado no catálogo. Um novo produto será cadastrado.";
+      }
+    } catch (erro) {
+      status.className = "produto-json-status error";
+      status.textContent = "Não foi possível consultar o catálogo SQLite: " + (erro.message || erro);
+    }
+  }
+
   function abrirModalNovoProdutoJson() {
     const modal = gProdutoJson("modalNovoProdutoJson");
     if (!modal) return;
     gProdutoJson("formNovoProdutoJson").reset();
+    gProdutoJson("novoProdutoModo").value = "adicionar";
+    definirModoProdutoJson("adicionar");
     const status = gProdutoJson("novoProdutoJsonStatus");
-    status.textContent = "";
-    status.className = "produto-json-status";
+    status.textContent = "Carregando catálogo e seções...";
+    status.className = "produto-json-status info";
     modal.style.display = "flex";
+    carregarSecoesProdutoJson().then(() => {
+      status.textContent = "Informe o EAN para verificar se o produto já existe.";
+      status.className = "produto-json-status";
+    }).catch(erro => {
+      status.className = "produto-json-status error";
+      status.textContent = "Falha ao carregar seções do catálogo: " + (erro.message || erro);
+    });
     setTimeout(() => gProdutoJson("novoProdutoCodigo")?.focus(), 50);
     renderPainelIcons(modal);
   }
@@ -7600,6 +7644,9 @@ document.addEventListener("submit", async function(event) {
     if (modal) modal.style.display = "none";
   }
 
+  gProdutoJson("novoProdutoEan")?.addEventListener("change", identificarProdutoJson);
+  gProdutoJson("novoProdutoEan")?.addEventListener("blur", identificarProdutoJson);
+
   async function salvarNovoProdutoJson(event) {
     event.preventDefault();
     const btn = gProdutoJson("btnSalvarNovoProdutoJson");
@@ -7608,49 +7655,74 @@ document.addEventListener("submit", async function(event) {
     const ean = gProdutoJson("novoProdutoEan").value.trim();
     const produto = gProdutoJson("novoProdutoDescricao").value.trim();
     const secao = gProdutoJson("novoProdutoSecao").value.trim();
+    let modo = gProdutoJson("novoProdutoModo").value || "adicionar";
 
     if (!codigoInterno || !ean || !produto || !secao) {
       status.className = "produto-json-status error";
       status.textContent = "Preencha todos os campos.";
       return;
     }
-    try { await carregarDescricoesProdutos(); } catch (erroCatalogo) {
+    if (!/^\d{8,14}$/.test(ean)) {
+      status.className = "produto-json-status error";
+      status.textContent = "O EAN deve conter de 8 a 14 dígitos.";
+      return;
+    }
+
+    let secoes;
+    try {
+      secoes = await carregarSecoesProdutoJson();
+      const secaoValida = secoes.find(item => item.localeCompare(secao, "pt-BR", { sensitivity: "base" }) === 0);
+      if (!secaoValida) {
+        status.className = "produto-json-status error";
+        status.textContent = "Selecione uma seção existente na lista do catálogo.";
+        gProdutoJson("novoProdutoSecao").focus();
+        return;
+      }
+      gProdutoJson("novoProdutoSecao").value = secaoValida;
+      const existente = window.CatalogoSQLite.porEAN(ean);
+      if (existente && modo !== "editar") {
+        definirModoProdutoJson("editar", existente);
+        status.className = "produto-json-status info";
+        status.textContent = "O EAN já existe. Os dados foram carregados para edição; revise e salve novamente.";
+        return;
+      }
+      if (!existente && modo === "editar") {
+        modo = "adicionar";
+        definirModoProdutoJson("adicionar");
+      }
+    } catch (erroCatalogo) {
       status.className = "produto-json-status error";
       status.textContent = "Não foi possível validar o catálogo SQLite: " + (erroCatalogo.message || erroCatalogo);
       return;
     }
-    if (mapaDescricoes[ean]) {
-      status.className = "produto-json-status error";
-      status.textContent = "Este EAN já existe no catálogo. Confira o código antes de cadastrar.";
-      return;
-    }
 
     btn.disabled = true;
-    btn.textContent = "Salvando...";
+    btn.textContent = modo === "editar" ? "Atualizando..." : "Salvando...";
     status.className = "produto-json-status info";
-    status.textContent = "Enviando cadastro ao GitHub...";
+    status.textContent = modo === "editar" ? "Enviando alterações ao GitHub..." : "Enviando cadastro ao GitHub...";
 
     try {
       const resposta = await jsonpPainel("adicionarProdutoJson", "__adicionarProdutoJsonCb", {
-        codigoInterno, ean, produto, secao
+        modo, codigoInterno, ean, produto, secao
       });
       if (!resposta || resposta.sucesso !== true) {
+        if (resposta?.duplicado && resposta.produto) {
+          definirModoProdutoJson("editar", resposta.produto);
+        }
         throw new Error((resposta && (resposta.mensagem || resposta.erro)) || "Não foi possível salvar o produto.");
       }
 
       status.className = "produto-json-status success";
-      status.textContent = resposta.mensagem || "Produto adicionado ao catálogo com sucesso.";
-      gProdutoJson("formNovoProdutoJson").reset();
+      status.textContent = resposta.mensagem || (modo === "editar" ? "Produto atualizado no catálogo." : "Produto adicionado ao catálogo com sucesso.");
 
       (async () => {
-        // O Apps Script atualiza o JSON no GitHub; o Actions gera o SQLite em seguida.
-        // Aguarda a nova versão do banco sem bloquear o restante do painel.
         for (let tentativa = 0; tentativa < 12; tentativa++) {
           await new Promise(resolve => setTimeout(resolve, tentativa === 0 ? 2500 : 5000));
           try {
             await carregarDescricoesProdutos(true);
-            if (window.CatalogoSQLite.temEAN(ean)) {
-              status.textContent = "Produto cadastrado e disponível no banco SQLite.";
+            const atualizado = window.CatalogoSQLite.porEAN(ean);
+            if (atualizado && String(atualizado.produto || atualizado.descricao) === produto && String(atualizado.secao || "") === secao) {
+              status.textContent = "Produto " + (modo === "editar" ? "atualizado" : "cadastrado") + " e disponível no banco SQLite.";
               window.renderProdutos?.();
               return;
             }
@@ -7658,7 +7730,7 @@ document.addEventListener("submit", async function(event) {
             console.warn("Aguardando publicação do banco SQLite:", erroAtualizacao);
           }
         }
-        status.textContent = "Produto salvo no catálogo de origem. A atualização do banco SQLite ainda está em processamento; atualize o painel em alguns instantes.";
+        status.textContent = "Alteração salva no catálogo de origem. A atualização do banco SQLite ainda está em processamento; atualize o painel em alguns instantes.";
       })();
     } catch (erro) {
       status.className = "produto-json-status error";
@@ -7666,7 +7738,7 @@ document.addEventListener("submit", async function(event) {
         "\nVerifique a rota adicionarProdutoJson no Code.gs e as Propriedades do script do GitHub.";
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="save"></i> Salvar produto';
+      definirModoProdutoJson(gProdutoJson("novoProdutoModo").value || modo);
       renderPainelIcons(gProdutoJson("modalNovoProdutoJson"));
     }
   }

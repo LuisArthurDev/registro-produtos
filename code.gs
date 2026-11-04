@@ -345,6 +345,25 @@ function doGetOriginal_(e) {
   const parametros = e && e.parameter ? e.parameter : {};
   const acao = String(parametros.action || "");
 
+  if (acao === "funcionariosLogin") {
+    const callback = String(parametros.callback || "");
+    if (callback !== "__funcionariosLoginCb") return respostaTexto_("Callback inválido.");
+    try {
+      // Publica somente nomes de usuários ativos para preencher o autocomplete do login.
+      // PIN, loja, perfil e demais dados permanecem exclusivamente no servidor.
+      const nomes = [...new Set(linhasFuncionariosDaRequisicao_()
+        .filter(linha => {
+          const nome = String(linha[0] || "").trim();
+          const inativo = String(linha[9] || "").toLowerCase() === "inativo" || linha[9] === false;
+          return nome && normalizarTexto_(nome) !== "transferencias" && !inativo && !ehAdministradorGeralValor_(linha[7]);
+        })
+        .map(linha => String(linha[0]).trim()))];
+      return respostaJsonp_(callback, { sucesso: true, funcionarios: nomes });
+    } catch (erro) {
+      return respostaJsonp_(callback, { sucesso: false, funcionarios: [], mensagem: mensagemErro_(erro) });
+    }
+  }
+
   if (acao === "configNotificacoes") {
     const callback = String(parametros.callback || "");
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(callback)) return respostaTexto_("Callback inválido.");
@@ -6556,6 +6575,7 @@ function bloquearSeNaoAutorizado_(p) {
   // Ações públicas necessárias para a tela de login.
   const publicas = [
     "login",
+    "funcionariosLogin",
     "sessao",
     "configNotificacoes",
     "logout"
@@ -6891,6 +6911,16 @@ function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, a
   return dados;
 }
 
+function obterAbaMapaFuncionario_(planilha, nomeFuncionario) {
+  const nomeNormalizado = normalizarTexto_(nomeFuncionario);
+  const direta = planilha.getSheetByName(String(nomeFuncionario || "").trim());
+  if (direta) return direta;
+  // Recupera diferenças de acentuação, caixa e espaços sem abrir acesso a outras lojas.
+  return planilha.getSheets().find(function (aba) {
+    return normalizarTexto_(aba.getName()) === nomeNormalizado;
+  }) || null;
+}
+
 function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
   lojaFiltro = normalizarLoja_(lojaFiltro || "");
   forcarEnvio = forcarEnvio === true;
@@ -6899,24 +6929,26 @@ function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
   const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
   if (!appId || !apiKey) {
     console.warn("Push de vencidos não configurado: defina MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY em Script Properties.");
-    return { configurado: false, enviados: 0 };
+    return { configurado: false, verificados: 0, comVencidos: 0, registrosVencidos: 0, enviados: 0, falhas: [] };
   }
 
   const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
   const abaFuncionarios = planilha.getSheetByName("Funcionarios");
-  if (!abaFuncionarios || abaFuncionarios.getLastRow() < 2) return { configurado: true, enviados: 0 };
+  if (!abaFuncionarios || abaFuncionarios.getLastRow() < 2) {
+    return { configurado: true, verificados: 0, comVencidos: 0, registrosVencidos: 0, enviados: 0, falhas: [] };
+  }
   const fuso = planilha.getSpreadsheetTimeZone() || "America/Sao_Paulo";
   const hojeISO = Utilities.formatDate(new Date(), fuso, "yyyy-MM-dd");
   const ultimaLinha = abaFuncionarios.getLastRow();
   const cadastros = abaFuncionarios.getRange(2, 1, ultimaLinha - 1, 10).getValues();
-  // Reproduz a exclusão do popup atual: registros já enviados à Queima
-  // não devem gerar alerta de vencidos na sessão original do funcionário.
+
+  // Mantém a mesma regra do popup do Lançamento: registros já enviados à Queima
+  // não voltam a ser considerados vencidos no mapa original.
   const chavesQueimaPorLojaFuncionario = new Set();
   const abaQueimaPush = planilha.getSheetByName("Queima");
   if (abaQueimaPush && abaQueimaPush.getLastRow() >= 2) {
-    const qRange = abaQueimaPush.getDataRange();
-    const qValores = qRange.getValues();
-    const qExibidos = qRange.getDisplayValues();
+    const qValores = abaQueimaPush.getDataRange().getValues();
+    const qExibidos = abaQueimaPush.getDataRange().getDisplayValues();
     const qCabecalho = (qExibidos[0] || []).map(h => normalizarTexto_(h).replace(/\s+/g, " "));
     const qOrigem = qCabecalho.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
     const qLoja = qCabecalho.indexOf("lojaorigem");
@@ -6931,50 +6963,65 @@ function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
           const cadastroOrigem = cadastros.find(c => normalizarTexto_(c[0]) === normalizarTexto_(origem));
           if (cadastroOrigem) lojaRegistro = normalizarLoja_(cadastroOrigem[8]);
         }
-        chavesQueimaPorLojaFuncionario.add(normalizarLoja_(lojaRegistro) + "|" + normalizarTexto_(origem) + "|" + chave);
+        chavesQueimaPorLojaFuncionario.add(lojaRegistro + "|" + normalizarTexto_(origem) + "|" + chave);
       }
     }
   }
+
+  let verificados = 0;
+  let comVencidos = 0;
+  let registrosVencidos = 0;
   let enviados = 0;
+  const falhas = [];
 
   cadastros.forEach(function (cadastro) {
     const nome = String(cadastro[0] || "").trim();
     const especial = cadastro[1] === true || String(cadastro[1] || "").toLowerCase() === "true";
     const administrador = ehAdministradorValor_(cadastro[7]);
     const loja = normalizarLoja_(cadastro[8]);
-    const inativo = String(cadastro[9] || "").toLowerCase() === "inativo" || cadastro[9] === false;
+    const status = String(cadastro[9] == null ? "" : cadastro[9]).trim().toLowerCase();
+    const inativo = status === "inativo" || cadastro[9] === false;
     if (!nome || especial || administrador || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
     if (lojaFiltro && loja !== lojaFiltro) return;
 
-    const abaMapa = planilha.getSheetByName(nome);
+    verificados++;
+    const abaMapa = obterAbaMapaFuncionario_(planilha, nome);
+    const propertyKey = "MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome);
     if (!abaMapa || abaMapa.getLastRow() < 2) {
-      props.setProperty("MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome), "");
+      props.setProperty(propertyKey, "");
       return;
     }
 
-    const linhas = abaMapa.getRange(2, 1, abaMapa.getLastRow() - 1, 6).getValues();
-    const exibidos = abaMapa.getRange(2, 1, abaMapa.getLastRow() - 1, 6).getDisplayValues();
+    const ultimaLinhaMapa = abaMapa.getLastRow();
+    const linhas = abaMapa.getRange(2, 1, ultimaLinhaMapa - 1, 6).getValues();
+    const exibidos = abaMapa.getRange(2, 1, ultimaLinhaMapa - 1, 6).getDisplayValues();
     const itens = new Map();
+
     linhas.forEach(function (linha, i) {
       const exibido = exibidos[i] || [];
-      const codigo = String(exibido[0] || "").trim();
+      const codigo = String(exibido[0] || linha[0] || "").trim();
       if (!codigo) return;
       const chaveMapa = String(linha[5] || exibido[5] || "").trim();
       if (chaveMapa && chavesQueimaPorLojaFuncionario.has(loja + "|" + normalizarTexto_(nome) + "|" + chaveMapa)) return;
+
+      // Usa a mesma conversão e o mesmo fuso da consulta de validades do Lançamento.
       const data = converterValidadeParaData_(linha[2], exibido[2]);
       if (!data) return;
       const validadeISO = Utilities.formatDate(data, fuso, "yyyy-MM-dd");
       if (validadeISO >= hojeISO) return;
-      const lote = String(exibido[1] || "").trim();
+
+      const lote = String(exibido[1] || linha[1] || "").trim();
       const chave = [codigo, lote, validadeISO].join("|");
       if (!itens.has(chave)) itens.set(chave, { codigo: codigo, lote: lote, validade: validadeISO });
     });
 
-    const propertyKey = "MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome);
     if (!itens.size) {
       props.setProperty(propertyKey, "");
       return;
     }
+
+    comVencidos++;
+    registrosVencidos += itens.size;
     const assinaturaTexto = Array.from(itens.keys()).sort().join("\n");
     const assinatura = Utilities.base64EncodeWebSafe(
       Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, assinaturaTexto, Utilities.Charset.UTF_8)
@@ -6987,11 +7034,20 @@ function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
       props.setProperty(propertyKey, assinatura);
       enviados++;
     } catch (erro) {
-      console.error("Falha no push de vencidos de " + nome + " (loja " + loja + "): " + erro);
+      const detalhe = nome + " (loja " + loja + "): " + String(erro && erro.message || erro);
+      falhas.push(detalhe);
+      console.error("Falha no push de vencidos: " + detalhe);
     }
   });
 
-  return { configurado: true, enviados: enviados };
+  return {
+    configurado: true,
+    verificados: verificados,
+    comVencidos: comVencidos,
+    registrosVencidos: registrosVencidos,
+    enviados: enviados,
+    falhas: falhas
+  };
 }
 
 function configurarAgendamentoNotificacoesVencidos() {
@@ -7002,8 +7058,8 @@ function configurarAgendamentoNotificacoesVencidos() {
   ScriptApp.getProjectTriggers().forEach(function (gatilho) {
     if (gatilho.getHandlerFunction() === "verificarNotificacoesVencidos") ScriptApp.deleteTrigger(gatilho);
   });
-  ScriptApp.newTrigger("verificarNotificacoesVencidos").timeBased().everyHours(1).create();
-  console.log("Agendamento de notificações de vencidos criado: verificação a cada hora.");
+  ScriptApp.newTrigger("verificarNotificacoesVencidos").timeBased().everyHours(6).create();
+  console.log("Agendamento de notificações de vencidos criado: verificação a cada 6 horas.");
   return "Agendamento criado. Execute verificarNotificacoesVencidos uma vez para o primeiro teste.";
 }
 
@@ -7049,8 +7105,10 @@ function notificarTodosLoja_(p) {
       app_id: appId,
       target_channel: "push",
       include_aliases: { external_id: lote },
-      headings: { pt: titulo },
-      contents: { pt: mensagem },
+      // OneSignal exige conteúdo em Any/English como fallback obrigatório.
+      // Mantemos também pt para dispositivos configurados em português.
+      headings: { en: titulo, pt: titulo },
+      contents: { en: mensagem, pt: mensagem },
       web_url: "https://luisarthurdev.github.io/registro-produtos/",
       data: { tipo: "comunicado", loja: sessao.administradorGeral === true ? "todas" : lojaSessao }
     };
@@ -7080,11 +7138,25 @@ function notificarVencidosManual_(p) {
   const loja = sessao.administradorGeral === true ? "" : normalizarLoja_(sessao.loja || "");
   if (sessao.administradorGeral !== true && !loja) throw new Error("Não foi possível identificar a loja da sua sessão.");
   const resultado = verificarNotificacoesVencidos(loja, true);
+  if (resultado.configurado === false) {
+    throw new Error("As credenciais do OneSignal não estão configuradas.");
+  }
+  let mensagem;
+  if (Number(resultado.comVencidos || 0) === 0) {
+    mensagem = "Foram verificados " + Number(resultado.verificados || 0) + " funcionários ativos nesta abrangência, mas nenhum mapa apresentou produtos vencidos não encaminhados à Queima.";
+  } else if (Number(resultado.enviados || 0) > 0) {
+    mensagem = "Encontrados produtos vencidos em " + resultado.comVencidos + " funcionário(s). O OneSignal aceitou " + resultado.enviados + " envio(s), abrangendo " + resultado.registrosVencidos + " registros vencidos.";
+    if (resultado.falhas && resultado.falhas.length) mensagem += " Falhas: " + resultado.falhas.join("; ");
+  } else {
+    mensagem = "Foram encontrados produtos vencidos em " + resultado.comVencidos + " funcionário(s), mas o OneSignal não confirmou nenhum envio. " + (resultado.falhas || []).join("; ");
+  }
   return respostaJsonp_(String(p.callback || ""), {
     sucesso: true,
+    verificados: Number(resultado.verificados || 0),
+    comVencidos: Number(resultado.comVencidos || 0),
+    registrosVencidos: Number(resultado.registrosVencidos || 0),
     enviados: Number(resultado.enviados || 0),
-    mensagem: Number(resultado.enviados || 0)
-      ? "Avisos de vencidos enviados para " + resultado.enviados + " funcionário(s) com produtos vencidos."
-      : "Nenhum funcionário com produtos vencidos foi encontrado nesta abrangência."
+    falhas: resultado.falhas || [],
+    mensagem: mensagem
   });
 }

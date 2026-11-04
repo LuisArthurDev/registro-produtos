@@ -227,26 +227,6 @@
       color: var(--success);
     }
 
-    .login-persist-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: 42px;
-      margin-top: 10px;
-      border: 1px solid var(--primary);
-      border-radius: 10px;
-      background: transparent;
-      color: var(--primary);
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .login-persist-button[aria-pressed="true"] {
-      background: color-mix(in srgb, var(--primary) 12%, transparent);
-      border-width: 2px;
-    }
-    .login-persist-button[hidden] { display: none !important; }
-
     .submit-button {
       display: flex;
       align-items: center;
@@ -383,12 +363,14 @@
             id="usuario"
             name="username"
             type="text"
-            placeholder="Digite seu nome"
-            autocomplete="username"
+            list="listaUsuarios"
+            placeholder="Digite ou selecione seu nome"
+            autocomplete="off"
             maxlength="80"
             required
           >
           <datalist id="listaUsuarios"></datalist>
+          <small id="statusListaUsuarios" style="display:block;margin-top:6px;color:var(--muted);font-size:12px">Carregando funcionários ativos...</small>
         </div>
 
         <div class="field">
@@ -415,8 +397,6 @@
             >◉</button>
           </div>
         </div>
-
-        <button type="button" class="login-persist-button" id="btnManterConectadoLogin" aria-pressed="false" hidden>Manter conectado</button>
 
         <button class="submit-button" id="submitButton" type="submit">
           <span class="spinner" aria-hidden="true"></span>
@@ -466,21 +446,6 @@
       message.className = "message";
     }
 
-    function ehComputadorLogin() {
-      return !(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) &&
-        window.matchMedia("(pointer: fine) and (min-width: 768px)").matches;
-    }
-    let manterConectadoNoLogin = false;
-    const botaoManterConectadoLogin = document.getElementById("btnManterConectadoLogin");
-    if (botaoManterConectadoLogin && ehComputadorLogin()) {
-      botaoManterConectadoLogin.hidden = false;
-      botaoManterConectadoLogin.addEventListener("click", () => {
-        manterConectadoNoLogin = !manterConectadoNoLogin;
-        botaoManterConectadoLogin.setAttribute("aria-pressed", manterConectadoNoLogin ? "true" : "false");
-        botaoManterConectadoLogin.textContent = manterConectadoNoLogin ? "Conexão mantida nesta sessão" : "Manter conectado";
-      });
-    }
-
     function definirCarregamento(ativo) {
       submitButton.disabled = ativo;
       submitButton.classList.toggle("loading", ativo);
@@ -526,8 +491,7 @@
         const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
         const agora = Date.now();
         const atividade = Number(s && s.atividadeEm || agora);
-        return s && s.token && s.ate > agora &&
-          (s.manterConectado === true || agora - atividade < 30 * 60 * 1000) ? s : null;
+        return s && s.token && s.ate > agora && agora - atividade < 30 * 60 * 1000 ? s : null;
       } catch (_) { return null; }
     }
 
@@ -543,9 +507,7 @@
           location.replace("index.html?motivo=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
           return;
         }
-        const restanteIdle = s.manterConectado === true
-          ? Number.POSITIVE_INFINITY
-          : 30 * 60 * 1000 - (Date.now() - Number(s.atividadeEm || Date.now()));
+        const restanteIdle = 30 * 60 * 1000 - (Date.now() - Number(s.atividadeEm || Date.now()));
         const restanteTotal = Number(s.ate) - Date.now();
         timerInatividadeLogin = setTimeout(() => {
           localStorage.removeItem(CHAVE_SESSAO);
@@ -603,8 +565,37 @@
       senhaInput.value = senhaInput.value.replace(/\D/g, "");
     });
 
-    // O nome é digitado pelo próprio usuário. Não expomos a lista de funcionários
-    // antes da autenticação.
+    // A lista pública contém somente nomes de funcionários ativos; não inclui PINs,
+    // lojas, perfis ou qualquer outro dado de autenticação.
+    function carregarFuncionariosAtivosLogin() {
+      const lista = document.getElementById("listaUsuarios");
+      const statusLista = document.getElementById("statusListaUsuarios");
+      chamarServidor("funcionariosLogin", "__funcionariosLoginCb", { atualizadoEm: Date.now() })
+        .then(d => {
+          if (!d || d.sucesso !== true || !Array.isArray(d.funcionarios)) {
+            throw new Error(d?.mensagem || "Não foi possível carregar os funcionários.");
+          }
+          lista.innerHTML = d.funcionarios.map(nome => {
+            const option = document.createElement("option");
+            option.value = nome;
+            return option.outerHTML;
+          }).join("");
+          statusLista.textContent = d.funcionarios.length
+            ? "Selecione seu nome ou digite para pesquisar."
+            : "Nenhum funcionário ativo disponível.";
+        })
+        .catch(erro => {
+          statusLista.textContent = "Não foi possível carregar a lista. Você ainda pode digitar seu nome.";
+          console.warn("Lista de funcionários ativos:", erro);
+        });
+    }
+
+    function dispositivoMovel() {
+      return /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (window.matchMedia && window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches);
+    }
+
+    carregarFuncionariosAtivosLogin();
 
     // Se já existe uma sessão válida, entra direto.
     (async function () {
@@ -617,13 +608,13 @@
             token: sessao.token, nome: d.nome, loja: d.loja,
             administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
             perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
-            manterConectado: d.manterConectado === true,
             criadaEm: d.criadaEm || sessao.criadaEm || Date.now(),
             atividadeEm: d.atividadeEm || Date.now(),
             ate: d.ate || ((d.criadaEm || Date.now()) + 8 * 3600 * 1000)
           }));
           if (d.administradorGeral === true) { location.replace("painelgeral.html"); return; }
           if (d.administrador === true) {
+            if (dispositivoMovel()) { location.replace("lancamento.html"); return; }
             document.getElementById("loginForm").hidden = true;
             document.getElementById("adminAcesso").hidden = false;
             document.getElementById("btnPainelConferente").href = "painelconferente.html";
@@ -660,11 +651,7 @@
       definirCarregamento(true);
 
       try {
-        const d = await chamarServidor("login", "__loginCb", {
-          usuario: usuario,
-          pin: pin,
-          manterConectado: manterConectadoNoLogin && ehComputadorLogin() ? "1" : "0"
-        });
+        const d = await chamarServidor("login", "__loginCb", { usuario: usuario, pin: pin });
 
         if (!d || d.sucesso !== true) {
           throw new Error((d && d.mensagem) || "Não foi possível entrar.");
@@ -680,8 +667,7 @@
           loginId: d.loginId,
           criadaEm: d.criadaEm || Date.now(),
           atividadeEm: d.atividadeEm || Date.now(),
-          ate: d.ate || (Date.now() + 8 * 3600 * 1000),
-          manterConectado: d.manterConectado === true
+          ate: d.ate || (Date.now() + 8 * 3600 * 1000)
         }));
 
         mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");
@@ -689,6 +675,7 @@
         if (d.administradorGeral === true) {
           location.replace("painelgeral.html");
         } else if (d.administrador === true) {
+          if (dispositivoMovel()) { location.replace("lancamento.html"); return; }
           document.getElementById("loginForm").hidden = true;
           document.getElementById("adminAcesso").hidden = false;
           document.getElementById("btnPainelConferente").href = "painelconferente.html";
