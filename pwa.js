@@ -1,31 +1,69 @@
-/* Inicialização PWA para GitHub Pages. O worker do OneSignal é compartilhado
-   com o escopo do aplicativo para não sobrescrever o worker de notificações. */
 (function () {
-  "use strict";
-  if (!("serviceWorker" in navigator)) return;
-  window.addEventListener("load", function () {
-    navigator.serviceWorker.register("/registro-produtos/OneSignalSDKWorker.js", { scope: "/registro-produtos/" })
-      .then(function (registration) {
-        console.info("PWA: service worker registrado", registration.scope);
-        if (registration.update) registration.update().catch(function () {});
-      })
-      .catch(function (error) {
-        console.warn("PWA: não foi possível registrar o service worker", error);
+  'use strict';
+
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  let verificacaoEmAndamento = false;
+
+  async function verificarAtualizacao() {
+    if (verificacaoEmAndamento) return;
+
+    verificacaoEmAndamento = true;
+
+    try {
+      const registrations =
+        await navigator.serviceWorker.getRegistrations();
+
+      const registroPrincipal = registrations.find(registro => {
+        return registro.scope.includes('/registro-produtos/');
       });
-  }, { once: true });
 
-  // Ao reabrir uma tela restaurada pelo cache de navegação, busca a versão atual.
-  window.addEventListener("pageshow", function (event) {
-    if (event.persisted) window.location.reload();
-  });
-
-  // Se o app ficar em segundo plano por pelo menos um minuto, atualiza ao voltar.
-  let ocultoDesde = 0;
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden) { ocultoDesde = Date.now(); return; }
-    if (ocultoDesde && Date.now() - ocultoDesde >= 60000) {
-      ocultoDesde = 0;
-      window.location.reload();
+      if (registroPrincipal) {
+        await registroPrincipal.update();
+      }
+    } catch (erro) {
+      console.warn(
+        '[PWA] Não foi possível verificar atualizações:',
+        erro
+      );
+    } finally {
+      verificacaoEmAndamento = false;
     }
-  });
+  }
+
+  async function iniciarPWA() {
+    try {
+      const registro = await navigator.serviceWorker.register(
+        './service-worker.js',
+        { scope: './' }
+      );
+
+      console.log('[PWA] Service Worker registrado.');
+
+      await registro.update();
+
+    } catch (erro) {
+      console.warn(
+        '[PWA] Falha ao registrar Service Worker:',
+        erro
+      );
+    }
+  }
+
+  // Inicializa somente quando a página é aberta.
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      iniciarPWA,
+      { once: true }
+    );
+  } else {
+    iniciarPWA();
+  }
+
+  // Não recarrega a página ao trocar de aba,
+  // voltar do histórico ou retornar ao navegador.
+
 })();
