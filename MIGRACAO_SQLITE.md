@@ -41,3 +41,12 @@ O runtime SQL.js é carregado primeiro de `libs/sql.js/`, versionado pelo workfl
 ## Publicação do GitHub Pages usando Actions
 
 O projeto recebido contém o workflow de atualização do catálogo, mas não contém um workflow de deploy do GitHub Pages. Se o repositório publica o site por `actions/deploy-pages`, o workflow de deploy deve também ser executado após a conclusão bem-sucedida de `Atualizar produtos EAN` (evento `workflow_run`, workflow `Atualizar produtos EAN`). Isso garante que futuras alterações do JSON, convertidas pelo bot em SQLite, cheguem ao site publicado. No workflow de deploy, deve existir somente um `upload-pages-artifact` por execução.
+
+
+## Correções de compatibilidade (novembro/2026)
+
+- O workflow identifica automaticamente o projeto na raiz do repositório ou em `registro-produtos-main/`, evitando erro de caminho para `scripts/gerar_banco_sqlite.py`.
+- Os scripts Python resolvem a raiz a partir da própria pasta `scripts/`, sem depender de `GITHUB_WORKSPACE`.
+- O carregador SQL.js executa `initSqlJs()` e utiliza o módulo retornado para criar `new SQL.Database(...)`.
+- As consultas do painel reutilizam uma única leitura A:J da aba `Funcionarios` durante cada requisição do Apps Script. O cache é reiniciado a cada chamada, preservando a validação atualizada de perfil e status.
+- O painel solicita `modo=gestao` no carregamento do cadastro de funcionários e utiliza timeout de até 60 segundos para consultas JSONP.

@@ -33,15 +33,32 @@
   }
 
   async function iniciarSQL() {
-    if (global.initSqlJs) return global.initSqlJs;
     if (!sqlPromise) {
       sqlPromise = (async () => {
+        let erroLocal = null;
         try {
-          await carregarScript(LOCAL_SQLJS);
+          if (typeof global.initSqlJs !== 'function') {
+            await carregarScript(LOCAL_SQLJS);
+          }
+          if (typeof global.initSqlJs !== 'function') {
+            throw new Error('SQL.js não disponibilizou initSqlJs.');
+          }
+          // initSqlJs é uma fábrica assíncrona: seu retorno é o módulo SQL
+          // que contém Database. Não se deve usar a função initSqlJs diretamente.
           return await global.initSqlJs({ locateFile: file => `./libs/sql.js/${file}` });
-        } catch (localError) {
+        } catch (erro) {
+          erroLocal = erro;
+        }
+
+        try {
+          // Se a cópia local ou o WASM local falhar, tenta a mesma versão no CDN.
           await carregarScript(`${CDN_BASE}sql-wasm.js`);
+          if (typeof global.initSqlJs !== 'function') {
+            throw new Error('SQL.js não disponibilizou initSqlJs pelo CDN.');
+          }
           return await global.initSqlJs({ locateFile: file => `${CDN_BASE}${file}` });
+        } catch (erroCDN) {
+          throw new Error(`Não foi possível inicializar SQL.js. Local: ${erroLocal?.message || 'indisponível'}. CDN: ${erroCDN?.message || erroCDN}`);
         }
       })().catch(error => {
         sqlPromise = null;

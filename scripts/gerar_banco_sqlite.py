@@ -7,7 +7,7 @@ import sys
 import hashlib
 from pathlib import Path
 
-ROOT = Path(os.environ.get('GITHUB_WORKSPACE') or Path(__file__).resolve().parents[1])
+ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / 'produtos_ean.json'
 DB_PATH = ROOT / 'produtos_ean.db'
 VERSION_PATH = ROOT / 'catalogo_versao.json'

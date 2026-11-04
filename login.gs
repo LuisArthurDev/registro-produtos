@@ -194,14 +194,17 @@ function limparFalhas_(chave) {
    ============================================================ */
 
 function buscarFuncionarioPorNome_(nome) {
-  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const aba = planilha.getSheetByName("Funcionarios");
-
-  if (!aba || aba.getLastRow() < 2) return null;
-
-  const dados = aba.getRange(
-    2, 1, aba.getLastRow() - 1, 10
-  ).getValues();
+  // Reutiliza a leitura A:J da aba Funcionarios durante esta requisição.
+  // doGet reinicia esse cache em toda chamada, então alterações de perfil
+  // e inativações continuam sendo verificadas em cada nova requisição.
+  const dados = typeof linhasFuncionariosDaRequisicao_ === "function"
+    ? linhasFuncionariosDaRequisicao_()
+    : (() => {
+        const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const aba = planilha.getSheetByName("Funcionarios");
+        return (!aba || aba.getLastRow() < 2) ? [] : aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
+      })();
+  if (!dados.length) return null;
 
   const alvo = normalizarTexto_(nome);
 
@@ -562,6 +565,6 @@ function gravarAdministradorGeralInicial_(nome, pin) {
   aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hash);
   aba.getRange(linha, 8).clearDataValidations().setValue("GERAL");
   aba.getRange(linha, 9).clearContent();
-  CacheService.getScriptCache().remove("cadastro_funcionarios");
+  CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
   return "Administrador Geral configurado. Faça login com o nome e PIN definidos.";
 }

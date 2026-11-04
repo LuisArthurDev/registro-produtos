@@ -3148,7 +3148,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
       finalizar(
         new Error('Tempo esgotado ao consultar ' + action)
       );
-    }, 20000);
+    }, 60000);
 
     function finalizar(erro, dados) {
       if (finalizado) return;
@@ -5119,7 +5119,8 @@ function atualizarProdutosAtencao(registros) {
     try {
       const resposta = await jsonpPainel(
         'funcionarios',
-        'funcionarios'
+        'funcionarios',
+        { modo: 'gestao' }
       );
   
       if (!resposta || resposta.sucesso !== true) {

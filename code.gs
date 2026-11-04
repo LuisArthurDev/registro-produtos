@@ -3,6 +3,28 @@ const SPREADSHEET_ID = "1X3JOGGeO_aBFoSpP5mFvjBYQiFzfrU0jLDAioH4gtfg";
 
 const TEMPO_CACHE_SEGUNDOS = 21600;
 
+// Cache restrito à execução atual do Web App. Evita reler a aba Funcionarios
+// várias vezes na mesma requisição, sem manter permissões antigas entre chamadas.
+let CACHE_REQUISICAO_ = null;
+function cacheDaRequisicao_() {
+  if (!CACHE_REQUISICAO_) CACHE_REQUISICAO_ = {};
+  return CACHE_REQUISICAO_;
+}
+function planilhaDaRequisicao_() {
+  const cache = cacheDaRequisicao_();
+  if (!cache.planilha) cache.planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return cache.planilha;
+}
+function linhasFuncionariosDaRequisicao_() {
+  const cache = cacheDaRequisicao_();
+  if (cache.linhasFuncionarios) return cache.linhasFuncionarios;
+  const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
+  if (!aba || aba.getLastRow() < 2) return (cache.linhasFuncionarios = []);
+  // A:J: inclui J (status ativo/inativo), sem perder os campos de perfil/loja.
+  cache.linhasFuncionarios = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
+  return cache.linhasFuncionarios;
+}
+
 const CABECALHOS_TRANSFERENCIAS = [
   "Código de Barras",
   "Lote",
@@ -24,35 +46,32 @@ function obterCadastroFuncionarios_() {
   if (CADASTRO_MEMO_) return CADASTRO_MEMO_;           // dentro da mesma execução
 
   const cache = CacheService.getScriptCache();
-  const salvo = cache.get("cadastro_funcionarios");    // entre execuções
+  const salvo = cache.get("cadastro_funcionarios_v2");    // entre execuções
   if (salvo) {
     CADASTRO_MEMO_ = JSON.parse(salvo);
     return CADASTRO_MEMO_;
   }
 
   const resultado = lerCadastroFuncionarios_();
-  cache.put("cadastro_funcionarios", JSON.stringify(resultado), 300);
+  cache.put("cadastro_funcionarios_v2", JSON.stringify(resultado), 300);
   CADASTRO_MEMO_ = resultado;
   return resultado;
 }
 
 
 function lerCadastroFuncionarios_() {
-  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const aba = planilha.getSheetByName("Funcionarios");
+  const aba = planilhaDaRequisicao_().getSheetByName("Funcionarios");
 
   if (!aba) {
     throw new Error('A aba "Funcionarios" não foi encontrada.');
   }
 
-  const ultimaLinha = aba.getLastRow();
+  const dados = linhasFuncionariosDaRequisicao_();
   const funcionarios = [];
   const especiais = [];
 
-  if (ultimaLinha >= 2) {
-    // A = Nome | B = Especial | H = Administrador
-    const dados = aba.getRange(2, 1, ultimaLinha - 1, 9).getValues();
-
+  if (dados.length) {
+    // A = Nome | B = Especial | H = Administrador | J = Status
     dados.forEach(linha => {
       const nome = String(linha[0] || "").trim();
       const especial = linha[1] === true;
@@ -1012,7 +1031,7 @@ function consultarHistoricoMes_(parametros) {
   }
 
   try {
-    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const planilha = planilhaDaRequisicao_();
     const fuso = planilha.getSpreadsheetTimeZone();
     const sessao = obterSessaoObrigatoria_(parametros);
     const nomesAbas = obterAbasPermitidas_(parametros);
@@ -2166,7 +2185,7 @@ function consultarDashboardPainel_(parametros) {
   const callback = String(parametros.callback || "");
   if (callback !== "__dashboardPainelCb") return respostaTexto_("Callback inválido.");
   try {
-    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const planilha = planilhaDaRequisicao_();
     const fuso = planilha.getSpreadsheetTimeZone();
     const agora = new Date();
     const mesAtual = Utilities.formatDate(agora, fuso, "yyyy-MM");
@@ -2182,7 +2201,6 @@ function consultarDashboardPainel_(parametros) {
       const aba = planilha.getSheetByName(nome);
       if (!aba || aba.getLastRow() < 2) return;
       const transferencia = nome === "Transferencias";
-      const especial = obterAbasEspeciais_().includes(nome);
       const n = aba.getLastRow() - 1;
       const valores = aba.getRange(2, 1, n, transferencia ? 8 : 6).getValues();
       valores.forEach(linha => {
@@ -4919,6 +4937,8 @@ const ACOES_QUE_ALTERAM_ = [
 ];
 
 function doGet(e) {
+  CACHE_REQUISICAO_ = {};
+  CADASTRO_MEMO_ = null;
   const p = (e && e.parameter) || {};
   const acao = String(p.action || "");
   const bloqueio = bloquearSeNaoAutorizado_(p);
@@ -5035,7 +5055,7 @@ function versaoDados_() {
 
 function invalidarCacheDados_() {
   CacheService.getScriptCache().put("dados_versao", String(Date.now()), 21600);
-  CacheService.getScriptCache().remove("cadastro_funcionarios");
+  CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
 }
 
 function chaveCache_(acao, parametros) {
@@ -5902,7 +5922,7 @@ function inativarFuncionario_(p) {
     if (!linha) throw new Error("Funcionário não encontrado.");
     aba.getRange(1, 10).setValue("Status");
     aba.getRange(linha, 10).setValue(ativo ? "Ativo" : "Inativo");
-    CacheService.getScriptCache().remove("cadastro_funcionarios");
+    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
     SpreadsheetApp.flush();
     return respostaJsonp_(cb, { sucesso: true, mensagem: ativo ? "Funcionário reativado." : "Funcionário inativado." });
   } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
@@ -5992,9 +6012,9 @@ function salvarCiclo_(ciclo) {
       "definirEspecialFuncionario", "marcarCheckFuncionario"
 
    4) Se você aplicou a otimização de cache do cadastro
-      ("cadastro_funcionarios"), acrescente em invalidarCacheDados_():
+      ("cadastro_funcionarios_v2"), acrescente em invalidarCacheDados_():
 
-      CacheService.getScriptCache().remove("cadastro_funcionarios");
+      CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
 
    5) Publique uma NOVA VERSÃO da implantação.
 
@@ -6024,7 +6044,9 @@ function exigirOrigemQueimaDaLoja_(sessao, aba, linha) {
 }
 
 function lojaDaLinhaVencidos_(aba, linha, exibidos) {
-  const lojaGravada = normalizarLoja_(aba.getLastColumn() >= 11 ? aba.getRange(linha, 11).getDisplayValue() : "");
+  // A consulta do Dashboard já leu as colunas A:K em lote; usa K da linha
+  // recebida e evita uma chamada getRange por registro.
+  const lojaGravada = normalizarLoja_(exibidos && exibidos.length >= 11 ? exibidos[10] : "");
   if (lojaGravada) return lojaGravada;
   const origem = String(exibidos[0] || "").trim();
   const funcionario = buscarFuncionarioPorNome_(origem);
@@ -6036,9 +6058,8 @@ function lojaDaLinhaVencidos_(aba, linha, exibidos) {
    ============================================================ */
 function obterDetalhesFuncionarios_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros || {});
-  const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
-  if (!aba || aba.getLastRow() < 2) return [];
-  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
+  const dados = linhasFuncionariosDaRequisicao_();
+  if (!dados.length) return [];
   return dados.map(linha => {
     const nome = String(linha[0] || "").trim();
     const loja = normalizarLoja_(linha[8]);
@@ -6180,7 +6201,7 @@ function criarAdminLoja_(p) {
     aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hash);
     aba.getRange(linha, 8).insertCheckboxes().setValue(true);
     aba.getRange(linha, 9).setNumberFormat("@").setValue(loja);
-    CacheService.getScriptCache().remove("cadastro_funcionarios");
+    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
     SpreadsheetApp.flush();
     return respostaJsonp_(cb, { sucesso: true, mensagem: "Administrador da loja " + loja + " criado com sucesso." });
   } catch (e) {
@@ -6191,16 +6212,8 @@ function criarAdminLoja_(p) {
 function obterAbasPermitidas_(parametros) {
   const sessao = obterSessaoObrigatoria_(parametros);
 
-  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const cadastro = planilha.getSheetByName("Funcionarios");
-
-  if (!cadastro || cadastro.getLastRow() < 2) {
-    return [];
-  }
-
-  const dados = cadastro.getRange(
-    2, 1, cadastro.getLastRow() - 1, 10
-  ).getValues();
+  const dados = linhasFuncionariosDaRequisicao_();
+  if (!dados.length) return [];
 
   const permitidas = [];
 
