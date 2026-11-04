@@ -1929,7 +1929,15 @@ Auth.exigirLogin().then(ok => {
 
 carregarCadastroFuncionarios()
   .then(() => carregarDescricoes())
-  .then(consultarHistorico)
+  .then(() => {
+    const abaInicial = new URLSearchParams(window.location.search).get("aba");
+    if (abaInicial === "vencidos") {
+      $("statusValidade").value = "vencido";
+      definirModo("validade");
+    } else {
+      consultarHistorico();
+    }
+  })
   .catch(erro => {
     console.error(erro);
     definirMensagem(

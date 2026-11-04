@@ -227,6 +227,26 @@
       color: var(--success);
     }
 
+    .login-persist-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 42px;
+      margin-top: 10px;
+      border: 1px solid var(--primary);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .login-persist-button[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
+      border-width: 2px;
+    }
+    .login-persist-button[hidden] { display: none !important; }
+
     .submit-button {
       display: flex;
       align-items: center;
@@ -396,6 +416,8 @@
           </div>
         </div>
 
+        <button type="button" class="login-persist-button" id="btnManterConectadoLogin" aria-pressed="false" hidden>Manter conectado</button>
+
         <button class="submit-button" id="submitButton" type="submit">
           <span class="spinner" aria-hidden="true"></span>
           <span id="buttonText">Entrar</span>
@@ -444,6 +466,21 @@
       message.className = "message";
     }
 
+    function ehComputadorLogin() {
+      return !(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) &&
+        window.matchMedia("(pointer: fine) and (min-width: 768px)").matches;
+    }
+    let manterConectadoNoLogin = false;
+    const botaoManterConectadoLogin = document.getElementById("btnManterConectadoLogin");
+    if (botaoManterConectadoLogin && ehComputadorLogin()) {
+      botaoManterConectadoLogin.hidden = false;
+      botaoManterConectadoLogin.addEventListener("click", () => {
+        manterConectadoNoLogin = !manterConectadoNoLogin;
+        botaoManterConectadoLogin.setAttribute("aria-pressed", manterConectadoNoLogin ? "true" : "false");
+        botaoManterConectadoLogin.textContent = manterConectadoNoLogin ? "Conexão mantida nesta sessão" : "Manter conectado";
+      });
+    }
+
     function definirCarregamento(ativo) {
       submitButton.disabled = ativo;
       submitButton.classList.toggle("loading", ativo);
@@ -489,7 +526,8 @@
         const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
         const agora = Date.now();
         const atividade = Number(s && s.atividadeEm || agora);
-        return s && s.token && s.ate > agora && agora - atividade < 30 * 60 * 1000 ? s : null;
+        return s && s.token && s.ate > agora &&
+          (s.manterConectado === true || agora - atividade < 30 * 60 * 1000) ? s : null;
       } catch (_) { return null; }
     }
 
@@ -505,7 +543,9 @@
           location.replace("index.html?motivo=" + encodeURIComponent("Sua sessão expirou. Entre novamente."));
           return;
         }
-        const restanteIdle = 30 * 60 * 1000 - (Date.now() - Number(s.atividadeEm || Date.now()));
+        const restanteIdle = s.manterConectado === true
+          ? Number.POSITIVE_INFINITY
+          : 30 * 60 * 1000 - (Date.now() - Number(s.atividadeEm || Date.now()));
         const restanteTotal = Number(s.ate) - Date.now();
         timerInatividadeLogin = setTimeout(() => {
           localStorage.removeItem(CHAVE_SESSAO);
@@ -577,6 +617,7 @@
             token: sessao.token, nome: d.nome, loja: d.loja,
             administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
             perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
+            manterConectado: d.manterConectado === true,
             criadaEm: d.criadaEm || sessao.criadaEm || Date.now(),
             atividadeEm: d.atividadeEm || Date.now(),
             ate: d.ate || ((d.criadaEm || Date.now()) + 8 * 3600 * 1000)
@@ -619,7 +660,11 @@
       definirCarregamento(true);
 
       try {
-        const d = await chamarServidor("login", "__loginCb", { usuario: usuario, pin: pin });
+        const d = await chamarServidor("login", "__loginCb", {
+          usuario: usuario,
+          pin: pin,
+          manterConectado: manterConectadoNoLogin && ehComputadorLogin() ? "1" : "0"
+        });
 
         if (!d || d.sucesso !== true) {
           throw new Error((d && d.mensagem) || "Não foi possível entrar.");
@@ -635,7 +680,8 @@
           loginId: d.loginId,
           criadaEm: d.criadaEm || Date.now(),
           atividadeEm: d.atividadeEm || Date.now(),
-          ate: d.ate || (Date.now() + 8 * 3600 * 1000)
+          ate: d.ate || (Date.now() + 8 * 3600 * 1000),
+          manterConectado: d.manterConectado === true
         }));
 
         mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");

@@ -1649,9 +1649,8 @@
       border-top-color: #2563eb; border-radius: 50%; animation: spin .75s linear infinite;
     }
     html.auth-ok #authCarregando { display: none; }
-    @media (prefers-reduced-motion: reduce) {
-      #authCarregando .auth-carregando-spinner { animation: none; }
-    }
+    /* O indicador de validação permanece animado para deixar claro que a sessão está sendo verificada. */
+    #authCarregando .auth-carregando-spinner { animation: spin .75s linear infinite !important; }
   </style>
   <script src="auth.js"></script>
 <script src="notificacoes.js" defer></script>
@@ -1774,7 +1773,6 @@ Auth.exigirAdmin().then(ok => {
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
-        <button type="button" class="button" id="btnManterConectadoPainel" data-manter-conectado hidden>Manter conectado</button>
         <button type="button" class="button" id="btnAtivarNotificacoesPainel" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
@@ -3792,13 +3790,14 @@ function renderControleValidade() {
     return m ? m[1] + '-' + m[2] : '';
   }
   let tipoMapaAtivo = "funcionarios";
+  let funcionarioMapaInicial = "";
   function renderMapa() {
     if (!funcionariosMapaCarregados) {
       return;
     }
     const q=(document.getElementById('mapaProduto').value||'').toLocaleLowerCase('pt-BR').trim();
     const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
-    const func=document.getElementById('mapaFuncionario').value;
+    let func=document.getElementById('mapaFuncionario').value;
     const validade=document.getElementById('mapaValidade').value;
     const lancamentoMes=document.getElementById('mapaLancamento').value;
     const sit=document.getElementById('mapaSituacao').value;
@@ -3824,7 +3823,13 @@ function renderControleValidade() {
     const names = [...new Set(base.map(r => String(r.funcionario || '').trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     sel.innerHTML='<option value="">'+(tipoMapaAtivo==='controlados'?'Todos os controlados':tipoMapaAtivo==='todos'?'Todos os mapas':'Todos os funcionários')+'</option>'+names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    if(names.includes(prior))sel.value=prior;
+    if (funcionarioMapaInicial && names.includes(funcionarioMapaInicial)) {
+      sel.value = funcionarioMapaInicial;
+      funcionarioMapaInicial = "";
+    } else if(names.includes(prior)) {
+      sel.value=prior;
+    }
+    func = sel.value;
     
     mapaVisiveisChaves = rows
       .filter(r => !func || r.funcionario === func)
@@ -5354,6 +5359,20 @@ function atualizarProdutosAtencao(registros) {
     if (typeof renderPaginasGestao === "function") {
       renderPaginasGestao();
     }
+
+    const parametrosInicializacao = new URLSearchParams(window.location.search);
+    const paginaInicial = parametrosInicializacao.get("pagina");
+    const funcionarioInicial = parametrosInicializacao.get("funcionario");
+    if (paginaInicial === "mapa") {
+      tipoMapaAtivo = "funcionarios";
+      funcionarioMapaInicial = funcionarioInicial || "";
+      const abaFuncionarios = document.querySelector('.mapa-tab[data-mapa-tipo="funcionarios"]');
+      if (abaFuncionarios) {
+        document.querySelectorAll('.mapa-tab').forEach(btn => btn.setAttribute('aria-selected', String(btn === abaFuncionarios)));
+      }
+      if (validadesProntas) renderMapa();
+      navigate("mapa");
+    }
   })
   .catch(erro => {
     console.error("Falha ao carregar cadastro de funcionários:", erro);
@@ -6748,7 +6767,7 @@ document.addEventListener("submit", async function(event) {
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
-        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="visualizacao.html?funcionario=' + encodeURIComponent(o.nome) + '" title="Ver lançamentos" aria-label="Ver lançamentos"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
+        (det && det.ativo === false ? badge("Inativo", "badge-danger") : (o.administrador ? badge("Sem mapa", "badge-neutral") : (o.lanc ? badge("Com lançamentos", "badge-success") : badge("Sem lançamentos", "badge-neutral")))) + '</td>' + checkCelula + '<td>' + (o.administrador ? '' : '<a class="button" style="text-decoration:none;color:inherit" href="painelconferente.html?pagina=mapa&amp;funcionario=' + encodeURIComponent(o.nome) + '" title="Abrir mapa do funcionário" aria-label="Abrir mapa do funcionário"><i data-lucide="eye"></i></a>') + botoesGestao + '</td></tr>';
     }).join("");
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");

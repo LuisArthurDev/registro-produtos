@@ -299,7 +299,8 @@ function login_(p) {
       especial: funcionario.especial,
       loginId: Utilities.getUuid(),
       criadaEm: Date.now(),
-      ultimaAtividade: Date.now()
+      ultimaAtividade: Date.now(),
+      manterConectado: String(p.manterConectado || "0") === "1"
     };
 
     // A sessão fica em ScriptProperties para não depender da expiração

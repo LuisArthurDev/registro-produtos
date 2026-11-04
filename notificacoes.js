@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  let ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521";
+  let ONESIGNAL_APP_ID = "";
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
@@ -136,11 +136,10 @@
     if (anterior && agora - Number(anterior.em || 0) < 6 * 60 * 60 * 1000 && Number(anterior.quantidade) === quantidade) return;
     try { localStorage.setItem(chave, JSON.stringify({ em: agora, quantidade })); } catch (_) {}
     const nome = String(dados.nome || "Sua loja");
-    const singular = quantidade === 1;
     const titulo = dados.url === "painelconferente.html" ? "Produtos vencidos na loja" : "Produtos vencidos no mapa";
     const corpo = dados.url === "painelconferente.html"
-      ? quantidade + (singular ? " registro vencido" : " registros vencidos") + " precisam de conferência na " + nome + "."
-      : nome + (singular ? " possui 1 produto vencido." : " possui " + quantidade + " produtos vencidos.");
+      ? "Existem produtos vencidos que precisam de conferência na " + nome + "."
+      : nome + " possui produtos vencidos.";
     const notificacao = new Notification(titulo, { body: corpo, tag: chave, renotify: false });
     notificacao.onclick = function () { window.focus(); if (dados.url) window.location.href = dados.url; notificacao.close(); };
   }
