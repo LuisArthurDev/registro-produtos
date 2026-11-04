@@ -481,11 +481,12 @@ body.camera-aberta #cameraControles:not([hidden]) {
     <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
-      href="index.html"
-      class="theme-toggle header-icon-btn"
-      title="Entrar"
-      aria-label="Entrar"
+      href="painelconferente.html"
+      class="header-btn header-btn-login"
+      title="Painel Conferente"
     >
+      Painel Conferente
+    </a>
       <svg viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round"
@@ -705,10 +706,18 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 Auth.exigirLancamento().then(ok => {
   if (!ok) return;
-  // Exibe apenas nome e loja; o identificador técnico da sessão nunca vai para a interface.
-  Auth.mostrarUsuario("identidadeLogada");
+
+  const identidade = document.getElementById("identidadeLogada");
+
+  if (identidade) {
+    identidade.textContent = `${Auth.usuario()} · Loja ${Auth.loja()}`;
+    identidade.hidden = false;
+  }
+
   const campoFuncionario = document.getElementById("campoFuncionario");
-  if (campoFuncionario) campoFuncionario.hidden = !Auth.administrador();
+  if (campoFuncionario) {
+    campoFuncionario.hidden = !Auth.administrador();
+  }
 });
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
