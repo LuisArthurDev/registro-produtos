@@ -1708,9 +1708,12 @@ function consultarTransferencias_(parametros) {
       const codigo = String(pegar(col.codigo) || "").trim();
       if (!codigo) continue;
 
-      const lojaOrigem = normalizarLoja_(pegar(col.loja));
-      if (lojaOrigem !== sessao.loja) continue;
+      // A transferência pertence ao painel da loja DESTINO (coluna H).
+      // A loja de origem (coluna F) é apenas a procedência do produto.
+      const lojaDestino = normalizarLoja_(pegar(col.destino));
+      if (!lojaDestino || lojaDestino !== sessao.loja) continue;
 
+      const lojaOrigem = String(pegar(col.loja) || "").trim();
       const chaveUnica = String(pegar(col.chave) || (col.chave >= 0 ? linha[col.chave] : "") || "").trim();
       if (chaveUnica && chavesQueima.has(chaveUnica)) continue;
 
@@ -1753,6 +1756,7 @@ function consultarTransferencias_(parametros) {
     }
 
     // Agrupa por EAN/lote/validade/romaneio/destino para não misturar remessas diferentes.
+    // O filtro de acesso já foi aplicado pela loja de destino, não pela origem.
     const agrupados = new Map();
     registros.forEach(item => {
       const chave = [item.codigo, item.lote || "SEM_LOTE", item.validadeISO, item.romaneio, item.destino].join("|");
