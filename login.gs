@@ -142,7 +142,7 @@ function limparSessoesExpiradas_() {
       const criadaEm = Number(sessao.criadaEm || 0);
       const atividade = Number(sessao.ultimaAtividade || criadaEm);
       if (!criadaEm || agora >= criadaEm + SESSAO_SEGUNDOS_ * 1000 ||
-          !atividade || agora - atividade >= INATIVIDADE_SEGUNDOS_ * 1000) {
+          (!sessao.manterConectado && (!atividade || agora - atividade >= INATIVIDADE_SEGUNDOS_ * 1000))) {
         propriedades.deleteProperty(chave);
       }
     } catch (_) {
@@ -318,7 +318,8 @@ function login_(p) {
       loginId: sessao.loginId,
       criadaEm: sessao.criadaEm,
       atividadeEm: sessao.ultimaAtividade,
-      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000
+      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000,
+      manterConectado: sessao.manterConectado === true
     });
 
   } catch (erro) {
@@ -353,7 +354,8 @@ function consultarSessao_(p) {
       loginId: sessao.loginId,
       criadaEm: sessao.criadaEm,
       atividadeEm: sessao.ultimaAtividade || sessao.criadaEm,
-      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000
+      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000,
+      manterConectado: sessao.manterConectado === true
     });
   } catch (erro) {
     return respostaJsonp_(callback, {
@@ -367,6 +369,27 @@ function consultarSessao_(p) {
 /* ============================================================
    REGISTRAR ATIVIDADE DO USUÁRIO
    ============================================================ */
+function definirPermanenciaSessao_(p) {
+  const callback = "__permanenciaCb";
+  if (String(p.callback || "") !== callback) return respostaTexto_("Callback inválido.");
+  try {
+    const token = String(p.sessao || "");
+    const sessao = obterSessaoObrigatoria_({ sessao: token });
+    const ativo = String(p.ativo || "0") === "1";
+    sessao.manterConectado = ativo;
+    if (!ativo) sessao.ultimaAtividade = Date.now();
+    salvarSessao_(token, sessao);
+    return respostaJsonp_(callback, {
+      sucesso: true,
+      manterConectado: ativo,
+      atividadeEm: sessao.ultimaAtividade || sessao.criadaEm,
+      ate: sessao.criadaEm + SESSAO_SEGUNDOS_ * 1000
+    });
+  } catch (erro) {
+    return respostaJsonp_(callback, { sucesso: false, precisaLogin: true, mensagem: mensagemErro_(erro) });
+  }
+}
+
 function registrarAtividadeSessao_(p) {
   const callback = "__atividadeCb";
   if (String(p.callback || "") !== callback) {

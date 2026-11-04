@@ -1652,6 +1652,7 @@
     }
   </style>
   <script src="auth.js"></script>
+<script src="notificacoes.js" defer></script>
 </head>
 
 <body>
@@ -1673,6 +1674,7 @@ Auth.exigirAdmin().then(ok => {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", atualizarIdentidade);
   else atualizarIdentidade();
+  if (window.MVNotificacoes) window.MVNotificacoes.iniciar();
 });
 </script>
 <div class="app">
@@ -1764,6 +1766,8 @@ Auth.exigirAdmin().then(ok => {
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
+        <button type="button" class="button" id="btnManterConectadoPainel" data-manter-conectado hidden>Manter conectado</button>
+        <button type="button" class="button" id="btnAtivarNotificacoesPainel" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
         </button>
@@ -1783,6 +1787,11 @@ Auth.exigirAdmin().then(ok => {
         </div>
 
         <div class="loading-banner" id="dashboardLoading"><span class="loading-spinner"></span><span>Carregando informações dos mapas e indicadores...</span></div>
+        <div id="avisoVencidosLoja" hidden style="margin:0 0 16px;padding:14px 16px;border:1px solid #f2b45b;border-left:5px solid #d97706;border-radius:12px;background:#fff7e8;color:#7c3f09;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div><strong id="avisoVencidosTitulo">Atenção: existem produtos vencidos nesta loja.</strong><div id="avisoVencidosTexto" style="font-size:13px;margin-top:3px">Confira os mapas dos funcionários.</div></div>
+          <button type="button" class="button button-primary" id="btnVerVencidosPainel">Ver vencidos</button>
+        </div>
+
         <div class="stats">
           <div class="stat-card">
             <div class="stat-top">
@@ -3022,6 +3031,8 @@ Auth.exigirAdmin().then(ok => {
   const painelCache = { validades: [], validadesQueima: [], vencidos: [], queima: [] };
 
   // A condição de Queima vem da planilha, calculada no servidor por chave e loja.
+  document.getElementById("btnVerVencidosPainel")?.addEventListener("click", () => navigate("controle-validade"));
+
   function obterChavesQueimaHTML() {
     return new Set((painelCache.validades || []).filter(r => r.emQueima).map(r => String(r.chaveUnica || '').trim()).filter(Boolean));
   }
@@ -3375,6 +3386,30 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     const dias = diasAte(r.validadeISO || r.validade);
     if (dias === null) return false;
     return dias <= limiteVencimentoPainel(r);
+  }
+
+  function atualizarAvisoVencidosLoja() {
+    const registros = [...(painelCache.validades || []), ...(painelCache.validadesQueima || [])];
+    const vencidos = registros.filter(estaVencidoPainel);
+    const nomes = [...new Set(vencidos.map(r => String(r.funcionario || "").trim()).filter(Boolean))];
+    const aviso = document.getElementById("avisoVencidosLoja");
+    const titulo = document.getElementById("avisoVencidosTitulo");
+    const texto = document.getElementById("avisoVencidosTexto");
+    if (!aviso) return;
+    aviso.hidden = vencidos.length === 0;
+    aviso.style.display = vencidos.length ? "flex" : "none";
+    if (vencidos.length) {
+      if (titulo) titulo.textContent = vencidos.length + (vencidos.length === 1 ? " registro vencido" : " registros vencidos") + " encontrados nesta loja.";
+      if (texto) texto.textContent = nomes.length + (nomes.length === 1 ? " funcionário possui" : " funcionários possuem") + " produtos que precisam de conferência.";
+      if (window.MVNotificacoes) {
+        window.MVNotificacoes.notificarDesktop({
+          nome: "Loja " + Auth.loja(),
+          quantidade: vencidos.length,
+          loja: Auth.loja(),
+          url: "painelconferente.html"
+        });
+      }
+    }
   }
 
   function situacaoPainel(r) {
@@ -4225,6 +4260,7 @@ function imprimirMapaValidade() {
         ? d.registrosQueima.map(r => ({ ...r, emQueima: true }))
         : [];
       validadesProntas = true;
+      atualizarAvisoVencidosLoja();
   
       // Atualiza o Mapa de Validade.
       renderMapa();

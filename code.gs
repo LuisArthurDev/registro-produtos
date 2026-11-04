@@ -348,6 +348,7 @@ function doGetOriginal_(e) {
   if (acao === "login") return login_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
+  if (acao === "definirPermanenciaSessao") return definirPermanenciaSessao_(parametros);
   if (acao === "logout") return logout_(parametros);
   if (acao === "loginAdmin") return loginAdmin_(parametros);
   if (acao === "definirPinFuncionario") return definirPinFuncionario_(parametros);
@@ -6138,7 +6139,7 @@ function obterSessaoObrigatoria_(parametros) {
     removerSessao_(token);
     throw new Error("Sua sessão atingiu o limite de 8 horas. Entre novamente.");
   }
-  if (!ultimaAtividade || agora - ultimaAtividade >= INATIVIDADE_SEGUNDOS_ * 1000) {
+  if (sessao.manterConectado !== true && (!ultimaAtividade || agora - ultimaAtividade >= INATIVIDADE_SEGUNDOS_ * 1000)) {
     removerSessao_(token);
     throw new Error("Sua sessão foi encerrada após 30 minutos de inatividade.");
   }
@@ -6827,3 +6828,160 @@ function garantirLojaOrigemSinalizacao_() {
   SpreadsheetApp.flush();
 }
 
+
+
+/* ============================================================
+   NOTIFICAÇÕES PUSH DE PRODUTOS VENCIDOS (ONESIGNAL)
+   Configurar em Script Properties:
+   MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY
+   ============================================================ */
+function idPushFuncionario_(loja, nome) {
+  const slug = normalizarTexto_(nome).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return "mv_" + normalizarLoja_(loja) + "_" + slug;
+}
+
+function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura) {
+  const externalId = idPushFuncionario_(loja, nome);
+  const urlSistema = "https://luisarthurdev.github.io/registro-produtos/lancamento.html";
+  const plural = quantidade === 1 ? "produto vencido" : "produtos vencidos";
+  const payload = {
+    app_id: appId,
+    target_channel: "push",
+    include_aliases: { external_id: [externalId] },
+    headings: { pt: "Atenção: produtos vencidos", en: "Expired products" },
+    contents: {
+      pt: nome + " tem " + quantidade + " " + plural + " na sua sessão.",
+      en: nome + " has " + quantidade + " expired products in their map."
+    },
+    web_url: urlSistema,
+    data: { tipo: "vencidos", loja: normalizarLoja_(loja), funcionario: nome, assinatura: assinatura }
+  };
+  const resposta = UrlFetchApp.fetch("https://api.onesignal.com/notifications", {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Key " + apiKey, Accept: "application/json" },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  const status = resposta.getResponseCode();
+  const corpo = resposta.getContentText();
+  let dados = {};
+  try { dados = JSON.parse(corpo || "{}"); } catch (_) {}
+  if (status < 200 || status >= 300 || !dados.id) {
+    throw new Error("OneSignal não confirmou o envio para " + nome + ": HTTP " + status + " — " + corpo);
+  }
+  return dados;
+}
+
+function verificarNotificacoesVencidos() {
+  const props = PropertiesService.getScriptProperties();
+  const appId = String(props.getProperty("MV_ONESIGNAL_APP_ID") || "").trim();
+  const apiKey = String(props.getProperty("MV_ONESIGNAL_REST_API_KEY") || "").trim();
+  if (!appId || !apiKey) {
+    console.warn("Push de vencidos não configurado: defina MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY em Script Properties.");
+    return { configurado: false, enviados: 0 };
+  }
+
+  const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const abaFuncionarios = planilha.getSheetByName("Funcionarios");
+  if (!abaFuncionarios || abaFuncionarios.getLastRow() < 2) return { configurado: true, enviados: 0 };
+  const fuso = planilha.getSpreadsheetTimeZone() || "America/Sao_Paulo";
+  const hojeISO = Utilities.formatDate(new Date(), fuso, "yyyy-MM-dd");
+  const ultimaLinha = abaFuncionarios.getLastRow();
+  const cadastros = abaFuncionarios.getRange(2, 1, ultimaLinha - 1, 10).getValues();
+  // Reproduz a exclusão do popup atual: registros já enviados à Queima
+  // não devem gerar alerta de vencidos na sessão original do funcionário.
+  const chavesQueimaPorLojaFuncionario = new Set();
+  const abaQueimaPush = planilha.getSheetByName("Queima");
+  if (abaQueimaPush && abaQueimaPush.getLastRow() >= 2) {
+    const qRange = abaQueimaPush.getDataRange();
+    const qValores = qRange.getValues();
+    const qExibidos = qRange.getDisplayValues();
+    const qCabecalho = (qExibidos[0] || []).map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+    const qOrigem = qCabecalho.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
+    const qLoja = qCabecalho.indexOf("lojaorigem");
+    const qChave = qCabecalho.findIndex(h => ["chave unica", "chave unica origem"].includes(h));
+    if (qOrigem >= 0 && qChave >= 0) {
+      for (let qi = 1; qi < qValores.length; qi++) {
+        const origem = String(qExibidos[qi][qOrigem] || "").trim();
+        const chave = String(qExibidos[qi][qChave] || qValores[qi][qChave] || "").trim();
+        if (!origem || !chave) continue;
+        let lojaRegistro = qLoja >= 0 ? normalizarLoja_(qExibidos[qi][qLoja]) : "";
+        if (!lojaRegistro && normalizarTexto_(origem) !== "cadastro manual") {
+          const cadastroOrigem = cadastros.find(c => normalizarTexto_(c[0]) === normalizarTexto_(origem));
+          if (cadastroOrigem) lojaRegistro = normalizarLoja_(cadastroOrigem[8]);
+        }
+        chavesQueimaPorLojaFuncionario.add(normalizarLoja_(lojaRegistro) + "|" + normalizarTexto_(origem) + "|" + chave);
+      }
+    }
+  }
+  let enviados = 0;
+
+  cadastros.forEach(function (cadastro) {
+    const nome = String(cadastro[0] || "").trim();
+    const especial = cadastro[1] === true || String(cadastro[1] || "").toLowerCase() === "true";
+    const administrador = ehAdministradorValor_(cadastro[7]);
+    const loja = normalizarLoja_(cadastro[8]);
+    const inativo = String(cadastro[9] || "").toLowerCase() === "inativo" || cadastro[9] === false;
+    if (!nome || especial || administrador || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
+
+    const abaMapa = planilha.getSheetByName(nome);
+    if (!abaMapa || abaMapa.getLastRow() < 2) {
+      props.setProperty("MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome), "");
+      return;
+    }
+
+    const linhas = abaMapa.getRange(2, 1, abaMapa.getLastRow() - 1, 6).getValues();
+    const exibidos = abaMapa.getRange(2, 1, abaMapa.getLastRow() - 1, 6).getDisplayValues();
+    const itens = new Map();
+    linhas.forEach(function (linha, i) {
+      const exibido = exibidos[i] || [];
+      const codigo = String(exibido[0] || "").trim();
+      if (!codigo) return;
+      const chaveMapa = String(linha[5] || exibido[5] || "").trim();
+      if (chaveMapa && chavesQueimaPorLojaFuncionario.has(loja + "|" + normalizarTexto_(nome) + "|" + chaveMapa)) return;
+      const data = converterValidadeParaData_(linha[2], exibido[2]);
+      if (!data) return;
+      const validadeISO = Utilities.formatDate(data, fuso, "yyyy-MM-dd");
+      if (validadeISO >= hojeISO) return;
+      const lote = String(exibido[1] || "").trim();
+      const chave = [codigo, lote, validadeISO].join("|");
+      if (!itens.has(chave)) itens.set(chave, { codigo: codigo, lote: lote, validade: validadeISO });
+    });
+
+    const propertyKey = "MV_VENCIDOS_HASH_" + idPushFuncionario_(loja, nome);
+    if (!itens.size) {
+      props.setProperty(propertyKey, "");
+      return;
+    }
+    const assinaturaTexto = Array.from(itens.keys()).sort().join("\n");
+    const assinatura = Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, assinaturaTexto, Utilities.Charset.UTF_8)
+    ).replace(/=+$/g, "");
+    const anterior = String(props.getProperty(propertyKey) || "");
+    if (assinatura === anterior) return;
+
+    try {
+      enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura);
+      props.setProperty(propertyKey, assinatura);
+      enviados++;
+    } catch (erro) {
+      console.error("Falha no push de vencidos de " + nome + " (loja " + loja + "): " + erro);
+    }
+  });
+
+  return { configurado: true, enviados: enviados };
+}
+
+function configurarAgendamentoNotificacoesVencidos() {
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty("MV_ONESIGNAL_APP_ID") || !props.getProperty("MV_ONESIGNAL_REST_API_KEY")) {
+    throw new Error("Antes, configure MV_ONESIGNAL_APP_ID e MV_ONESIGNAL_REST_API_KEY em Configurações do projeto > Propriedades do script.");
+  }
+  ScriptApp.getProjectTriggers().forEach(function (gatilho) {
+    if (gatilho.getHandlerFunction() === "verificarNotificacoesVencidos") ScriptApp.deleteTrigger(gatilho);
+  });
+  ScriptApp.newTrigger("verificarNotificacoesVencidos").timeBased().everyHours(1).create();
+  console.log("Agendamento de notificações de vencidos criado: verificação a cada hora.");
+  return "Agendamento criado. Execute verificarNotificacoesVencidos uma vez para o primeiro teste.";
+}

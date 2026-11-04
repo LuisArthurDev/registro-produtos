@@ -39,6 +39,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-ap
 .topbar h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.2px}
 .topbar p{margin:2px 0 0;font-size:13px;color:#b9cad8}
 .topbar-actions{display:flex;align-items:center;gap:10px}
+.header-action{min-height:38px;padding:0 11px;border:1px solid rgba(255,255,255,.35);border-radius:9px;background:rgba(255,255,255,.12);color:#fff;font-size:13px;font-weight:700;white-space:nowrap}
+.header-action[hidden]{display:none}
+@media(max-width:760px){.header-action{font-size:12px;padding:0 8px;min-height:36px}.topbar{gap:8px;padding-left:10px;padding-right:10px}.topbar h1{font-size:16px}.identidade-logada{font-size:11px}}
 .theme-toggle{flex-shrink:0;width:44px;min-height:44px;padding:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center}
 .theme-toggle:hover{background:rgba(255,255,255,.24)}
 .theme-toggle svg{width:22px;height:22px}
@@ -469,17 +472,20 @@ body.camera-aberta #cameraControles:not([hidden]) {
   html.auth-ok body { visibility: visible; }
 </style>
 <script src="auth.js"></script>
+<script src="notificacoes.js" defer></script>
 </head>
 
 <body>
 <header class="topbar">
   <div class="topbar-info">
-    <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v1.0.1</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
   <div class="topbar-acoes">
     <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
+    <button type="button" class="header-action desktop-only" id="btnManterConectado" data-manter-conectado hidden>Manter conectado</button>
+    <button type="button" class="header-action" id="btnAtivarNotificacoes" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
       href="index.html"
@@ -1794,6 +1800,8 @@ window.addEventListener("load", async () => {
     atualizarCamposTransferencia();
     atualizarBotaoVisualizar();
     await restaurarLancamentoPendente();
+    verificarAvisoValidade();
+    if (window.MVNotificacoes) window.MVNotificacoes.iniciar();
 
   } catch (erro) {
     console.error(erro);
@@ -1907,7 +1915,9 @@ function buscarValidadesParaAviso() {
 
     const parametros = new URLSearchParams({
       action: "validades",
-      callback
+      callback,
+      sessao: Auth.token(),
+      nocache: "1"
     });
 
     script.src =
@@ -1982,7 +1992,7 @@ function verificarAvisoValidade() {
 
   Promise.all([
     buscarValidadesParaAviso(),
-    carregarCatalogoSQLite()
+    carregarCatalogoSQLite().catch(() => null)
   ])
     .then(([registros]) => {
       // Impede que uma consulta antiga mostre o popup para outro funcionário.
@@ -1995,6 +2005,14 @@ function verificarAvisoValidade() {
 
       if (quantidade > 0) {
         mostrarAvisoValidade(quantidade, funcionario);
+        if (window.MVNotificacoes) {
+          window.MVNotificacoes.notificarDesktop({
+            nome: funcionario,
+            quantidade: quantidade,
+            loja: Auth.loja(),
+            url: "visualizacao.html?funcionario=" + encodeURIComponent(funcionario)
+          });
+        }
       } else {
         fecharAvisoValidade();
       }

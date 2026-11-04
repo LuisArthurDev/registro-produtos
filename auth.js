@@ -29,7 +29,7 @@
       return sessao &&
         sessao.token &&
         sessao.ate > agora &&
-        agora - atividade < INATIVIDADE_MS
+        (sessao.manterConectado === true || agora - atividade < INATIVIDADE_MS)
         ? sessao
         : null;
 
@@ -130,6 +130,9 @@
       if (dados && dados.atividadeEm) {
         atual.atividadeEm = Math.max(Number(atual.atividadeEm || 0), Number(dados.atividadeEm));
       }
+      if (dados && typeof dados.manterConectado === "boolean") {
+        atual.manterConectado = dados.manterConectado;
+      }
       localStorage.setItem(CHAVE_SESSAO, JSON.stringify(atual));
     } catch (_) {}
   }
@@ -155,7 +158,9 @@
       return;
     }
     const atividade = Number(sessao.atividadeEm || Date.now());
-    const restanteInatividade = INATIVIDADE_MS - (Date.now() - atividade);
+    const restanteInatividade = sessao.manterConectado === true
+      ? Number.POSITIVE_INFINITY
+      : INATIVIDADE_MS - (Date.now() - atividade);
     const restanteAbsoluto = Number(sessao.ate) - Date.now();
     timerInatividade = setTimeout(function () {
       if (Date.now() >= Number(sessao.ate)) {
@@ -205,6 +210,69 @@
     window.addEventListener("storage", function (evento) {
       if (evento.key === CHAVE_SESSAO) programarExpiracaoInatividade();
     });
+  }
+
+  function ehComputador() {
+    try {
+      return !(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) &&
+        window.matchMedia("(pointer: fine) and (min-width: 768px)").matches;
+    } catch (_) { return false; }
+  }
+
+  function atualizarBotoesPermanencia() {
+    let sessao = null;
+    try { sessao = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null"); } catch (_) {}
+    document.querySelectorAll("[data-manter-conectado]").forEach(function (botao) {
+      if (!ehComputador()) { botao.hidden = true; return; }
+      botao.hidden = false;
+      const ativo = !!(sessao && sessao.manterConectado === true);
+      botao.textContent = ativo ? "Conexão mantida" : "Manter conectado";
+      botao.setAttribute("aria-pressed", ativo ? "true" : "false");
+      botao.title = ativo
+        ? "Desativar permanência; o limite de 30 minutos voltará a valer"
+        : "Ignorar inatividade nesta sessão, mantendo o limite absoluto de 8 horas";
+    });
+  }
+
+  async function alternarPermanencia() {
+    if (!ehComputador()) return false;
+    const atual = lerSessao();
+    if (!atual) { encerrarSessao("Sua sessão expirou. Entre novamente."); return false; }
+    const novoEstado = atual.manterConectado !== true;
+    const resposta = await chamar("definirPermanenciaSessao", "__permanenciaCb", {
+      ativo: novoEstado ? "1" : "0"
+    }, {});
+    if (!resposta || resposta.sucesso !== true) {
+      throw new Error(resposta && resposta.mensagem || "Não foi possível atualizar a permanência da sessão.");
+    }
+    try {
+      const salvo = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
+      if (salvo) {
+        salvo.manterConectado = novoEstado;
+        if (!novoEstado) salvo.atividadeEm = Date.now();
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify(salvo));
+      }
+    } catch (_) {}
+    programarExpiracaoInatividade();
+    atualizarBotoesPermanencia();
+    return novoEstado;
+  }
+
+  function configurarBotoesPermanencia() {
+    document.querySelectorAll("[data-manter-conectado]").forEach(function (botao) {
+      if (botao.dataset.configurado === "1") return;
+      botao.dataset.configurado = "1";
+      botao.addEventListener("click", async function () {
+        botao.disabled = true;
+        try {
+          const ativo = await alternarPermanencia();
+          botao.textContent = ativo ? "Conexão mantida" : "Manter conectado";
+        } catch (erro) {
+          alert(erro.message || "Não foi possível alterar a sessão.");
+        } finally { botao.disabled = false; atualizarBotoesPermanencia(); }
+      });
+    });
+    atualizarBotoesPermanencia();
   }
 
   async function validarPerfil(perfilEsperado) {
@@ -268,6 +336,11 @@
 
       // Sincroniza os prazos oficiais e monitora atividade real do usuário.
       iniciarMonitorAtividade(resposta);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", configurarBotoesPermanencia, { once: true });
+      } else {
+        configurarBotoesPermanencia();
+      }
 
       // Libera a interface somente depois da confirmação do servidor.
       document.documentElement.classList.add("auth-ok");
@@ -283,6 +356,7 @@
 
   async function sair() {
     const sessao = lerSessao();
+    try { if (window.MVNotificacoes && typeof window.MVNotificacoes.sair === "function") await window.MVNotificacoes.sair(); } catch (_) {}
 
     if (sessao) {
       try {
@@ -334,6 +408,13 @@
       const s = lerSessao();
       return !!(s && s.administradorGeral === true);
     },
+
+    manterConectado: function () {
+      const s = lerSessao();
+      return !!(s && s.manterConectado === true);
+    },
+
+    alternarPermanencia: alternarPermanencia,
 
     perfil: function () {
       const s = lerSessao();
