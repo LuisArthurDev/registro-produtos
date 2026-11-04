@@ -1,69 +1,39 @@
+/* Inicialização PWA para GitHub Pages.
+ * Verifica atualizações do Service Worker ao abrir cada página, sem recarregar
+ * a página atual. O worker do OneSignal continua responsável pelas notificações.
+ */
 (function () {
-  'use strict';
+  "use strict";
 
-  if (!('serviceWorker' in navigator)) {
-    return;
-  }
+  if (!("serviceWorker" in navigator)) return;
 
-  let verificacaoEmAndamento = false;
+  var workerUrl = "/registro-produtos/OneSignalSDKWorker.js";
+  var workerScope = "/registro-produtos/";
 
-  async function verificarAtualizacao() {
-    if (verificacaoEmAndamento) return;
+  function registrarEVerificarAtualizacao() {
+    navigator.serviceWorker
+      .register(workerUrl, { scope: workerScope })
+      .then(function (registration) {
+        console.info("PWA: service worker registrado", registration.scope);
 
-    verificacaoEmAndamento = true;
-
-    try {
-      const registrations =
-        await navigator.serviceWorker.getRegistrations();
-
-      const registroPrincipal = registrations.find(registro => {
-        return registro.scope.includes('/registro-produtos/');
+        // Consulta se há uma versão nova do worker. Não força reload da página:
+        // evita interromper formulários, lançamentos e consultas em andamento.
+        if (typeof registration.update === "function") {
+          return registration.update().catch(function (error) {
+            console.warn("PWA: não foi possível verificar atualizações", error);
+          });
+        }
+      })
+      .catch(function (error) {
+        console.warn("PWA: não foi possível registrar o service worker", error);
       });
-
-      if (registroPrincipal) {
-        await registroPrincipal.update();
-      }
-    } catch (erro) {
-      console.warn(
-        '[PWA] Não foi possível verificar atualizações:',
-        erro
-      );
-    } finally {
-      verificacaoEmAndamento = false;
-    }
   }
 
-  async function iniciarPWA() {
-    try {
-      const registro = await navigator.serviceWorker.register(
-        './service-worker.js',
-        { scope: './' }
-      );
-
-      console.log('[PWA] Service Worker registrado.');
-
-      await registro.update();
-
-    } catch (erro) {
-      console.warn(
-        '[PWA] Falha ao registrar Service Worker:',
-        erro
-      );
-    }
-  }
-
-  // Inicializa somente quando a página é aberta.
-  if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      iniciarPWA,
-      { once: true }
-    );
+  // Ao abrir a página, o navegador verifica o worker e instala uma versão nova
+  // quando disponível. A página atual permanece aberta, sem recarga automática.
+  if (document.readyState === "complete") {
+    registrarEVerificarAtualizacao();
   } else {
-    iniciarPWA();
+    window.addEventListener("load", registrarEVerificarAtualizacao, { once: true });
   }
-
-  // Não recarrega a página ao trocar de aba,
-  // voltar do histórico ou retornar ao navegador.
-
 })();

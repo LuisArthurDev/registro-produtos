@@ -3234,7 +3234,7 @@ function jsonpPainelBruto(action, callback, extra = {}) {
 
   // Consultas de status do celular próprio são auxiliares e não devem abrir
   // o overlay global de atualização do painel a cada funcionário consultado.
-  const exibirCarregamento = action !== "gerenciarCelularProprio";
+  const exibirCarregamento = action !== "gerenciarCelularProprio" && action !== "gerenciarCelularProprioLote";
   if (exibirCarregamento) iniciarCarregamentoPainel("Atualizando informações do painel...");
   const promessa = new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -3364,7 +3364,7 @@ function carregarCadastroFuncionariosPainel() {
       // Carrega todos os estados de celular em uma única chamada, junto do cadastro.
       // Isso evita dezenas de requisições JSONP concorrentes/serializadas ao abrir o painel.
       try {
-        const status = await chamarFuncionarioApi("gerenciarCelularProprioLote", "__celularProprioLoteCb", {
+        const status = await jsonpPainel("gerenciarCelularProprioLote", "__celularProprioLoteCb", {
           funcionarios: JSON.stringify(cadastroFuncionariosPainel.detalhes.map(d => ({ nome: d.nome, loja: d.loja || "" })))
         });
         (status.funcionarios || []).forEach(item => {
@@ -4128,11 +4128,12 @@ function imprimirMapaValidade() {
           body { print-color-adjust: exact; }
         }
       
-    .celular-proprio-btn { width:34px; min-width:34px; height:34px; padding:5px !important; display:inline-flex !important; align-items:center; justify-content:center; vertical-align:middle; opacity:1 !important; visibility:visible !important; }
+    .celular-proprio-btn { width:34px; min-width:34px; height:34px; padding:5px !important; display:inline-flex !important; align-items:center; justify-content:center; vertical-align:middle; opacity:1 !important; visibility:visible !important; position:relative; }
     .func-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:5px; min-width:150px; }
     .celular-proprio-btn svg { width:18px; height:18px; }
     .celular-proprio-ativo { color:#16a34a !important; border-color:#16a34a !important; }
     .celular-proprio-inativo { color:#dc2626 !important; border-color:#dc2626 !important; }
+    .celular-proprio-inativo::after { content:""; position:absolute; width:23px; height:2px; background:#dc2626; transform:rotate(-48deg); border-radius:2px; pointer-events:none; }
 </style>
     </head>
     <body>
@@ -6777,7 +6778,7 @@ document.addEventListener("submit", async function(event) {
         const estadoCelular = estadosCelularProprio.get(chaveCelular);
         const ativoCelular = estadoCelular === true;
         const rotuloCelular = estadoCelular === undefined ? "Verificando celular próprio" : (ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio");
-        const iconeCelular = ativoCelular ? "smartphone" : "smartphone-off";
+        const iconeCelular = "smartphone";
         botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '"' + (estadoCelular === undefined ? ' disabled' : '') + ' title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="' + iconeCelular + '"></i></button>';
       }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
