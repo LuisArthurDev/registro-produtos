@@ -1,0 +1,8 @@
+name = "registro-produtos-api"
+main = "src/index.js"
+compatibility_date = "2026-11-04"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "registro-produtos"
+database_id = "4e1417e5-b51c-4475-bf62-94df97dfb134"
