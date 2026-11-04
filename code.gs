@@ -5919,6 +5919,7 @@ function bloquearSeNaoAutorizado_(p) {
     "status",
     "historicoMes",
     "validades",
+    "funcionarios", // Lista de abas permitidas; o endpoint filtra por perfil e loja.
     "editarLancamento",
     "excluirLancamento",
     "adicionarValidadeManual",

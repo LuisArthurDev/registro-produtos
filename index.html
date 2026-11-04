@@ -350,7 +350,7 @@
       <div id="adminAcesso" hidden style="margin:16px 0;text-align:center">
         <p id="adminBoasVindas">Acesso de administrador confirmado.</p>
         <a id="btnPainelConferente" href="painelconferente.html" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#12354b;color:#fff;text-decoration:none;font-weight:700">Entrar no Painel Conferente</a>
-        <a id="btnLancamentoEspecial" href="lancamento.html" style="display:inline-block;padding:12px 18px;margin:8px 0 0;border:1px solid #12354b;border-radius:10px;color:#12354b;text-decoration:none;font-weight:700">Lançar em aba especial</a>
+        <a id="btnLancamentoEspecial" href="lancamento.html" style="display:inline-block;padding:12px 18px;margin:8px 0 0;border:1px solid #12354b;border-radius:10px;color:#12354b;text-decoration:none;font-weight:700">Acessar Lançamentos</a>
       </div>
       <form id="loginForm" autocomplete="on">
         <div class="field">
@@ -528,10 +528,12 @@
             document.getElementById("loginForm").hidden = true;
             document.getElementById("adminAcesso").hidden = false;
             document.getElementById("btnPainelConferente").href = "painelconferente.html";
+            document.getElementById("btnLancamentoEspecial").href = "lancamento.html";
+            document.getElementById("btnLancamentoEspecial").hidden = false;
             document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
             return;
           }
-          location.replace(destinoSeguro());
+          location.replace("lancamento.html");
           return;
         }
       } catch (_) {}
@@ -582,9 +584,12 @@
         } else if (d.administrador === true) {
           document.getElementById("loginForm").hidden = true;
           document.getElementById("adminAcesso").hidden = false;
+          document.getElementById("btnPainelConferente").href = "painelconferente.html";
+          document.getElementById("btnLancamentoEspecial").href = "lancamento.html";
+          document.getElementById("btnLancamentoEspecial").hidden = false;
           document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
         } else {
-          location.replace(destinoSeguro());
+          location.replace("lancamento.html");
         }
 
       } catch (erro) {
