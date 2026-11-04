@@ -371,6 +371,9 @@ function doGetOriginal_(e) {
     return respostaJsonp_(callback, { sucesso: !!appId, appId: appId });
   }
   if (acao === "login") return login_(parametros);
+  if (acao === "loginDispositivoSulaima") return loginDispositivoSulaima_(parametros);
+  if (acao === "registrarCelularSulaima") return registrarCelularSulaima_(parametros);
+  if (acao === "gerenciarCelularSulaima") return gerenciarCelularSulaima_(parametros);
   if (acao === "sessao") return consultarSessao_(parametros);
   if (acao === "atividade") return registrarAtividadeSessao_(parametros);
   if (acao === "definirPermanenciaSessao") return definirPermanenciaSessao_(parametros);
@@ -6165,6 +6168,13 @@ function obterSessaoObrigatoria_(parametros) {
     throw new Error("Sessão expirada. Entre novamente.");
   }
 
+  if (sessao.dispositivoSulaima === true &&
+      (PropertiesService.getScriptProperties().getProperty("MV_CELULAR_SULAIMA_ATIVO") !== "1" ||
+       !PropertiesService.getScriptProperties().getProperty("MV_CELULAR_SULAIMA_TOKEN_HASH"))) {
+    removerSessao_(token);
+    throw new Error("O celular próprio da Sulaima foi revogado pelo Painel Conferente.");
+  }
+
   const agora = Date.now();
   const criadaEm = Number(sessao.criadaEm || 0);
   const ultimaAtividade = Number(sessao.ultimaAtividade || criadaEm);
@@ -6575,6 +6585,7 @@ function bloquearSeNaoAutorizado_(p) {
   // Ações públicas necessárias para a tela de login.
   const publicas = [
     "login",
+    "loginDispositivoSulaima",
     "funcionariosLogin",
     "sessao",
     "configNotificacoes",
@@ -6618,6 +6629,7 @@ function bloquearSeNaoAutorizado_(p) {
     "marcarCheckFuncionario",
     "inativarFuncionario",
     "definirPinFuncionario",
+    "gerenciarCelularSulaima",
     "retirarDeLoja",
     "adicionarDanificado",
     "adicionarAoQueima",
@@ -6658,7 +6670,8 @@ function bloquearSeNaoAutorizado_(p) {
     "excluirLancamento",
     "adicionarValidadeManual",
     "sinalizarLancamento",
-    "atividade" // renova somente a janela de inatividade da sessão autenticada
+    "atividade", // renova somente a janela de inatividade da sessão autenticada
+    "registrarCelularSulaima"
   ];
 
   if (
@@ -6879,7 +6892,14 @@ function idPushFuncionario_(loja, nome) {
 }
 
 function enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, quantidade, assinatura) {
-  const externalId = idPushFuncionario_(loja, nome);
+  let externalId = idPushFuncionario_(loja, nome);
+  if (normalizarTexto_(nome) === "sulaima") {
+    const propsCelular = PropertiesService.getScriptProperties();
+    if (propsCelular.getProperty("MV_CELULAR_SULAIMA_ATIVO") !== "1" || !propsCelular.getProperty("MV_CELULAR_SULAIMA_TOKEN_HASH")) {
+      return { skipped: true, reason: "Celular próprio da Sulaima ainda não autorizado." };
+    }
+    externalId = "mv_sulaima_celular_proprio";
+  }
   const urlSistema = "https://luisarthurdev.github.io/registro-produtos/lancamento.html";
   const plural = quantidade === 1 ? "produto vencido" : "produtos vencidos";
   const payload = {
@@ -7030,7 +7050,8 @@ function verificarNotificacoesVencidos(lojaFiltro, forcarEnvio) {
     if (!forcarEnvio && assinatura === anterior) return;
 
     try {
-      enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura);
+      const envio = enviarPushVencidosFuncionario_(appId, apiKey, loja, nome, itens.size, assinatura);
+      if (envio && envio.skipped) return;
       props.setProperty(propertyKey, assinatura);
       enviados++;
     } catch (erro) {
@@ -7094,6 +7115,9 @@ function notificarTodosLoja_(p) {
     if (!nome || especial || inativo || normalizarTexto_(nome) === "transferencias" || !loja) return;
     if (sessao.administradorGeral !== true && loja !== lojaSessao) return;
     ids.push(idPushFuncionario_(loja, nome));
+    // Comunicado manual continua alcançando todos. A Sulaima também recebe
+    // pelo alias exclusivo do celular próprio, se esse aparelho já estiver inscrito.
+    if (normalizarTexto_(nome) === "sulaima") ids.push("mv_sulaima_celular_proprio");
   });
   const unicos = Array.from(new Set(ids));
   if (!unicos.length) throw new Error("Não há usuários ativos com loja definida para receber a notificação.");

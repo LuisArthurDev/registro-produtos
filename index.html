@@ -309,6 +309,15 @@
       }
     }
 
+    .device-modal-backdrop { position:fixed; inset:0; z-index:50000; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(8,20,32,.68); }
+    .device-modal { width:min(420px,100%); padding:24px; border:1px solid var(--border); border-radius:18px; background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+    .device-modal h2 { margin:0 0 10px; font-size:20px; }
+    .device-modal p { margin:0; color:var(--muted); font-size:14px; line-height:1.55; }
+    .device-modal-actions { display:flex; gap:10px; margin-top:22px; }
+    .device-modal-actions button { flex:1; min-height:44px; padding:10px; border-radius:10px; border:1px solid var(--border); cursor:pointer; font-weight:700; }
+    .device-modal-primary { background:var(--primary); color:#fff; border-color:var(--primary) !important; }
+    .device-modal-secondary { background:var(--surface); color:var(--ink); }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -330,6 +339,18 @@
     aria-label="Alternar tema"
     title="Alternar tema"
   >🌙</button>
+
+  <div class="device-modal-backdrop" id="modalCelularSulaima" role="dialog" aria-modal="true" aria-labelledby="tituloCelularSulaima">
+    <div class="device-modal">
+      <h2 id="tituloCelularSulaima">Manter este celular conectado?</h2>
+      <p>Este recurso foi liberado para o celular próprio da Sulaima. Se autorizar, este aparelho poderá entrar automaticamente nas próximas vezes, sem solicitar o PIN. O acesso poderá ser revogado pelo Painel Conferente.</p>
+      <div class="device-modal-actions">
+        <button type="button" class="device-modal-secondary" id="naoAutorizarCelular">Agora não</button>
+        <button type="button" class="device-modal-primary" id="autorizarCelular">Autorizar celular</button>
+      </div>
+      <p id="statusCelularSulaima" role="status" style="margin-top:12px"></p>
+    </div>
+  </div>
 
   <main class="login-container">
     <header class="brand">
@@ -565,6 +586,56 @@
       senhaInput.value = senhaInput.value.replace(/\D/g, "");
     });
 
+    const CHAVE_TOKEN_CELULAR_SULAIMA = "mv_celular_sulaima_token";
+    const CHAVE_FLAG_CELULAR_SULAIMA = "mv_celular_sulaima_autorizado";
+    function ehSulaima(nome) { return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() === "sulaima"; }
+    function salvarSessaoLogin(d) {
+      localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+        token: d.token, nome: d.nome, loja: d.loja,
+        administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
+        perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
+        criadaEm: d.criadaEm || Date.now(), atividadeEm: d.atividadeEm || Date.now(),
+        ate: d.ate || (Date.now() + 8 * 3600 * 1000), manterConectado: d.manterConectado === true
+      }));
+    }
+    function tokenAleatorioDispositivo() {
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    }
+    function irParaLancamento() { location.replace("lancamento.html"); }
+    function abrirModalCelularSulaima() {
+      const modal = document.getElementById("modalCelularSulaima");
+      modal.style.display = "flex";
+      document.getElementById("statusCelularSulaima").textContent = "";
+      document.getElementById("autorizarCelular").disabled = false;
+    }
+    document.getElementById("naoAutorizarCelular").addEventListener("click", irParaLancamento);
+    document.getElementById("autorizarCelular").addEventListener("click", async function () {
+      const botao = this;
+      const status = document.getElementById("statusCelularSulaima");
+      botao.disabled = true;
+      status.textContent = "Autorizando este aparelho...";
+      try {
+        const tokenDispositivo = tokenAleatorioDispositivo();
+        const resposta = await chamarServidor("registrarCelularSulaima", "__registrarCelularSulaimaCb", {
+          tokenDispositivo: tokenDispositivo,
+          sessao: (JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "{}") || {}).token
+        });
+        if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível autorizar este aparelho.");
+        localStorage.setItem(CHAVE_TOKEN_CELULAR_SULAIMA, tokenDispositivo);
+        localStorage.setItem(CHAVE_FLAG_CELULAR_SULAIMA, "1");
+        const sessaoAtual = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "{}");
+        sessaoAtual.manterConectado = true;
+        sessaoAtual.atividadeEm = Date.now();
+        localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessaoAtual));
+        irParaLancamento();
+      } catch (erro) {
+        status.textContent = erro.message || "Falha ao autorizar o aparelho.";
+        botao.disabled = false;
+      }
+    });
+
     // A lista pública contém somente nomes de funcionários ativos; não inclui PINs,
     // lojas, perfis ou qualquer outro dado de autenticação.
     function carregarFuncionariosAtivosLogin() {
@@ -597,24 +668,38 @@
 
     carregarFuncionariosAtivosLogin();
 
-    // Se já existe uma sessão válida, entra direto.
+    // Primeiro tenta restaurar a sessão normal. Se ela expirou, o celular
+    // previamente autorizado da Sulaima solicita uma nova sessão ao servidor.
     (async function () {
-      const sessao = lerSessaoLocal();
-      if (!sessao) return;
+      let sessao = lerSessaoLocal();
+      if (!sessao) {
+        const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA) || "";
+        if (tokenDispositivo) {
+          try {
+            const d = await chamarServidor("loginDispositivoSulaima", "__loginDispositivoCb", { tokenDispositivo: tokenDispositivo });
+            if (d && d.sucesso === true) {
+              salvarSessaoLogin(d);
+              localStorage.setItem(CHAVE_FLAG_CELULAR_SULAIMA, "1");
+              irParaLancamento();
+              return;
+            }
+          } catch (_) {}
+          localStorage.removeItem(CHAVE_TOKEN_CELULAR_SULAIMA);
+          localStorage.removeItem(CHAVE_FLAG_CELULAR_SULAIMA);
+        }
+        return;
+      }
       try {
         const d = await chamarServidor("sessao", "__sessaoCb", { sessao: sessao.token });
         if (d && d.sucesso) {
-          localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
-            token: sessao.token, nome: d.nome, loja: d.loja,
-            administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
-            perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
-            criadaEm: d.criadaEm || sessao.criadaEm || Date.now(),
-            atividadeEm: d.atividadeEm || Date.now(),
-            ate: d.ate || ((d.criadaEm || Date.now()) + 8 * 3600 * 1000)
-          }));
+          salvarSessaoLogin(Object.assign({}, d, { token: sessao.token }));
+          if (ehSulaima(d.nome) && dispositivoMovel() && d.celularProprioDisponivel === true && !localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA)) {
+            abrirModalCelularSulaima();
+            return;
+          }
           if (d.administradorGeral === true) { location.replace("painelgeral.html"); return; }
           if (d.administrador === true) {
-            if (dispositivoMovel()) { location.replace("lancamento.html"); return; }
+            if (dispositivoMovel()) { irParaLancamento(); return; }
             document.getElementById("loginForm").hidden = true;
             document.getElementById("adminAcesso").hidden = false;
             document.getElementById("btnPainelConferente").href = "painelconferente.html";
@@ -624,11 +709,20 @@
             monitorarAtividadeAdminLogin();
             return;
           }
-          location.replace("lancamento.html");
+          irParaLancamento();
           return;
         }
       } catch (_) {}
       localStorage.removeItem(CHAVE_SESSAO);
+      const tokenDispositivo = localStorage.getItem(CHAVE_TOKEN_CELULAR_SULAIMA) || "";
+      if (tokenDispositivo) {
+        try {
+          const d = await chamarServidor("loginDispositivoSulaima", "__loginDispositivoCb", { tokenDispositivo: tokenDispositivo });
+          if (d && d.sucesso === true) { salvarSessaoLogin(d); irParaLancamento(); return; }
+        } catch (_) {}
+        localStorage.removeItem(CHAVE_TOKEN_CELULAR_SULAIMA);
+        localStorage.removeItem(CHAVE_FLAG_CELULAR_SULAIMA);
+      }
     })();
 
     form.addEventListener("submit", async (event) => {
@@ -657,18 +751,7 @@
           throw new Error((d && d.mensagem) || "Não foi possível entrar.");
         }
 
-        localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
-          token: d.token,
-          nome: d.nome,
-          loja: d.loja,
-          administrador: d.administrador === true,
-          administradorGeral: d.administradorGeral === true,
-          perfil: d.perfil || (d.administrador ? "admin" : "funcionario"),
-          loginId: d.loginId,
-          criadaEm: d.criadaEm || Date.now(),
-          atividadeEm: d.atividadeEm || Date.now(),
-          ate: d.ate || (Date.now() + 8 * 3600 * 1000)
-        }));
+        salvarSessaoLogin(d);
 
         mostrarMensagem(d.administradorGeral === true ? "Acesso de Administrador Geral liberado." : (d.administrador === true ? "Acesso de administrador liberado." : "Acesso liberado. Entrando..."), "success");
         senhaInput.value = "";
@@ -683,6 +766,8 @@
           document.getElementById("btnLancamentoEspecial").hidden = false;
           document.getElementById("adminBoasVindas").textContent = d.nome + " · Loja " + d.loja;
           monitorarAtividadeAdminLogin();
+        } else if (ehSulaima(d.nome) && dispositivoMovel() && d.celularProprioDisponivel === true) {
+          abrirModalCelularSulaima();
         } else {
           location.replace("lancamento.html");
         }

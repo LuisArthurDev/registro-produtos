@@ -4,10 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <link rel="manifest" href="/registro-produtos/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/registro-produtos/icon-192.png">
 <meta name="theme-color" content="#0f2a3d">
-<meta name="app-version" content="1.1.0">
 <script>
 (function(){
   var t;
@@ -476,13 +473,12 @@ body.camera-aberta #cameraControles:not([hidden]) {
 </style>
 <script src="auth.js"></script>
 <script src="notificacoes.js" defer></script>
-  <script src="/registro-produtos/pwa.js" defer></script>
 </head>
 
 <body>
 <header class="topbar">
   <div class="topbar-info">
-    <h1>Registro de Mapa de Validade<sup>v1.0.2</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v1.0.1</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -1775,7 +1771,7 @@ btnVisualizarFuncionario.addEventListener("click", () => {
 
   window.location.href =
     "visualizacao.html?funcionario=" +
-    encodeURIComponent(funcionario) + "&aba=vencidos";
+    encodeURIComponent(funcionario);
 });
 
 // Atualiza a visibilidade quando o funcionário muda.
@@ -1966,7 +1962,10 @@ function mostrarAvisoValidade(quantidade, funcionario) {
   $("tituloAvisoValidade").textContent = "Atenção: produtos vencidos";
 
   $("textoAvisoValidade").textContent =
-    funcionario + " possui produtos vencidos.";
+    quantidade === 1
+      ? funcionario + " possui 1 lançamento com produto vencido."
+      : funcionario + " possui " + quantidade +
+        " lançamentos com produtos vencidos.";
 
   const progresso = $("avisoValidadeProgresso");
   progresso.style.animation = "none";
@@ -2010,7 +2009,7 @@ function verificarAvisoValidade() {
             nome: funcionario,
             quantidade: quantidade,
             loja: Auth.loja(),
-            url: "visualizacao.html?funcionario=" + encodeURIComponent(funcionario) + "&aba=vencidos"
+            url: "visualizacao.html?funcionario=" + encodeURIComponent(funcionario)
           });
         }
       } else {

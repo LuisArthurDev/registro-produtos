@@ -1774,7 +1774,6 @@ Auth.exigirAdmin().then(ok => {
 
       <div class="topbar-right">
         <div class="topbar-date" id="currentDate"></div>
-        <button type="button" class="button" id="btnManterConectadoPainel" data-manter-conectado hidden>Manter conectado</button>
         <button type="button" class="button" id="btnAtivarNotificacoesPainel" onclick="MVNotificacoes.ativar()">Ativar notificações</button>
         <button class="icon-button" id="refreshButton" title="Atualizar esta aba">
           <i data-lucide="refresh-cw"></i>
@@ -2922,6 +2921,8 @@ Auth.exigirAdmin().then(ok => {
   
   let funcionariosMapaCarregados = false;
   let cadastroFuncionariosPromise = null;
+  let celularSulaimaHabilitado = null;
+  let carregandoStatusCelularSulaima = false;
   
   const mapaSelecionados = new Set();
   let mapaVisiveisChaves = [];
@@ -6748,6 +6749,11 @@ document.addEventListener("submit", async function(event) {
       if (det && det.administrador && !det.especial) {
         botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
       }
+      if (det && !det.administrador && !det.especial && norm(o.nome) === "sulaima" && funcionariosCategoriaAtual !== "especiais") {
+        const textoCelular = celularSulaimaHabilitado === null ? "Verificando celular próprio" : (celularSulaimaHabilitado ? "Desativar celular próprio" : "Habilitar celular próprio");
+        const iconeCelular = celularSulaimaHabilitado ? "smartphone" : "smartphone";
+        botoesGestao += ' <button class="button" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '"' + (celularSulaimaHabilitado === null ? ' disabled' : '') + ' title="' + textoCelular + '" aria-label="' + textoCelular + '"><i data-lucide="' + iconeCelular + '"></i><span style="margin-left:4px">Celular próprio</span></button>';
+      }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det && !det.especial ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
@@ -6756,6 +6762,13 @@ document.addEventListener("submit", async function(event) {
     mostrar("funcionariosEmpty", rows.length === 0);
     avisoDados("funcionariosNotice");
     renderPainelIcons(g("page-funcionarios"));
+    if (celularSulaimaHabilitado === null && !carregandoStatusCelularSulaima) {
+      carregandoStatusCelularSulaima = true;
+      chamarFuncionarioApi("gerenciarCelularSulaima", "__celularSulaimaCb", { modo: "status" })
+        .then(d => { celularSulaimaHabilitado = d.ativo === true; renderFuncionarios(); })
+        .catch(e => { console.warn("Status do celular próprio:", e); celularSulaimaHabilitado = false; renderFuncionarios(); })
+        .finally(() => { carregandoStatusCelularSulaima = false; });
+    }
   }
 
   /* ---------- Funcionários: adicionar, renomear, especial e check ---------- */
@@ -6921,6 +6934,17 @@ document.addEventListener("submit", async function(event) {
     if (btn.dataset.funcAcao === "renomear") abrirModalFuncionario("renomear", nome);
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
+    else if (btn.dataset.funcAcao === "celular") {
+      const novoEstado = celularSulaimaHabilitado !== true;
+      const pergunta = novoEstado
+        ? "Habilitar a autorização de celular próprio para Sulaima? Ela verá a opção no próximo login pelo celular."
+        : "Desativar o celular próprio da Sulaima? O acesso automático será revogado imediatamente.";
+      if (!confirm(pergunta)) return;
+      btn.disabled = true;
+      chamarFuncionarioApi("gerenciarCelularSulaima", "__celularSulaimaCb", { modo: "alternar", ativo: novoEstado ? "1" : "0" })
+        .then(d => { celularSulaimaHabilitado = d.ativo === true; renderFuncionarios(); alert(novoEstado ? "Recurso habilitado. A Sulaima poderá autorizar o celular no próximo login." : "Celular próprio desativado e autorização revogada."); })
+        .catch(e => { alert(e.message); btn.disabled = false; });
+    }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });
 
