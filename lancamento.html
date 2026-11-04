@@ -473,7 +473,7 @@ body.camera-aberta #cameraControles:not([hidden]) {
 <body>
 <header class="topbar">
   <div class="topbar-info">
-    <h1>Registro de Mapa de Validade<sup>v1.0.0</sup></h1>
+    <h1>Registro de Mapa de Validade<sup>v0.2.0</sup></h1>
     <p>Leia o código, informe lote, validade e quantidade.</p>
   </div>
 
@@ -481,12 +481,10 @@ body.camera-aberta #cameraControles:not([hidden]) {
     <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
-      href="painelconferente.html"
-      id="btnPainelConferente"
+      href="index.html"
       class="theme-toggle header-icon-btn"
-      title="Painel Conferente"
-      aria-label="Painel Conferente"
-      hidden
+      title="Entrar"
+      aria-label="Entrar"
     >
       <svg viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
@@ -642,20 +640,11 @@ body.camera-aberta #cameraControles:not([hidden]) {
 </section>
 </form>
 
-<div id="modalHistoricoFuncionario" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="tituloHistoricoFuncionario">
-  <div class="modal">
-    <h2 id="tituloHistoricoFuncionario">Histórico encontrado</h2>
-    <p id="textoHistoricoFuncionario"></p>
-    <p>Deseja continuar com o histórico de hoje deste funcionário ou iniciar novamente?</p>
-    <div class="modal-acoes"><button type="button" id="btnContinuarHistorico" class="btn-modal-ok">Continuar</button><button type="button" id="btnReiniciarHistorico" class="btn-modal-perigo">Iniciar novamente</button></div>
-  </div>
-</div>
-
 <div id="modalDuplicado" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="tituloDuplicado">
   <div class="modal">
-    <h2 id="tituloDuplicado">Produto já lançado hoje</h2>
+    <h2 id="tituloDuplicado">Produto já existe neste mapa</h2>
     <p id="detalhesDuplicado"></p>
-    <p>Este funcionário já lançou o mesmo EAN, lote e validade hoje. Deseja adicionar mesmo assim ou ignorar este lançamento?</p>
+    <p>Este produto já consta no mapa selecionado, independentemente da data do lançamento. Deseja adicionar mais quantidade ou ignorar este lançamento?</p>
     <div class="modal-acoes"><button type="button" id="btnAdicionarDuplicado" class="btn-modal-ok">Adicionar mesmo assim</button><button type="button" id="btnIgnorarDuplicado" class="btn-modal-secundario">Ignorar lançamento</button></div>
   </div>
 </div>
@@ -707,14 +696,8 @@ body.camera-aberta #cameraControles:not([hidden]) {
 
 Auth.exigirLancamento().then(ok => {
   if (!ok) return;
-
+  // Exibe apenas nome e loja; o identificador técnico da sessão nunca vai para a interface.
   Auth.mostrarUsuario("identidadeLogada");
-
-  const btnPainel = document.getElementById("btnPainelConferente");
-  if (btnPainel) {
-    btnPainel.hidden = !Auth.administrador();
-  }
-
   const campoFuncionario = document.getElementById("campoFuncionario");
   if (campoFuncionario) campoFuncionario.hidden = !Auth.administrador();
 });
@@ -1349,7 +1332,7 @@ funcionarioEl.addEventListener("change",()=>{
 
 const CHAVE_HISTORICO_DIARIO="registroProdutosHistoricoDiario_v1";
 let funcionarioPendenteHistorico=null,payloadDuplicadoPendente=null,payloadNaoCadastradoPendente=null;
-let confirmarDuplicadoUmaVez=false,confirmarNaoCadastradoUmaVez=false,modalHistoricoAberto=false;
+let confirmarDuplicadoUmaVez=false,confirmarNaoCadastradoUmaVez=false,verificandoMapa=false;
 
 function reiniciarConfirmacoes(){confirmarNaoCadastradoUmaVez=false;confirmarDuplicadoUmaVez=false}
 function dataLocalISO(){
@@ -1384,36 +1367,9 @@ function atualizarUltimoPorFuncionario(nome,soSeMaisRecente){
   }
   definirUltimo(nomeParaExibir(ultimo.codigo,ultimo.descricao),ultimo.registradoEm);
 }
-function fecharModalHistorico(){$("modalHistoricoFuncionario").classList.remove("aberto");modalHistoricoAberto=false;funcionarioPendenteHistorico=null}
-function verificarHistoricoFuncionario(nome){
-  if(!nome||modalHistoricoAberto)return;
-  const itens=obterHistoricoFuncionario(nome);if(!itens.length)return;
-  funcionarioPendenteHistorico=nome;modalHistoricoAberto=true;
-  const unidades=itens.reduce((t,i)=>t+Number(i.quantidade||0),0);
-  $("textoHistoricoFuncionario").textContent=nome+" possui "+itens.length+" lançamento(s) no histórico de hoje, totalizando "+unidades+" unidade(s).";
-  $("modalHistoricoFuncionario").classList.add("aberto");
-}
-$("btnContinuarHistorico").addEventListener("click",()=>{
-  const nome=funcionarioPendenteHistorico;fecharModalHistorico();
-  mostrarStatus("Histórico de hoje mantido"+(nome?" para "+nome:"")+".","success");
-});
-$("btnReiniciarHistorico").addEventListener("click",()=>{
-  if(!funcionarioPendenteHistorico){fecharModalHistorico();return}
-  const nome=funcionarioPendenteHistorico,chave=normalizarTexto(nome),h=lerHistoricoDiario();
-  h.itens=h.itens.filter(i=>normalizarTexto(i.funcionario)!==chave);
-  gravarHistoricoDiario(h);atualizarUltimoPorFuncionario(nome);fecharModalHistorico();
-  mostrarStatus("Histórico local de hoje reiniciado para "+nome+".","success");
-});
-$("modalHistoricoFuncionario").addEventListener("click",e=>{if(e.target.id==="modalHistoricoFuncionario")fecharModalHistorico()});
-funcionarioEl.addEventListener("change",()=>{
-  atualizarUltimoPorFuncionario(funcionarioEl.value);
-  verificarHistoricoFuncionario(funcionarioEl.value);
-});
+funcionarioEl.addEventListener("change",()=>atualizarUltimoPorFuncionario(funcionarioEl.value));
 
-function mesmosDadosDuplicados(a,b){
-  return normalizarTexto(a.funcionario)===normalizarTexto(b.funcionario)&&String(a.codigo)===String(b.codigo)&&normalizarTexto(a.lote)===normalizarTexto(b.lote)&&String(a.validade)===String(b.validade);
-}
-function encontrarDuplicados(p){return lerHistoricoDiario().itens.filter(i=>mesmosDadosDuplicados(i,p))}
+
 function registrarNoHistorico(payload,descricao){
   if(!payload)return;
   const h=lerHistoricoDiario();
@@ -1429,7 +1385,7 @@ function registrarNoHistorico(payload,descricao){
 function abrirModalDuplicado(payload,itens){
   payloadDuplicadoPendente=payload;
   const quantidadeAnterior=itens.reduce((t,i)=>t+Number(i.quantidade||0),0);
-  $("detalhesDuplicado").textContent="Funcionário: "+payload.funcionario+" | EAN: "+payload.codigo+" | Lote: "+payload.lote+" | Validade: "+payload.validade+" | Quantidade já lançada hoje: "+quantidadeAnterior+" em "+itens.length+" lançamento(s).";
+  $("detalhesDuplicado").textContent="Funcionário: "+payload.funcionario+" | EAN: "+payload.codigo+" | Lote: "+payload.lote+" | Validade: "+payload.validade+" | Quantidade já existente no mapa: "+quantidadeAnterior+" em "+itens.length+" registro(s).";
   $("modalDuplicado").classList.add("aberto");
 }
 function fecharModalDuplicado(){$("modalDuplicado").classList.remove("aberto");payloadDuplicadoPendente=null}
@@ -1464,7 +1420,6 @@ $("modalProdutoNaoCadastrado").addEventListener("click",e=>{
 });
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){
-    if(modalHistoricoAberto)fecharModalHistorico();
     fecharModalDuplicado();fecharModalNaoCadastrado();reiniciarConfirmacoes();
   }
 });
@@ -1473,9 +1428,37 @@ function aleatorioHex(bytes){
   return Array.from(b,x=>x.toString(16).padStart(2,"0")).join("");
 }
 
+/* Consulta o mapa completo do funcionário no servidor (não usa histórico diário local). */
+function consultarDuplicidadeNoMapa(payload) {
+  return new Promise((resolve, reject) => {
+    const cb = "__verificarItemMapaCb";
+    const anterior = window[cb];
+    const script = document.createElement("script");
+    let finalizado = false;
+    const finalizar = (erro, dados) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timer);
+      script.remove();
+      if (window[cb] === receber) { if (anterior) window[cb] = anterior; else delete window[cb]; }
+      erro ? reject(erro) : resolve(dados);
+    };
+    const receber = dados => finalizar(null, dados);
+    window[cb] = receber;
+    const params = new URLSearchParams({
+      action: "verificarItemMapa", callback: cb, sessao: Auth.token(),
+      funcionario: payload.funcionario, codigo: payload.codigo, lote: payload.lote, validade: payload.validade
+    });
+    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 20000);
+    script.onerror = () => finalizar(new Error("Não foi possível consultar o mapa do funcionário."));
+    script.src = APPS_SCRIPT_URL + "?" + params.toString();
+    document.head.appendChild(script);
+  });
+}
+
 /* Envio do lançamento */
-formulario.addEventListener("submit",evento=>{
-  evento.preventDefault();if(enviando)return;ocultarStatus();
+formulario.addEventListener("submit",async evento=>{
+  evento.preventDefault();if(enviando||verificandoMapa)return;ocultarStatus();
 
   const codigo=codigoEl.value.trim(),funcionario=funcionarioEl.value.trim();
   const lote=$("lote").value.trim(),validadeTexto=validadeEl.value.trim();
@@ -1537,8 +1520,27 @@ formulario.addEventListener("submit",evento=>{
 
   if(!produtoExisteNoJson&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
   if(!confirmarDuplicadoUmaVez){
-    const duplicados=encontrarDuplicados(payload);
-    if(duplicados.length){abrirModalDuplicado(payload,duplicados);return}
+    try {
+      verificandoMapa = true;
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = "Verificando mapa...";
+      const verificacao = await consultarDuplicidadeNoMapa(payload);
+      verificandoMapa = false;
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = "Salvar lançamento";
+      if (!verificacao || verificacao.sucesso !== true) throw new Error(verificacao?.mensagem || "Falha ao verificar o mapa.");
+      if (verificacao.existe) {
+        abrirModalDuplicado(payload, [{ quantidade: verificacao.quantidade, ocorrencias: verificacao.ocorrencias }]);
+        $("detalhesDuplicado").textContent = "Funcionário: " + payload.funcionario + " | EAN: " + payload.codigo + " | Lote: " + payload.lote + " | Validade: " + payload.validade + " | Quantidade já existente no mapa: " + verificacao.quantidade + " em " + verificacao.ocorrencias + " registro(s).";
+        return;
+      }
+    } catch (erro) {
+      verificandoMapa = false;
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = "Salvar lançamento";
+      mostrarStatus("Não foi possível verificar o mapa antes de salvar: " + erro.message, "error");
+      return;
+    }
   }
 
   reiniciarConfirmacoes();
@@ -1695,9 +1697,6 @@ window.addEventListener("load", async () => {
     atualizarCamposTransferencia();
     atualizarBotaoVisualizar();
 
-    if (funcionarioEl.value) {
-      verificarHistoricoFuncionario(funcionarioEl.value);
-    }
   } catch (erro) {
     console.error(erro);
     mostrarStatus(

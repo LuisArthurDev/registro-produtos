@@ -342,6 +342,7 @@ function doGetOriginal_(e) {
   if (acao === "validades") {
     return consultarValidades_(parametros);
   }
+  if (acao === "verificarItemMapa") return verificarItemMapa_(parametros);
 
   if (acao === "adicionarValidadeManual") {
     return adicionarValidadeManual_(parametros);
@@ -1190,7 +1191,7 @@ function registrarSinalizacao_(parametros) {
 
       aba.getRange(linha, 1, 1, 6).setValues([[
         chaveUnica,
-        sessao.nome,
+        registro.nomeAba,
         motivo,
         "Em Aberto",
         new Date(),
@@ -1470,6 +1471,50 @@ function converterValidadeParaData_(valor, textoExibido) {
   return null;
 }
 
+function verificarItemMapa_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__verificarItemMapaCb") return respostaTexto_("Callback inválido.");
+  try {
+    const funcionario = String(p.funcionario || "").trim();
+    let sessao;
+    if (funcionario === "Transferencias") {
+      sessao = obterSessaoObrigatoria_({ sessao: p.sessao });
+      if (!sessao.administrador || sessao.administradorGeral) throw new Error("Somente o Administrador de Loja pode consultar Transferências.");
+    } else {
+      const dados = { sessao: p.sessao, funcionario };
+      sessao = exigirSessaoLancamento_(dados);
+    }
+    const codigo = String(p.codigo || "").trim();
+    const lote = String(p.lote || "").trim();
+    const validadeISO = String(p.validade || "").trim();
+    if (!codigo || !lote || !/^\d{4}-\d{2}-\d{2}$/.test(validadeISO)) throw new Error("Dados incompletos para verificar o mapa.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const aba = ss.getSheetByName(funcionario);
+    if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, existe: false, quantidade: 0, ocorrencias: 0 });
+    const transferencia = funcionario === "Transferencias";
+    const largura = transferencia ? 8 : 6;
+    const valores = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getValues();
+    const exibidos = aba.getRange(2, 1, aba.getLastRow() - 1, largura).getDisplayValues();
+    let quantidade = 0, ocorrencias = 0;
+    for (let i = 0; i < valores.length; i++) {
+      const row = valores[i], shown = exibidos[i];
+      if (transferencia && normalizarLoja_(shown[5]) !== sessao.loja) continue;
+      const cod = String(shown[0] || "").trim();
+      const lot = String(shown[1] || "").trim();
+      const validade = converterValidadeParaData_(row[2], shown[2]);
+      if (!validade) continue;
+      const iso = Utilities.formatDate(validade, ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
+      if (cod === codigo && normalizarTexto_(lot) === normalizarTexto_(lote) && iso === validadeISO) {
+        quantidade += Number(row[3]) || 0;
+        ocorrencias++;
+      }
+    }
+    return respostaJsonp_(cb, { sucesso: true, existe: ocorrencias > 0, quantidade, ocorrencias, funcionario });
+  } catch (e) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  }
+}
+
 function consultarValidades_(parametros) {
   if (String(parametros.callback || "") !== "__validadeCb") {
     return respostaTexto_("Callback inválido.");
@@ -1482,6 +1527,31 @@ function consultarValidades_(parametros) {
     const abas = obterAbasPermitidas_(parametros);
     const especiais = obterAbasEspeciais_();
     const registros = [];
+    const registrosQueima = [];
+
+    // A aba Queima é a fonte oficial para ocultar produtos já enviados.
+    // A comparação é por chave única e loja, não pelo localStorage do navegador.
+    const chavesQueimaDaLoja = new Set();
+    const abaQueima = planilha.getSheetByName("Queima");
+    if (abaQueima && abaQueima.getLastRow() >= 2) {
+      const qVals = abaQueima.getDataRange().getValues();
+      const qDisp = abaQueima.getDataRange().getDisplayValues();
+      const qHead = qDisp[0].map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+      const qOrigem = qHead.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
+      const qLoja = qHead.indexOf("lojaorigem");
+      const qChave = qHead.findIndex(h => ["chave unica", "chave unica origem"].includes(h));
+      for (let qi = 1; qi < qVals.length; qi++) {
+        if (qChave < 0) break;
+        const origemNome = qOrigem >= 0 ? String(qDisp[qi][qOrigem] || "").trim() : "";
+        let lojaRegistro = qLoja >= 0 ? normalizarLoja_(qDisp[qi][qLoja]) : "";
+        if (!lojaRegistro && origemNome && normalizarTexto_(origemNome) !== "cadastro manual") {
+          const cad = buscarFuncionarioPorNome_(origemNome);
+          if (cad && !cad.administrador) lojaRegistro = normalizarLoja_(cad.loja);
+        }
+        const chaveRegistro = String(qDisp[qi][qChave] || qVals[qi][qChave] || "").trim();
+        if (chaveRegistro && lojaRegistro === sessao.loja) chavesQueimaDaLoja.add(chaveRegistro);
+      }
+    }
 
     abas.forEach(function (nomeAba) {
       const aba = planilha.getSheetByName(nomeAba);
@@ -1502,11 +1572,17 @@ function consultarValidades_(parametros) {
 
         if (!codigo) return;
 
-        // Restringe as transferências à loja do usuário.
+        // Restringe as transferências à loja do usuário e separa registros enviados à Queima.
+        let destinoRegistros = registros;
         if (ehTransferencia) {
           const lojaOrigem = normalizarLoja_(exibe[5]);
 
           if (lojaOrigem !== sessao.loja) return;
+          const chaveTransferencia = String(exibe[7] || "").trim();
+          if (chaveTransferencia && chavesQueimaDaLoja.has(chaveTransferencia)) destinoRegistros = registrosQueima;
+        } else {
+          const chaveMapa = String(linha[5] || "").trim();
+          if (chaveMapa && chavesQueimaDaLoja.has(chaveMapa)) destinoRegistros = registrosQueima;
         }
 
         const validade = converterValidadeParaData_(linha[2], exibe[2]);
@@ -1522,7 +1598,7 @@ function consultarValidades_(parametros) {
               ? Utilities.formatDate(mesData, fuso, "yyyy-MM")
               : "";
 
-          registros.push({
+          destinoRegistros.push({
             funcionario: nomeAba,
             codigo: codigo,
             lote: String(exibe[1] || "").trim(),
@@ -1551,7 +1627,7 @@ function consultarValidades_(parametros) {
         const dataValida =
           dataLancamento instanceof Date && !isNaN(dataLancamento.getTime());
 
-        registros.push({
+        destinoRegistros.push({
           funcionario: nomeAba,
           codigo: codigo,
           lote: String(exibe[1] || "").trim(),
@@ -1602,7 +1678,8 @@ function consultarValidades_(parametros) {
 
     return respostaJsonp_("__validadeCb", {
       sucesso: true,
-      registros: registrosAgrupados
+      registros: registrosAgrupados,
+      registrosQueima: registrosQueima
     });
 
   } catch (erro) {
@@ -2613,13 +2690,14 @@ function consultarQueima_(p) {
 
       if (!codigo) continue;
       const origemRegistro = indice.origem >= 0 ? String(linha[indice.origem] || "").trim() : "";
-      if (normalizarTexto_(origemRegistro) === "cadastro manual") {
-        const lojaManual = indice.loja >= 0 ? normalizarLoja_(linha[indice.loja]) : "";
-        if (lojaManual !== sessao.loja) continue;
-      } else {
+      const lojaGravada = indice.loja >= 0 ? normalizarLoja_(linha[indice.loja]) : "";
+      let lojaEfetiva = lojaGravada;
+      // Compatibilidade com registros antigos sem LojaOrigem: recupera pelo funcionário.
+      if (!lojaEfetiva && normalizarTexto_(origemRegistro) !== "cadastro manual") {
         const funcionarioOrigem = buscarFuncionarioPorNome_(origemRegistro);
-        if (!funcionarioOrigem || funcionarioOrigem.administrador || funcionarioOrigem.loja !== sessao.loja) continue;
+        if (funcionarioOrigem && !funcionarioOrigem.administrador) lojaEfetiva = normalizarLoja_(funcionarioOrigem.loja);
       }
+      if (!lojaEfetiva || lojaEfetiva !== sessao.loja) continue;
 
       const aprovadoTexto = indice.aprovado >= 0
         ? normalizarTexto_(linha[indice.aprovado])
@@ -5556,19 +5634,19 @@ function salvarCiclo_(ciclo) {
 function exigirOrigemQueimaDaLoja_(sessao, aba, linha) {
   const ultimaColuna = aba.getLastColumn();
   const cab = aba.getRange(1, 1, 1, ultimaColuna).getDisplayValues()[0].map(h => normalizarTexto_(h).replace(/\s+/g, " "));
-  const idx = cab.findIndex(h => ["aba de origem", "origem", "funcionario", "mapa de origem"].includes(h));
-  if (idx < 0) throw new Error("Não foi possível validar a loja de origem deste registro.");
-  const origem = String(aba.getRange(linha, idx + 1).getDisplayValue() || "").trim();
-  if (normalizarTexto_(origem) === "cadastro manual") {
-    const idxLoja = cab.indexOf("lojaorigem");
-    const loja = idxLoja >= 0 ? normalizarLoja_(aba.getRange(linha, idxLoja + 1).getDisplayValue()) : "";
-    if (!loja || loja !== sessao.loja) throw new Error("Este registro manual não pertence à sua loja.");
+  const idxLoja = cab.indexOf("lojaorigem");
+  const lojaGravada = idxLoja >= 0 ? normalizarLoja_(aba.getRange(linha, idxLoja + 1).getDisplayValue()) : "";
+  if (lojaGravada) {
+    if (lojaGravada !== sessao.loja) throw new Error("Este registro não pertence à sua loja.");
     return;
   }
+  // Registros antigos sem LojaOrigem: tenta recuperar pelo nome da aba de origem.
+  const idx = cab.findIndex(h => ["aba de origem", "aba origem", "funcionario", "mapa de origem"].includes(h));
+  if (idx < 0) throw new Error("Não foi possível validar a loja de origem deste registro.");
+  const origem = String(aba.getRange(linha, idx + 1).getDisplayValue() || "").trim();
+  if (normalizarTexto_(origem) === "cadastro manual") throw new Error("Registro manual sem LojaOrigem: não é possível confirmar a loja.");
   const funcionario = buscarFuncionarioPorNome_(origem);
-  if (!funcionario || funcionario.administrador || funcionario.loja !== sessao.loja) {
-    throw new Error("Este registro não pertence à sua loja.");
-  }
+  if (!funcionario || funcionario.administrador || normalizarLoja_(funcionario.loja) !== sessao.loja) throw new Error("Este registro não pertence à sua loja.");
 }
 
 function lojaDaLinhaVencidos_(aba, linha, exibidos) {
@@ -5859,6 +5937,98 @@ function exigirAcessoRegistro_(parametros, registro) {
    AUTORIZAÇÃO CENTRAL DAS AÇÕES GET
    ============================================================ */
 
+/**
+ * Executa um diagnóstico somente de leitura da planilha.
+ * Para usar: abra o editor do Apps Script, selecione verificarPlanilha e clique em Executar.
+ * O resultado completo fica no Registro de execução.
+ */
+function verificarPlanilha() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const resultados = [];
+  const cadastro = ss.getSheetByName("Funcionarios");
+  const aliasesPorCabecalho = {
+    "nome": ["funcionario", "funcionario nome", "nome do funcionario"],
+    "codigo de barras": ["codigo", "ean"],
+    "chave unica": ["chave unica origem"],
+    "aba de origem": ["aba origem", "funcionario", "mapa de origem"]
+  };
+  const verificar = (nome, obrigatorias) => {
+    const sh = ss.getSheetByName(nome);
+    if (!sh) {
+      resultados.push({ aba: nome, status: "ERRO", mensagem: "Aba não encontrada.", faltantes: obrigatorias, linhas: 0 });
+      return;
+    }
+    const lc = Math.max(sh.getLastColumn(), 1);
+    const headers = sh.getRange(1, 1, 1, lc).getDisplayValues()[0].map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+    const faltantes = obrigatorias.filter(h => {
+      const chave = normalizarTexto_(h).replace(/\s+/g, " ");
+      return !headers.includes(chave) && !(aliasesPorCabecalho[chave] || []).some(a => headers.includes(a));
+    });
+    const status = faltantes.length ? "ATENÇÃO" : "OK";
+    resultados.push({ aba: nome, status, mensagem: faltantes.length ? "Faltam cabeçalhos obrigatórios." : "Estrutura básica encontrada.", faltantes, linhas: Math.max(0, sh.getLastRow() - 1), colunas: lc });
+  };
+
+  verificar("Funcionarios", ["nome"]);
+  const nomesMapas = [];
+  if (cadastro && cadastro.getLastRow() >= 2) {
+    const funcionarios = cadastro.getRange(2, 1, cadastro.getLastRow() - 1, 9).getValues();
+    funcionarios.forEach(row => {
+      const nome = String(row[0] || "").trim();
+      const administrador = ehAdministradorValor_(row[7]);
+      if (nome && !administrador && !nomesMapas.includes(nome)) nomesMapas.push(nome);
+    });
+  }
+  nomesMapas.forEach(nome => verificar(nome, ["Código de Barras", "Lote", "Validade", "Quantidade", "Data de Lançamento", "Chave Única"]));
+  verificar("Transferencias", CABECALHOS_TRANSFERENCIAS);
+  verificar("Queima", ["Código de Barras", "Lote", "Validade", "Quantidade", "Aba de Origem", "Chave Única", "LojaOrigem"]);
+  verificar("Vencidos", ["Aba de origem", "Linha original", "Código", "Descrição", "Lote", "Validade", "Quantidade", "Data de Registro / Mês de Lançamento", "EAN interno", "Chave Única", "LojaOrigem"]);
+  verificar("Sinalizacao", ["Chave Unica", "Funcionario", "Motivo", "Ação Tomada", "Data de Registro", "LojaOrigem"]);
+
+  // Verifica dados obrigatórios nas abas compartilhadas, sem modificar registros.
+  const avisarVazios = (nome, cabecalho, rotulo) => {
+    const sh = ss.getSheetByName(nome);
+    if (!sh || sh.getLastRow() < 2) return;
+    const lc = sh.getLastColumn();
+    const heads = sh.getRange(1, 1, 1, lc).getDisplayValues()[0].map(h => normalizarTexto_(h).replace(/\s+/g, " "));
+    const aliases = aliasesPorCabecalho[normalizarTexto_(cabecalho).replace(/\s+/g, " ")] || [];
+    const idx = heads.indexOf(normalizarTexto_(cabecalho).replace(/\s+/g, " ")) >= 0
+      ? heads.indexOf(normalizarTexto_(cabecalho).replace(/\s+/g, " ")) : heads.findIndex(h => aliases.includes(h));
+    if (idx < 0) return;
+    const rows = sh.getRange(2, 1, sh.getLastRow() - 1, lc).getDisplayValues();
+    const vazios = rows.filter(row => !String(row[idx] || "").trim()).length;
+    if (vazios) {
+      const item = resultados.find(r => r.aba === nome);
+      if (item) { item.avisos = item.avisos || []; item.avisos.push(vazios + " registro(s) sem " + rotulo + "."); if (item.status === "OK") item.status = "ATENÇÃO"; }
+    }
+  };
+  avisarVazios("Queima", "LojaOrigem", "LojaOrigem");
+  avisarVazios("Queima", "Chave Única", "Chave Única");
+  avisarVazios("Vencidos", "LojaOrigem", "LojaOrigem");
+  avisarVazios("Sinalizacao", "LojaOrigem", "LojaOrigem");
+  avisarVazios("Transferencias", "Loja de Origem", "Loja de Origem");
+
+  if (cadastro && cadastro.getLastRow() >= 2) {
+    const funcionarios = cadastro.getRange(2, 1, cadastro.getLastRow() - 1, 9).getDisplayValues();
+    const semAba = funcionarios.filter(row => String(row[0] || "").trim() && !ehAdministradorValor_(row[7]) && !ss.getSheetByName(String(row[0]).trim())).length;
+    if (semAba) {
+      const item = resultados.find(r => r.aba === "Funcionarios");
+      if (item) { item.avisos = item.avisos || []; item.avisos.push(semAba + " funcionário(s) sem aba de mapa correspondente."); item.status = "ERRO"; }
+    }
+  }
+
+  const resumo = {
+    total: resultados.length,
+    erros: resultados.filter(r => r.status === "ERRO").length,
+    atencoes: resultados.filter(r => r.status === "ATENÇÃO").length,
+    corretos: resultados.filter(r => r.status === "OK").length
+  };
+  const relatorio = { executadoEm: new Date().toISOString(), resumo, resultados };
+  Logger.log("===== DIAGNÓSTICO DA PLANILHA =====");
+  Logger.log(JSON.stringify(relatorio, null, 2));
+  console.log(JSON.stringify(relatorio, null, 2));
+  return relatorio;
+}
+
 function bloquearSeNaoAutorizado_(p) {
   const acao = String(p.action || "");
 
@@ -5933,6 +6103,7 @@ function bloquearSeNaoAutorizado_(p) {
     "status",
     "historicoMes",
     "validades",
+    "verificarItemMapa",
     "funcionarios", // Lista de abas permitidas; o endpoint filtra por perfil e loja.
     "editarLancamento",
     "excluirLancamento",

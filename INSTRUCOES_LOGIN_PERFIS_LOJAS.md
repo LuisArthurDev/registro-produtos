@@ -92,3 +92,12 @@ No `painelgeral.html`, informe nome, número da loja e PIN inicial. O sistema cr
 - Administrador de Loja: em `lancamento.html`, a lista apresenta somente abas especiais (coluna B marcada) da própria loja. O servidor valida perfil, loja e marcação de especial antes de gravar. Tentativas de lançar em abas normais são rejeitadas.
 - As operações nas abas normais permanecem no `painelconferente.html`.
 - Administrador Geral: não realiza lançamentos; administra os Administradores de Loja em `painelgeral.html`.
+
+## Atualização: Queima, diagnóstico e duplicidade por mapa
+
+- A consulta de validades agora cruza a aba `Queima` no servidor usando `Chave Única` e `LojaOrigem`. Os registros enviados à Queima deixam de aparecer no mapa daquela loja, independentemente do navegador utilizado.
+- `LojaOrigem` é localizada pelo texto do cabeçalho; não precisa ocupar uma letra específica. Registros antigos sem essa coluna preenchida tentam recuperar a loja pela aba de origem. Cadastros manuais sem loja não podem ser atribuídos automaticamente.
+- O diagnóstico da planilha fica exclusivamente no Google Apps Script. No editor do Apps Script, selecione a função `verificarPlanilha` e clique em **Executar**; o relatório aparece no Registro de execução. A rotina é somente de leitura e verifica as abas, os cabeçalhos e campos obrigatórios em branco. Não há botão, modal nem chamada de diagnóstico no front-end.
+- No `lancamento.html`, a verificação de duplicidade consulta o mapa completo selecionado (EAN + lote + validade), sem limitar a busca ao dia atual. Se encontrar o item, permite adicionar mais quantidade ou ignorar. O backend continua validando perfil e aba de destino.
+
+Para publicar esta atualização, substitua `code.gs` no Apps Script e publique uma nova versão do Web App. Atualize `lancamento.html` e `painelconferente.html` no GitHub Pages. Faça backup da planilha e teste primeiro com dois administradores de lojas diferentes e um funcionário.
