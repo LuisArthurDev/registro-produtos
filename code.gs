@@ -353,6 +353,8 @@ function doGetOriginal_(e) {
   if (acao === "definirPinFuncionario") return definirPinFuncionario_(parametros);
   if (acao === "listarAdminsLojas") return listarAdminsLojas_(parametros);
   if (acao === "criarAdminLoja") return criarAdminLoja_(parametros);
+  if (acao === "editarUsuarioAdminGeral") return editarUsuarioAdminGeral_(parametros);
+  if (acao === "excluirUsuarioAdminGeral") return excluirUsuarioAdminGeral_(parametros);
   if (acao === "definirPermissaoFuncionario") {
     return definirPermissaoFuncionario_(parametros);
   }
@@ -4933,7 +4935,7 @@ const ACOES_QUE_ALTERAM_ = [
   "subirVencidos", "subirParaVencidos", "definirPermissaoFuncionario",
   "adicionarValidadeManual", "adicionarProdutoJson", "adicionarFuncionario", "renomearFuncionario",
   "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario",
-  "criarAdminLoja", "inativarFuncionario", "cadastrarQueimaManual", "encaminharEstoqueMapa"
+  "criarAdminLoja", "editarUsuarioAdminGeral", "excluirUsuarioAdminGeral", "inativarFuncionario", "cadastrarQueimaManual", "encaminharEstoqueMapa"
 ];
 
 function doGet(e) {
@@ -4991,7 +4993,7 @@ const ACOES_AUDITORIA_ADMIN_ = {
   adicionarFuncionario: "Cadastro de funcionário", renomearFuncionario: "Renomeação de funcionário",
   definirEspecialFuncionario: "Alteração de aba especial", marcarCheckFuncionario: "Alteração de conferência",
   definirPinFuncionario: "Definição de PIN", criarAdminLoja: "Criação de administrador de loja",
-  inativarFuncionario: "Alteração de status de funcionário", cadastrarQueimaManual: "Cadastro manual na Queima",
+  inativarFuncionario: "Alteração de status de funcionário", editarUsuarioAdminGeral: "Edição de usuário administrador", excluirUsuarioAdminGeral: "Exclusão de usuário administrador", cadastrarQueimaManual: "Cadastro manual na Queima",
   encaminharEstoqueMapa: "Encaminhamento de vencido do Estoque", registrarEstoqueVencido: "Cadastro de vencido no Estoque"
 };
 
@@ -5004,12 +5006,23 @@ function registrarAuditoriaAdministrador_(acao, parametros, resposta) {
     if (!match) return;
     const dados = JSON.parse(match[1]);
     if (!dados || dados.sucesso !== true) return;
-    const sessao = obterSessaoObrigatoria_(parametros);
-    if (!sessao || sessao.administrador !== true) return;
+    // A autorização da requisição já foi validada antes da execução da ação.
+    // Lê o snapshot da sessão para também auditar renomeação/exclusão do próprio usuário.
+    const sessao = lerSessao_(String(parametros.sessao || ""));
+    if (!sessao || (sessao.administrador !== true && sessao.administradorGeral !== true)) return;
 
     const descricao = String(dados.mensagem || tipo).slice(0, 500);
-    const referencia = String(parametros.chaveUnica || parametros.nome || parametros.codigo || parametros.funcionario || "").slice(0, 150);
-    gravarEventoAdministrativo_(sessao, tipo, descricao, referencia);
+    const referencia = String(parametros.chaveUnica || parametros.nome || parametros.nomeAtual || parametros.codigo || parametros.funcionario || "").slice(0, 150);
+    // Para ações do Administrador Geral, associa o evento à loja afetada.
+    // Em exclusões, a loja é enviada pelo painel porque o cadastro já foi removido.
+    let lojaEvento = sessao.loja || normalizarLoja_(parametros.loja);
+    if (!lojaEvento && parametros.nome) {
+      try { const alvo = buscarFuncionarioPorNome_(String(parametros.nome)); if (alvo) lojaEvento = alvo.loja; } catch (_) {}
+    }
+    if (!lojaEvento && parametros.nomeAtual) {
+      try { const alvo = buscarFuncionarioPorNome_(String(parametros.nomeAtual)); if (alvo) lojaEvento = alvo.loja; } catch (_) {}
+    }
+    gravarEventoAdministrativo_(Object.assign({}, sessao, { loja: lojaEvento }), tipo, descricao, referencia);
   } catch (erro) {
     console.error("Falha ao registrar auditoria administrativa: " + (erro.stack || erro));
   }
@@ -5036,6 +5049,12 @@ function consultarEventosAdministrativos_(sessao, mes, todosMeses) {
   const valores = aba.getRange(2, 1, aba.getLastRow() - 1, 8).getValues();
   const fuso = ss.getSpreadsheetTimeZone();
   return valores.filter(linha => {
+    // O histórico exibido no Painel Conferente é restrito às ações
+    // dos Administradores de Loja. Ações do Administrador Geral
+    // permanecem gravadas na auditoria central, mas não são exibidas aqui.
+    const perfilEvento = String(linha[3] || "").trim();
+    if (perfilEvento === "Administrador Geral") return false;
+
     const loja = normalizarLoja_(linha[1]);
     if (!sessao.administradorGeral && loja !== sessao.loja) return false;
     const data = linha[0] instanceof Date ? linha[0] : new Date(linha[0]);
@@ -5886,6 +5905,10 @@ function definirEspecialFuncionario_(p) {
     if (!linha) throw new Error("Funcionário não encontrado no cadastro.");
 
     cadastro.getRange(linha, 2).setValue(especial);
+    if (especial) {
+      // Abas especiais não possuem autenticação individual por PIN.
+      cadastro.getRange(linha, 7).clearContent();
+    }
     SpreadsheetApp.flush();
 
     return respostaJsonp_(cb, {
@@ -6165,14 +6188,99 @@ function listarAdminsLojas_(p) {
     exigirAdministradorGeral_(p);
     const aba = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Funcionarios");
     if (!aba || aba.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, administradores: [] });
-    const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 9).getValues();
-    const administradores = dados.map((r, i) => ({
-      nome: String(r[0] || "").trim(), loja: normalizarLoja_(r[8]),
-      temPin: String(r[6] || "").includes(":"), linha: i + 2, geral: ehAdministradorGeralValor_(r[7])
-    })).filter(x => x.nome && ehAdministradorValor_(dados[x.linha - 2][7]) && !x.geral)
-      .map(({ nome, loja, temPin }) => ({ nome, loja, temPin }));
-    return respostaJsonp_(cb, { sucesso: true, administradores });
+    const dados = aba.getRange(2, 1, aba.getLastRow() - 1, 10).getValues();
+    const usuarios = dados.map(r => {
+      const nome = String(r[0] || "").trim();
+      const valorPerfil = r[7];
+      const geral = ehAdministradorGeralValor_(valorPerfil);
+      const administrador = ehAdministradorValor_(valorPerfil);
+      return {
+        nome,
+        loja: normalizarLoja_(r[8]),
+        temPin: String(r[6] || "").includes(":"),
+        geral,
+        administrador,
+        perfil: geral ? "Administrador Geral" : administrador ? "Administrador de Loja" : (r[1] === true ? "Aba especial" : "Funcionário"),
+        ativo: !(String(r[9] || "").toLowerCase() === "inativo" || r[9] === false)
+      };
+    }).filter(x => x.nome && normalizarTexto_(x.nome) !== "transferencias" && (x.administrador || x.geral));
+    return respostaJsonp_(cb, { sucesso: true, administradores: usuarios });
   } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+}
+
+function editarUsuarioAdminGeral_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__editarUsuarioAdminGeralCb") return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
+  try {
+    exigirAdministradorGeral_(p);
+    const nomeAtual = String(p.nomeAtual || "").trim();
+    const novoNome = String(p.nome || "").trim();
+    const lojaInformada = normalizarLoja_(p.loja);
+    const pin = String(p.pin || "").trim();
+    const alvo = buscarFuncionarioPorNome_(nomeAtual);
+    if (!alvo) throw new Error("Usuário não encontrado.");
+    const loja = lojaInformada || alvo.loja;
+    validarNomeFuncionario_(novoNome);
+    if (!/^\d{1,5}$/.test(loja) && !alvo.administradorGeral) throw new Error("Informe uma loja válida, somente números.");
+    if (pin && !/^\d{4,6}$/.test(pin)) throw new Error("O PIN deve conter de 4 a 6 números.");
+    if (normalizarTexto_(novoNome) !== normalizarTexto_(nomeAtual) && buscarFuncionarioPorNome_(novoNome)) throw new Error("Já existe um usuário com esse nome.");
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const aba = ss.getSheetByName("Funcionarios");
+    const linha = localizarLinhaFuncionario_(aba, nomeAtual);
+    if (!linha) throw new Error("Usuário não encontrado no cadastro.");
+    if (normalizarTexto_(novoNome) !== normalizarTexto_(nomeAtual) && !alvo.administrador) {
+      const mapa = ss.getSheetByName(nomeAtual);
+      if (!mapa) throw new Error('A aba de mapa "' + nomeAtual + '" não foi encontrada.');
+      if (existeAbaComNome_(ss, novoNome, nomeAtual)) throw new Error("Já existe uma aba com o novo nome.");
+      mapa.setName(novoNome);
+      try {
+        const sinal = ss.getSheetByName("Sinalizacao");
+        substituirValorColuna_(sinal, indiceColuna_(sinal, ["funcionario"]), nomeAtual, novoNome);
+        const queima = ss.getSheetByName("Queima");
+        substituirValorColuna_(queima, indiceColuna_(queima, ["aba de origem", "aba origem", "funcionario", "mapa de origem"]), nomeAtual, novoNome);
+        substituirValorColuna_(ss.getSheetByName("Vencidos"), 1, nomeAtual, novoNome);
+      } catch (erroRef) {
+        console.error("Falha ao atualizar referências do usuário renomeado: " + (erroRef.stack || erroRef));
+      }
+    }
+    aba.getRange(linha, 1).setValue(novoNome);
+    if (!alvo.administradorGeral) aba.getRange(linha, 9).setNumberFormat("@").setValue(loja);
+    if (pin) {
+      const salt = Utilities.getUuid();
+      aba.getRange(linha, 7).setNumberFormat("@").setValue(salt + ":" + hashPin_(pin, salt));
+    }
+    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
+    SpreadsheetApp.flush();
+    return respostaJsonp_(cb, { sucesso: true, mensagem: "Usuário atualizado. Se o nome foi alterado, será necessário entrar novamente com o novo nome." });
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+  finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
+function excluirUsuarioAdminGeral_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__excluirUsuarioAdminGeralCb") return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
+  try {
+    const sessao = exigirAdministradorGeral_(p);
+    const nome = String(p.nome || "").trim();
+    const alvo = buscarFuncionarioPorNome_(nome);
+    if (!alvo) throw new Error("Usuário não encontrado.");
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const aba = ss.getSheetByName("Funcionarios");
+    const linha = localizarLinhaFuncionario_(aba, nome);
+    if (!linha) throw new Error("Usuário não encontrado no cadastro.");
+    // Remove apenas o acesso/cadastro. Os mapas e históricos permanecem intactos.
+    aba.deleteRow(linha);
+    CacheService.getScriptCache().remove("cadastro_funcionarios_v2");
+    // A sessão será invalidada naturalmente na próxima requisição por ausência do cadastro.
+    // Mantê-la até o wrapper de doGet permite registrar a própria exclusão na auditoria.
+    SpreadsheetApp.flush();
+    return respostaJsonp_(cb, { sucesso: true, mensagem: "Usuário excluído do cadastro. Os dados históricos foram preservados.", proprioUsuario: normalizarTexto_(nome) === normalizarTexto_(sessao.nome) });
+  } catch (e) { return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) }); }
+  finally { if (lock.hasLock()) lock.releaseLock(); }
 }
 
 function criarAdminLoja_(p) {
@@ -6479,7 +6587,7 @@ function bloquearSeNaoAutorizado_(p) {
     "encaminharEstoqueMapa",
     "adicionarProdutoJson",
     "cadastrarQueimaManual",
-    "listarAdminsLojas", "criarAdminLoja"
+    "listarAdminsLojas", "criarAdminLoja", "editarUsuarioAdminGeral", "excluirUsuarioAdminGeral"
   ];
 
   if (

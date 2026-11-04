@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Administrador Geral | Registro de Mapa de Validade</title>
   <style>
-    :root{font-family:Inter,system-ui,Segoe UI,sans-serif;color:#172b3a;background:#eef3f7}*{box-sizing:border-box}body{margin:0;padding:28px;visibility:hidden}html.auth-ok body{visibility:visible}.wrap{max-width:980px;margin:0 auto}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.top h1{font-size:25px;margin:0}.sub{color:#647789;margin-top:6px;font-size:13px}.card{background:#fff;border:1px solid #dce5ec;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 8px 24px #17354b0a}.card h2{font-size:17px;margin:0 0 16px}.grid{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;align-items:end}label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}input{width:100%;height:42px;border:1px solid #cbd7e0;border-radius:9px;padding:0 11px;font:inherit}button{height:42px;border:0;border-radius:9px;padding:0 16px;background:#12354b;color:white;font-weight:700;cursor:pointer}button.secondary{background:#e8eef3;color:#20394a}button:disabled{opacity:.6;cursor:wait}.msg{font-size:13px;margin-top:12px}.error{color:#b42318}.success{color:#027a48}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #edf1f4;font-size:13px}th{font-size:11px;text-transform:uppercase;color:#718096}.empty{padding:24px;text-align:center;color:#718096}.pill{display:inline-block;border-radius:20px;background:#eaf2ff;color:#1d4ed8;padding:4px 9px;font-size:11px;font-weight:700}.hint{font-size:12px;color:#718096;margin-top:10px}@media(max-width:700px){body{padding:16px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+    :root{font-family:Inter,system-ui,Segoe UI,sans-serif;color:#172b3a;background:#eef3f7}*{box-sizing:border-box}body{margin:0;padding:28px;visibility:hidden}html.auth-ok body{visibility:visible}.wrap{max-width:980px;margin:0 auto}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.top h1{font-size:25px;margin:0}.sub{color:#647789;margin-top:6px;font-size:13px}.card{background:#fff;border:1px solid #dce5ec;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 8px 24px #17354b0a}.card h2{font-size:17px;margin:0 0 16px}.grid{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;align-items:end}label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}input{width:100%;height:42px;border:1px solid #cbd7e0;border-radius:9px;padding:0 11px;font:inherit}button{height:42px;border:0;border-radius:9px;padding:0 16px;background:#12354b;color:white;font-weight:700;cursor:pointer}button.secondary{background:#e8eef3;color:#20394a}button:disabled{opacity:.6;cursor:wait}.msg{font-size:13px;margin-top:12px}.error{color:#b42318}.success{color:#027a48}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #edf1f4;font-size:13px}th{font-size:11px;text-transform:uppercase;color:#718096}.empty{padding:24px;text-align:center;color:#718096}.actions{display:flex;gap:6px;flex-wrap:wrap}.actions button{height:34px;padding:0 10px;font-size:12px}.pill{display:inline-block;border-radius:20px;background:#eaf2ff;color:#1d4ed8;padding:4px 9px;font-size:11px;font-weight:700}.hint{font-size:12px;color:#718096;margin-top:10px}@media(max-width:700px){body{padding:16px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
   </style>
   <script src="auth.js"></script>
 </head>
@@ -27,10 +27,20 @@
       <p class="hint">O administrador criado será vinculado à loja informada. Ele não terá acesso a outras lojas e não aparecerá nas listas operacionais de funcionários.</p>
     </section>
     <section class="card">
-      <h2>Administradores de loja cadastrados</h2>
-      <div class="table-wrap"><table><thead><tr><th>Administrador</th><th>Loja</th><th>Login</th></tr></thead><tbody id="lista"><tr><td colspan="3" class="empty">Carregando...</td></tr></tbody></table></div>
+      <h2>Usuários cadastrados</h2>
+      <div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil / Loja</th><th>Login</th><th>Ações</th></tr></thead><tbody id="lista"><tr><td colspan="4" class="empty">Carregando...</td></tr></tbody></table></div>
     </section>
   </main>
+  <div id="modalUsuario" style="display:none;position:fixed;inset:0;background:#0f172a99;z-index:1000;align-items:center;justify-content:center;padding:16px">
+    <form id="formUsuario" class="card" style="width:min(460px,100%);margin:0">
+      <h2 id="modalUsuarioTitulo">Editar usuário</h2>
+      <label for="usuarioNome">Nome</label><input id="usuarioNome" maxlength="60" required>
+      <div id="usuarioLojaWrap" style="margin-top:12px"><label for="usuarioLoja">Número da loja</label><input id="usuarioLoja" inputmode="numeric" maxlength="5" pattern="[0-9]{1,5}"></div>
+      <div style="margin-top:12px"><label for="usuarioPin">Novo PIN (deixe vazio para manter)</label><input id="usuarioPin" type="password" inputmode="numeric" minlength="4" maxlength="6" pattern="[0-9]{4,6}" autocomplete="new-password"></div>
+      <div id="usuarioMsg" class="msg" role="status"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button type="button" class="secondary" id="cancelarUsuario">Cancelar</button><button id="salvarUsuario" type="submit">Salvar alterações</button></div>
+    </form>
+  </div>
 <script>
 (async function(){
   const autorizado = await Auth.exigirAdminGeral();
@@ -39,13 +49,20 @@
   const form=document.getElementById('formAdmin'), btn=document.getElementById('btnCriar'), msg=document.getElementById('mensagem'), lista=document.getElementById('lista');
   function mostrar(texto,tipo){msg.textContent=texto;msg.className='msg '+(tipo||'');}
   async function carregar(){
-    lista.innerHTML='<tr><td colspan="3" class="empty">Carregando...</td></tr>';
+    lista.innerHTML='<tr><td colspan="4" class="empty">Carregando...</td></tr>';
     try{const d=await Auth.chamar('listarAdminsLojas','__listarAdminsLojasCb',{});if(!d||!d.sucesso)throw new Error(d?.mensagem||'Não foi possível carregar.');
-      if(!d.administradores.length){lista.innerHTML='<tr><td colspan="3" class="empty">Nenhum administrador de loja cadastrado.</td></tr>';return;}
-      lista.innerHTML=d.administradores.map(a=>'<tr><td><strong>'+esc(a.nome)+'</strong></td><td><span class="pill">Loja '+esc(a.loja||'—')+'</span></td><td>'+(a.temPin?'Ativo':'PIN pendente')+'</td></tr>').join('');
-    }catch(e){lista.innerHTML='<tr><td colspan="3" class="empty">'+esc(e.message)+'</td></tr>';}
+      if(!d.administradores.length){lista.innerHTML='<tr><td colspan="4" class="empty">Nenhum administrador cadastrado.</td></tr>';return;}
+      lista.innerHTML=d.administradores.map(a=>'<tr><td><strong>'+esc(a.nome)+'</strong>'+(a.geral?' <span class="pill">Administrador Geral</span>':'')+'</td><td>'+(a.geral?'Administrador Geral':esc(a.perfil)+' · Loja '+esc(a.loja||'—'))+'</td><td>'+(a.temPin?'PIN definido':'Sem PIN')+(a.ativo===false?' · Inativo':' · Ativo')+'</td><td><div class="actions"><button type="button" class="secondary" data-editar="'+esc(a.nome)+'" data-loja="'+esc(a.loja||'')+'" data-geral="'+(a.geral?'1':'0')+'" data-perfil="'+esc(a.perfil)+'">Editar</button><button type="button" class="secondary" data-excluir="'+esc(a.nome)+'" data-loja="'+esc(a.loja||'')+'">Excluir</button></div></td></tr>').join('');
+    }catch(e){lista.innerHTML='<tr><td colspan="4" class="empty">'+esc(e.message)+'</td></tr>';}
   }
   function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  const modal=document.getElementById('modalUsuario'), formUsuario=document.getElementById('formUsuario');
+  let usuarioOriginal='', usuarioGeral=false;
+  function fecharModal(){modal.style.display='none';}
+  function abrirEdicao(nome,loja,geral,perfil){usuarioOriginal=nome;usuarioGeral=geral;document.getElementById('modalUsuarioTitulo').textContent='Editar '+(perfil||'usuário');document.getElementById('usuarioNome').value=nome;document.getElementById('usuarioLoja').value=loja;document.getElementById('usuarioLojaWrap').style.display=geral?'none':'block';document.getElementById('usuarioPin').value='';document.getElementById('usuarioMsg').textContent='';modal.style.display='flex';}
+  document.getElementById('cancelarUsuario').addEventListener('click',fecharModal);
+  lista.addEventListener('click',async ev=>{const edit=ev.target.closest('[data-editar]'),del=ev.target.closest('[data-excluir]');if(edit){abrirEdicao(edit.dataset.editar,edit.dataset.loja,edit.dataset.geral==='1',edit.dataset.perfil);return;}if(del){const nome=del.dataset.excluir;if(!confirm('Excluir o usuário "'+nome+'"? O acesso será removido, mas os mapas e históricos serão preservados.'))return;try{const r=await Auth.chamar('excluirUsuarioAdminGeral','__excluirUsuarioAdminGeralCb',{nome,loja:del.dataset.loja||''});if(!r||!r.sucesso)throw new Error(r?.mensagem||'Falha ao excluir.');alert(r.mensagem);if(r.proprioUsuario){Auth.sair();return;}await carregar();}catch(e){alert(e.message);}}});
+  formUsuario.addEventListener('submit',async ev=>{ev.preventDefault();const nome=document.getElementById('usuarioNome').value.trim(),loja=document.getElementById('usuarioLoja').value.trim(),pin=document.getElementById('usuarioPin').value.trim(),msg=document.getElementById('usuarioMsg'),btn=document.getElementById('salvarUsuario');if(pin&&!/^\d{4,6}$/.test(pin)){msg.textContent='O PIN deve conter de 4 a 6 números.';return;}if(!usuarioGeral&&loja&&!/^\d{1,5}$/.test(loja)){msg.textContent='Informe uma loja válida.';return;}btn.disabled=true;msg.textContent='Salvando...';try{const r=await Auth.chamar('editarUsuarioAdminGeral','__editarUsuarioAdminGeralCb',{nomeAtual:usuarioOriginal,nome,loja,pin});if(!r||!r.sucesso)throw new Error(r?.mensagem||'Falha ao atualizar.');fecharModal();alert(r.mensagem);if(usuarioOriginal===Auth.usuario()&&nome!==usuarioOriginal){Auth.sair();return;}await carregar();}catch(e){msg.textContent=e.message;}finally{btn.disabled=false;}});
   form.addEventListener('submit',async ev=>{ev.preventDefault();btn.disabled=true;mostrar('Criando administrador...');
     try{const d=await Auth.chamar('criarAdminLoja','__criarAdminLojaCb',{nome:document.getElementById('nome').value.trim(),loja:document.getElementById('loja').value.trim(),pin:document.getElementById('pin').value});if(!d||!d.sucesso)throw new Error(d?.mensagem||'Não foi possível criar.');form.reset();mostrar(d.mensagem,'success');await carregar();}
     catch(e){mostrar(e.message,'error');}finally{btn.disabled=false;}

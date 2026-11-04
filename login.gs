@@ -457,6 +457,9 @@ function definirPinFuncionario_(p) {
         "Funcionário não encontrado na sua loja."
       );
     }
+    if (funcionario.especial) {
+      throw new Error("Abas especiais não podem ter PIN de acesso.");
+    }
 
     const aba = SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName("Funcionarios");
