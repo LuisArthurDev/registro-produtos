@@ -1,30 +1,30 @@
 # Registro de Mapa de Validade
 
-Aplicação web estática (GitHub Pages) com autenticação via Apps Script, API Cloudflare Workers/D1, PWA e notificações.
+Aplicação web publicada pelo GitHub Pages, com páginas operacionais, Google Apps Script, catálogo local legado e integração com Cloudflare D1.
 
-## Páginas
-- `index.html`: autenticação e seleção/entrada no sistema.
-- `lancamento.html`: lançamento de produtos e consulta de código de barras.
-- `painelconferente.html`: painel operacional, mapas, estoque e funcionários.
-- `painelgeral.html`: administração geral.
-- `visualizacao.html`: consulta de lançamentos.
-- `instalar.html`: instruções de instalação PWA.
-- `erro.html`: página de acesso/erro.
+## Páginas principais
+- `index.html` — login e entrada no sistema.
+- `lancamento.html` — lançamento de produtos.
+- `painelconferente.html` — painel operacional.
+- `painelgeral.html` — administração geral.
+- `visualizacao.html` — consulta de registros.
+- `instalar.html` — instruções de instalação PWA.
+- `erro.html` — tela de acesso/erro.
 
-## Estrutura de apoio
-- `assets/css/theme-fixes.css`: correções transversais de cores, superfícies, tabelas, formulários e tema escuro.
-- `assets/js/theme-controller.js`: tema global; preferência manual em `localStorage.tema`, ou preferência do sistema quando não há escolha salva.
-- `scripts/`: scripts Python utilizados pelos GitHub Actions.
-- `.github/workflows/`: automações de atualização do catálogo e importação D1.
-- `worker/`: Cloudflare Worker e migrações D1.
-- `libs/sql.js/`: runtime SQLite/sql.js legado ainda presente no repositório.
-- `docs/`: documentação técnica e inventário.
+## Estrutura
+- `assets/css/` — estilos compartilhados.
+- `assets/js/` — scripts compartilhados de interface.
+- `scripts/` — scripts Python chamados pelos GitHub Actions.
+- `.github/workflows/` — workflows ativos.
+- `worker/migrations/` — schema e lotes de importação D1 usados pelo workflow.
+- `libs/sql.js/` — biblioteca SQLite usada pelo catálogo local/fallback.
+- `archive/legacy-workflows/` — workflow antigo preservado, mas não executado pelo GitHub Actions.
+
+## Tema do Painel Conferente
+O painel agora acompanha `prefers-color-scheme` quando não existe preferência manual. O botão na barra superior alterna claro/escuro; a escolha é salva em `localStorage` na chave `tema` e sincroniza entre abas. Os estilos estão em `assets/css/painel-darkmode.css`.
 
 ## Publicação
-O projeto é servido pela raiz do GitHub Pages e possui referências relativas/absolutas já utilizadas pelo PWA e pelos workflows. Por segurança, páginas, endpoints, migrações, dados e arquivos de workflow que possuem caminhos operacionais na raiz foram mantidos nos caminhos atuais. A organização foi feita por meio de `assets/` e `docs/` sem mover arquivos que poderiam quebrar URLs, cache do Service Worker ou automações.
+Publique os arquivos mantendo os caminhos relativos. Não execute novamente os lotes SQL de importação apenas por causa desta atualização visual. O workflow de importação D1 é manual e pode ser destrutivo em termos operacionais mesmo com `INSERT OR IGNORE`; não o execute sem necessidade.
 
-## Tema
-A ausência de escolha manual faz o sistema acompanhar `prefers-color-scheme`. Se o usuário escolher claro/escuro, a preferência fica salva em `localStorage` e é aplicada nas páginas. Para voltar ao automático, remover a chave `tema` do armazenamento local do site.
-
-## Importante
-Não executar novamente migrações/importações D1 apenas para publicar alterações visuais. O catálogo remoto não é modificado por este pacote.
+## Arquivos sensíveis à compatibilidade
+Os workflows ativos usam `scripts/` e `worker/migrations/`. Os arquivos duplicados byte a byte na raiz foram removidos. Os dados de catálogo, planilhas, Apps Script, autenticação e endpoints foram preservados.

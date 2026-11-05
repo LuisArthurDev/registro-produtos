@@ -9,6 +9,8 @@
   <script src="https://unpkg.com/lucide@0.468.0"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="./catalogo-sqlite.js?v=20261104-2"></script>
+  <script src="./assets/js/painel-theme.js?v=20261104-5"></script>
+  <link rel="stylesheet" href="./assets/css/painel-darkmode.css?v=20261104-5">
 
   <style>
     :root {
@@ -1652,8 +1654,6 @@
     }
   </style>
   <script src="auth.js"></script>
-  <link rel="stylesheet" href="assets/css/theme-fixes.css?v=20261104-3">
-  <script src="assets/js/theme-controller.js?v=20261104-3"></script>
 </head>
 
 <body>
@@ -5074,7 +5074,7 @@ function atualizarProdutosAtencao(registros) {
     } catch (_) { /* sem valores guardados */ }
   }
 
-  function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
+  function setDonut(chartId,innerId,total,approved){total=Number(total)||0;approved=Number(approved)||0;const pct=total?Math.min(100,approved/total*100):0;document.getElementById(chartId).style.background=`conic-gradient(#facc15 0 100%)`;document.getElementById(innerId).style.background=`radial-gradient(circle, var(--surface) 0 42%, transparent 43%), conic-gradient(#22c55e 0 ${pct}%, #dcfce7 ${pct}% 100%)`;}
   let sinalizadosCache=[]; let sinalizadoAtual=null;
   function carregarSinalizados(usarCache){return semDuplicar('sinalizados',()=>carregarSinalizadosInterno(usarCache===true));}
   function carregarSinalizadosInterno(usarCache){const notice=document.getElementById('sinalizadosNotice');notice.style.display='block';notice.textContent='Carregando sinalizações...';return jsonpPainel('consultarSinalizados','sinalizados',usarCache?{}:{nocache:'1'}).then(d=>{if(!d.sucesso)throw new Error(d.mensagem||'Falha ao consultar sinalizações');sinalizadosCache=d.registros||[];sinalizadosProntos=true;renderSinalizados();notice.textContent=`${sinalizadosCache.length} sinalização(ões) carregada(s).`;}).catch(e=>{notice.textContent='Não foi possível carregar: '+e.message;});}
