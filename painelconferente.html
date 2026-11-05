@@ -3155,6 +3155,43 @@ Auth.exigirAdmin().then(ok => {
     return dadosProduto(r).descricao;
   }
 
+
+  // Ponte somente de leitura para o Conector Procfit (Windows).
+  // Não altera registros, não confirma Queima e não modifica o fluxo do Painel.
+  window.PainelProcfitBridge = Object.freeze({
+    versao: "1.0.0",
+    status() {
+      return {
+        pronto: Boolean(validadesProntas && catalogoCarregado && window.CatalogoSQLite?.pronto()),
+        mapaCarregado: Boolean(validadesProntas),
+        catalogoCarregado: Boolean(catalogoCarregado),
+        totalRegistros: Array.isArray(painelCache.validades) ? painelCache.validades.length : 0
+      };
+    },
+    listarProdutos() {
+      if (!validadesProntas) throw new Error("O Mapa de Validade ainda não terminou de carregar.");
+      if (!window.CatalogoSQLite?.pronto()) throw new Error("O catálogo de produtos ainda não está disponível.");
+      return registrosVisiveisHTML(painelCache.validades || [])
+        .filter(r => FUNCIONARIOS_MAPA.includes(String(r.funcionario || "").trim()))
+        .map(r => {
+          const ean = codigoEanProduto(r);
+          const codigoInterno = codigoInternoProduto(r);
+          return {
+            chave: String(r.chaveUnica || ""),
+            funcionario: String(r.funcionario || ""),
+            codigoInterno,
+            ean,
+            descricao: String(descricaoProduto(r) || ""),
+            lote: String(r.lote || "").trim(),
+            validade: String(r.validadeISO || r.validade || "").trim(),
+            quantidade: Number(String(r.quantidade ?? "").replace(",", ".")),
+            situacao: String(situacaoPainel(r) || "")
+          };
+        })
+        .filter(p => p.chave && p.codigoInterno && p.ean && p.lote && p.validade && Number.isFinite(p.quantidade) && p.quantidade > 0);
+    }
+  });
+
   
 const consultasJsonpPainel = new Map();
 let consultasPainelAtivas = 0;
