@@ -284,7 +284,7 @@
 
     .topbar {
       height: 75px;
-      background: var(--card-bg);
+      background: #fff;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
@@ -882,8 +882,8 @@
 
 
     .burn-section {
-      background: var(--card-bg);;
-      border: 1px solid var(--border-color);
+      background: #fff;
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       margin-bottom: 22px;
       overflow: hidden;
@@ -1639,7 +1639,7 @@
     #authCarregando .auth-carregando-card {
       display: flex; align-items: center; gap: 14px; max-width: 420px;
       padding: 20px 24px; border: 1px solid #dbe3ee; border-radius: 14px;
-      background: var(--card-bg); box-shadow: 0 12px 36px rgba(15,23,42,.09);
+      background: #fff; box-shadow: 0 12px 36px rgba(15,23,42,.09);
       font-size: 14px; font-weight: 600;
     }
     #authCarregando .auth-carregando-spinner {
@@ -3156,41 +3156,58 @@ Auth.exigirAdmin().then(ok => {
   }
 
 
-  // Ponte somente de leitura para o Conector Procfit (Windows).
-  // Não altera registros, não confirma Queima e não modifica o fluxo do Painel.
+  // Integração somente de leitura com o Conector Procfit para Windows.
+  // Produto sem código interno continua elegível: no Procfit será usado o EAN
+  // e a consulta de saldo deverá ser ignorada pelo conector.
   window.PainelProcfitBridge = Object.freeze({
-    versao: "1.0.0",
+    versao: "1.1.0",
     status() {
       return {
-        pronto: Boolean(validadesProntas && catalogoCarregado && window.CatalogoSQLite?.pronto()),
         mapaCarregado: Boolean(validadesProntas),
         catalogoCarregado: Boolean(catalogoCarregado),
         totalRegistros: Array.isArray(painelCache.validades) ? painelCache.validades.length : 0
       };
     },
     listarProdutos() {
-      if (!validadesProntas) throw new Error("O Mapa de Validade ainda não terminou de carregar.");
-      if (!window.CatalogoSQLite?.pronto()) throw new Error("O catálogo de produtos ainda não está disponível.");
+      if (!validadesProntas) throw new Error("Aguarde o carregamento do Mapa de Validade.");
       return registrosVisiveisHTML(painelCache.validades || [])
-        .filter(r => FUNCIONARIOS_MAPA.includes(String(r.funcionario || "").trim()))
-        .map(r => {
-          const ean = codigoEanProduto(r);
-          const codigoInterno = codigoInternoProduto(r);
-          return {
-            chave: String(r.chaveUnica || ""),
-            funcionario: String(r.funcionario || ""),
-            codigoInterno,
-            ean,
-            descricao: String(descricaoProduto(r) || ""),
-            lote: String(r.lote || "").trim(),
-            validade: String(r.validadeISO || r.validade || "").trim(),
-            quantidade: Number(String(r.quantidade ?? "").replace(",", ".")),
-            situacao: String(situacaoPainel(r) || "")
-          };
-        })
-        .filter(p => p.chave && p.codigoInterno && p.ean && p.lote && p.validade && Number.isFinite(p.quantidade) && p.quantidade > 0);
+        .filter(r => FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim()))
+        .map(r => ({
+          chave: String(r.chaveUnica || ''),
+          funcionario: String(r.funcionario || ''),
+          codigoInterno: String(codigoInternoProduto(r) || '').trim(),
+          ean: String(codigoEanProduto(r) || '').trim(),
+          descricao: String(descricaoProduto(r) || ''),
+          lote: String(r.lote || '').trim(),
+          validade: String(r.validadeISO || r.validade || '').trim(),
+          quantidade: Number(String(r.quantidade ?? '').replace(',', '.')),
+          situacao: String(situacaoPainel(r) || '')
+        }))
+        .filter(p => p.chave && p.ean && p.lote && p.validade && Number.isFinite(p.quantidade) && p.quantidade > 0);
+    },
+    copiarJSON() {
+      const dados = { origem: 'Painel Conferente / Mapa de Validade', versao: this.versao, exportadoEm: new Date().toISOString(), produtos: this.listarProdutos() };
+      return navigator.clipboard.writeText(JSON.stringify(dados, null, 2));
     }
   });
+  // Botão de exportação aparece apenas quando o Mapa de Validade estiver disponível.
+  function instalarBotaoConectorProcfit() {
+    if (document.getElementById('btnExportarProcfit')) return;
+    const alvo = document.getElementById('mapaTotal')?.closest('section') || document.getElementById('mapaTbody')?.closest('section');
+    if (!alvo) return;
+    const b = document.createElement('button');
+    b.id = 'btnExportarProcfit'; b.type = 'button';
+    b.textContent = 'Copiar produtos para Conector Procfit';
+    b.style.cssText = 'margin:10px 0;padding:10px 14px;border-radius:8px;border:1px solid #16a34a;background:#166534;color:white;font-weight:600;cursor:pointer';
+    b.addEventListener('click', async () => {
+      try { await window.PainelProcfitBridge.copiarJSON(); alert('Produtos copiados. Abra o Conector Procfit e use “Importar da área de transferência”.'); }
+      catch (e) { alert('Não foi possível copiar: ' + (e.message || e)); }
+    });
+    alvo.prepend(b);
+  }
+  const observerProcfit = new MutationObserver(instalarBotaoConectorProcfit);
+  observerProcfit.observe(document.documentElement, {childList:true,subtree:true});
+  setTimeout(instalarBotaoConectorProcfit, 1500);
 
   
 const consultasJsonpPainel = new Map();
