@@ -414,6 +414,11 @@
       return !!(s && s.manterConectado === true);
     },
 
+    dispositivoCelularProprio: function () {
+      const s = lerSessao();
+      return !!(s && s.dispositivoCelularProprio === true);
+    },
+
     alternarPermanencia: alternarPermanencia,
 
     perfil: function () {

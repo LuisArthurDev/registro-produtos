@@ -1652,6 +1652,7 @@
     }
   </style>
   <script src="auth.js"></script>
+<script src="./notificacoes.js" defer></script>
   <link rel="stylesheet" href="./assets/css/painel-tema.css?v=20261104-6">
   <script src="./assets/js/painel-tema.js?v=20261104-6"></script>
 </head>
@@ -1732,6 +1733,10 @@ Auth.exigirAdmin().then(ok => {
 
       <button class="nav-item" data-page="funcionarios">
         <i data-lucide="users"></i> Funcionários
+      </button>
+
+      <button class="nav-item" data-page="configuracoes">
+        <i data-lucide="bell"></i> Notificações
       </button>
     </nav>
 
@@ -2454,6 +2459,36 @@ Auth.exigirAdmin().then(ok => {
         </div>
       </section>
 
+      <!-- CONFIGURAÇÕES E NOTIFICAÇÕES -->
+      <section class="page" id="page-configuracoes">
+        <div class="page-heading">
+          <div><h2>Configurações</h2><p>Gerencie os avisos enviados aos dispositivos com notificações ativadas.</p></div>
+        </div>
+        <div class="panel" style="padding:20px;margin-bottom:16px">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <i data-lucide="bell" style="width:24px;height:24px;color:#2563eb;flex:0 0 auto"></i>
+            <div><h3 style="margin:0 0 6px">Permissão de notificações</h3><p style="margin:0;color:var(--muted, #94a3b8);font-size:13px">Ative as notificações neste dispositivo para receber comunicados e avisos de produtos vencidos, inclusive quando o navegador estiver fechado, desde que o sistema e o navegador permitam.</p></div>
+          </div>
+          <button type="button" class="button button-primary" style="margin-top:14px" onclick="MVNotificacoes.ativar()"><i data-lucide="bell-ring"></i> Ativar notificações neste dispositivo</button>
+        </div>
+        <div class="panel" style="padding:20px;margin-bottom:16px">
+          <h3 style="margin:0 0 6px">Notificar a todos</h3>
+          <p style="color:var(--muted, #94a3b8);font-size:13px;margin:0 0 14px">Envia um comunicado para os usuários ativos da sua loja. O servidor valida a loja da sua sessão; Administrador Geral pode alcançar todas as lojas.</p>
+          <label for="notificacaoTodosTitulo" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Título</label>
+          <input id="notificacaoTodosTitulo" class="filter-select" maxlength="80" value="Aviso da farmácia" style="width:100%;margin-bottom:12px">
+          <label for="notificacaoTodosMensagem" style="display:block;font-size:13px;font-weight:650;margin:0 0 6px">Mensagem</label>
+          <textarea id="notificacaoTodosMensagem" class="filter-select" maxlength="500" rows="4" placeholder="Digite o comunicado que deseja enviar..." style="width:100%;resize:vertical"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px"><button type="button" class="button button-primary" id="btnNotificarTodos" onclick="enviarNotificacaoTodos()"><i data-lucide="send"></i> Notificar a todos</button></div>
+        </div>
+        <div class="panel" style="padding:20px">
+          <h3 style="margin:0 0 6px">Notificar Vencidos</h3>
+          <p style="color:var(--muted, #94a3b8);font-size:13px;margin:0 0 14px">Verifica os mapas da abrangência autorizada e envia um aviso individual aos funcionários que possuem produtos vencidos em sua sessão.</p>
+          <button type="button" class="button" id="btnNotificarVencidos" onclick="enviarNotificacaoVencidos()"><i data-lucide="package-x"></i> Notificar Vencidos</button>
+        </div>
+        <p id="configNotificacoesStatus" role="status" aria-live="polite" style="font-size:13px;margin-top:14px;color:var(--text, #e2e8f0)"></p>
+      </section>
+
+
       <!-- MODAL: DIGITAÇÃO MANUAL DE MAPA -->
       <div
         id="modalDigitacaoManualMapa"
@@ -2869,6 +2904,7 @@ Auth.exigirAdmin().then(ok => {
   
   let funcionariosMapaCarregados = false;
   let cadastroFuncionariosPromise = null;
+  const estadosCelularProprio = new Map();
   
   const mapaSelecionados = new Set();
   let mapaVisiveisChaves = [];
@@ -2885,7 +2921,8 @@ Auth.exigirAdmin().then(ok => {
     estoque: ["Controle de Estoque", "Consulta de saldos e quantidades"],
     sinalizados: ["Sinalizados", "Produtos que precisam de atenção"],
     historico: ["Histórico", "Registro das atividades do sistema"],
-    funcionarios: ["Funcionários", "Equipe e abas de lançamento"]
+    funcionarios: ["Funcionários", "Equipe e abas de lançamento"],
+    configuracoes: ["Notificações", "Comunicados e avisos de vencimento"]
   };
 
   function navigate(pageName) {
@@ -3162,7 +3199,9 @@ function jsonpPainelBruto(action, callback, extra = {}) {
     adicionarQueima: '__adicionarAoQueimaCb',
     adicionarProdutoJson: '__adicionarProdutoJsonCb',
     estoqueVencidos: '__estoqueVencidosCb',
-    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb'
+    encaminharEstoqueMapa: '__encaminharEstoqueMapaCb',
+    notificarTodos: '__notificarTodosCb',
+    notificarVencidosManual: '__notificarVencidosManualCb'
   };
 
   const cbName = callbackMap[callback] || callback;
@@ -3234,6 +3273,37 @@ function jsonpPainelBruto(action, callback, extra = {}) {
   return promessa;
 }
 
+async function enviarNotificacaoTodos() {
+  const titulo = document.getElementById("notificacaoTodosTitulo").value.trim();
+  const mensagem = document.getElementById("notificacaoTodosMensagem").value.trim();
+  const botao = document.getElementById("btnNotificarTodos");
+  const status = document.getElementById("configNotificacoesStatus");
+  if (!titulo || !mensagem) { status.textContent = "Informe o título e a mensagem."; return; }
+  if (!confirm("Enviar este comunicado aos usuários ativos da abrangência autorizada?")) return;
+  botao.disabled = true; status.textContent = "Enviando notificações...";
+  try {
+    const resposta = await jsonpPainel("notificarTodos", "notificarTodos", { titulo, mensagem });
+    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar o comunicado.");
+    status.textContent = resposta.mensagem || "Notificação enviada.";
+    document.getElementById("notificacaoTodosMensagem").value = "";
+  } catch (erro) { status.textContent = erro.message || "Falha ao enviar notificações."; }
+  finally { botao.disabled = false; }
+}
+
+async function enviarNotificacaoVencidos() {
+  const botao = document.getElementById("btnNotificarVencidos");
+  const status = document.getElementById("configNotificacoesStatus");
+  if (!confirm("Enviar agora os avisos de produtos vencidos aos funcionários que possuem vencidos na abrangência autorizada?")) return;
+  botao.disabled = true; status.textContent = "Verificando mapas e enviando avisos...";
+  try {
+    const resposta = await jsonpPainel("notificarVencidosManual", "notificarVencidosManual");
+    if (!resposta || resposta.sucesso !== true) throw new Error(resposta?.mensagem || "Não foi possível enviar os avisos.");
+    status.textContent = resposta.mensagem || "Verificação concluída.";
+  } catch (erro) { status.textContent = erro.message || "Falha ao enviar avisos de vencidos."; }
+  finally { botao.disabled = false; }
+}
+
+
   function carregarCadastroFuncionariosPainel() {
     if (cadastroFuncionariosPromise) {
       return cadastroFuncionariosPromise;
@@ -3262,6 +3332,12 @@ function jsonpPainelBruto(action, callback, extra = {}) {
         todos: resposta.todos,
         detalhes: Array.isArray(resposta.detalhes) ? resposta.detalhes : []
       };
+
+      estadosCelularProprio.clear();
+      cadastroFuncionariosPainel.detalhes.forEach(item => {
+        const chave = norm(item.nome) + "|" + String(item.loja || "");
+        estadosCelularProprio.set(chave, item.celularProprioAtivo === true);
+      });
   
       FUNCIONARIOS_MAPA = [...resposta.funcionarios];
       CONTROLADOS_MAPA = [...resposta.especiais];
@@ -3990,7 +4066,15 @@ function imprimirMapaValidade() {
         @media print {
           body { print-color-adjust: exact; }
         }
-      </style>
+      
+    /* Controle individual de celular próprio — compatível com tema claro/escuro */
+    .celular-proprio-btn { width:34px; min-width:34px; height:34px; padding:5px !important; display:inline-flex !important; align-items:center; justify-content:center; vertical-align:middle; position:relative; background:var(--surface, #fff) !important; border:1px solid var(--border, #d1d5db) !important; }
+    .celular-proprio-btn svg { width:18px; height:18px; }
+    .celular-proprio-ativo { color:#22c55e !important; border-color:#22c55e !important; }
+    .celular-proprio-inativo { color:#ef4444 !important; border-color:#ef4444 !important; }
+    .celular-proprio-inativo::after { content:""; position:absolute; width:23px; height:2px; background:#ef4444; transform:rotate(-48deg); border-radius:2px; pointer-events:none; }
+    .func-acoes { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+</style>
     </head>
     <body>
       <table>
@@ -6625,6 +6709,12 @@ document.addEventListener("submit", async function(event) {
       if (det && det.administrador) {
         botoesGestao = ' <button class="button" type="button" data-func-acao="pin" data-nome="' + nomeAttr + '" title="Redefinir PIN de acesso" aria-label="Definir PIN de acesso"><i data-lucide="key-round"></i></button>';
       }
+      if (det) {
+        const chaveCelular = norm(det.nome) + "|" + String(det.loja || "");
+        const ativoCelular = estadosCelularProprio.get(chaveCelular) === true;
+        const rotuloCelular = ativoCelular ? "Desativar celular próprio" : "Ativar celular próprio";
+        botoesGestao += ' <button class="button celular-proprio-btn ' + (ativoCelular ? 'celular-proprio-ativo' : 'celular-proprio-inativo') + '" type="button" data-func-acao="celular" data-nome="' + nomeAttr + '" data-loja="' + esc(det.loja || '') + '" title="' + rotuloCelular + '" aria-label="' + rotuloCelular + '"><i data-lucide="smartphone"></i></button>';
+      }
       const perfil = det && det.administrador ? badge("Administrador · Loja " + det.loja, "badge-info") : ESPECIAIS.includes(k) ? badge("Aba especial", "badge-purple") : k === "transferencias" ? badge("Transferências", "badge-warning") : badge("Salão", "badge-info");
       return '<tr><td><div class="cell-primary">' + esc(o.nome) + '</div>' + (det ? '<div style="font-size:11px;margin-top:2px;color:' + (det.temPin ? '#15803d' : '#b45309') + '">' + (det.temPin ? 'PIN definido' : 'Sem PIN') + '</div>' : '') + '</td><td>' + perfil + '</td><td>' + num(o.lanc) + '</td><td>' + num(o.un) + '</td><td>' +
         (o.venc ? badge(num(o.venc), "badge-danger") : "0") + '</td><td>' + (o.avenc ? badge(num(o.avenc), "badge-warning") : "0") + '</td><td>' + esc(fmtDH(o.ult)) + '</td><td>' +
@@ -6784,6 +6874,31 @@ document.addEventListener("submit", async function(event) {
     if (btn.dataset.funcAcao === "renomear") abrirModalFuncionario("renomear", nome);
     else if (btn.dataset.funcAcao === "pin") abrirModalFuncionario("pin", nome);
     else if (btn.dataset.funcAcao === "especial") alternarEspecialFuncionario(nome, btn.dataset.especial === "1");
+    else if (btn.dataset.funcAcao === "celular") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const loja = btn.dataset.loja || "";
+      const chaveCelular = norm(nome) + "|" + String(loja);
+      const novoEstado = estadosCelularProprio.get(chaveCelular) !== true;
+      if (!confirm((novoEstado ? "Ativar" : "Desativar") + " o celular próprio de " + nome + "?")) return;
+      if (btn.dataset.processando === "1") return;
+      btn.dataset.processando = "1";
+      btn.disabled = true;
+      jsonpPainelBruto("gerenciarCelularProprio", "__celularProprioCb", { modo: "alternar", nome, loja, ativo: novoEstado ? "1" : "0" })
+        .then(d => {
+          if (!d || d.sucesso !== true) throw new Error(d && d.mensagem ? d.mensagem : "O servidor não confirmou a alteração.");
+          estadosCelularProprio.set(chaveCelular, d.ativo === true);
+          const detalhe = detalhesFunc().get(norm(nome));
+          if (detalhe) detalhe.celularProprioAtivo = d.ativo === true;
+          alert(d.mensagem || (d.ativo ? "Celular próprio habilitado." : "Celular próprio desabilitado."));
+          renderFuncionarios();
+        }).catch(e => {
+          console.error("Falha ao gerenciar celular próprio:", e);
+          alert("Não foi possível alterar o celular próprio: " + (e && e.message ? e.message : String(e)));
+          btn.disabled = false;
+          btn.dataset.processando = "0";
+        });
+    }
     else if (btn.dataset.funcAcao === "inativar") { const ativo = btn.dataset.ativo === "1"; if (!confirm((ativo ? "Inativar " : "Reativar ") + nome + "?")) return; chamarFuncionarioApi("inativarFuncionario", "__inativarFuncionarioCb", { nome, ativo: ativo ? "0" : "1" }).then(async d => { alert(d.mensagem); await atualizarAposMudancaFuncionario(); }).catch(e => alert(e.message)); }
   });
 

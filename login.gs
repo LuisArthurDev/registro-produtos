@@ -286,7 +286,8 @@ function montarSessaoFuncionario_(funcionario, manterConectado) {
     administrador: funcionario.administrador, administradorGeral: funcionario.administradorGeral,
     perfil: funcionario.perfil, especial: funcionario.especial, loginId: sessao.loginId,
     criadaEm: agora, atividadeEm: agora, ate: agora + SESSAO_SEGUNDOS_ * 1000,
-    manterConectado: sessao.manterConectado
+    manterConectado: sessao.manterConectado,
+    dispositivoCelularProprio: manterConectado === true
   };
 }
 
@@ -304,6 +305,7 @@ function registrarCelularProprio_(p) {
     const funcionario = buscarFuncionarioPorNome_(sessao.nome);
     if (!funcionario || funcionario.ativo === false || normalizarLoja_(funcionario.loja) !== normalizarLoja_(sessao.loja)) throw new Error("Funcionário inativo ou cadastro alterado.");
     props.setProperty(propsCelular.hash, hashTokenCelularProprio_(token));
+    props.setProperty(propsCelular.ativo, "1");
     sessao.manterConectado = true;
     sessao.dispositivoCelularProprio = true;
     sessao.ultimaAtividade = Date.now();
@@ -358,7 +360,11 @@ function gerenciarCelularProprio_(p) {
       if (novoAtivo && funcionario.ativo === false) throw new Error("Reative o funcionário antes de habilitar o celular próprio.");
       lock.waitLock(15000);
       gravarCelularProprioNaLinha_(aba, funcionario.linha, novoAtivo);
-      if (!novoAtivo) props.deleteProperty(k.hash);
+      if (novoAtivo) props.setProperty(k.ativo, "1");
+      else {
+        props.deleteProperty(k.ativo);
+        props.deleteProperty(k.hash);
+      }
       ativo = novoAtivo;
     }
     return respostaJsonp_(cb, { sucesso: true, nome: funcionario.nome, loja: funcionario.loja, ativo, dispositivoAutorizado: !!props.getProperty(k.hash), mensagem: ativo ? "Celular próprio habilitado." : "Celular próprio desabilitado." });

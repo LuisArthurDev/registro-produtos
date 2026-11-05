@@ -1,0 +1,34 @@
+{
+  "entrypoints": [
+    "index.html",
+    "lancamento.html",
+    "painelconferente.html",
+    "painelgeral.html",
+    "visualizacao.html"
+  ],
+  "backend": [
+    "Code.gs",
+    "login.gs"
+  ],
+  "notifications": [
+    "notificacoes.js",
+    "OneSignalSDKWorker.js"
+  ],
+  "pwa": [
+    "manifest.webmanifest",
+    "pwa.js",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-maskable-512.png"
+  ],
+  "catalog": [
+    "catalogo-sqlite.js",
+    "produtos_ean.db",
+    "produtos_ean.json",
+    "catalogo_versao.json"
+  ],
+  "cloudflare_d1": [
+    "worker/",
+    "migrations/"
+  ]
+}

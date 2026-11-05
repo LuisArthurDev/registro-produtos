@@ -1,0 +1,2147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="manifest" href="/registro-produtos/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/registro-produtos/icon-192.png">
+<meta name="theme-color" content="#101827">
+  <script>
+    (function () {
+      var t;
+      try { t = localStorage.getItem("tema"); } catch (e) {}
+      if (t !== "light" && t !== "dark") {
+        t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <title>Visualização dos Lançamentos</title>
+  <style>body{visibility:hidden}html.auth-ok body{visibility:visible}</style>
+  <script src="auth.js"></script>
+  <script src="./catalogo-sqlite.js"></script>
+
+  <style>
+    :root {
+      --bg: #eaeff3;
+      --surface: #fff;
+      --ink: #0f1b2d;
+      --muted: #5a6877;
+      --line: #d3dce5;
+      --brand: #0f2a3d;
+      --accent: #0a7c86;
+      --ok: #17803d;
+      --ok-bg: #e4f5ea;
+      --err: #b3261e;
+      --err-bg: #fdeceb;
+      --warn: #a15c07;
+      --warn-bg: #fff3df;
+      --shadow: 0 1px 2px rgba(15,27,45,.06);
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #0b141c;
+      --surface: #142230;
+      --ink: #e8eef4;
+      --muted: #9aa9b8;
+      --line: #284054;
+      --brand: #0b1a26;
+      --accent: #31b3bf;
+      --ok: #5fd08a;
+      --ok-bg: #12301f;
+      --err: #ff8a80;
+      --err-bg: #3a1714;
+      --warn: #f0b45a;
+      --warn-bg: #36270f;
+      --shadow: none;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    header {
+      background: var(--brand);
+      color: white;
+      padding: 16px 20px 18px;
+    }
+
+    .cabecalho-conteudo { width: min(100%, 1000px); margin: 0 auto; }
+    .cabecalho-acoes {
+      display: flex; justify-content: flex-end; align-items: center;
+      gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    #usuarioSessao { color: #c5d4df; font-size: 12px; margin-right: 4px; }
+    .cabecalho-acoes .btn-cabecalho {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: auto; min-width: 0; min-height: 34px; height: 34px;
+      padding: 6px 12px; border: 1px solid rgba(255,255,255,.22);
+      border-radius: 8px; background: rgba(255,255,255,.10);
+      color: #fff; font-size: 13px; line-height: 1.2; text-decoration: none;
+      white-space: nowrap;
+    }
+    .cabecalho-acoes .btn-cabecalho:hover { background: rgba(255,255,255,.19); }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; color: #c5d4df; font-size: 13px; }
+    @media (max-width: 560px) {
+      header { padding: 13px 12px 16px; }
+      .cabecalho-acoes { justify-content: space-between; }
+      #usuarioSessao { flex: 1 1 100%; }
+    }
+
+    main {
+      width: min(100% - 24px, 1000px);
+      margin: 18px auto 40px;
+    }
+
+    .card {
+      padding: 16px;
+      margin-bottom: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .modos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .modo {
+      background: var(--bg);
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    .modo[aria-pressed="true"] {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .filtros {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input, select, button {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font: inherit;
+    }
+
+    input, select {
+      color: var(--ink);
+      background: var(--surface);
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: .6; cursor: wait; }
+
+    .resumo {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .numero {
+      font-size: 23px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .legenda { color: var(--muted); font-size: 12px; }
+
+    #mensagem {
+      padding: 12px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow-wrap: anywhere;
+    }
+
+    .grupo { margin-bottom: 18px; }
+    .grupo h2 { font-size: 17px; margin: 0 0 10px; }
+
+    .tabela-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 690px;
+      border-collapse: collapse;
+      background: var(--surface);
+    }
+
+    table.larga { min-width: 830px; }
+    table.transferencias { min-width: 1000px; }
+    table.validade-transferencias { min-width: 1100px; }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      color: var(--muted);
+      background: var(--bg);
+      font-size: 12px;
+    }
+
+    td { overflow-wrap: anywhere; }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    .descricao { font-weight: 700; }
+    .ean { display: block; color: var(--muted); font-size: 12px; }
+    .quantidade { font-weight: 800; white-space: nowrap; }
+
+    .selo {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .selo.vencido { background: var(--err-bg); color: var(--err); }
+    .selo.avencer { background: var(--warn-bg); color: var(--warn); }
+    .selo.vendavel { background: var(--ok-bg); color: var(--ok); }
+
+    .acoes {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .acoes a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: var(--line);
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .vazio { padding: 20px; text-align: center; color: var(--muted); }
+    .acoes-lancamento {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      min-width: 150px;
+    }
+
+    .acoes-lancamento button {
+      flex: 0 0 42px;
+      width: 42px;
+      min-width: 42px;
+      min-height: 38px;
+      height: 38px;
+      padding: 5px;
+      border-radius: 8px;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .acao-editar { background: #1769aa; }
+    .acao-excluir { background: #b3261e; }
+    .acao-sinalizar { background: #a15c07; }
+
+    .acoes-lancamento button:hover { filter: brightness(.92); }
+    .acoes-lancamento button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .modal-fundo { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { width: min(100%, 520px); max-height: 90vh; overflow: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+    .modal h2 { margin: 0 0 6px; font-size: 20px; }
+    .modal p { color: var(--muted); margin: 0 0 16px; }
+    .modal .campo { margin: 14px 0; }
+    .modal .botoes { display: flex; gap: 10px; margin-top: 18px; }
+    .modal .secundario { background: var(--line); color: var(--ink); }
+    .motivo-opcao { display: flex; align-items: center; gap: 9px; padding: 9px 0; color: var(--ink); }
+    .motivo-opcao input { width: 18px; min-height: 18px; }
+    .detalhe-item { padding: 10px; border-radius: 8px; background: var(--bg); margin-bottom: 14px; overflow-wrap: anywhere; }
+
+    @media (max-width: 620px) {
+      .filtros { grid-template-columns: 1fr; }
+      .resumo { grid-template-columns: 1fr 1fr; }
+    }
+  .filtros-pesquisa {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 620px) {
+  .filtros-pesquisa {
+    grid-template-columns: 1fr;
+  }
+}
+
+  .campo-mes-controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.campo-mes-controles > #mes {
+  flex: 1 1 150px;
+  min-width: 130px;
+}
+
+.opcao-todos-meses {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.opcao-todos-meses input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+}
+
+    .acao-subir-vencidos {
+  background: #176b3a;
+}
+
+ 
+/* =========================
+   TELA DE CARREGAMENTO
+   ========================= */
+
+#telaCarregamento {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(8, 20, 30, 0.48);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+#telaCarregamento[hidden] {
+  display: flex !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.carregamento-conteudo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 34px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  animation: aparecerCarregamento 0.25s ease;
+}
+
+.carregamento-circulo {
+  width: 54px;
+  height: 54px;
+  border: 5px solid var(--line);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-radius: 50%;
+  animation: girarCarregamento 0.8s linear infinite;
+}
+
+#textoCarregamento {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+}
+
+@keyframes girarCarregamento {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aparecerCarregamento {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carregamento-circulo,
+  .carregamento-conteudo {
+    animation: none;
+  }
+
+  #telaCarregamento {
+    transition: none;
+  }
+}
+
+  .btn-informacoes {
+  flex: 0 0 24px !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  margin-right: 6px;
+  border: 1.5px solid var(--muted) !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 15px !important;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-informacoes:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+   
+  </style>
+<style id="tema-painel">
+/* ===== Visual do Painel do Conferente (mesma paleta, fonte, bordas e sombras) ===== */
+:root{
+  --bg:#f3f6fb;--surface:#ffffff;--ink:#172033;--muted:#788399;--line:#e6eaf0;
+  --brand:#101827;--accent:#3b82f6;--accent-dark:#2563eb;
+  --ok:#16a34a;--ok-bg:#e7f8ed;--err:#dc2626;--err-bg:#fdecec;
+  --warn:#d97706;--warn-bg:#fff4e0;--info-bg:#eaf2ff;
+  --shadow:0 1px 2px rgba(16,24,39,.06),0 6px 16px rgba(16,24,39,.04);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0c1320;--surface:#141d2e;--ink:#e6ebf5;--muted:#8f9bb3;--line:#26324a;
+  --brand:#0a101c;--accent:#3b82f6;--accent-dark:#93c5fd;
+  --ok:#4ade80;--ok-bg:#12301f;--err:#f87171;--err-bg:#3a1714;
+  --warn:#fbbf24;--warn-bg:#36270f;--info-bg:#172a4a;
+  --shadow:none;color-scheme:dark;
+}
+body{font-family:Inter,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+.topbar,header{background:var(--brand);border-bottom:1px solid #263246}
+.topbar h1,header h1{font-weight:750;letter-spacing:-.4px}
+.topbar p,header p{color:#91a0b7}
+.card{border-radius:12px;border:1px solid var(--line);box-shadow:var(--shadow)}
+h2{font-weight:750;letter-spacing:-.2px}
+label{font-weight:650}
+input,select,textarea{border-radius:9px;border-color:var(--line)}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid rgba(59,130,246,.35);outline-offset:1px;border-color:var(--accent)}
+button{border-radius:9px;font-weight:650}
+.btn-camera:hover:not(:disabled){background:#2563eb}
+:root[data-theme="dark"] .btn-camera:hover:not(:disabled){background:#2563eb}
+.modal{border-radius:14px}
+
+/* Informações da Queima */
+.btn-informacoes{border-color:var(--accent)!important;color:var(--accent)!important}
+.info-queima-ean{margin:2px 0 8px;color:var(--muted);font-size:13px}
+.info-queima-mensagem{margin:0 0 10px;font-weight:600}
+.info-queima-lista{display:grid;gap:8px;max-height:50vh;overflow:auto;margin-bottom:12px}
+.info-queima-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.info-queima-topo{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.info-queima-detalhes{margin-top:4px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.info-queima-selo{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700}
+.info-queima-selo.ok{background:var(--ok-bg);color:var(--ok)}
+.info-queima-selo.aviso{background:var(--warn-bg);color:var(--warn)}
+.info-queima-selo.erro{background:var(--err-bg);color:var(--err)}
+.info-queima-igual{margin-top:6px;font-size:12px;font-weight:700;color:var(--accent)}
+</style>
+  <script src="/registro-produtos/notificacoes.js" defer></script>
+  <script src="/registro-produtos/pwa.js" defer></script>
+</head>
+
+<body>
+  
+<div id="telaCarregamento" hidden role="status" aria-live="polite">
+  <div class="carregamento-conteudo">
+    <div class="carregamento-circulo" aria-hidden="true"></div>
+    <p id="textoCarregamento">Carregando...</p>
+  </div>
+</div>
+
+<header>
+  <div class="cabecalho-conteudo">
+    <div class="cabecalho-acoes">
+      <span id="usuarioSessao"></span>
+      <a id="btnPainelConferente" class="btn-cabecalho" href="painelconferente.html" hidden>Painel do Conferente</a>
+      <button class="btn-cabecalho" type="button" onclick="Auth.sair()">Sair</button>
+    </div>
+    <h1>Visualização dos Lançamentos</h1>
+    <p id="subtitulo">Histórico mensal de produtos por funcionário</p>
+  </div>
+</header>
+
+<main>
+  <div class="acoes">
+    <a href="index.html">← Voltar ao lançamento</a>
+  </div>
+
+  <section class="card">
+    <div class="modos">
+      <button id="btnModoMes" class="modo" type="button" aria-pressed="true">
+        Por mês de lançamento
+      </button>
+      <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
+        Validade (a vencer)
+      </button>
+    </div>
+
+    <div class="filtros">
+      <div id="campoMes">
+        <label for="mes">Mês do lançamento</label>
+      
+          <input id="mes" type="month">
+      
+          <label class="opcao-todos-meses" for="todosMeses">
+            <input id="todosMeses" type="checkbox">
+            Todos os meses
+          </label>
+        </div>
+
+      <div id="campoStatus" hidden>
+        <label for="statusValidade">Situação da validade</label>
+        <select id="statusValidade">
+          <option value="criticos">Vencidos e à vencer</option>
+          <option value="vencido">Somente vencidos</option>
+          <option value="avencer">Somente à vencer</option>
+          <option value="vendavel">Somente vendáveis</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+
+      <div id="campoFuncionario">
+        <label for="funcionario">Funcionário</label>
+        <select id="funcionario">
+          <option value="">Todos os funcionários</option>
+        </select>
+      </div>
+
+      <button id="btnBuscar" type="button">Consultar</button>
+    </div>
+    <div class="filtros-pesquisa">
+  <div>
+    <label for="filtroEAN">Pesquisar por EAN</label>
+    <input
+      id="filtroEAN"
+      type="search"
+      placeholder="Digite o EAN"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <label for="filtroLote">Pesquisar por Lote</label>
+    <input
+      id="filtroLote"
+      type="search"
+      placeholder="Digite o lote"
+      autocomplete="off"
+    >
+  </div>
+
+  <div>
+    <label for="filtroValidade">Pesquisar por Validade</label>
+    <input id="filtroValidade" type="date">
+  </div>
+
+  <button id="btnLimparPesquisa" type="button">
+    Limpar pesquisa
+  </button>
+</div>
+  </section>
+
+  <div id="mensagem" role="status" aria-live="polite">
+    Carregando histórico...
+  </div>
+
+  <section class="card">
+    <div class="resumo">
+      <div>
+        <div id="totalRegistros" class="numero">0</div>
+        <div class="legenda">Lançamentos</div>
+      </div>
+      <div>
+        <div id="totalUnidades" class="numero">0</div>
+        <div class="legenda">Unidades lançadas</div>
+      </div>
+      <div>
+        <div id="totalFuncionarios" class="numero">0</div>
+        <div class="legenda">Funcionários</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="resultado"></div>
+</main>
+
+<div id="modalEdicao" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloEdicao">
+    <h2 id="tituloEdicao">Editar lançamento</h2>
+    <p>Altere os dados do lançamento e salve.</p>
+    <div id="itemEdicao" class="detalhe-item"></div>
+    <form id="formEdicao">
+      <div class="campo"><label for="loteEdicao">Lote</label><input id="loteEdicao" maxlength="100" required></div>
+      <div class="campo"><label for="validadeEdicao">Validade</label><input id="validadeEdicao" type="date" required></div>
+      <div class="campo"><label for="quantidadeEdicao">Quantidade</label><input id="quantidadeEdicao" type="number" min="1" step="1" required></div>
+      <div id="camposTransferenciaEdicao" hidden>
+      <div class="campo">
+        <label for="lojaOrigemEdicao">Loja de Origem</label>
+        <input
+          id="lojaOrigemEdicao"
+          maxlength="11"
+          placeholder="Ex.: V12"
+        >
+      </div>
+  
+      <div class="campo">
+        <label for="romaneioEdicao">Romaneio</label>
+        <input
+          id="romaneioEdicao"
+          maxlength="100"
+          placeholder="Informe o romaneio"
+        >
+      </div>
+    </div>
+      <div id="mensagemEdicao" role="status" aria-live="polite"></div>
+      <div class="botoes">
+        <button id="btnSalvarEdicao" type="submit">Salvar alterações</button>
+        <button id="btnCancelarEdicao" class="secundario" type="button">Cancelar</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div id="modalSinalizacao" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tituloSinalizacao">
+    <h2 id="tituloSinalizacao">Sinalizar lançamento</h2>
+    <p>Selecione seu nome e informe o motivo da sinalização.</p>
+    <div id="itemSinalizacao" class="detalhe-item"></div>
+    <form id="formSinalizacao">
+      <div class="campo">
+        <label for="funcionarioSinalizacao">Funcionário</label>
+        <select id="funcionarioSinalizacao" required>
+          <option value="">Selecione seu nome</option>
+          <option>Alice</option><option>Altino</option><option>Ana Carolina</option><option>Anielle</option>
+          <option>Gabriela</option><option>Gabriele</option><option>Isabela</option><option>Livia</option>
+          <option>Paola</option><option>Rafaela</option><option>Ramon</option><option>Rillary</option>
+          <option>Sulaima</option><option>Thomaz</option><option>Gabriela Gerente</option><option>Cristina</option>
+          <option>Tamires</option><option>Jonas</option><option>Luis Arthur</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label>Motivo da sinalização</label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Não Entrou no Queima" required> Não Entrou no Queima</label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Muita Quantidade"> Muita Quantidade</label>
+        <label class="motivo-opcao"><input type="radio" name="motivoSinalizacao" value="Outras"> Outras</label>
+      </div>
+      <div class="campo" id="campoOutrasSinalizacao" hidden>
+        <label for="outrasSinalizacao">Descreva o motivo</label>
+        <textarea id="outrasSinalizacao" rows="3" maxlength="500" placeholder="Digite o motivo da sinalização"></textarea>
+      </div>
+      <div id="mensagemSinalizacao" role="status" aria-live="polite"></div>
+      <div class="botoes">
+        <button id="btnSalvarSinalizacao" type="submit">Salvar sinalização</button>
+        <button id="btnCancelarSinalizacao" class="secundario" type="button">Cancelar</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div id="modalInfoQueima" class="modal-fundo" hidden>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="infoQueimaProduto">
+    <h2 id="infoQueimaProduto">Produto</h2>
+    <p id="infoQueimaEAN" class="info-queima-ean"></p>
+    <p id="infoQueimaMensagem" class="info-queima-mensagem" role="status" aria-live="polite"></p>
+    <div id="infoQueimaLista" class="info-queima-lista"></div>
+    <div class="botoes">
+      <button id="btnFecharInfoQueima" class="secundario" type="button">Fechar</button>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
+
+const LIMITE_VENCIDO_PADRAO = 60;
+const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
+const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA = 3;
+const LIMITE_A_VENCER = 160;
+
+const $ = id => document.getElementById(id);
+
+let todosRegistros = [];
+let registrosValidade = [];
+let mesCarregado = false;
+let validadeCarregada = false;
+let descricoesEAN = {};
+let consultaEmAndamento = false;
+let modo = "mes";
+
+function mesAtualISO() {
+  const agora = new Date();
+
+  return agora.getFullYear() + "-" +
+    String(agora.getMonth() + 1).padStart(2, "0");
+}
+
+function normalizar(valor) {
+  return String(valor || "").trim().toLocaleLowerCase("pt-BR");
+}
+
+function ehTransferencia(registro) {
+  return normalizar(registro && registro.funcionario) === "transferencias";
+}
+
+function definirMensagem(texto) {
+  $("mensagem").textContent = texto;
+}
+
+function mostrarCarregamento(texto) {
+  $("textoCarregamento").textContent = texto || "Carregando...";
+  $("telaCarregamento").hidden = false;
+}
+
+function ocultarCarregamento() {
+  $("telaCarregamento").hidden = true;
+}
+
+
+/* =========================
+   BASE DE PRODUTOS / EAN
+   ========================= */
+
+function carregarDescricoes() {
+  return window.CatalogoSQLite.abrir().then(() => {
+    descricoesEAN = new Proxy(Object.create(null), {
+      get(_alvo, chave) { return typeof chave === "string" ? window.CatalogoSQLite.porEAN(chave) || undefined : undefined; },
+      getOwnPropertyDescriptor(_alvo, chave) {
+        const valor = typeof chave === "string" ? window.CatalogoSQLite.porEAN(chave) : null;
+        return valor ? { configurable: true, enumerable: true, value: valor } : undefined;
+      }
+    });
+  });
+}
+
+function candidatosEAN(ean) {
+  const codigo = String(ean || "").trim();
+  const candidatos = [codigo];
+
+  if (/^\d{12}$/.test(codigo)) {
+    candidatos.push("0" + codigo);
+  }
+
+  if (/^0\d{12}$/.test(codigo)) {
+    candidatos.push(codigo.slice(1));
+  }
+
+  return candidatos;
+}
+
+function obterProdutoEAN(ean) {
+  const item = window.CatalogoSQLite?.porEAN(ean);
+  if (!item) return { produto: "Descrição não encontrada", secao: "" };
+  return { produto: String(item.produto || item.descricao || "Descrição não encontrada"), secao: String(item.secao || "").trim() };
+}
+
+function obterDescricao(ean) {
+  return obterProdutoEAN(ean).produto;
+}
+
+function obterSecao(ean) {
+  return obterProdutoEAN(ean).secao;
+}
+
+/* =========================
+   CONSULTA AO APPS SCRIPT
+   ========================= */
+
+function chamarApps(action, callbackName, extra) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    const anterior = window[callbackName];
+    let finalizado = false;
+    let limite = null;
+
+    function finalizar() {
+      if (finalizado) return false;
+
+      finalizado = true;
+      clearTimeout(limite);
+      script.remove();
+
+      if (anterior) {
+        window[callbackName] = anterior;
+      } else {
+        delete window[callbackName];
+      }
+
+      return true;
+    }
+
+    limite = setTimeout(() => {
+      if (finalizar()) reject(new Error("timeout"));
+    }, 20000);
+
+    window[callbackName] = resposta => {
+      if (finalizar()) resolve(resposta);
+    };
+
+    script.onerror = () => {
+      if (finalizar()) reject(new Error("falha"));
+    };
+
+    const parametros = new URLSearchParams(
+      Object.assign({
+        action: action,
+        callback: callbackName,
+        sessao: Auth.token()
+      }, extra || {})
+    );
+
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function mensagemDeErroConsulta(erro) {
+  if (erro && erro.message === "timeout") {
+    return "A consulta demorou demais. Verifique a conexão e tente novamente.";
+  }
+
+  return "Falha ao acessar o Apps Script. Confira se a implantação está atualizada e acessível.";
+}
+
+function iniciarConsulta(texto) {
+  if (consultaEmAndamento) return false;
+
+  consultaEmAndamento = true;
+  $("btnBuscar").disabled = true;
+  definirMensagem(texto);
+
+  return true;
+}
+
+function encerrarConsulta() {
+  consultaEmAndamento = false;
+  $("btnBuscar").disabled = false;
+}
+
+function consultarHistorico() {
+  const todosMeses = $("todosMeses").checked;
+  const mes = todosMeses ? "TODOS" : $("mes").value;
+
+  if (!todosMeses && !/^\d{4}-\d{2}$/.test(mes)) {
+    definirMensagem("Selecione um mês válido ou marque Todos os meses.");
+    return;
+  }
+
+  if (!iniciarConsulta("Consultando os lançamentos...")) return;
+
+  mostrarCarregamento("Consultando os lançamentos...");
+
+  chamarApps("historicoMes", "__historicoCb", { mes: mes })
+    .then(resposta => {
+      encerrarConsulta();
+      ocultarCarregamento();
+
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar o histórico."
+        );
+        return;
+      }
+
+      todosRegistros = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+
+      mesCarregado = true;
+
+      if (modo === "mes") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+  
+function consultarValidades() {
+  if (!iniciarConsulta("Consultando as validades...")) return;
+
+  mostrarCarregamento("Consultando as validades...");
+
+  chamarApps("validades", "__validadeCb", {})
+    .then(resposta => {
+      encerrarConsulta();
+      ocultarCarregamento();
+
+      if (!resposta || !resposta.sucesso) {
+        definirMensagem(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível consultar as validades."
+        );
+        return;
+      }
+
+      registrosValidade = Array.isArray(resposta.registros)
+        ? resposta.registros
+        : [];
+
+      validadeCarregada = true;
+
+      if (modo === "validade") renderizar();
+    })
+    .catch(erro => {
+      encerrarConsulta();
+      definirMensagem(mensagemDeErroConsulta(erro));
+    });
+}
+
+function consultar() {
+  if (modo === "validade") consultarValidades();
+  else consultarHistorico();
+}
+
+/* =========================
+   COLETA FUNCIONARIOS
+   ========================= */
+function carregarCadastroFuncionarios() {
+  return new Promise((resolve, reject) => {
+    const callback = "__funcionariosCb";
+
+    window[callback] = function (resposta) {
+      delete window[callback];
+
+      if (!resposta || !resposta.sucesso) {
+        reject(new Error("Não foi possível carregar os funcionários."));
+        return;
+      }
+
+      const select = document.getElementById("funcionario");
+      const selecionado = select.value;
+
+      // A visualização administrativa reúne os mapas de funcionários,
+      // mas a aba técnica Transferencias não é um funcionário e não deve
+      // aparecer como opção de consulta.
+      const nomesVisiveis = (Array.isArray(resposta.todos) ? resposta.todos : [])
+        .filter(nome => String(nome || "").trim().toLocaleLowerCase("pt-BR") !== "transferencias");
+
+      select.innerHTML =
+        '<option value="">Todos os funcionários</option>';
+
+      nomesVisiveis.forEach(nome => {
+        const option = document.createElement("option");
+        option.value = nome;
+        option.textContent = nome;
+        select.appendChild(option);
+      });
+
+      if (Auth.administrador()) {
+        if (nomesVisiveis.includes(selecionado)) select.value = selecionado;
+      } else {
+        // Funcionário consulta exclusivamente o próprio mapa: o seletor
+        // fica oculto e o filtro não pode ser alterado por URL.
+        select.value = Auth.usuario();
+        select.disabled = true;
+        document.getElementById("campoFuncionario").hidden = true;
+      }
+
+      const funcionarioURL =
+        new URLSearchParams(window.location.search).get("funcionario");
+
+      if (Auth.administrador() && funcionarioURL && nomesVisiveis.includes(funcionarioURL)) {
+        select.value = funcionarioURL;
+      }
+
+      resolve(resposta);
+    };
+
+    const script = document.createElement("script");
+    const parametros = new URLSearchParams({
+      action: "funcionarios",
+      callback: callback,
+      sessao: Auth.token()
+    });
+    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
+
+    script.onerror = () => {
+      delete window[callback];
+      reject(new Error("Erro ao consultar a aba Funcionarios."));
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
+/* =========================
+   SINALIZAÇÃO DE LANÇAMENTOS
+   ========================= */
+  
+let registroParaSinalizar = null;
+
+let registroParaEditar = null;
+
+function dataParaISO(dataTexto) {
+  const texto = String(dataTexto || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+  return br ? br[3] + "-" + br[2] + "-" + br[1] : "";
+}
+
+function criarCelulaAcoes(registro, opcoes = {}) {
+  const td = document.createElement("td");
+  const grupo = document.createElement("div");
+
+  grupo.className = "acoes-lancamento";
+
+  const editar = document.createElement("button");
+  editar.type = "button";
+  editar.className = "acao-editar";
+  editar.textContent = "✏️";
+  editar.title = "Editar lançamento";
+  editar.setAttribute("aria-label", "Editar lançamento");
+  editar.addEventListener("click", () => abrirEdicao(registro));
+
+  if (opcoes.vencido !== true) {
+    const excluir = document.createElement("button");
+  
+    excluir.type = "button";
+    excluir.className = "acao-excluir";
+    excluir.textContent = "🗑️";
+    excluir.title = "Excluir lançamento";
+    excluir.setAttribute("aria-label", "Excluir lançamento");
+  
+    excluir.addEventListener("click", () => excluirRegistro(registro));
+  
+    grupo.appendChild(excluir);
+  }
+
+  const informacoes = document.createElement("button");
+  informacoes.type = "button";
+  informacoes.className = "btn-informacoes";
+  informacoes.textContent = "ⓘ";
+  informacoes.title = "Ver lançamentos deste produto na Queima";
+  informacoes.setAttribute(
+    "aria-label",
+    "Informações deste lançamento"
+  );
+
+  informacoes.addEventListener("click", () => {
+    mostrarInformacoesRegistro(registro);
+  });
+  
+  grupo.append(editar);
+
+  if (opcoes.modo === "validade" && opcoes.vencido === true) {
+    const subir = document.createElement("button");
+
+    subir.type = "button";
+    subir.className = "acao-subir-vencidos";
+    subir.textContent = "⬆️";
+    subir.title = "Encaminhar para a aba Vencidos";
+    subir.setAttribute(
+      "aria-label",
+      "Encaminhar produto para a aba Vencidos"
+    );
+
+    subir.addEventListener("click", () => subirParaVencidos(registro));
+
+    grupo.appendChild(subir);
+  } else {
+    const sinalizar = document.createElement("button");
+
+    sinalizar.type = "button";
+    sinalizar.className = "acao-sinalizar";
+    sinalizar.textContent = "⚑";
+    sinalizar.title = "Sinalizar lançamento";
+    sinalizar.setAttribute("aria-label", "Sinalizar lançamento");
+
+    sinalizar.addEventListener("click", () => abrirSinalizacao(registro));
+
+    grupo.appendChild(sinalizar);
+  }
+
+  td.appendChild(grupo);
+  return td;
+}
+
+function abrirEdicao(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
+    return;
+  }
+
+  registroParaEditar = registro;
+
+  const especial = registro.especial === true;
+  const ehTransf = ehTransferencia(registro);
+
+  $("tituloEdicao").textContent = especial
+    ? "Editar quantidade total"
+    : "Editar lançamento";
+
+  $("itemEdicao").textContent =
+    "Produto: " + obterDescricao(registro.codigo) +
+    " | EAN: " + (registro.codigo || "") +
+    " | Funcionário: " + (registro.funcionario || "") +
+    (especial
+      ? " | Quantidade total atual: " + registro.quantidade
+      : "");
+
+  $("loteEdicao").value = registro.lote || "";
+  $("validadeEdicao").value =
+    dataParaISO(registro.validadeISO || registro.validade);
+  $("quantidadeEdicao").value = Number(registro.quantidade || 1);
+
+  // Nas abas especiais, somente a quantidade poderá ser alterada.
+  $("loteEdicao").disabled = especial;
+  $("validadeEdicao").disabled = especial;
+
+  $("loteEdicao").parentElement.hidden = especial;
+  $("validadeEdicao").parentElement.hidden = especial;
+
+  $("camposTransferenciaEdicao").hidden = especial || !ehTransf;
+
+  $("lojaOrigemEdicao").value = registro.lojaOrigem || "";
+  $("romaneioEdicao").value = registro.romaneio || "";
+
+  $("lojaOrigemEdicao").required = !especial && ehTransf;
+  $("romaneioEdicao").required = !especial && ehTransf;
+
+  $("lojaOrigemEdicao").disabled = especial;
+  $("romaneioEdicao").disabled = especial;
+
+  $("quantidadeEdicao").disabled = false;
+  $("quantidadeEdicao").min = "1";
+  $("quantidadeEdicao").step = "1";
+
+  $("btnSalvarEdicao").textContent = especial
+    ? "Salvar quantidade"
+    : "Salvar alterações";
+
+  $("mensagemEdicao").textContent = especial
+    ? "Apenas a quantidade total poderá ser alterada."
+    : "";
+
+  $("modalEdicao").hidden = false;
+}
+
+function fecharEdicao() {
+  $("modalEdicao").hidden = true;
+  registroParaEditar = null;
+}
+
+$("btnCancelarEdicao").addEventListener("click", fecharEdicao);
+$("modalEdicao").addEventListener("click", evento => {
+  if (evento.target === $("modalEdicao")) fecharEdicao();
+});
+
+$("formEdicao").addEventListener("submit", evento => {
+  evento.preventDefault();
+  if (!registroParaEditar) return;
+
+  const botao = $("btnSalvarEdicao");
+  botao.disabled = true;
+  botao.textContent = "Salvando...";
+
+  chamarApps("editarLancamento", "__editarCb", {
+    chaveUnica: String(registroParaEditar.chaveUnica),
+    lote: $("loteEdicao").value.trim(),
+    validade: $("validadeEdicao").value,
+    quantidade: $("quantidadeEdicao").value,
+    lojaOrigem: $("lojaOrigemEdicao").value.trim(),
+    romaneio: $("romaneioEdicao").value.trim()
+}).then(resposta => {
+    if (!resposta || !resposta.sucesso) throw new Error(resposta && resposta.mensagem || "Não foi possível editar o lançamento.");
+    alert(resposta.mensagem);
+    fecharEdicao();
+    mesCarregado = false;
+    validadeCarregada = false;
+    consultar();
+  }).catch(erro => {
+    $("mensagemEdicao").textContent = erro.message || "Erro ao editar o lançamento.";
+  }).finally(() => {
+    botao.disabled = false;
+    botao.textContent = "Salvar alterações";
+  });
+});
+
+
+function subirParaVencidos(registro) {
+  if (
+    !registro ||
+    !String(registro.chaveUnica || "").trim()
+  ) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
+    return;
+  }
+
+  if (registro.especial) {
+    alert(
+      "Esta aba agrupa quantidades de vários lançamentos. " +
+      "Não é possível mover um lançamento individual para Vencidos."
+    );
+    return;
+  }
+
+  const chaveUnica = String(registro.chaveUnica).trim();
+
+  const confirmar = confirm(
+    "Deseja mover este lançamento para a aba Vencidos?\n\n" +
+    "Produto: " + obterDescricao(registro.codigo) +
+    "\nLote: " + (registro.lote || "") +
+    "\nValidade: " + (registro.validade || "") +
+    "\nQuantidade: " + (registro.quantidade || 0) +
+    "\n\nA linha original será removida e as sinalizações associadas serão excluídas."
+  );
+
+  if (!confirmar) return;
+
+  const botoes = document.querySelectorAll(".acao-subir-vencidos");
+  botoes.forEach(botao => botao.disabled = true);
+
+  chamarApps("subirVencidos", "__subirVencidosCb", {
+    chaveUnica: chaveUnica
+  })
+    .then(resposta => {
+      if (!resposta || !resposta.sucesso) {
+        throw new Error(
+          resposta && resposta.mensagem
+            ? resposta.mensagem
+            : "Não foi possível mover o lançamento para Vencidos."
+        );
+      }
+
+      alert(resposta.mensagem || "Lançamento movido para Vencidos.");
+
+      // Invalidar os dados em cache para forçar uma nova consulta.
+      mesCarregado = false;
+      validadeCarregada = false;
+
+      consultar();
+    })
+    .catch(erro => {
+      alert(erro.message || "Erro ao mover o lançamento para Vencidos.");
+    })
+    .finally(() => {
+      document.querySelectorAll(".acao-subir-vencidos")
+        .forEach(botao => botao.disabled = false);
+    });
+}
+
+  
+function excluirRegistro(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar a chave única deste lançamento.");
+    return;
+  }
+  if (registro.especial) {
+    alert("Esta aba agrupa quantidades de vários lançamentos. A exclusão individual não está disponível.");
+    return;
+  }
+
+  const detalhes = obterDescricao(registro.codigo) +
+    "\nLote: " + (registro.lote || "") +
+    "\nValidade: " + (registro.validade || "") +
+    "\nQuantidade: " + (registro.quantidade || 0);
+
+  if (!confirm("Deseja realmente excluir este lançamento?\n\n" + detalhes)) return;
+
+  chamarApps("excluirLancamento", "__excluirCb", {
+    chaveUnica: String(registro.chaveUnica)
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) throw new Error(resposta && resposta.mensagem || "Não foi possível excluir o lançamento.");
+    alert(resposta.mensagem);
+    mesCarregado = false;
+    validadeCarregada = false;
+    consultar();
+  }).catch(erro => alert(erro.message || "Erro ao excluir o lançamento."));
+}
+
+function abrirSinalizacao(registro) {
+  if (!registro || !String(registro.chaveUnica || "").trim()) {
+    alert("Não foi possível identificar a chave única deste lançamento. Atualize o Code.gs e implante uma nova versão.");
+    return;
+  }
+  registroParaSinalizar = registro;
+  $("itemSinalizacao").textContent =
+    "Produto: " + obterDescricao(registro.codigo) +
+    " | EAN: " + (registro.codigo || "") +
+    " | Lote: " + (registro.lote || "") +
+    " | Validade: " + (registro.validade || "") +
+    " | Funcionário da aba: " + (registro.funcionario || "");
+  $("funcionarioSinalizacao").value = "";
+  $("formSinalizacao").reset();
+  $("campoOutrasSinalizacao").hidden = true;
+  $("outrasSinalizacao").required = false;
+  $("mensagemSinalizacao").textContent = "";
+  $("modalSinalizacao").hidden = false;
+}
+
+function fecharSinalizacao() {
+  $("modalSinalizacao").hidden = true;
+  registroParaSinalizar = null;
+}
+
+document.querySelectorAll('input[name="motivoSinalizacao"]').forEach(campo => {
+  campo.addEventListener("change", () => {
+    const outras = document.querySelector('input[name="motivoSinalizacao"]:checked')?.value === "Outras";
+    $("campoOutrasSinalizacao").hidden = !outras;
+    $("outrasSinalizacao").required = outras;
+  });
+});
+
+$("btnCancelarSinalizacao").addEventListener("click", fecharSinalizacao);
+$("modalSinalizacao").addEventListener("click", evento => {
+  if (evento.target === $("modalSinalizacao")) fecharSinalizacao();
+});
+
+$("formSinalizacao").addEventListener("submit", evento => {
+  evento.preventDefault();
+  if (!registroParaSinalizar) return;
+
+  const funcionario = $("funcionarioSinalizacao").value.trim();
+  const selecionado = document.querySelector('input[name="motivoSinalizacao"]:checked');
+  if (!funcionario || !selecionado) {
+    $("mensagemSinalizacao").textContent = "Selecione o funcionário e o motivo.";
+    return;
+  }
+
+  let motivo = selecionado.value;
+  if (motivo === "Outras") {
+    const detalhe = $("outrasSinalizacao").value.trim();
+    if (!detalhe) {
+      $("mensagemSinalizacao").textContent = "Descreva o motivo em Outras.";
+      return;
+    }
+    motivo += ": " + detalhe;
+  }
+
+  const botao = $("btnSalvarSinalizacao");
+  botao.disabled = true;
+  botao.textContent = "Salvando...";
+  $("mensagemSinalizacao").textContent = "Registrando sinalização...";
+
+  chamarApps("sinalizarLancamento", "__sinalizacaoCb", {
+    chaveUnica: String(registroParaSinalizar.chaveUnica),
+    funcionario: funcionario,
+    motivo: motivo
+  }).then(resposta => {
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta && resposta.mensagem || "Não foi possível salvar a sinalização.");
+    }
+    $("mensagemSinalizacao").textContent = "Sinalização registrada com sucesso.";
+    alert("Sinalização registrada com sucesso na aba Sinalizacao.");
+    fecharSinalizacao();
+  }).catch(erro => {
+    $("mensagemSinalizacao").textContent = erro.message || "Erro ao salvar sinalização.";
+  }).finally(() => {
+    botao.disabled = false;
+    botao.textContent = "Salvar sinalização";
+  });
+});
+
+/* =========================
+   CÁLCULO DA VALIDADE
+   ========================= */
+
+function diasAte(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+
+  if (!m) return null;
+
+  const alvo = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3])
+  );
+
+  const agora = new Date();
+  const hoje = new Date(
+    agora.getFullYear(),
+    agora.getMonth(),
+    agora.getDate()
+  );
+
+  return Math.round((alvo - hoje) / 86400000);
+}
+
+function limiteVencidoPorSecao(secao, estaNoQueima = false) {
+  const secaoNormalizada = String(secao || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    secaoNormalizada === "NUTRICAO" ||
+    secaoNormalizada === "CONVENIENCIA"
+  ) {
+    return estaNoQueima
+      ? LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA
+      : LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA;
+  }
+
+  return LIMITE_VENCIDO_PADRAO;
+}
+
+function produtoEstaNoQueima(codigo) {
+  if (!queimaCache || !Array.isArray(queimaCache.registros)) return false;
+  const codigoNormalizado = String(codigo || "").trim();
+  return queimaCache.registros.some(r =>
+    String(r.codigo || r.ean || r.EAN || r.codBarras || "").trim() === codigoNormalizado
+  );
+}
+
+function situacao(dias, secao = "", estaNoQueima = false) {
+  const limiteVencido = limiteVencidoPorSecao(secao, estaNoQueima);
+
+  if (dias <= limiteVencido) {
+    return {
+      chave: "vencido",
+      texto: "VENCIDO"
+    };
+  }
+
+  if (dias <= LIMITE_A_VENCER) {
+    return {
+      chave: "avencer",
+      texto: "À VENCER - " + dias + " dias"
+    };
+  }
+
+  return {
+    chave: "vendavel",
+    texto: "VENDÁVEL - " + dias + " dias"
+  };
+}
+
+/* =========================
+   RENDERIZAÇÃO
+   ========================= */
+
+function criarCelula(texto, classe) {
+  const td = document.createElement("td");
+
+  if (classe) td.className = classe;
+
+  td.textContent = texto == null ? "" : String(texto);
+
+  return td;
+}
+
+function criarCabecalho(colunas) {
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+
+  colunas.forEach(titulo => {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    tr.appendChild(th);
+  });
+
+  thead.appendChild(tr);
+
+  return thead;
+}
+
+function criarCelulaProduto(codigo, registro) {
+  const td = document.createElement("td");
+
+  const informacoes = document.createElement("button");
+  informacoes.type = "button";
+  informacoes.className = "btn-informacoes";
+  informacoes.textContent = "i";
+  informacoes.title = "Ver lançamentos deste produto na Queima";
+  informacoes.setAttribute(
+    "aria-label",
+    "Ver lançamentos deste produto na Queima"
+  );
+
+  informacoes.addEventListener("click", () => {
+    mostrarInformacoesRegistro(registro);
+  });
+
+  const conteudo = document.createElement("span");
+  conteudo.style.display = "inline";
+
+  const descricao = document.createElement("span");
+  descricao.className = "descricao";
+  descricao.textContent = obterDescricao(codigo);
+
+  const ean = document.createElement("span");
+  ean.className = "ean";
+  ean.textContent = "EAN: " + (codigo || "");
+
+  conteudo.append(descricao, ean);
+  td.append(informacoes, conteudo);
+
+  return td;
+}
+
+function atualizarResumo(registros) {
+  $("totalRegistros").textContent =
+    registros.length.toLocaleString("pt-BR");
+
+  $("totalUnidades").textContent = registros.reduce(
+    (total, registro) => total + (Number(registro.quantidade) || 0),
+    0
+  ).toLocaleString("pt-BR");
+
+  $("totalFuncionarios").textContent = new Set(
+    registros.map(registro => registro.funcionario)
+  ).size.toLocaleString("pt-BR");
+}
+
+function mostrarVazio(texto) {
+  const vazio = document.createElement("div");
+
+  vazio.className = "card vazio";
+  vazio.textContent = texto;
+
+  $("resultado").appendChild(vazio);
+}
+
+function renderizar() {
+  if (modo === "validade") renderizarValidade();
+  else renderizarMes();
+}
+
+function renderizarMes() {
+  const funcionarioSelecionado = $("funcionario").value;
+
+  const registros = todosRegistros.filter(registro =>
+  (
+    !funcionarioSelecionado ||
+    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
+  ) &&
+  registroPassaPesquisa(registro)
+);
+
+  atualizarResumo(registros);
+
+  const destino = $("resultado");
+  destino.replaceChildren();
+
+  if (!registros.length) {
+    definirMensagem(
+      "Nenhum lançamento encontrado para o mês e funcionário selecionados."
+    );
+
+    mostrarVazio("Não há lançamentos para exibir.");
+    return;
+  }
+
+  definirMensagem(
+    registros.length +
+    " lançamento(s) encontrado(s) em " +
+    ($("todosMeses").checked ? "todos os meses" : $("mes").value) +
+    "."
+  );
+
+  const grupos = new Map();
+
+  registros.forEach(registro => {
+    const nome = registro.funcionario || "Funcionário não informado";
+
+    if (!grupos.has(nome)) grupos.set(nome, []);
+
+    grupos.get(nome).push(registro);
+  });
+
+  const nomes = Array.from(grupos.keys()).sort((a, b) =>
+    a.localeCompare(b, "pt-BR")
+  );
+
+  nomes.forEach(nome => {
+    const registrosGrupo = grupos.get(nome);
+    const transferencia = normalizar(nome) === "transferencias";
+
+    const grupo = document.createElement("section");
+    grupo.className = "card grupo";
+
+    const titulo = document.createElement("h2");
+    const especial = registrosGrupo.some(r => r.especial);
+
+    titulo.textContent =
+      nome + " (" + registrosGrupo.length + " lançamento(s))" +
+      (especial ? " — todos os meses" : "");
+
+    grupo.appendChild(titulo);
+
+    const wrap = document.createElement("div");
+    wrap.className = "tabela-wrap";
+
+    const tabela = document.createElement("table");
+
+    if (transferencia) tabela.classList.add("transferencias");
+
+    const colunas = [
+      "Produto / EAN",
+      "Lote",
+      "Validade",
+      "Quantidade"
+    ];
+
+    if (transferencia) {
+      colunas.push("Loja de Origem", "Romaneio", "Mês de Lançamento");
+    } else {
+      colunas.push("Data do lançamento");
+    }
+    colunas.push("Ações");
+
+    tabela.appendChild(criarCabecalho(colunas));
+
+    const tbody = document.createElement("tbody");
+
+    registrosGrupo
+      .slice()
+      .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+      .forEach(registro => {
+        const tr = document.createElement("tr");
+
+        tr.appendChild(criarCelulaProduto(registro.codigo, registro));
+        tr.appendChild(criarCelula(registro.lote));
+        tr.appendChild(criarCelula(registro.validade));
+
+        tr.appendChild(criarCelula(
+          Number(registro.quantidade || 0).toLocaleString("pt-BR"),
+          "quantidade"
+        ));
+
+        if (transferencia) {
+          tr.appendChild(criarCelula(registro.lojaOrigem || ""));
+          tr.appendChild(criarCelula(registro.romaneio || ""));
+          tr.appendChild(criarCelula(
+            registro.mesLancamento || registro.dataLancamento || ""
+          ));
+        } else {
+          tr.appendChild(criarCelula(registro.dataLancamento));
+        }
+        tr.appendChild(criarCelulaAcoes(registro));
+
+        tbody.appendChild(tr);
+      });
+
+    tabela.appendChild(tbody);
+    wrap.appendChild(tabela);
+    grupo.appendChild(wrap);
+    destino.appendChild(grupo);
+  });
+}
+
+function renderizarValidade() {
+  // Carrega a situação da Queima antes de classificar os prazos de validade.
+  if (!queimaCache || Date.now() - queimaCache.t >= TEMPO_CACHE_QUEIMA) {
+    if (window.__carregandoQueimaParaValidade) return;
+    window.__carregandoQueimaParaValidade = true;
+    consultarQueimaTodos()
+      .catch(() => null)
+      .finally(() => {
+        window.__carregandoQueimaParaValidade = false;
+        renderizarValidade();
+      });
+    return;
+  }
+
+  const funcionarioSelecionado = $("funcionario").value;
+  const filtro = $("statusValidade").value;
+  const itens = [];
+
+  registrosValidade.forEach(registro => {
+    if (!registroPassaPesquisa(registro)) return;
+    if (
+      funcionarioSelecionado &&
+      normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
+    ) {
+      return;
+    }
+
+    const dias = diasAte(registro.validadeISO);
+
+    if (dias === null) return;
+
+    const secao = obterSecao(registro.codigo);
+    const sit = situacao(dias, secao, produtoEstaNoQueima(registro.codigo));
+
+    if (filtro === "criticos" && sit.chave === "vendavel") return;
+
+    if (
+      filtro !== "criticos" &&
+      filtro !== "todos" &&
+      sit.chave !== filtro
+    ) {
+      return;
+    }
+
+    itens.push({
+      registro: registro,
+      dias: dias,
+      sit: sit
+    });
+  });
+
+  itens.sort((a, b) => a.dias - b.dias);
+
+  atualizarResumo(itens.map(item => item.registro));
+
+  const destino = $("resultado");
+  destino.replaceChildren();
+
+  if (!itens.length) {
+    definirMensagem(
+      "Nenhum produto encontrado para a situação e o funcionário selecionados."
+    );
+
+    mostrarVazio("Não há produtos para exibir.");
+    return;
+  }
+
+  definirMensagem(
+    itens.length +
+    " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    "Nutrição e Conveniência fora do Queima: VENCIDO quando faltarem " +
+    LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
+    " dias ou menos; no Queima: " +
+    LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA +
+    " dias ou menos. Demais seções: VENCIDO até " +
+    LIMITE_VENCIDO_PADRAO +
+    " dias. À vencer até " +
+    LIMITE_A_VENCER + " dias."
+  );
+
+  const mostrarColunasTransferencia = itens.some(
+    item => ehTransferencia(item.registro)
+  );
+
+  const card = document.createElement("section");
+  card.className = "card grupo";
+
+  const wrap = document.createElement("div");
+  wrap.className = "tabela-wrap";
+
+  const tabela = document.createElement("table");
+  tabela.className = mostrarColunasTransferencia
+    ? "validade-transferencias"
+    : "larga";
+
+  const colunas = [
+    "Situação",
+    "Produto / EAN",
+    "Lote",
+    "Validade",
+    "Quantidade",
+    "Funcionário"
+  ];
+
+  if (mostrarColunasTransferencia) {
+    colunas.push("Loja de Origem", "Romaneio");
+  }
+  colunas.push("Ações");
+
+  tabela.appendChild(criarCabecalho(colunas));
+
+  const tbody = document.createElement("tbody");
+
+  itens.forEach(item => {
+    const tr = document.createElement("tr");
+
+    const tdSituacao = document.createElement("td");
+    const selo = document.createElement("span");
+
+    selo.className = "selo " + item.sit.chave;
+    selo.textContent = item.sit.texto;
+
+    tdSituacao.appendChild(selo);
+    tr.appendChild(tdSituacao);
+
+    tr.appendChild(
+      criarCelulaProduto(item.registro.codigo, item.registro)
+    );
+    tr.appendChild(criarCelula(item.registro.lote));
+    tr.appendChild(criarCelula(item.registro.validade));
+
+    tr.appendChild(criarCelula(
+      Number(item.registro.quantidade || 0).toLocaleString("pt-BR"),
+      "quantidade"
+    ));
+
+    tr.appendChild(criarCelula(item.registro.funcionario));
+
+    if (mostrarColunasTransferencia) {
+      tr.appendChild(criarCelula(
+        item.registro.lojaOrigem || ""
+      ));
+
+      tr.appendChild(criarCelula(
+        item.registro.romaneio || ""
+      ));
+    }
+    tr.appendChild(criarCelulaAcoes(item.registro, {
+      modo: "validade",
+      vencido: item.sit.chave === "vencido"
+    }));
+
+    tbody.appendChild(tr);
+  });
+
+  tabela.appendChild(tbody);
+  wrap.appendChild(tabela);
+  card.appendChild(wrap);
+  destino.appendChild(card);
+}
+
+/* =========================
+   TROCA DE MODO
+   ========================= */
+
+function definirModo(novoModo) {
+  modo = novoModo;
+
+  const validade = modo === "validade";
+
+  $("btnModoMes").setAttribute("aria-pressed", String(!validade));
+  $("btnModoValidade").setAttribute("aria-pressed", String(validade));
+
+  $("campoMes").hidden = validade;
+  $("campoStatus").hidden = !validade;
+
+  $("subtitulo").textContent = validade
+    ? "Produtos próximos do vencimento, de todos os lançamentos"
+    : "Histórico mensal de produtos por funcionário";
+
+  if (validade) {
+    if (validadeCarregada) {
+      renderizar();
+    } else {
+      $("resultado").replaceChildren();
+      consultarValidades();
+    }
+  } else {
+    if (mesCarregado) {
+      renderizar();
+    } else {
+      $("resultado").replaceChildren();
+      consultarHistorico();
+    }
+  }
+}
+
+$("btnModoMes").addEventListener("click", () => definirModo("mes"));
+$("btnModoValidade").addEventListener("click", () => definirModo("validade"));
+$("btnBuscar").addEventListener("click", consultar);
+$("funcionario").addEventListener("change", renderizar);
+$("statusValidade").addEventListener("change", renderizar);
+
+$("mes").value = mesAtualISO();
+
+const parametrosURL = new URLSearchParams(window.location.search);
+const funcionarioURL = parametrosURL.get("funcionario");
+
+if (funcionarioURL) {
+  const opcao = Array.from($("funcionario").options).find(
+    item => normalizar(item.value) === normalizar(funcionarioURL)
+  );
+
+  if (opcao) $("funcionario").value = opcao.value;
+}
+
+Auth.exigirLogin().then(ok => {
+  if (!ok) return;
+  const usuario = document.getElementById("usuarioSessao");
+  if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja();
+  const botaoPainel = document.getElementById("btnPainelConferente");
+  if (botaoPainel && Auth.administrador()) botaoPainel.hidden = false;
+});
+
+carregarCadastroFuncionarios()
+  .then(() => carregarDescricoes())
+  .then(() => {
+    const abaInicial = new URLSearchParams(window.location.search).get("aba");
+    if (abaInicial === "vencidos") {
+      $("statusValidade").value = "vencido";
+      definirModo("validade");
+    } else {
+      consultarHistorico();
+    }
+  })
+  .catch(erro => {
+    console.error(erro);
+    definirMensagem(
+      "Não foi possível carregar o cadastro de funcionários ou os produtos."
+    );
+  });
+  function validadeRegistroISO(registro) {
+  if (registro.validadeISO) {
+    return dataParaISO(registro.validadeISO);
+  }
+
+  return dataParaISO(registro.validade);
+}
+
+function registroPassaPesquisa(registro) {
+  const ean = normalizar($("filtroEAN").value);
+  const lote = normalizar($("filtroLote").value);
+  const validade = $("filtroValidade").value;
+
+  const codigoRegistro = normalizar(registro.codigo);
+  const loteRegistro = normalizar(registro.lote);
+  const validadeRegistro = validadeRegistroISO(registro);
+
+  if (ean && !codigoRegistro.includes(ean)) {
+    return false;
+  }
+
+  if (lote && !loteRegistro.includes(lote)) {
+    return false;
+  }
+
+  if (validade && validadeRegistro !== validade) {
+    return false;
+  }
+
+  return true;
+}
+
+function limparPesquisa() {
+  $("filtroEAN").value = "";
+  $("filtroLote").value = "";
+  $("filtroValidade").value = "";
+  renderizar();
+}
+
+["filtroEAN", "filtroLote", "filtroValidade"].forEach(id => {
+  $(id).addEventListener("input", renderizar);
+  $(id).addEventListener("change", renderizar);
+});
+
+$("btnLimparPesquisa").addEventListener("click", limparPesquisa);
+
+$("todosMeses").addEventListener("change", () => {
+  $("mes").disabled = $("todosMeses").checked;
+
+  mesCarregado = false;
+
+  if (modo === "mes") {
+    consultarHistorico();
+  }
+});
+
+/* =========================
+   INFORMAÇÕES DO PRODUTO NA QUEIMA
+   (botão "i" ao lado do produto: mostra quando o item foi lançado na Queima)
+   ========================= */
+let queimaCache = null;
+let pedidoInfoQueima = 0;
+const TEMPO_CACHE_QUEIMA = 60000;
+
+function consultarQueimaTodos() {
+  if (queimaCache && Date.now() - queimaCache.t < TEMPO_CACHE_QUEIMA) {
+    return Promise.resolve(queimaCache.registros);
+  }
+
+  return chamarApps("consultarQueima", "__consultarQueimaCb", {}).then(resposta => {
+    if (!resposta || !resposta.sucesso) {
+      throw new Error(resposta && resposta.mensagem ? resposta.mensagem : "Não foi possível consultar a Queima.");
+    }
+
+    const marcar = (lista, situacao) =>
+      (Array.isArray(lista) ? lista : []).map(r => Object.assign({}, r, { situacaoQueima: situacao }));
+
+    const registros = [].concat(
+      marcar(resposta.pendentes, "Em aberto"),
+      marcar(resposta.aprovados, "Aprovado"),
+      marcar(resposta.relancar, "Relançar")
+    );
+
+    queimaCache = { t: Date.now(), registros: registros };
+    return registros;
+  });
+}
+
+function criarItemQueima(r, registroAtual) {
+  const item = document.createElement("div");
+  item.className = "info-queima-item";
+
+  const topo = document.createElement("div");
+  topo.className = "info-queima-topo";
+
+  const data = document.createElement("strong");
+  data.textContent = "Lançado em " + (r.mesLancamento || "—");
+
+  const selo = document.createElement("span");
+  const aprovado = r.situacaoQueima === "Aprovado";
+  selo.className = "info-queima-selo " + (aprovado ? "ok" : r.situacaoQueima === "Relançar" ? "erro" : "aviso");
+  selo.textContent = aprovado
+    ? "Aprovado" + (r.mesAprovado ? " em " + r.mesAprovado : "")
+    : r.situacaoQueima === "Relançar" ? "Mês anterior: relançar" : "Em aberto";
+
+  topo.append(data, selo);
+
+  const detalhes = document.createElement("div");
+  detalhes.className = "info-queima-detalhes";
+  detalhes.textContent =
+    "Lote: " + (r.lote || "—") +
+    " · Validade: " + (r.validade || "—") +
+    " · Quantidade: " + (r.quantidade === "" || r.quantidade == null ? "—" : r.quantidade) +
+    (r.abaOrigem ? " · Origem: " + r.abaOrigem : "");
+
+  item.append(topo, detalhes);
+
+  if (registroAtual && normalizar(registroAtual.lote) && normalizar(registroAtual.lote) === normalizar(r.lote)) {
+    const igual = document.createElement("div");
+    igual.className = "info-queima-igual";
+    igual.textContent = "Mesmo lote do lançamento selecionado";
+    item.appendChild(igual);
+  }
+
+  return item;
+}
+
+function fecharInfoQueima() {
+  pedidoInfoQueima++;
+  $("modalInfoQueima").hidden = true;
+}
+
+function mostrarInformacoesRegistro(registro) {
+  const codigo = String((registro && registro.codigo) || "").trim();
+  const lista = $("infoQueimaLista");
+  const pedido = ++pedidoInfoQueima;
+
+  $("infoQueimaProduto").textContent = obterDescricao(codigo);
+  $("infoQueimaEAN").textContent = "EAN: " + codigo;
+  $("infoQueimaMensagem").textContent = "Consultando a Queima...";
+  lista.replaceChildren();
+  $("modalInfoQueima").hidden = false;
+
+  const candidatos = candidatosEAN(codigo);
+
+  consultarQueimaTodos()
+    .then(registros => {
+      if (pedido !== pedidoInfoQueima) return;
+
+      const doProduto = registros
+        .filter(r => candidatos.includes(String(r.codigo || "").trim()))
+        .sort((a, b) => (Number(b.linha) || 0) - (Number(a.linha) || 0));
+
+      if (!doProduto.length) {
+        $("infoQueimaMensagem").textContent = "Este produto ainda não foi lançado na Queima.";
+        return;
+      }
+
+      $("infoQueimaMensagem").textContent =
+        doProduto.length === 1
+          ? "1 lançamento deste produto na Queima."
+          : doProduto.length + " lançamentos deste produto na Queima.";
+
+      doProduto.forEach(r => lista.appendChild(criarItemQueima(r, registro)));
+    })
+    .catch(erro => {
+      if (pedido !== pedidoInfoQueima) return;
+      $("infoQueimaMensagem").textContent = mensagemDeErroConsulta(erro);
+    });
+}
+
+$("btnFecharInfoQueima").addEventListener("click", fecharInfoQueima);
+$("modalInfoQueima").addEventListener("click", evento => {
+  if (evento.target === $("modalInfoQueima")) fecharInfoQueima();
+});
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape" && !$("modalInfoQueima").hidden) fecharInfoQueima();
+});
+
+</script>
+<script>
+/* Paginação uniforme para tabelas longas, sem alterar filtros ou ações existentes. */
+(function(){
+  const TAMANHO=25, estados=new WeakMap();
+  function preparar(t){
+    if(t.dataset.paginacaoPronta||!t.tBodies.length)return;
+    t.dataset.paginacaoPronta='1';const body=t.tBodies[0],wrap=t.closest('.table-panel')||t.parentElement;
+    const nav=document.createElement('div');nav.className='table-pagination';nav.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 14px;flex-wrap:wrap;color:#64748b;font-size:13px';
+    nav.innerHTML='<span class="pagination-info"></span><button type="button" class="button pagination-prev">Anterior</button><button type="button" class="button pagination-next">Próxima</button>';wrap.appendChild(nav);
+    const st={page:1,nav};estados.set(t,st);
+    nav.querySelector('.pagination-prev').addEventListener('click',()=>{st.page--;render(t)});nav.querySelector('.pagination-next').addEventListener('click',()=>{st.page++;render(t)});
+    new MutationObserver(()=>{st.page=1;render(t)}).observe(body,{childList:true});render(t);
+  }
+  function render(t){const st=estados.get(t);if(!st)return;const rows=Array.from(t.tBodies[0].rows),total=rows.length,pages=Math.max(1,Math.ceil(total/TAMANHO));st.page=Math.max(1,Math.min(st.page,pages));const start=(st.page-1)*TAMANHO,end=start+TAMANHO;rows.forEach((r,i)=>r.style.display=i>=start&&i<end?'':'none');st.nav.querySelector('.pagination-info').textContent=total?`Página ${st.page} de ${pages} · ${start+1}–${Math.min(end,total)} de ${total}`:'0 registros';st.nav.querySelector('.pagination-prev').disabled=st.page===1;st.nav.querySelector('.pagination-next').disabled=st.page===pages;st.nav.style.display=total>TAMANHO?'flex':'none';}
+  function init(){document.querySelectorAll('table').forEach(preparar)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+  new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
+})();
+</script>
+</body>
+</html>

@@ -327,7 +327,6 @@
       }
     }
   </style>
-  <script src="/registro-produtos/notificacoes.js" defer></script>
   <script src="/registro-produtos/pwa.js" defer></script>
 </head>
 
@@ -595,7 +594,8 @@
         administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
         perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
         criadaEm: d.criadaEm || Date.now(), atividadeEm: d.atividadeEm || Date.now(),
-        ate: d.ate || (Date.now() + 8 * 3600 * 1000), manterConectado: d.manterConectado === true
+        ate: d.ate || (Date.now() + 8 * 3600 * 1000), manterConectado: d.manterConectado === true,
+        dispositivoCelularProprio: d.dispositivoCelularProprio === true
       }));
     }
     function tokenAleatorioDispositivo() {
@@ -627,6 +627,7 @@
         localStorage.setItem(CHAVE_TOKEN_CELULAR_PROPRIO, tokenDispositivo);
         localStorage.setItem(CHAVE_FLAG_CELULAR_PROPRIO, JSON.stringify({ nome: sessaoAtual.nome, loja: sessaoAtual.loja }));
         sessaoAtual.manterConectado = true;
+        sessaoAtual.dispositivoCelularProprio = true;
         sessaoAtual.atividadeEm = Date.now();
         localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessaoAtual));
         irParaLancamento();

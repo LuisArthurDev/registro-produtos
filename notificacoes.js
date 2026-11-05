@@ -4,7 +4,7 @@
  */
 (function () {
   "use strict";
-  let ONESIGNAL_APP_ID = "4665b904-4947-4fb4-a262-33b56c3e9521";
+  let ONESIGNAL_APP_ID = "";
   const API_URL = "https://script.google.com/macros/s/AKfycbxDx57h_RgrSCBIPtkwCDZd00dFyM3SyAmtxWS5QzfqXJaLETbHKlVffZiclqhwKYApIA/exec";
   const SERVICE_WORKER_PATH = "/registro-produtos/OneSignalSDKWorker.js";
   const SERVICE_WORKER_SCOPE = "/registro-produtos/";
@@ -17,7 +17,11 @@
   function externalId() {
     const loja = String(window.Auth?.loja?.() || "").replace(/\D/g, "");
     const nome = window.Auth?.usuario?.() || "";
-    return loja && nome ? "mv_" + loja + "_" + normalizarSlug(nome) : "";
+    if (!loja || !nome) return "";
+    const slug = normalizarSlug(nome);
+    return window.Auth?.dispositivoCelularProprio?.() === true
+      ? "mv_celular_" + loja + "_" + slug
+      : "mv_" + loja + "_" + slug;
   }
   function obterAppId() {
     if (ONESIGNAL_APP_ID) return Promise.resolve(ONESIGNAL_APP_ID);
