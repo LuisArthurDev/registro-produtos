@@ -2158,7 +2158,7 @@ Auth.exigirAdmin().then(ok => {
           <button type="button" class="button" id="mapaSelVencido" onclick="acaoEmMassaMapa('vencido')"><i data-lucide="archive"></i> <span>Mover para Vencidos</span></button>
           <button type="button" class="button" onclick="limparSelecaoMapa()">Limpar seleção</button>
         </div>
-        <div class="table-wrap"><table><thead><tr><th data-nosort style="width:36px;text-align:center"><input type="checkbox" id="mapaSelTodos" title="Selecionar todos os registros filtrados" aria-label="Selecionar todos os registros filtrados" onchange="alternarSelecaoTodosMapa(this.checked)"></th><th>Funcionário / Aba</th><th>Código</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
+        <div class="table-wrap"><table><thead><tr><th data-nosort style="width:36px;text-align:center"><input type="checkbox" id="mapaSelTodos" title="Selecionar todos os registros filtrados" aria-label="Selecionar todos os registros filtrados" onchange="alternarSelecaoTodosMapa(this.checked)"></th><th>Funcionário / Aba</th><th>Código Interno</th><th>Código EAN</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Quantidade</th><th>Data de registro</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="mapaTbody"></tbody></table></div><div class="empty-state" id="mapaEmpty">Nenhum registro encontrado.</div></div>
       </section>
 
       <!-- CONTROLE DE VALIDADE -->
@@ -3129,6 +3129,14 @@ Auth.exigirAdmin().then(ok => {
     return String(produto?.codigoInterno ?? produto?.codigo_interno ?? produto?.codInterno ?? produto?.codigoInternoProduto ?? "").trim();
   }
 
+  function codigoEanProduto(r) {
+    const produto = produtoCatalogoDoRegistro(r);
+    return String(
+      produto?.ean ?? produto?.EAN ?? produto?.codigoBarras ?? produto?.codigo_barras ??
+      r?.ean ?? r?.EAN ?? r?.eanInterno ?? r?.codigoBarras ?? r?.codigo_barras ?? r?.codigo ?? ""
+    ).trim();
+  }
+
   function dadosProduto(r) {
     const encontrado = produtoCatalogoDoRegistro(r);
   
@@ -3335,7 +3343,7 @@ async function enviarNotificacaoVencidos() {
 
       estadosCelularProprio.clear();
       cadastroFuncionariosPainel.detalhes.forEach(item => {
-        const chave = norm(item.nome) + "|" + String(item.loja || "");
+        const chave = normalizarTextoPainel(item.nome) + "|" + String(item.loja || "");
         estadosCelularProprio.set(chave, item.celularProprioAtivo === true);
       });
   
@@ -3353,6 +3361,15 @@ async function enviarNotificacaoVencidos() {
   }
 
   function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  // Normalização compartilhada pelas rotinas principais do painel.
+  // A versão local da página de gestão permanece isolada em seu próprio escopo.
+  function normalizarTextoPainel(v) {
+    return String(v == null ? "" : v)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR")
+      .trim();
+  }
   
   function parseDataBR(valor) {
     if (!valor) return null;
@@ -3774,7 +3791,7 @@ function renderControleValidade() {
     const base=registrosVisiveisHTML(painelCache.validades).filter(r =>
       FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim())
     );
-    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||(String(r.codigo)+' '+descricaoProduto(r)).toLocaleLowerCase('pt-BR').includes(q)) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
+    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||([r.codigo, codigoInternoProduto(r), codigoEanProduto(r), descricaoProduto(r)].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(q))) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
@@ -3843,7 +3860,8 @@ function renderControleValidade() {
         return `<tr>
           <td style="text-align:center"><input type="checkbox" class="mapa-sel" data-chave="${escHtml(chaveSel)}" ${chaveSel ? '' : 'disabled'} ${mapaSelecionados.has(chaveSel) ? 'checked' : ''} onchange="alternarSelecaoMapa(this.dataset.chave, this.checked)" aria-label="Selecionar registro"></td>
           <td>${escHtml(r.funcionario)}</td>
-          <td>${escHtml(r.codigo)}</td>
+          <td>${escHtml(codigoInternoProduto(r) || '—')}</td>
+          <td>${escHtml(codigoEanProduto(r) || '—')}</td>
           <td class="cell-primary">${escHtml(descricaoProduto(r))}</td>
           <td>${escHtml(r.lote)}</td>
           <td>${escHtml(fmtData(r.validade))}</td>
