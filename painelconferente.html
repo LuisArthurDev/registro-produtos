@@ -9,8 +9,6 @@
   <script src="https://unpkg.com/lucide@0.468.0"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="./catalogo-sqlite.js?v=20261104-2"></script>
-  <script src="./assets/js/painel-theme.js?v=20261104-5"></script>
-  <link rel="stylesheet" href="./assets/css/painel-darkmode.css?v=20261104-5">
 
   <style>
     :root {
@@ -947,7 +945,7 @@
       width: 132px;
       height: 132px;
       border-radius: 50%;
-      background: radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 75%, #dcfce7 75% 100%);
+      background: radial-gradient(circle, var(--surface) 0 42%, transparent 43%), conic-gradient(#22c55e 0 75%, #dcfce7 75% 100%);
       display: grid;
       place-items: center;
       border: 7px solid #fff;
@@ -955,7 +953,7 @@
     }
 
     .burn-inner-general {
-      background: radial-gradient(circle, #fff 0 42%, transparent 43%), conic-gradient(#22c55e 0 79%, #dcfce7 79% 100%);
+      background: radial-gradient(circle, var(--surface) 0 42%, transparent 43%), conic-gradient(#22c55e 0 79%, #dcfce7 79% 100%);
     }
 
     .burn-inner > div {
@@ -1654,6 +1652,8 @@
     }
   </style>
   <script src="auth.js"></script>
+  <link rel="stylesheet" href="./assets/css/painel-tema.css?v=20261104-6">
+  <script src="./assets/js/painel-tema.js?v=20261104-6"></script>
 </head>
 
 <body>

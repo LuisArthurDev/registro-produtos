@@ -342,6 +342,9 @@ function doGetOriginal_(e) {
   if (acao === "validades") {
     return consultarValidades_(parametros);
   }
+  if (acao === "consultarTransferencias") {
+    return consultarTransferencias_(parametros);
+  }
   if (acao === "verificarItemMapa") return verificarItemMapa_(parametros);
 
   if (acao === "adicionarValidadeManual") {
@@ -1512,6 +1515,57 @@ function verificarItemMapa_(p) {
     return respostaJsonp_(cb, { sucesso: true, existe: ocorrencias > 0, quantidade, ocorrencias, funcionario });
   } catch (e) {
     return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  }
+}
+
+function consultarTransferencias_(parametros) {
+  const callback = String(parametros.callback || "");
+  if (callback !== "__transferenciasCb") return respostaTexto_("Callback inválido.");
+  try {
+    const sessao = obterSessaoObrigatoria_(parametros);
+    if (sessao.administrador !== true) {
+      throw new Error("Acesso exclusivo para administradores de loja.");
+    }
+    if (!sessao.loja) throw new Error("Administrador sem loja cadastrada.");
+    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const aba = planilha.getSheetByName("Transferencias");
+    if (!aba || aba.getLastRow() < 2) {
+      return respostaJsonp_(callback, { sucesso: true, registros: [] });
+    }
+    configurarCabecalhosTransferenciasSeNecessario_(aba);
+    const fuso = planilha.getSpreadsheetTimeZone();
+    const valores = aba.getRange(2, 1, aba.getLastRow() - 1, 8).getValues();
+    const exibidos = aba.getRange(2, 1, aba.getLastRow() - 1, 8).getDisplayValues();
+    const registros = [];
+    valores.forEach((linha, i) => {
+      const display = exibidos[i] || [];
+      const codigo = String(display[0] || "").trim();
+      const lojaOrigem = String(display[5] || "").trim();
+      if (!codigo || normalizarLoja_(lojaOrigem) !== normalizarLoja_(sessao.loja)) return;
+      const validade = converterValidadeParaData_(linha[2], display[2]);
+      if (!validade) return;
+      const mesData = linha[4];
+      const dataLancamento = mesData instanceof Date && !isNaN(mesData.getTime()) ? mesData : null;
+      registros.push({
+        funcionario: "Transferencias",
+        codigo,
+        lote: String(display[1] || "").trim(),
+        validade: Utilities.formatDate(validade, fuso, "dd/MM/yyyy"),
+        validadeISO: Utilities.formatDate(validade, fuso, "yyyy-MM-dd"),
+        quantidade: Number(linha[3]) || 0,
+        dataLancamento: dataLancamento ? Utilities.formatDate(dataLancamento, fuso, "dd/MM/yyyy HH:mm:ss") : String(display[4] || ""),
+        ts: dataLancamento ? dataLancamento.getTime() : 0,
+        especial: false,
+        lojaOrigem,
+        romaneio: String(display[6] || "").trim(),
+        destino: String(display[8] || "").trim(),
+        chaveUnica: String(display[7] || linha[7] || "").trim()
+      });
+    });
+    return respostaJsonp_(callback, { sucesso: true, registros });
+  } catch (erro) {
+    console.error("Erro ao consultar transferências: " + (erro.stack || erro));
+    return respostaJsonp_(callback, { sucesso: false, mensagem: mensagemErro_(erro), registros: [] });
   }
 }
 
@@ -5890,6 +5944,7 @@ function bloquearSeNaoAutorizado_(p) {
     "status",
     "historicoMes",
     "validades",
+    "consultarTransferencias",
     "verificarItemMapa",
     "funcionarios", // Lista de abas permitidas; o endpoint filtra por perfil e loja.
     "editarLancamento",
