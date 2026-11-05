@@ -373,6 +373,8 @@ function doGetOriginal_(e) {
   if (acao === "adicionarDanificado") return adicionarDanificado_(parametros);
   if (acao === "adicionarAoQueima") return adicionarAoQueima_(parametros);
   if (acao === "consultarQueima") return consultarQueima_(parametros);
+  if (acao === "listarEstoqueVencidos") return listarEstoqueVencidos_(parametros);
+  if (acao === "encaminharEstoqueMapa") return encaminharEstoqueMapa_(parametros);
   if (acao === "aprovarQueima") return aprovarQueima_(parametros);
   if (acao === "relancarQueima") return relancarQueima_(parametros);
 
@@ -2687,6 +2689,105 @@ function adicionarAoQueima_(p) {
 
 
 
+
+/* ============================================================
+   ESTOQUE DE VENCIDOS — CONSULTA E ENCAMINHAMENTO AO MAPA
+   ============================================================ */
+function listarEstoqueVencidos_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__estoqueVencidosCb") return respostaTexto_("Callback inválido.");
+  try {
+    const sessao = exigirAdministrador_(p);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName("Vencidos");
+    if (!sh || sh.getLastRow() < 2) return respostaJsonp_(cb, { sucesso: true, registros: [] });
+    garantirLojaOrigemVencidos_();
+    const last = sh.getLastRow();
+    const vals = sh.getRange(2, 1, last - 1, Math.max(11, sh.getLastColumn())).getValues();
+    const disp = sh.getRange(2, 1, last - 1, Math.max(11, sh.getLastColumn())).getDisplayValues();
+    const fuso = ss.getSpreadsheetTimeZone();
+    const registros = [];
+    vals.forEach((row, i) => {
+      const d = disp[i];
+      const loja = normalizarLoja_(d[10] || row[10]);
+      const chave = String(d[9] || row[9] || "").trim();
+      if (!chave || loja !== sessao.loja) return;
+      const validade = converterValidadeParaData_(row[5], d[5]);
+      registros.push({
+        chaveUnica: chave,
+        codigo: String(d[2] || "").trim(),
+        descricao: String(d[3] || "").trim(),
+        lote: String(d[4] || "").trim(),
+        validade: validade ? Utilities.formatDate(validade, fuso, "dd/MM/yyyy") : String(d[5] || ""),
+        quantidade: Number(row[6]) || 0,
+        lojaOrigem: loja,
+        codigoInterno: String(d[8] || "").trim(),
+        abaOrigem: String(d[0] || "").trim()
+      });
+    });
+    return respostaJsonp_(cb, { sucesso: true, registros });
+  } catch (e) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e), registros: [] });
+  }
+}
+
+function encaminharEstoqueMapa_(p) {
+  const cb = String(p.callback || "");
+  if (cb !== "__encaminharEstoqueMapaCb") return respostaTexto_("Callback inválido.");
+  const lock = LockService.getScriptLock();
+  try {
+    const sessao = exigirAdministrador_(p);
+    const chave = String(p.chaveUnica || "").trim();
+    const destino = String(p.funcionario || "").trim();
+    if (!chave || !destino) throw new Error("Registro ou funcionário de destino não informado.");
+    if (!lock.tryLock(15000)) throw new Error("Sistema ocupado. Tente novamente.");
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const cadastro = buscarFuncionarioPorNome_(destino);
+    if (!cadastro || cadastro.ativo === false || cadastro.administrador || normalizarLoja_(cadastro.loja) !== sessao.loja) {
+      throw new Error("O funcionário selecionado não pertence à sua loja ou está inativo.");
+    }
+    if (obterAbasEspeciais_().some(n => normalizarTexto_(n) === normalizarTexto_(destino))) {
+      throw new Error("Não é permitido encaminhar vencidos para uma aba especial.");
+    }
+    const vencidos = ss.getSheetByName("Vencidos");
+    if (!vencidos || vencidos.getLastRow() < 2) throw new Error("O registro não foi encontrado no Estoque de Vencidos.");
+    garantirLojaOrigemVencidos_();
+    const dados = vencidos.getRange(2, 1, vencidos.getLastRow() - 1, Math.max(11, vencidos.getLastColumn())).getValues();
+    let idx = -1;
+    for (let i = 0; i < dados.length; i++) {
+      if (String(dados[i][9] || "").trim() === chave) { idx = i; break; }
+    }
+    if (idx < 0) throw new Error("Este produto já foi encaminhado ou não existe mais no estoque.");
+    const row = dados[idx];
+    if (normalizarLoja_(row[10]) !== sessao.loja) throw new Error("Este registro não pertence à sua loja.");
+    const aba = ss.getSheetByName(destino);
+    if (!aba) throw new Error("A aba do funcionário não foi encontrada.");
+    const ultima = aba.getLastRow();
+    if (ultima >= 2) {
+      const chaves = aba.getRange(2, 6, ultima - 1, 1).getDisplayValues().flat();
+      if (chaves.includes(chave)) throw new Error("Este lançamento já existe no mapa de destino.");
+    }
+    const validade = row[5] instanceof Date ? row[5] : converterValidadeParaData_(row[5], String(row[5] || ""));
+    if (!validade || isNaN(validade.getTime())) throw new Error("A validade do registro está inválida.");
+    const dataRegistro = row[7] instanceof Date ? row[7] : new Date();
+    const novaLinha = Math.max(aba.getLastRow() + 1, 2);
+    aba.getRange(novaLinha, 1, 1, 6).setValues([[
+      String(row[2] || "").trim(), String(row[4] || "").trim(), validade,
+      Number(row[6]) || 0, dataRegistro, chave
+    ]]);
+    aba.getRange(novaLinha, 3).setNumberFormat("dd/MM/yyyy");
+    aba.getRange(novaLinha, 5).setNumberFormat("dd/MM/yyyy HH:mm:ss");
+    SpreadsheetApp.flush();
+    vencidos.deleteRow(idx + 2);
+    invalidarCacheDados_();
+    return respostaJsonp_(cb, { sucesso: true, mensagem: "Produto encaminhado para o mapa de " + destino + " com sucesso." });
+  } catch (e) {
+    return respostaJsonp_(cb, { sucesso: false, mensagem: mensagemErro_(e) });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
 function consultarQueima_(p) {
   const callback = String(p.callback || "");
 
@@ -4483,7 +4584,7 @@ const ACOES_QUE_ALTERAM_ = [
   "subirVencidos", "subirParaVencidos", "definirPermissaoFuncionario",
   "adicionarValidadeManual", "adicionarProdutoJson", "adicionarFuncionario", "renomearFuncionario",
   "definirEspecialFuncionario", "marcarCheckFuncionario", "definirPinFuncionario",
-  "criarAdminLoja"
+  "criarAdminLoja", "encaminharEstoqueMapa"
 ];
 
 function doGet(e) {
@@ -5906,6 +6007,8 @@ function bloquearSeNaoAutorizado_(p) {
     "dashboardPainel",
     "vencidosPainel",
     "consultarQueima",
+    "listarEstoqueVencidos",
+    "encaminharEstoqueMapa",
     "consultarSinalizados",
     "funcionariosAdmin",
     "adicionarFuncionario",
