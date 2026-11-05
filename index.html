@@ -329,6 +329,9 @@
   </style>
   <script src="/registro-produtos/notificacoes.js" defer></script>
   <script src="/registro-produtos/pwa.js" defer></script>
+
+  <link rel="stylesheet" href="design-system.css?v=20261104">
+  <script src="theme-controller.js?v=20261104"></script>
 </head>
 
 <body>
@@ -578,6 +581,7 @@
       const escuro = raiz.getAttribute("data-theme") !== "dark";
 
       raiz.setAttribute("data-theme", escuro ? "dark" : "light");
+      try { localStorage.setItem("tema", escuro ? "dark" : "light"); } catch (e) {}
       document.getElementById("themeToggle").textContent = escuro ? "☀️" : "🌙";
     });
 
