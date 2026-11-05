@@ -3157,6 +3157,7 @@ Auth.exigirAdmin().then(ok => {
 
 
   // Integração somente de leitura com o Conector Procfit para Windows.
+  // A exportação respeita os filtros ativos do Mapa de Validade.
   // Produto sem código interno continua elegível: no Procfit será usado o EAN
   // e a consulta de saldo deverá ser ignorada pelo conector.
   window.PainelProcfitBridge = Object.freeze({
@@ -3170,8 +3171,7 @@ Auth.exigirAdmin().then(ok => {
     },
     listarProdutos() {
       if (!validadesProntas) throw new Error("Aguarde o carregamento do Mapa de Validade.");
-      return registrosVisiveisHTML(painelCache.validades || [])
-        .filter(r => FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim()))
+      return obterDadosFiltradosMapa().rows
         .map(r => ({
           chave: String(r.chaveUnica || ''),
           funcionario: String(r.funcionario || ''),
@@ -3827,25 +3827,39 @@ function renderControleValidade() {
     m = t.match(/^(\d{4})-(\d{2})/);
     return m ? m[1] + '-' + m[2] : '';
   }
+  // Fonte única dos filtros do Mapa de Validade. A tabela e a exportação
+  // para o Conector Procfit usam exatamente o mesmo conjunto de registros.
+  function obterDadosFiltradosMapa() {
+    const q = (document.getElementById('mapaProduto')?.value || '').toLocaleLowerCase('pt-BR').trim();
+    const lote = (document.getElementById('mapaLote')?.value || '').toLocaleLowerCase('pt-BR').trim();
+    const func = document.getElementById('mapaFuncionario')?.value || '';
+    const validade = document.getElementById('mapaValidade')?.value || '';
+    const lancamentoMes = document.getElementById('mapaLancamento')?.value || '';
+    const sit = document.getElementById('mapaSituacao')?.value || '';
+
+    // O painel Conferente exibe exclusivamente os mapas dos funcionários.
+    // Abas especiais e transferências permanecem fora desta listagem.
+    const base = registrosVisiveisHTML(painelCache.validades || []).filter(r =>
+      FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim())
+    );
+    const rows = base.filter(r =>
+      (!func || String(r.funcionario || '').trim() === func) &&
+      (!q || [r.codigo, codigoInternoProduto(r), codigoEanProduto(r), descricaoProduto(r)]
+        .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(q)) &&
+      (!lote || String(r.lote || '').toLocaleLowerCase('pt-BR').includes(lote)) &&
+      (!validade || String(r.validadeISO || '') === validade) &&
+      (!lancamentoMes || mesLancamentoISO(r) === lancamentoMes) &&
+      (!sit || situacaoPainel(r) === sit)
+    );
+    return { base, rows };
+  }
+
   let tipoMapaAtivo = "funcionarios";
   function renderMapa() {
     if (!funcionariosMapaCarregados) {
       return;
     }
-    const q=(document.getElementById('mapaProduto').value||'').toLocaleLowerCase('pt-BR').trim();
-    const lote=(document.getElementById('mapaLote').value||'').toLocaleLowerCase('pt-BR').trim();
-    const func=document.getElementById('mapaFuncionario').value;
-    const validade=document.getElementById('mapaValidade').value;
-    const lancamentoMes=document.getElementById('mapaLancamento').value;
-    const sit=document.getElementById('mapaSituacao').value;
-    // O painel Conferente exibe exclusivamente os mapas dos funcionários.
-    // Abas especiais (Termolabil, Psicotropicos e Antibioticos) e
-    // Transferencias continuam disponíveis nos fluxos próprios, mas não
-    // entram nesta listagem.
-    const base=registrosVisiveisHTML(painelCache.validades).filter(r =>
-      FUNCIONARIOS_MAPA.includes(String(r.funcionario || '').trim())
-    );
-    const rows=base.filter(r=> (!func||r.funcionario===func) && (!q||([r.codigo, codigoInternoProduto(r), codigoEanProduto(r), descricaoProduto(r)].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(q))) && (!lote||String(r.lote||'').toLocaleLowerCase('pt-BR').includes(lote)) && (!validade||String(r.validadeISO||'')===validade) && (!lancamentoMes||mesLancamentoISO(r)===lancamentoMes) && (!sit||situacaoPainel(r)===sit));
+    const { base, rows } = obterDadosFiltradosMapa();
     document.getElementById('mapaTotal').textContent=base.length;
     document.getElementById('mapaLotes').textContent=new Set(base.map(r=>String(r.lote||'').trim()).filter(Boolean)).size;
     const ym=new Date().toISOString().slice(0,7); document.getElementById('mapaMes').textContent=base.filter(r=>String(r.validadeISO||'').slice(0,7)===ym).length;
@@ -3861,7 +3875,6 @@ function renderControleValidade() {
     if(names.includes(prior))sel.value=prior;
     
     mapaVisiveisChaves = rows
-      .filter(r => !func || r.funcionario === func)
       .map(r => String(r.chaveUnica || ''))
       .filter(Boolean);
     // Remove da seleção o que não existe mais nos dados carregados.
@@ -3871,7 +3884,6 @@ function renderControleValidade() {
     })();
 
     document.getElementById('mapaTbody').innerHTML = rows
-      .filter(r => !func || r.funcionario === func)
       .map(r => {
         
       const situacao = situacaoPainel(r);
