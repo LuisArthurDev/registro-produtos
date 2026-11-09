@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-app-page="painelconferente">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,7 @@
 
   <script src="https://unpkg.com/lucide@0.468.0"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="./catalogo-sqlite.js?v=20261104-2"></script>
+  <script src="./catalogo-sqlite.js?v=20261109"></script>
 
   <style>
     :root {
@@ -1655,6 +1655,8 @@
 <script src="./notificacoes.js" defer></script>
   <link rel="stylesheet" href="./assets/css/painel-tema.css?v=20261104-6">
   <script src="./assets/js/painel-tema.js?v=20261104-6"></script>
+  <link rel="stylesheet" href="./assets/css/sistema-ui.css?v=20261109" />
+  <script src="./assets/js/sistema-ui.js?v=20261109" defer></script>
 </head>
 
 <body>
@@ -7103,10 +7105,24 @@ document.addEventListener("submit", async function(event) {
     return lista;
   }
   
+  // A planilha pode ultrapassar a cota de 5 MB do localStorage no celular.
+  // Uma falha de cache não deve cancelar um arquivo já lido corretamente.
+  function guardarEstoqueNoNavegador(registros, nomeArquivo) {
+    try {
+      localStorage.setItem(ESTOQUE_ODS_STORAGE_KEY, JSON.stringify({
+        registros, atualizadoEm: estoqueOdsAtualizadoEm, nomeArquivo
+      }));
+      return true;
+    } catch (erro) {
+      console.warn('Cache local cheio/indisponível; o estoque continua disponível nesta sessão.', erro);
+      return false;
+    }
+  }
+
   async function importarEstoqueOds(arquivo) {
     if (!arquivo) return;
     try { await carregarDescricoesProdutos(); }
-    catch (erroCatalogo) { throw new Error("Não foi possível carregar o catálogo SQLite para identificar os produtos: " + (erroCatalogo.message || erroCatalogo)); }
+    catch (erroCatalogo) { console.warn('Catálogo indisponível durante a importação; descrições da planilha serão utilizadas.', erroCatalogo); }
   
     if (!window.XLSX) {
       const msg = 'A biblioteca de leitura de planilhas não carregou. Verifique sua conexão e atualize a página.';
@@ -7144,7 +7160,10 @@ document.addEventListener("submit", async function(event) {
       const lista = extrairRegistrosEstoquePlanilha(wb);
 
       if (!lista.length) throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
-      await window.CatalogoSQLite.garantir(lista);
+      try { await window.CatalogoSQLite.garantir(lista); }
+      catch (erroCatalogo) {
+        console.warn('Catálogo indisponível; mantendo dados originais do arquivo de estoque.', erroCatalogo);
+      }
       lista.forEach(item => {
         const produto = window.CatalogoSQLite.porEAN(item.ean) || window.CatalogoSQLite.porCodigoInterno(item.codigoInterno);
         if (produto) { item.produto = produto.produto || produto.descricao || item.produto; item.secao = produto.secao || item.secao; item.encontradoNoJson = true; }
@@ -7155,14 +7174,7 @@ document.addEventListener("submit", async function(event) {
       if (validadesProntas) atualizarResumoValidade(painelCache.validades || []);
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
-      localStorage.setItem(
-        ESTOQUE_ODS_STORAGE_KEY,
-        JSON.stringify({
-          registros: lista,
-          atualizadoEm: estoqueOdsAtualizadoEm,
-          nomeArquivo: arquivo.name
-        })
-      );
+      const cachePersistido = guardarEstoqueNoNavegador(lista, arquivo.name);
   
       renderEstoque();
   
@@ -7198,10 +7210,10 @@ document.addEventListener("submit", async function(event) {
     } catch (e) {
       setText(
         'estoqueNotice',
-        'Falha na importação ou no envio: ' + (e.message || e)
+        'Falha na importação ou no envio: ' + (e.message || e) + ((window.estoqueOdsRegistros||[]).length ? ' Os dados já lidos permanecem disponíveis nesta sessão; o envio ao GitHub não foi confirmado.' : '')
       );
       mostrar('estoqueNotice', true);
-      alert('Não foi possível concluir a operação: ' + (e.message || e));
+      alert('Não foi possível concluir toda a operação: ' + (e.message || e) + '. Se o estoque já apareceu na tela, ele foi mantido localmente, mas a sincronização com o GitHub não está confirmada.');
     }
   }
 
@@ -7263,7 +7275,10 @@ document.addEventListener("submit", async function(event) {
       if (!lista.length) {
         throw new Error('A planilha foi lida, mas não contém produtos com EAN válido.');
       }
-      await window.CatalogoSQLite.garantir(lista);
+      try { await window.CatalogoSQLite.garantir(lista); }
+      catch (erroCatalogo) {
+        console.warn('Catálogo indisponível; mantendo dados originais do arquivo de estoque.', erroCatalogo);
+      }
       lista.forEach(item => {
         const produto = window.CatalogoSQLite.porEAN(item.ean) || window.CatalogoSQLite.porCodigoInterno(item.codigoInterno);
         if (produto) { item.produto = produto.produto || produto.descricao || item.produto; item.secao = produto.secao || item.secao; item.encontradoNoJson = true; }
@@ -7272,14 +7287,7 @@ document.addEventListener("submit", async function(event) {
       window.estoqueOdsRegistros = lista;
       estoqueOdsAtualizadoEm = new Date().toLocaleString('pt-BR');
   
-      localStorage.setItem(
-        ESTOQUE_ODS_STORAGE_KEY,
-        JSON.stringify({
-          registros: lista,
-          atualizadoEm: estoqueOdsAtualizadoEm,
-          nomeArquivo: `${nomeArquivoEstoque} (GitHub)`
-        })
-      );
+      const cachePersistido = guardarEstoqueNoNavegador(lista, `${nomeArquivoEstoque} (GitHub)`);
   
       window.renderEstoque();
   
@@ -7291,7 +7299,7 @@ document.addEventListener("submit", async function(event) {
       mostrar('estoqueNotice', true);
   
     } catch (erro) {
-      const msg = 'Falha ao carregar estoque do GitHub: ' +
+      const msg = 'Falha ao carregar estoque do GitHub (rede indisponível, arquivo ausente ou acesso bloqueado): ' +
         (erro.message || erro);
   
       setText('estoqueNotice', msg);
@@ -7320,12 +7328,39 @@ document.addEventListener("submit", async function(event) {
     if(!g('estoqueTbody'))return;
     const q=norm(g('estoqueBusca')?.value||''), filtro=g('estoqueFiltro')?.value||'';
     const mapas=registrosVisiveisHTML(painelCache.validades||[]);
-    const todos=(window.estoqueOdsRegistros || []).map(o=>{const matches=mapas.filter(r=>{const codigo=String(r.codigo||r.ean||'').trim();const interno=String(r.codigoInterno||'').trim();return (!!o.ean&&codigo===String(o.ean).trim()) || (!!o.codigoInterno&&(codigo===String(o.codigoInterno).trim()||interno===String(o.codigoInterno).trim()));});const prox=matches.filter(r=>r.validadeISO||r.validade).sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;return {...o,mapeada:matches.length>0,prox,mapas:matches};});
+    // Índice linear: elimina a busca O(produtosEstoque × registrosMapa),
+    // que travava o celular em estoques com milhares de produtos.
+    const mapasPorCodigo = new Map(), mapasPorInterno = new Map();
+    function incluirNoIndice(indice, chave, registro) {
+      if (!chave) return;
+      if (!indice.has(chave)) indice.set(chave, []);
+      indice.get(chave).push(registro);
+    }
+    mapas.forEach(r => {
+      incluirNoIndice(mapasPorCodigo, String(r.codigo||r.ean||'').trim(), r);
+      incluirNoIndice(mapasPorInterno, String(r.codigoInterno||'').trim(), r);
+    });
+    const todos=(window.estoqueOdsRegistros || []).map(o=>{
+      const ean=String(o.ean||'').trim(), interno=String(o.codigoInterno||'').trim();
+      const matches=[...new Set([
+        ...(ean ? (mapasPorCodigo.get(ean)||[]) : []),
+        ...(interno ? (mapasPorCodigo.get(interno)||[]) : []),
+        ...(interno ? (mapasPorInterno.get(interno)||[]) : [])
+      ])];
+      const prox=matches.filter(r=>r.validadeISO||r.validade)
+        .sort((a,b)=>String(a.validadeISO||a.validade).localeCompare(String(b.validadeISO||b.validade)))[0]||null;
+      return {...o,mapeada:matches.length>0,prox,mapas:matches};
+    });
     const rows=todos.filter(o=>(!q||norm([o.ean,o.codigoInterno,o.produto,o.secao].join(' ')).includes(q))&&(!filtro||(filtro==='Sim'?o.mapeada:!o.mapeada)));
     setText('estoqueProdutos',num(todos.length));setText('estoqueUnidades',num(todos.reduce((t,o)=>t+(Number(o.quantidade)||0),0)));setText('estoqueVencidos',num(todos.filter(o=>o.mapeada).length));
-    g('estoqueTbody').innerHTML=rows.map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" onclick="abrirModalMapasEstoque('${esc(o.ean)}','${esc(o.codigoInterno)}','${esc(o.produto)}')"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
+    g('estoqueTbody').innerHTML=rows.map(o=>`<tr><td>${esc(o.ean||'—')}<div class="cell-secondary">Cód. int.: ${esc(o.codigoInterno)}</div></td><td class="cell-primary">${esc(o.produto)}${o.secao?`<div class="cell-secondary">${esc(o.secao)}</div>`:''}${!o.encontradoNoJson?'<div class="cell-secondary" style="color:#b91c1c">EAN não localizado no JSON</div>':''}</td><td>${num(o.quantidade)}</td><td>${esc(o.prox?fmtData(o.prox.validade||o.prox.validadeISO):'—')}</td><td>${o.mapeada?'<span class="badge badge-success">Sim</span>':'<span class="badge badge-warning">Não</span>'}</td><td><button class="button" type="button" data-abrir-estoque="1" data-ean="${esc(o.ean)}" data-interno="${esc(o.codigoInterno)}" data-descricao="${esc(o.produto)}"><i data-lucide="eye"></i> Ver mapas</button></td></tr>`).join('');
     mostrar('estoqueEmpty',!rows.length);setText('estoqueUltimaImportacao',estoqueOdsAtualizadoEm?'Última importação: '+estoqueOdsAtualizadoEm:'Nenhum arquivo importado.');setText('estoqueNotice',(window.estoqueOdsRegistros || []).length?`${(window.estoqueOdsRegistros || []).length} produtos importados; ${(window.estoqueOdsRegistros || []).filter(o=>!o.encontradoNoJson).length} sem correspondência no JSON.`:'Selecione o arquivo .ods para importar o estoque.');mostrar('estoqueNotice',true);renderPainelIcons(g('page-estoque'));
   }
+  document.getElementById('estoqueTbody')?.addEventListener('click', function (evento) {
+    const botao=evento.target.closest('[data-abrir-estoque]');
+    if (!botao) return;
+    abrirModalMapasEstoque(botao.dataset.ean, botao.dataset.interno, botao.dataset.descricao);
+  });
   window.renderEstoque = renderEstoque;
 
   let estoqueVencidosCache = [];

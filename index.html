@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-app-page="index">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -328,6 +328,8 @@
     }
   </style>
   <script src="/registro-produtos/pwa.js" defer></script>
+  <link rel="stylesheet" href="./assets/css/sistema-ui.css?v=20261109" />
+  <script src="./assets/js/sistema-ui.js?v=20261109" defer></script>
 </head>
 
 <body>
@@ -576,7 +578,9 @@
       const raiz = document.documentElement;
       const escuro = raiz.getAttribute("data-theme") !== "dark";
 
-      raiz.setAttribute("data-theme", escuro ? "dark" : "light");
+      const novoTema = escuro ? "dark" : "light";
+      raiz.setAttribute("data-theme", novoTema);
+      try { localStorage.setItem("tema", novoTema); } catch (_) {}
       document.getElementById("themeToggle").textContent = escuro ? "☀️" : "🌙";
     });
 
@@ -589,14 +593,26 @@
     const CHAVE_FLAG_CELULAR_PROPRIO = "mv_celular_proprio_autorizado";
     function chaveLocalCelularProprio(nome, loja) { return String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() + "|" + String(loja || "").replace(/\D/g, ""); }
     function salvarSessaoLogin(d) {
-      localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
+      const dadosSessao = JSON.stringify({
         token: d.token, nome: d.nome, loja: d.loja,
         administrador: d.administrador === true, administradorGeral: d.administradorGeral === true,
         perfil: d.perfil || (d.administrador ? "admin" : "funcionario"), loginId: d.loginId,
         criadaEm: d.criadaEm || Date.now(), atividadeEm: d.atividadeEm || Date.now(),
         ate: d.ate || (Date.now() + 8 * 3600 * 1000), manterConectado: d.manterConectado === true,
         dispositivoCelularProprio: d.dispositivoCelularProprio === true
-      }));
+      });
+      try {
+        localStorage.setItem(CHAVE_SESSAO, dadosSessao);
+      } catch (erro) {
+        // Um cache de estoque antigo pode ocupar a cota inteira do celular.
+        // Limpa apenas esse cache recuperável e preserva credenciais/controles.
+        try {
+          localStorage.removeItem('painelConferente_estoqueOds_v1');
+          localStorage.setItem(CHAVE_SESSAO, dadosSessao);
+        } catch (_) {
+          throw new Error('O armazenamento do navegador está indisponível. Libere espaço para entrar no sistema.');
+        }
+      }
     }
     function tokenAleatorioDispositivo() {
       const bytes = new Uint8Array(32);

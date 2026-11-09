@@ -1,0 +1,12 @@
+# Dependências temporárias / arquivos locais
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+node_modules/
+.env
+.env.*
+backup.zip
+registro-produtos-final/

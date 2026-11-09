@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-app-page="lancamento">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -14,6 +14,7 @@
 })();
 </script>
 <title>Registro de Mapa de Validade</title>
+<script src="./catalogo-sqlite.js?v=20261109"></script>
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 
@@ -469,6 +470,8 @@ body.camera-aberta #cameraControles:not([hidden]) {
 </style>
 <script src="auth.js"></script>
 <script src="/registro-produtos/notificacoes.js" defer></script>
+  <link rel="stylesheet" href="./assets/css/sistema-ui.css?v=20261109" />
+  <script src="./assets/js/sistema-ui.js?v=20261109" defer></script>
 </head>
 
 <body>
@@ -856,12 +859,12 @@ async function consultarProdutoD1(codigo){
   if(emCache)return emCache;
   if(consultasProdutoD1.has(original))return consultasProdutoD1.get(original);
   const consulta=(async()=>{
-    const resposta=await fetch(API_CATALOGO_D1+"/api/produtos/"+encodeURIComponent(original),{cache:"no-store"});
-    if(!resposta.ok)throw new Error("Cloudflare D1 respondeu HTTP "+resposta.status+".");
-    const dados=await resposta.json();
-    if(dados.sucesso!==true)throw new Error(dados.mensagem||"Resposta inválida do catálogo Cloudflare D1.");
-    if(!dados.encontrado||!dados.produto)return null;
-    const p=dados.produto;
+    // A API compartilhada tenta novamente leituras temporariamente indisponíveis.
+    // Se o Worker falhar, utiliza o banco SQLite do próprio repositório.
+    if(!window.CatalogoSQLite)throw new Error("Módulo de catálogo não carregado.");
+    await window.CatalogoSQLite.garantir([{ean:original}]);
+    const p=window.CatalogoSQLite.porEAN(original)||window.CatalogoSQLite.porCodigoInterno(original);
+    if(!p)return null;
     const item={codigoEncontrado:String(p.ean||original),codigoInterno:String(p.codigoInterno||""),produto:String(p.produto||p.descricao||""),descricao:String(p.produto||p.descricao||""),secao:String(p.secao||"")};
     produtosJsonCache[item.codigoEncontrado]=item;
     produtosJsonCache[original]=item;
@@ -969,7 +972,7 @@ function buscarDescricaoProduto(codigoInformado){
   }).catch(erro=>{
     if(sequencia!==consultaSequencia)return;
     produtosJsonErro=erro;
-    mostrarDescricao("Não foi possível consultar o catálogo Cloudflare D1. Verifique a conexão e tente novamente.","error");
+    mostrarDescricao("Não foi possível acessar o catálogo online nem o banco local. Confira a conexão e tente novamente.","error");
   });
 }
 
@@ -1509,7 +1512,7 @@ formulario.addEventListener("submit",async evento=>{
   try {
     produtoEncontrado=await consultarProdutoD1(codigo);
   } catch (erroCatalogo) {
-    mostrarStatus("Não foi possível consultar o catálogo Cloudflare D1. O lançamento não foi enviado. Tente novamente.","error");
+    mostrarStatus("Falha ao consultar o catálogo online e local. O lançamento não foi enviado; tente novamente.","error");
     console.error("Falha ao validar EAN no D1:",erroCatalogo);
     return;
   }

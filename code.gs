@@ -1050,10 +1050,15 @@ function mensagemErro_(erro) {
 }
 
 function respostaJsonp_(callback, objeto) {
+  // Respostas JSONP são código executável. Nunca interpolar um callback arbitrário
+  // recebido por URL: nomes compostos podem injetar JavaScript na resposta.
+  const nome = String(callback || '').trim();
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,100}$/.test(nome)) {
+    return ContentService.createTextOutput('/* Callback JSONP inválido */')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
   const json = JSON.stringify(objeto).replace(/</g, "\\u003c");
-
-  return ContentService
-    .createTextOutput(callback + "(" + json + ");")
+  return ContentService.createTextOutput(nome + "(" + json + ");")
     .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 

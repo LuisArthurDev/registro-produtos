@@ -12,7 +12,12 @@
 
   function registrarEVerificarAtualizacao() {
     navigator.serviceWorker
-      .register(workerUrl, { scope: workerScope })
+      .getRegistration(workerScope)
+      .then(function (atual) {
+        const instalado = atual && (atual.active || atual.waiting || atual.installing);
+        const correto = instalado && new URL(instalado.scriptURL, location.origin).pathname === workerUrl;
+        return correto ? atual : navigator.serviceWorker.register(workerUrl, { scope: workerScope });
+      })
       .then(function (registration) {
         console.info("PWA: service worker registrado", registration.scope);
 

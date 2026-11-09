@@ -1,3 +1,5 @@
+> **Atualização 09/11/2026:** leia primeiro [README-REVISAO.md](README-REVISAO.md) e [RELATORIO-REVISAO.md](RELATORIO-REVISAO.md).
+
 # Registro de Mapa de Validade — Repositório reorganizado
 
 ## Estrutura
@@ -7,7 +9,7 @@
 - `painelconferente.html`: painel administrativo, funcionários, celular próprio e notificações.
 - `painelgeral.html`: painel geral.
 - `visualizacao.html`: visualização.
-- `Code.gs` e `login.gs`: backend Google Apps Script.
+- `code.gs` e `login.gs`: backend Google Apps Script.
 - `auth.js`: autenticação do frontend.
 - `notificacoes.js` e `OneSignalSDKWorker.js`: integração Web Push.
 - `pwa.js`, `manifest.webmanifest`, `icon-*.png`: PWA.
@@ -24,7 +26,7 @@
 
 ## Apps Script
 
-1. Substitua o conteúdo do projeto Apps Script por `Code.gs` e `login.gs` deste pacote.
+1. Substitua o conteúdo do projeto Apps Script por `code.gs` e `login.gs` deste pacote.
 2. Confirme `SPREADSHEET_ID` e as configurações de fuso/nomes das abas antes de publicar.
 3. Publique como Web App, mantendo a URL que o frontend já utiliza.
 4. Em Configurações do projeto > Propriedades do script, configure `MV_ONESIGNAL_APP_ID` e `MV_ONESIGNAL_REST_API_KEY`. O App ID é público e entregue ao frontend por `configNotificacoes`; a REST API Key permanece apenas no servidor.
