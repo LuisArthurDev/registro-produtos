@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1728">
+  <meta name="description" content="Gestão integrada de mapas de validade, catálogo EAN e estoque por loja.">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/app.css">
+  <title>Registro de Validades · Gestão integrada</title>
+</head>
+<body>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<section id="login-screen" class="login-stage">
+  <div class="login-panel">
+    <div class="brand"><span class="brand-icon">◈</span><div><strong>Registro de Validades</strong><small>Gestão integrada · Supabase</small></div></div>
+    <div class="login-intro"><span class="eyebrow">Acesso restrito</span><h1>Bem-vindo de volta.</h1><p>Entre com seu usuário, loja e PIN para continuar.</p></div>
+    <form id="form-login" class="stack" autocomplete="off">
+      <label>Nome de usuário<input id="login-nome" name="nome" placeholder="Nome cadastrado" maxlength="120" required autocomplete="username"></label>
+      <label>Loja <span class="subtle">(necessária quando há nomes repetidos)</span><input id="login-loja" name="loja" inputmode="numeric" placeholder="151" pattern="[0-9]*"></label>
+      <label>PIN<input id="login-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,12}" placeholder="••••••" required autocomplete="current-password"></label>
+      <label class="checkbox-label"><input type="checkbox" id="login-manter"> Permanecer conectado neste dispositivo</label>
+      <button class="primary" id="btn-login" type="submit">Entrar no sistema <span>→</span></button>
+      <p id="login-erro" role="alert" class="error-note" hidden></p>
+    </form>
+    <p class="login-footer">A conexão é necessária para autenticação. As tentativas de lançamento podem ser retomadas após oscilações de rede.</p>
+  </div>
+  <div class="login-art"><div class="mesh"></div><div class="hero-content"><span class="hero-pill">Painel operacional</span><h2>Produtos, validades e estoque. <em>Em um só lugar.</em></h2><p>Controle rastreável por funcionário, lote e loja, com todas as abas especiais preservadas.</p><div class="hero-stats"><span>EAN + Código interno</span><span>Controle por lote</span><span>Registro mensal</span></div></div></div>
+</section>
+<div id="app-shell" class="shell" hidden>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand sidebar-brand"><span class="brand-icon">◈</span><div><strong>Validades</strong><small>Painel operacional</small></div></div>
+    <div class="workspace"><span class="workspace-dot"></span><div><small>Loja ativa</small><strong id="workspace-store">—</strong></div></div>
+    <nav id="menu" aria-label="Menu principal" class="nav"></nav>
+    <div class="side-bottom"><div class="user-profile"><span id="avatar">U</span><div><strong id="user-name">—</strong><small id="user-role">—</small></div></div><button id="btn-logout" class="side-logout" type="button"><span>↪</span> Sair da conta</button></div>
+  </aside>
+  <div class="page-wrap"><header class="topbar"><button type="button" id="menu-toggle" class="icon-button mobile-only" aria-label="Abrir menu">☰</button><div class="breadcrumb"><span class="breadcrumb-start">Operação /</span> <strong id="breadcrumb-current">Visão geral</strong></div><div class="header-actions"><span id="net-pill" class="net-pill">● Conectado</span><span id="today-label" class="today-label"></span></div></header>
+    <main id="content" class="page-content" tabindex="-1"></main>
+  </div>
+  <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+</div>
+<dialog id="confirm-dialog" class="dialog"><form method="dialog" class="dialog-inner"><h3 id="dialog-title">Confirmar ação</h3><p id="dialog-message"></p><div class="dialog-actions"><button value="cancel" class="btn-outline">Cancelar</button><button value="confirm" class="primary">Confirmar</button></div></form></dialog>
+<script type="module" src="/assets/app.js"></script>
+<script>if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));</script>
+</body>
+</html>

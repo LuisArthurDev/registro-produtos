@@ -1,0 +1,12 @@
+{
+  "name": "registro-validades-supabase",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Migração de mapas de validade e Produtos EAN para Supabase + Vercel",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "check": "node --check api/index.js && node --check public/assets/app.js && node --test tests/*.test.js"
+  },
+  "engines": { "node": ">=20" }
+}
