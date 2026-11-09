@@ -1992,7 +1992,9 @@ function consultarValidades_(parametros) {
       });
     });
 
-    // ========= AGRUPAMENTO CORRETO POR: codigo + lote + validade =========
+    // Agrupar apenas dentro de um mesmo mapa (funcionário/aba).
+    // Antes dois funcionários com o mesmo EAN, lote e validade eram mesclados,
+    // alterando a contagem e atribuindo a quantidade ao primeiro funcionário.
     const mapaAgrupado = new Map();
 
     registros.forEach(function (item) {
@@ -2000,7 +2002,7 @@ function consultarValidades_(parametros) {
       const lote = String(item.lote || "").trim() || "SEM_LOTE";
       const validadeISO = String(item.validadeISO || "").trim();
 
-      const chave = codigo + "|" + lote + "|" + validadeISO;
+      const chave = JSON.stringify([item.funcionario || "", codigo, lote, validadeISO, item.lojaOrigem || ""]);
 
       if (!mapaAgrupado.has(chave)) {
         mapaAgrupado.set(chave, {

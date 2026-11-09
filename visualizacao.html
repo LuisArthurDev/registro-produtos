@@ -551,7 +551,7 @@ button{border-radius:9px;font-weight:650}
         Por mês de lançamento
       </button>
       <button id="btnModoValidade" class="modo" type="button" aria-pressed="false">
-        Validade (a vencer)
+        Vencidos e status
       </button>
     </div>
 
@@ -570,11 +570,11 @@ button{border-radius:9px;font-weight:650}
       <div id="campoStatus" hidden>
         <label for="statusValidade">Situação da validade</label>
         <select id="statusValidade">
-          <option value="criticos">Vencidos e à vencer</option>
+          <option value="todos" selected>Todos os status</option>
+          <option value="criticos">Vencidos e a vencer</option>
           <option value="vencido">Somente vencidos</option>
-          <option value="avencer">Somente à vencer</option>
+          <option value="avencer">Somente a vencer</option>
           <option value="vendavel">Somente vendáveis</option>
-          <option value="todos">Todos</option>
         </select>
       </div>
 
@@ -609,7 +609,7 @@ button{border-radius:9px;font-weight:650}
   </div>
 
   <div>
-    <label for="filtroValidade">Pesquisar por Validade</label>
+    <label for="filtroValidade">Pesquisar por validade (opcional)</label>
     <input id="filtroValidade" type="date">
   </div>
 
@@ -738,6 +738,10 @@ const LIMITE_VENCIDO_PADRAO = 60;
 const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA = 15;
 const LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA = 3;
 const LIMITE_A_VENCER = 160;
+let catalogoDisponivel = true;
+let catalogoAtualizando = false;
+let erroQueimaValidade = false;
+let ultimaTentativaQueimaValidade = 0;
 
 const $ = id => document.getElementById(id);
 
@@ -898,6 +902,26 @@ function encerrarConsulta() {
   $("btnBuscar").disabled = false;
 }
 
+// Carregamento de descrições e seções sob demanda. Se o serviço falhar,
+// a listagem da planilha continua disponível e uma mensagem informa o problema.
+function atualizarCatalogoDaLista(registros) {
+  if (!window.CatalogoSQLite || typeof window.CatalogoSQLite.garantir !== "function") {
+    catalogoDisponivel = false;
+    return;
+  }
+  catalogoAtualizando = true;
+  window.CatalogoSQLite.garantir(registros)
+    .then(() => { catalogoDisponivel = true; })
+    .catch(erro => {
+      catalogoDisponivel = false;
+      console.warn("Falha ao carregar dados de produtos:", erro);
+    })
+    .finally(() => {
+      catalogoAtualizando = false;
+      renderizar();
+    });
+}
+
 function consultarHistorico() {
   const todosMeses = $("todosMeses").checked;
   const mes = todosMeses ? "TODOS" : $("mes").value;
@@ -932,9 +956,11 @@ function consultarHistorico() {
       mesCarregado = true;
 
       if (modo === "mes") renderizar();
+      atualizarCatalogoDaLista(todosRegistros);
     })
     .catch(erro => {
       encerrarConsulta();
+      ocultarCarregamento();
       definirMensagem(mensagemDeErroConsulta(erro));
     });
 }
@@ -965,9 +991,11 @@ function consultarValidades() {
       validadeCarregada = true;
 
       if (modo === "validade") renderizar();
+      atualizarCatalogoDaLista(registrosValidade);
     })
     .catch(erro => {
       encerrarConsulta();
+      ocultarCarregamento();
       definirMensagem(mensagemDeErroConsulta(erro));
     });
 }
@@ -980,72 +1008,38 @@ function consultar() {
 /* =========================
    COLETA FUNCIONARIOS
    ========================= */
-function carregarCadastroFuncionarios() {
-  return new Promise((resolve, reject) => {
-    const callback = "__funcionariosCb";
+async function carregarCadastroFuncionarios() {
+  // 'gestao' inclui todos os mapas da loja para o administrador,
+  // não apenas abas especiais usadas na tela de lançamento.
+  const resposta = await chamarApps("funcionarios", "__funcionariosCb", { modo: "gestao" });
+  if (!resposta || !resposta.sucesso) {
+    throw new Error((resposta && resposta.mensagem) || "Não foi possível carregar os funcionários.");
+  }
 
-    window[callback] = function (resposta) {
-      delete window[callback];
+  const select = $("funcionario");
+  const selecionado = select.value;
+  const nomesVisiveis = (Array.isArray(resposta.todos) ? resposta.todos : [])
+    .filter(nome => normalizar(nome) !== "transferencias");
 
-      if (!resposta || !resposta.sucesso) {
-        reject(new Error("Não foi possível carregar os funcionários."));
-        return;
-      }
+  select.replaceChildren(new Option("Todos os funcionários", ""));
+  nomesVisiveis.forEach(nome => select.add(new Option(nome, nome)));
 
-      const select = document.getElementById("funcionario");
-      const selecionado = select.value;
-
-      // A visualização administrativa reúne os mapas de funcionários,
-      // mas a aba técnica Transferencias não é um funcionário e não deve
-      // aparecer como opção de consulta.
-      const nomesVisiveis = (Array.isArray(resposta.todos) ? resposta.todos : [])
-        .filter(nome => String(nome || "").trim().toLocaleLowerCase("pt-BR") !== "transferencias");
-
-      select.innerHTML =
-        '<option value="">Todos os funcionários</option>';
-
-      nomesVisiveis.forEach(nome => {
-        const option = document.createElement("option");
-        option.value = nome;
-        option.textContent = nome;
-        select.appendChild(option);
-      });
-
-      if (Auth.administrador()) {
-        if (nomesVisiveis.includes(selecionado)) select.value = selecionado;
-      } else {
-        // Funcionário consulta exclusivamente o próprio mapa: o seletor
-        // fica oculto e o filtro não pode ser alterado por URL.
-        select.value = Auth.usuario();
-        select.disabled = true;
-        document.getElementById("campoFuncionario").hidden = true;
-      }
-
-      const funcionarioURL =
-        new URLSearchParams(window.location.search).get("funcionario");
-
-      if (Auth.administrador() && funcionarioURL && nomesVisiveis.includes(funcionarioURL)) {
-        select.value = funcionarioURL;
-      }
-
-      resolve(resposta);
-    };
-
-    const script = document.createElement("script");
-    const parametros = new URLSearchParams({
-      action: "funcionarios",
-      callback: callback,
-      sessao: Auth.token()
-    });
-    script.src = APPS_SCRIPT_URL + "?" + parametros.toString();
-
-    script.onerror = () => {
-      delete window[callback];
-      reject(new Error("Erro ao consultar a aba Funcionarios."));
-    };
-
-    document.body.appendChild(script);
-  });
+  if (Auth.administrador()) {
+    const funcionarioURL = new URLSearchParams(location.search).get("funcionario");
+    const preferido = funcionarioURL || selecionado;
+    const correspondente = nomesVisiveis.find(nome => normalizar(nome) === normalizar(preferido));
+    if (correspondente) select.value = correspondente;
+  } else {
+    // Filtro de defesa adicional. O Apps Script também restringe as abas por sessão.
+    const usuario = Auth.usuario();
+    if (!nomesVisiveis.some(nome => normalizar(nome) === normalizar(usuario))) {
+      select.add(new Option(usuario, usuario));
+    }
+    select.value = usuario;
+    select.disabled = true;
+    $("campoFuncionario").hidden = true;
+  }
+  return resposta;
 }
 
 /* =========================
@@ -1582,16 +1576,19 @@ function renderizar() {
   else renderizarMes();
 }
 
-function renderizarMes() {
+function registroPertenceAoLogin(registro) {
+  if (!Auth.administrador()) {
+    return normalizar(registro.funcionario) === normalizar(Auth.usuario());
+  }
   const funcionarioSelecionado = $("funcionario").value;
+  return !funcionarioSelecionado ||
+    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado);
+}
 
+function renderizarMes() {
   const registros = todosRegistros.filter(registro =>
-  (
-    !funcionarioSelecionado ||
-    normalizar(registro.funcionario) === normalizar(funcionarioSelecionado)
-  ) &&
-  registroPassaPesquisa(registro)
-);
+    registroPertenceAoLogin(registro) && registroPassaPesquisa(registro)
+  );
 
   atualizarResumo(registros);
 
@@ -1706,33 +1703,32 @@ function renderizarMes() {
 }
 
 function renderizarValidade() {
-  // Carrega a situação da Queima antes de classificar os prazos de validade.
-  if (!queimaCache || Date.now() - queimaCache.t >= TEMPO_CACHE_QUEIMA) {
-    if (window.__carregandoQueimaParaValidade) return;
+  // A listagem deve aparecer mesmo sem resposta da consulta adicional à Queima.
+  // Essa consulta é atualizada em segundo plano, com espera entre tentativas.
+  if ((!queimaCache || Date.now() - queimaCache.t >= TEMPO_CACHE_QUEIMA) &&
+      !window.__carregandoQueimaParaValidade &&
+      Date.now() - ultimaTentativaQueimaValidade >= TEMPO_CACHE_QUEIMA) {
+    ultimaTentativaQueimaValidade = Date.now();
     window.__carregandoQueimaParaValidade = true;
     consultarQueimaTodos()
-      .catch(() => null)
+      .then(() => { erroQueimaValidade = false; })
+      .catch(erro => {
+        erroQueimaValidade = true;
+        console.warn("Não foi possível atualizar a situação da Queima:", erro);
+      })
       .finally(() => {
         window.__carregandoQueimaParaValidade = false;
-        renderizarValidade();
+        if (modo === "validade") renderizarValidade();
       });
-    return;
   }
-
-  const funcionarioSelecionado = $("funcionario").value;
   const filtro = $("statusValidade").value;
   const itens = [];
 
   registrosValidade.forEach(registro => {
     if (!registroPassaPesquisa(registro)) return;
-    if (
-      funcionarioSelecionado &&
-      normalizar(registro.funcionario) !== normalizar(funcionarioSelecionado)
-    ) {
-      return;
-    }
+    if (!registroPertenceAoLogin(registro)) return;
 
-    const dias = diasAte(registro.validadeISO);
+    const dias = diasAte(registro.validadeISO || dataParaISO(registro.validade));
 
     if (dias === null) return;
 
@@ -1774,15 +1770,19 @@ function renderizarValidade() {
 
   definirMensagem(
     itens.length +
-    " produto(s) listado(s), do mais próximo de vencer ao mais distante. " +
+    " produto(s) do mapa " + (Auth.administrador() ? "da loja" : "de " + Auth.usuario()) +
+    " listado(s), sem filtro obrigatório de mês ou data, do mais próximo de vencer ao mais distante. " +
     "Nutrição e Conveniência fora do Queima: VENCIDO quando faltarem " +
     LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA +
     " dias ou menos; no Queima: " +
     LIMITE_VENCIDO_NUTRICAO_CONVENIENCIA_QUEIMA +
     " dias ou menos. Demais seções: VENCIDO até " +
     LIMITE_VENCIDO_PADRAO +
-    " dias. À vencer até " +
-    LIMITE_A_VENCER + " dias."
+    " dias. A vencer até " +
+    LIMITE_A_VENCER + " dias." +
+    (catalogoAtualizando ? " Atualizando descrições e seções dos produtos..." : "") +
+    (!catalogoDisponivel ? " Aviso: catálogo indisponível; a seção de alguns produtos pode não ser identificada." : "") +
+    (erroQueimaValidade ? " Aviso: não foi possível consultar a Queima; os limites de Nutrição/Conveniência podem estar imprecisos." : "")
   );
 
   const mostrarColunasTransferencia = itens.some(
@@ -1871,6 +1871,7 @@ function renderizarValidade() {
    ========================= */
 
 function definirModo(novoModo) {
+  const antes = modo === "validade";
   modo = novoModo;
 
   const validade = modo === "validade";
@@ -1882,10 +1883,12 @@ function definirModo(novoModo) {
   $("campoStatus").hidden = !validade;
 
   $("subtitulo").textContent = validade
-    ? "Produtos próximos do vencimento, de todos os lançamentos"
+    ? "Todos os produtos do mapa autorizado, classificados por status, sem necessidade de informar data"
     : "Histórico mensal de produtos por funcionário";
 
   if (validade) {
+    // Uma pesquisa de data anterior não deve limitar automaticamente a aba Vencidos.
+    if (!antes) $("filtroValidade").value = "";
     if (validadeCarregada) {
       renderizar();
     } else {
@@ -1910,31 +1913,25 @@ $("statusValidade").addEventListener("change", renderizar);
 
 $("mes").value = mesAtualISO();
 
-const parametrosURL = new URLSearchParams(window.location.search);
-const funcionarioURL = parametrosURL.get("funcionario");
+Auth.exigirLogin()
+  .then(async ok => {
+    if (!ok) return;
+    $("usuarioSessao").textContent = Auth.usuario() + " · Loja " + Auth.loja();
+    if (Auth.administrador()) $("btnPainelConferente").hidden = false;
 
-if (funcionarioURL) {
-  const opcao = Array.from($("funcionario").options).find(
-    item => normalizar(item.value) === normalizar(funcionarioURL)
-  );
+    // Garante sessão validada antes de buscar registros privados.
+    await carregarCadastroFuncionarios();
+    try {
+      await carregarDescricoes();
+    } catch (erro) {
+      // A falta do catálogo não pode impedir que a própria planilha seja listada.
+      catalogoDisponivel = false;
+      console.warn("Catálogo não disponível, exibindo lançamentos sem descrição:", erro);
+    }
 
-  if (opcao) $("funcionario").value = opcao.value;
-}
-
-Auth.exigirLogin().then(ok => {
-  if (!ok) return;
-  const usuario = document.getElementById("usuarioSessao");
-  if (usuario) usuario.textContent = Auth.usuario() + " · Loja " + Auth.loja();
-  const botaoPainel = document.getElementById("btnPainelConferente");
-  if (botaoPainel && Auth.administrador()) botaoPainel.hidden = false;
-});
-
-carregarCadastroFuncionarios()
-  .then(() => carregarDescricoes())
-  .then(() => {
-    const abaInicial = new URLSearchParams(window.location.search).get("aba");
-    if (abaInicial === "vencidos") {
-      $("statusValidade").value = "vencido";
+    const abaInicial = new URLSearchParams(location.search).get("aba");
+    if (abaInicial === "vencidos" || abaInicial === "validade") {
+      $("statusValidade").value = "todos";
       definirModo("validade");
     } else {
       consultarHistorico();
@@ -1942,9 +1939,8 @@ carregarCadastroFuncionarios()
   })
   .catch(erro => {
     console.error(erro);
-    definirMensagem(
-      "Não foi possível carregar o cadastro de funcionários ou os produtos."
-    );
+    ocultarCarregamento();
+    definirMensagem("Falha ao carregar os mapas desta sessão: " + (erro.message || "Erro de conexão."));
   });
   function validadeRegistroISO(registro) {
   if (registro.validadeISO) {
