@@ -30,5 +30,7 @@ jobs:
         run: npm run check
       - name: Validar scripts Python
         run: python -m compileall -q scripts
+      - name: Testar download privado (sem rede)
+        run: python -m unittest discover -s tests -p "testar_download_storage.py" -v
       - name: Validar arquivos de redirecionamento
         run: test -f docs/index.html && test -f docs/config.js && test -f public/index.html
