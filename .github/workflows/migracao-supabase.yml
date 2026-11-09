@@ -9,6 +9,7 @@ on:
       - 'scripts/baixar_dados_privados.py'
       - 'scripts/importar_dados.py'
       - 'tests/testar_download_storage.py'
+      - 'tests/testar_storage_400.py'
   workflow_dispatch:
     inputs:
       etapa:
@@ -72,7 +73,7 @@ jobs:
           test -f scripts/importar_dados.py
           test -f scripts/baixar_dados_privados.py
           python -m compileall -q scripts
-          python -m unittest discover -s tests -p 'testar_download_storage.py' -v
+          python -m unittest discover -s tests -p 'testar*_storage*.py' -v
           echo 'Workflow ativado e arquivos basicos conferidos. Nenhuma alteracao no banco.'
   executar:
     # O job com credenciais privadas só pode iniciar por execução manual.

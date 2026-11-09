@@ -10,7 +10,9 @@ Segurança:
 from __future__ import annotations
 
 import io
+import json
 import os
+import re
 import stat
 import sys
 import urllib.error
@@ -75,31 +77,69 @@ def request_config(environ=None):
     return url, headers, 'bucket privado'
 
 
+# O Storage devolve o motivo em JSON. Mostramos APENAS codigos conhecidos,
+# nunca a mensagem livre (ela pode conter URLs, valores ou identificadores).
+KNOWN_STORAGE_ERRORS = {
+    'InvalidJWT': 'credencial JWT ausente, invalida ou incompativel com este endpoint.',
+    'InvalidRequest': 'formato de requisicao nao aceito pelo Storage.',
+    'MissingParameter': 'falta um parametro exigido pelo endpoint.',
+    'InvalidBucketName': 'nome do bucket invalido.',
+    'InvalidKey': 'caminho do objeto invalido.',
+    'NoSuchBucket': 'bucket nao encontrado neste projeto.',
+    'NoSuchKey': 'arquivo nao encontrado neste bucket/caminho.',
+    'AccessDenied': 'chave ou usuario sem acesso ao objeto privado.',
+    'Unauthorized': 'requisicao nao autorizada.',
+    'InvalidSignature': 'token/assinatura de download invalido.',
+    'InvalidAPIKey': 'chave API invalida ou de outro projeto.',
+}
+
+
+def storage_error_code(exc: urllib.error.HTTPError) -> str | None:
+    try:
+        raw = exc.read(4096)
+        obj = json.loads(raw.decode('utf-8', 'replace'))
+    except (ValueError, UnicodeError, OSError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    for key in ('code', 'errorCode', 'error_code', 'error'):
+        value = obj.get(key)
+        if isinstance(value, str) and value in KNOWN_STORAGE_ERRORS:
+            return value
+    # Algum gateway envia o codigo somente como texto na mensagem.
+    msg = obj.get('message')
+    if isinstance(msg, str):
+        for code in KNOWN_STORAGE_ERRORS:
+            if re.search(r'\b' + re.escape(code) + r'\b', msg):
+                return code
+    return None
+
+
 def http_failure(exc: urllib.error.HTTPError, source: str) -> str:
     code = exc.code
-    if code == 400:
-        reason = 'requisição inválida; confirme o projeto, bucket e nome do objeto.'
+    storage_code = storage_error_code(exc)
+    detail = f'; codigo Storage: {storage_code}' if storage_code else '; codigo Storage nao informado'
+    if storage_code:
+        reason = KNOWN_STORAGE_ERRORS[storage_code]
+    elif code == 400:
+        reason = 'requisicao recusada; confirme endpoint, projeto, bucket e credencial.'
     elif code == 401:
-        reason = ('autenticação recusada; confira SUPABASE_SECRET_KEY (chave secreta sb_secret_, '
-                  'não a chave pública) e se pertence ao mesmo projeto de SUPABASE_URL.')
+        reason = 'autenticacao recusada; confira chave API e projeto.'
     elif code == 403:
-        reason = 'acesso negado; confira a autorização da chave para o Storage privado.'
+        reason = 'acesso ao objeto privado negado.'
     elif code == 404:
-        reason = ('arquivo ou bucket não encontrado; confira Storage → migracao → '
-                  'dados-migracao.zip (na raiz do bucket, sem pasta adicional).')
+        reason = 'bucket ou arquivo nao encontrado; esperado migracao/dados-migracao.zip.'
     elif code == 410:
-        reason = 'recurso não disponível; se usou URL assinada, gere outra URL.'
+        reason = 'link temporario expirado ou revogado.'
     elif code == 413:
-        reason = 'arquivo excede o tamanho permitido pela API.'
+        reason = 'arquivo excede tamanho permitido.'
     elif code == 429:
-        reason = 'limite de requisições; tente novamente mais tarde.'
+        reason = 'limite de requisicoes atingido.'
     elif 500 <= code <= 599:
-        reason = 'falha temporária no serviço Supabase; tente novamente.'
+        reason = 'falha temporaria no Supabase.'
     else:
-        reason = 'verifique configurações de armazenamento e autenticação.'
-    if source == 'URL assinada' and code in (400, 401, 403, 404):
-        reason += ' A URL assinada pode ter expirado ou estar incorreta.'
-    return f'Falha ao baixar pacote privado: HTTP {code} ({source}); {reason}'
+        reason = 'verifique a configuracao de acesso ao Storage.'
+    return f'HTTP {code} ({source}){detail}; {reason}'
 
 
 def download(url: str, headers: dict[str, str], source: str) -> bytes:
@@ -110,12 +150,64 @@ def download(url: str, headers: dict[str, str], source: str) -> bytes:
     except urllib.error.HTTPError as exc:
         raise RuntimeError(http_failure(exc, source)) from None
     except urllib.error.URLError:
-        raise RuntimeError('Falha de rede/DNS/TLS ao baixar pacote privado; verifique o acesso ao projeto.') from None
+        raise RuntimeError('Falha de rede/DNS/TLS no download; confira conexao e projeto.') from None
     except TimeoutError:
-        raise RuntimeError('Tempo esgotado ao baixar pacote privado; tente executar o workflow novamente.') from None
+        raise RuntimeError('Tempo esgotado no download; execute novamente.') from None
     if len(payload) > MAX_DOWNLOAD:
         raise RuntimeError('Pacote privado excede o limite de 120 MB.')
     return payload
+
+
+def signed_url_for_private_object(object_url: str, headers: dict[str, str]) -> str:
+    """Solicita assinatura curta sem publicar o token e valida o host de destino."""
+    path_token = '/storage/v1/object/authenticated/'
+    if path_token not in object_url:
+        raise RuntimeError('Endereco do objeto nao tem formato esperado do Supabase Storage.')
+    signed_endpoint = object_url.replace(path_token, '/storage/v1/object/sign/', 1)
+    sign_headers = dict(headers)
+    sign_headers['Content-Type'] = 'application/json'
+    req = urllib.request.Request(signed_endpoint, data=b'{"expiresIn":300}',
+                                 headers=sign_headers, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            raw = response.read(16 * 1024)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(http_failure(exc, 'geracao do link temporario')) from None
+    except (urllib.error.URLError, TimeoutError):
+        raise RuntimeError('Falha de conexao ao solicitar URL temporaria.') from None
+    try:
+        data = json.loads(raw)
+        signed_path = data.get('signedURL') or data.get('signedUrl')
+    except (ValueError, AttributeError):
+        signed_path = None
+    if not isinstance(signed_path, str) or not signed_path:
+        raise RuntimeError('Storage nao devolveu signedURL valido.')
+    parsed_source = urllib.parse.urlsplit(object_url)
+    # Supabase frequentemente retorna /object/sign/..., sem prefixo /storage/v1.
+    if signed_path.startswith('/object/'):
+        signed_path = '/storage/v1' + signed_path
+    signed = urllib.parse.urljoin(f'{parsed_source.scheme}://{parsed_source.netloc}', signed_path)
+    target = urllib.parse.urlsplit(signed)
+    if (target.scheme != 'https' or target.netloc != parsed_source.netloc
+            or not target.path.startswith('/storage/v1/object/sign/') or not target.query):
+        raise RuntimeError('Storage devolveu URL temporaria com destino inesperado.')
+    return signed
+
+
+def download_with_storage_fallback(object_url: str, headers: dict[str, str]) -> bytes:
+    """Para sb_secret_ usa link temporario; tenta download direto se necessario."""
+    if headers.get('apikey', '').startswith('sb_secret_'):
+        try:
+            signed_url = signed_url_for_private_object(object_url, headers)
+            print('URL temporaria de acesso ao objeto gerada.', flush=True)
+            return download(signed_url, {'User-Agent': headers['User-Agent']}, 'URL temporaria')
+        except RuntimeError as first_error:
+            print('Metodo de URL temporaria indisponivel; testando download autenticado.', flush=True)
+            try:
+                return download(object_url, headers, 'bucket privado')
+            except RuntimeError as second_error:
+                raise RuntimeError(f'Falha da assinatura: {first_error}; falha do acesso direto: {second_error}') from None
+    return download(object_url, headers, 'bucket privado')
 
 
 def extract(bundle: bytes, destination: Path = DATA) -> int:
@@ -166,7 +258,8 @@ def main() -> int:
         url, headers, source = request_config()
         print('Obtendo dados de migração do armazenamento privado...', flush=True)
         print(f'Origem: {source}.', flush=True)
-        bundle = download(url, headers, source)
+        bundle = (download_with_storage_fallback(url, headers)
+                  if source == 'bucket privado' else download(url, headers, source))
         count = extract(bundle)
         print(f'Pacote privado validado: {count} arquivos. Dados não serão publicados no GitHub.')
         return 0
