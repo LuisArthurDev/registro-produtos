@@ -336,11 +336,13 @@ function doPost(e) {
     const resultado = salvarProduto_(payload);
     try {
       const sessaoLancamento = obterSessaoObrigatoria_(payload);
-      if (sessaoLancamento && sessaoLancamento.administrador === true && resultado && resultado.sucesso !== false) {
+      if (sessaoLancamento && sessaoLancamento.administrador === true && resultado && resultado.status === "saved") {
         gravarEventoAdministrativo_(sessaoLancamento, "Lançamento administrativo", "Lançamento realizado na aba " + String(payload.funcionario || payload.nomeAba || "—"), String(payload.codigo || payload.ean || ""));
       }
     } catch (erroAuditoria) { console.error("Falha ao registrar lançamento administrativo: " + erroAuditoria); }
-    invalidarCacheDados_();
+    // A verificação de duplicidade é leitura: não marca como lançamento salvo
+    // e não invalida painéis até que o operador confirme e a gravação ocorra.
+    if (resultado && resultado.status === "saved") invalidarCacheDados_();
 
     gravarStatus_(requestId, token, resultado);
 
@@ -547,7 +549,9 @@ function consultarStatus_(parametros) {
       resultado = {
         requestId: requestId,
         status: registro.status,
-        message: registro.message
+        message: registro.message,
+        quantidade: Number(registro.quantidade) || 0,
+        ocorrencias: Number(registro.ocorrencias) || 0
       };
     }
   }
@@ -615,6 +619,46 @@ function exigirSessaoLancamento_(dados) {
   }
   dados.funcionario = sessao.nome;
   return sessao;
+}
+
+/*
+ * Confere se EAN + lote + validade já existem na aba de destino.
+ * Executado SOB O MESMO LOCK do salvamento: duas leituras simultâneas não
+ * conseguem ultrapassar a confirmação e gravar o mesmo item inadvertidamente.
+ * A busca usa TextFinder apenas na coluna A e lê somente linhas candidatas.
+ */
+function resumirDuplicidadeDuranteGravacao_(ss, aba, tipo, codigo, lote, validadeISO, lojaFiltro) {
+  const vazio = { existe: false, quantidade: 0, ocorrencias: 0 };
+  if (!aba || aba.getLastRow() < 2) return vazio;
+
+  const ultima = aba.getLastRow();
+  const candidatos = aba.getRange(2, 1, ultima - 1, 1)
+    .createTextFinder(codigo).matchCase(true).matchEntireCell(true).findAll();
+  if (!candidatos.length) return vazio;
+
+  const estoque = tipo === "Estoque";
+  const transferencia = tipo === "Transferencias";
+  const indiceLote = estoque ? 3 : 1;
+  const indiceValidade = estoque ? 4 : 2;
+  const indiceQtd = estoque ? 5 : 3;
+  const indiceLoja = estoque ? 7 : 5;
+  const largura = estoque ? 9 : (transferencia ? 8 : 6);
+  const fuso = ss.getSpreadsheetTimeZone();
+  let quantidade = 0, ocorrencias = 0;
+  for (const celula of candidatos) {
+    const intervalo = aba.getRange(celula.getRow(), 1, 1, largura);
+    const dados = intervalo.getValues()[0];
+    const exibidos = intervalo.getDisplayValues()[0];
+    if (String(exibidos[0] || "").trim() !== codigo) continue;
+    if ((estoque || transferencia) && lojaFiltro &&
+        normalizarLoja_(exibidos[indiceLoja]) !== normalizarLoja_(lojaFiltro)) continue;
+    if (normalizarTexto_(exibidos[indiceLote]) !== normalizarTexto_(lote)) continue;
+    const data = converterValidadeParaData_(dados[indiceValidade], exibidos[indiceValidade]);
+    if (!data || Utilities.formatDate(data, fuso, "yyyy-MM-dd") !== validadeISO) continue;
+    quantidade += Number(dados[indiceQtd]) || 0;
+    ocorrencias++;
+  }
+  return { existe: ocorrencias > 0, quantidade: quantidade, ocorrencias: ocorrencias };
 }
 
 /* =========================
@@ -749,6 +793,22 @@ function salvarProduto_(dados) {
       return {
         status: "saved",
         message: "Este lançamento já consta na planilha. Nenhuma quantidade foi adicionada novamente."
+      };
+    }
+
+    // Um produto novo grava diretamente, sem a antiga consulta JSONP de 20 s.
+    // Se já existe o mesmo EAN/lote/validade, devolvemos "duplicate" ao celular.
+    // Só escreve quando o operador confirma explicitamente a repetição.
+    const lojaFiltro = ehTransferencia ? lojaOrigem : (ehEstoque ? dados.lojaOrigem : "");
+    const existente = resumirDuplicidadeDuranteGravacao_(
+      planilha, abaDestino, nomeAba, codigo, lote, validadeTexto, lojaFiltro
+    );
+    if (existente.existe && dados.permitirDuplicidade !== true) {
+      return {
+        status: "duplicate",
+        message: "Produto já registrado neste mapa. Confirme para acrescentar a quantidade.",
+        quantidade: existente.quantidade,
+        ocorrencias: existente.ocorrencias
       };
     }
 
@@ -993,7 +1053,9 @@ function gravarStatus_(requestId, token, resultado) {
   const registro = {
     token: token,
     status: String(resultado.status || "pending"),
-    message: String(resultado.message || "")
+    message: String(resultado.message || ""),
+    quantidade: Number(resultado.quantidade) || 0,
+    ocorrencias: Number(resultado.ocorrencias) || 0
   };
 
   CacheService.getScriptCache().put(

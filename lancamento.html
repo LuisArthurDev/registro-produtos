@@ -485,7 +485,7 @@ body.camera-aberta #cameraControles:not([hidden]) {
     <div id="identidadeLogada" class="identidade-logada" aria-label="Usuário e loja conectados"></div>
     <button type="button" id="btnSair" class="theme-toggle header-icon-btn" title="Sair" aria-label="Sair" onclick="Auth.sair()">Sair</button>
     <a
-      href="painelconferente.html"
+      href="index.html"
       class="theme-toggle header-icon-btn"
       title="Entrar"
       aria-label="Entrar"
@@ -1344,7 +1344,7 @@ funcionarioEl.addEventListener("change",()=>{
 
 const CHAVE_HISTORICO_DIARIO="registroProdutosHistoricoDiario_v1";
 let funcionarioPendenteHistorico=null,payloadDuplicadoPendente=null,payloadNaoCadastradoPendente=null;
-let confirmarDuplicadoUmaVez=false,confirmarNaoCadastradoUmaVez=false,verificandoMapa=false;
+let confirmarDuplicadoUmaVez=false,confirmarNaoCadastradoUmaVez=false,validandoCatalogo=false;
 
 function reiniciarConfirmacoes(){confirmarNaoCadastradoUmaVez=false;confirmarDuplicadoUmaVez=false}
 function dataLocalISO(){
@@ -1440,37 +1440,13 @@ function aleatorioHex(bytes){
   return Array.from(b,x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-/* Consulta o mapa completo do funcionário no servidor (não usa histórico diário local). */
-function consultarDuplicidadeNoMapa(payload) {
-  return new Promise((resolve, reject) => {
-    const cb = "__verificarItemMapaCb";
-    const anterior = window[cb];
-    const script = document.createElement("script");
-    let finalizado = false;
-    const finalizar = (erro, dados) => {
-      if (finalizado) return;
-      finalizado = true;
-      clearTimeout(timer);
-      script.remove();
-      if (window[cb] === receber) { if (anterior) window[cb] = anterior; else delete window[cb]; }
-      erro ? reject(erro) : resolve(dados);
-    };
-    const receber = dados => finalizar(null, dados);
-    window[cb] = receber;
-    const params = new URLSearchParams({
-      action: "verificarItemMapa", callback: cb, sessao: Auth.token(),
-      funcionario: payload.funcionario, codigo: payload.codigo, lote: payload.lote, validade: payload.validade
-    });
-    const timer = setTimeout(() => finalizar(new Error("Tempo esgotado ao consultar o mapa do funcionário.")), 20000);
-    script.onerror = () => finalizar(new Error("Não foi possível consultar o mapa do funcionário."));
-    script.src = APPS_SCRIPT_URL + "?" + params.toString();
-    document.head.appendChild(script);
-  });
-}
+/* A conferência de duplicidade acontece no servidor, durante o POST e sob lock.
+   Não há mais uma consulta JSONP extra antes de cada lançamento, que podia expirar
+   em redes móveis e impedir a gravação até de produtos ainda não cadastrados. */
 
 /* Envio do lançamento */
 formulario.addEventListener("submit",async evento=>{
-  evento.preventDefault();if(enviando||verificandoMapa)return;ocultarStatus();
+  evento.preventDefault();if(enviando||validandoCatalogo)return;ocultarStatus();
 
   const codigo=codigoEl.value.trim(),funcionario=funcionarioEl.value.trim();
   const lote=$("lote").value.trim(),validadeTexto=validadeEl.value.trim();
@@ -1509,12 +1485,19 @@ formulario.addEventListener("submit",async evento=>{
   };
 
   let produtoEncontrado;
+  validandoCatalogo=true;
+  btnSalvar.disabled=true;
+  btnSalvar.textContent="Consultando catálogo...";
   try {
     produtoEncontrado=await consultarProdutoD1(codigo);
   } catch (erroCatalogo) {
     mostrarStatus("Falha ao consultar o catálogo online e local. O lançamento não foi enviado; tente novamente.","error");
     console.error("Falha ao validar EAN no D1:",erroCatalogo);
     return;
+  } finally {
+    validandoCatalogo=false;
+    btnSalvar.disabled=false;
+    btnSalvar.textContent="Salvar lançamento";
   }
 
   const produtoExisteNoJson=Boolean(produtoEncontrado);
@@ -1531,35 +1514,15 @@ formulario.addEventListener("submit",async evento=>{
   }
 
   if(!produtoExisteNoJson&&!confirmarNaoCadastradoUmaVez){abrirModalNaoCadastrado(payload);return}
-  if(!confirmarDuplicadoUmaVez){
-    try {
-      verificandoMapa = true;
-      btnSalvar.disabled = true;
-      btnSalvar.textContent = "Verificando mapa...";
-      const verificacao = await consultarDuplicidadeNoMapa(payload);
-      verificandoMapa = false;
-      btnSalvar.disabled = false;
-      btnSalvar.textContent = "Salvar lançamento";
-      if (!verificacao || verificacao.sucesso !== true) throw new Error(verificacao?.mensagem || "Falha ao verificar o mapa.");
-      if (verificacao.existe) {
-        abrirModalDuplicado(payload, [{ quantidade: verificacao.quantidade, ocorrencias: verificacao.ocorrencias }]);
-        $("detalhesDuplicado").textContent = "Funcionário: " + payload.funcionario + " | EAN: " + payload.codigo + " | Lote: " + payload.lote + " | Validade: " + payload.validade + " | Quantidade já existente no mapa: " + verificacao.quantidade + " em " + verificacao.ocorrencias + " registro(s).";
-        return;
-      }
-    } catch (erro) {
-      verificandoMapa = false;
-      btnSalvar.disabled = false;
-      btnSalvar.textContent = "Salvar lançamento";
-      mostrarStatus("Não foi possível verificar o mapa antes de salvar: " + erro.message, "error");
-      return;
-    }
-  }
+  // O servidor sempre verifica duplicidade ao salvar, na mesma operação que
+  // grava a linha. A confirmação permite acrescentar quantidade se já existir.
+  payload.permitirDuplicidade = confirmarDuplicadoUmaVez === true;
+  const cadastroConfirmado = confirmarNaoCadastradoUmaVez === true;
 
-  reiniciarConfirmacoes();
   const token=aleatorioHex(32);
   enviando=true;btnSalvar.disabled=true;btnSalvar.textContent="Enviando...";
   mostrarStatus("Enviando lançamento para a planilha...");
-  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,descricao:$("descricaoTexto").textContent||""};
+  envioAtual={requestId:payload.requestId,token,iniciadoEm:Date.now(),payload,cadastroConfirmado,descricao:$("descricaoTexto").textContent||""};
 
   try{enviarPost(payload,token);iniciarPolling(payload.requestId,token)}
   catch(e){finalizarErro("Não foi possível iniciar o envio: "+e.message)}
@@ -1575,6 +1538,7 @@ function enviarPost(payload,token){
 window.__statusCb=function(resposta){
   if(!resposta||!envioAtual||resposta.requestId!==envioAtual.requestId)return;
   if(resposta.status==="saved")finalizarSucesso(resposta.message||"Lançamento salvo com sucesso.");
+  else if(resposta.status==="duplicate")finalizarDuplicidadeServidor(resposta);
   else if(resposta.status==="error")finalizarErro(resposta.message||"Não foi possível salvar o lançamento.");
   else mostrarStatus(resposta.message||"Processando lançamento...");
 };
@@ -1601,6 +1565,29 @@ function iniciarPolling(requestId,token){
   }
   temporizadorPolling=setTimeout(consultar,250);
 }
+function finalizarDuplicidadeServidor(resposta){
+  const tentativa=envioAtual;
+  encerrarPolling();
+  enviando=false;envioAtual=null;
+  btnSalvar.disabled=false;btnSalvar.textContent="Salvar lançamento";
+  if(!tentativa){
+    mostrarStatus("Foi encontrada uma duplicidade, mas a tentativa não está mais disponível. Revise os dados antes de reenviar.","error");
+    reiniciarConfirmacoes();
+    return;
+  }
+  // Confirmação prévia de EAN não cadastrado continua valendo apenas para este
+  // código; evita solicitar novamente as duas confirmações em sequência.
+  confirmarNaoCadastradoUmaVez=tentativa.cadastroConfirmado && codigoEl.value.trim()===tentativa.payload.codigo;
+  confirmarDuplicadoUmaVez=false;
+  abrirModalDuplicado(tentativa.payload,[{
+    quantidade:Number(resposta.quantidade)||0
+  }]);
+  $("detalhesDuplicado").textContent = "Funcionário: " + tentativa.payload.funcionario +
+    " | EAN: " + tentativa.payload.codigo + " | Lote: " + tentativa.payload.lote +
+    " | Validade: " + tentativa.payload.validade + " | Quantidade já existente no mapa: " +
+    (Number(resposta.quantidade)||0) + " em " + (Number(resposta.ocorrencias)||0) + " registro(s).";
+  mostrarStatus("Este produto já está no mapa. Confirme no aviso para adicionar a quantidade ou ignorar.","info");
+}
 function finalizarSucesso(mensagem){
   encerrarPolling();
   const manterCodigoBarras=$("mesmoProduto").checked;
@@ -1610,11 +1597,13 @@ function finalizarSucesso(mensagem){
     itemAtual=null;guardarItemAtual();
   }
   enviando=false;envioAtual=null;btnSalvar.disabled=false;btnSalvar.textContent="Salvar lançamento";
+  reiniciarConfirmacoes();
   mostrarStatus(mensagem,"success");limparCamposLancamento(manterCodigoBarras);
 }
 function finalizarErro(mensagem){
   encerrarPolling();enviando=false;envioAtual=null;
   btnSalvar.disabled=false;btnSalvar.textContent="Salvar lançamento";
+  reiniciarConfirmacoes();
   mostrarStatus(mensagem,"error");
 }
 function encerrarPolling(){
