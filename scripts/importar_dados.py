@@ -95,6 +95,73 @@ def api(action, data=None, *, conflict=None, method='POST', url=None, key=None):
         time.sleep(2 * (n+1))
 
 
+def usuarios_no_banco(*, url, key):
+    """Consulta IDs efetivos por nome/loja; suporta bases parcialmente migradas.
+
+    Não presume que IDs de contas já existentes sejam os UUIDs determinísticos
+    calculados pela versão atual do importador.
+    """
+    resultado = {}
+    limite = 1000
+    offset = 0
+    while True:
+        query = urllib.parse.urlencode({
+            'select': 'id,nome_normalizado,loja_id',
+            'limit': str(limite),
+            'offset': str(offset),
+            'order': 'id.asc',
+        })
+        endpoint = url.rstrip('/') + '/rest/v1/usuarios?' + query
+        headers = {'apikey': key, 'Accept': 'application/json'}
+        if key.count('.') == 2:
+            headers['Authorization'] = 'Bearer ' + key
+        req = urllib.request.Request(endpoint, method='GET', headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=65) as resp:
+                linhas = json.loads(resp.read().decode('utf-8'))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode('utf-8', 'replace')[:400]
+            raise RuntimeError(f'Consulta de usuários: HTTP {exc.code} {detail}') from exc
+        if not isinstance(linhas, list):
+            raise RuntimeError('Consulta de usuários retornou formato inesperado.')
+        for row in linhas:
+            chave = (norm(row['nome_normalizado']), str(row['loja_id'] or ''))
+            if chave in resultado and resultado[chave] != row['id']:
+                raise RuntimeError('Há contas duplicadas por nome/loja no Supabase; revisar antes de importar.')
+            resultado[chave] = row['id']
+        if len(linhas) < limite:
+            return resultado
+        offset += limite
+
+
+def chave_usuario(nome, loja):
+    return (norm(nome), str(loja or ''))
+
+
+def vincular_funcionarios(mapas, usuarios_remotos):
+    """Aponta mapas para IDs REAIS do Supabase, sem criar associação falsa."""
+    faltantes = set()
+    saida = []
+    for m in mapas:
+        usuario_id = None
+        if m['tipo_mapa'] == 'funcionario':
+            chave = chave_usuario(m['mapa_nome'], m['loja_id'])
+            usuario_id = usuarios_remotos.get(chave)
+            if not usuario_id:
+                faltantes.add(chave)
+        saida.append({**m, 'funcionario_id': usuario_id, 'produto_id': None})
+    if faltantes:
+        lojas = ', '.join(sorted({loja for _, loja in faltantes}))
+        raise RuntimeError(
+            f'PRÉ-VALIDAÇÃO: {len(faltantes)} funcionário(s) referenciados pelos mapas '
+            f'ainda não existem no Supabase (lojas: {lojas}). '
+            'Execute o workflow com etapa=importar, escopo=usuarios, '
+            'confirmar_gravacao=true e pular_usuarios=false. '
+            'Depois execute escopo=operacionais. Não apague os produtos já importados.'
+        )
+    return saida
+
+
 def send_rows(table, records, *, url, key, conflict=None, size=250):
     total = 0
     for group in batch(records, size):
@@ -113,12 +180,13 @@ def catalogo(db_path):
 def main():
     p = argparse.ArgumentParser(description='Migração segura e reexecutável Supabase (inicia em modo seco).')
     p.add_argument('--apply', action='store_true', help='Envia dados; exige variáveis de ambiente com credenciais')
-    p.add_argument('--only', choices=['todos','usuarios','produtos','mapas','vencidos','queima','auditoria'], default='todos')
+    p.add_argument('--only', choices=['todos','usuarios','produtos','operacionais','mapas','vencidos','queima','auditoria'], default='todos')
     p.add_argument('--catalogo', default=str(DATA / 'produtos_ean.db'))
     p.add_argument('--sem-usuarios', action='store_true', help='Não recria nem reinsere contas e PINs')
     args = p.parse_args()
     url = os.environ.get('SUPABASE_URL','').strip()
     key = (os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
+    print('VERSAO IMPORTADOR: FK-USUARIOS-2026-11-09-R2', flush=True)
     print('MODO:', 'ENVIO REAL para Supabase' if args.apply else 'VALIDAÇÃO OFFLINE — nenhuma alteração')
     required=['usuarios_sem_senhas.csv','mapa_lancamentos.csv','vencidos.csv','queima.csv','auditoria.csv']
     for name in required:
@@ -170,20 +238,29 @@ def main():
     import_users = args.only in ('todos','usuarios') and not args.sem_usuarios
     if import_users and not os.environ.get('MIGRATION_PIN_SEED', '').strip():
         sys.exit('Defina MIGRATION_PIN_SEED (segredo longo e estável) para garantir PINs iguais em reexecuções.')
-    if not (DATA/'novos_pins_gerados.csv').exists() and import_users:
+    # Ler primeiro a identidade real dos usuários no banco. Pode haver importações
+    # anteriores parciais; não sobrescrever PINs nem recriar contas existentes.
+    usuarios_remotos = usuarios_no_banco(url=url, key=key)
+    novos_usuarios = [u for u in users if chave_usuario(u['nome'], u['loja_id']) not in usuarios_remotos] if import_users else []
+    if args.only in ('todos', 'operacionais', 'mapas') and not import_users:
+        # Verifica as FK ANTES de reenviar milhares de registros de catálogo.
+        vincular_funcionarios(valid_maps, usuarios_remotos)
+    if novos_usuarios:
         pins=[]
-        for u in users:
+        for u in novos_usuarios:
             ident=(norm(u['nome']) + '/' + u['loja_id']).encode('utf-8')
             digest=hmac.new(os.environ['MIGRATION_PIN_SEED'].encode('utf-8'), ident, hashlib.sha256).digest()
             pin=str(int.from_bytes(digest, 'big') % (10**10)).zfill(10)
             pins.append({'nome':u['nome'],'loja':u['loja_id'], 'pin': pin})
+        # Gera PINs SOMENTE para contas novas; um PIN calculado para uma conta já
+        # existente poderia ser diferente do PIN realmente registrado no banco.
         pin_file=DATA/'novos_pins_gerados.csv'
         with pin_file.open('w', encoding='utf-8', newline='') as f:
             w=csv.DictWriter(f,fieldnames=['nome','loja','pin']);w.writeheader();w.writerows(pins)
         try:os.chmod(pin_file,0o600)
         except OSError:pass
-        print('ATENÇÃO: PINs novos criados em',pin_file,'— nunca publique esse arquivo.')
-    pins={(norm(x['nome']),x['loja']):x['pin'] for x in read_csv('novos_pins_gerados.csv')} if import_users else {}
+        print(f'PINs provisórios preparados para {len(novos_usuarios)} conta(s) nova(s).', flush=True)
+    pins = {(norm(x['nome']), x['loja']): x['pin'] for x in read_csv('novos_pins_gerados.csv')} if novos_usuarios else {}
     stores={u['loja_id'] for u in users if loja_valida(u.get('loja_id'))}
     stores |= {m['loja_id'] for m in valid_maps}
     stores |= {r['loja_id'] for r in valid_venc}
@@ -191,25 +268,29 @@ def main():
     send_rows('lojas',[{'id':s,'nome':f'Loja {s}'} for s in sorted(stores)],url=url,key=key,conflict='id')
     if import_users:
         built=[]
-        for u in users:
-            pin = pins[(norm(u['nome']),u['loja_id'])]
+        for u in novos_usuarios:
+            pin = pins[chave_usuario(u['nome'],u['loja_id'])]
             built.append({'id':uid(u['nome'],u['loja_id']), 'nome':u['nome'], 'nome_normalizado':norm(u['nome']),
                           'loja_id':u['loja_id'] or None, 'perfil':u['perfil'], 'ativo':u['ativo'].lower()=='true',
                           'celular_proprio':u['celular_proprio'].lower()=='true','especial':False,'pin_hash':pin_hash(pin)})
-        send_rows('usuarios',built,url=url,key=key,conflict='id')
+        if built:
+            send_rows('usuarios', built, url=url, key=key, conflict='id')
+        else:
+            print('  usuarios: todas as contas já existem; PINs existentes preservados.', flush=True)
+        usuarios_remotos = usuarios_no_banco(url=url, key=key)
+        if len([u for u in users if chave_usuario(u['nome'],u['loja_id']) not in usuarios_remotos]):
+            raise RuntimeError('Falha ao conferir contas criadas; importação interrompida antes dos mapas.')
+    if args.only in ('todos', 'operacionais', 'mapas'):
+        mapas_vinculados = vincular_funcionarios(valid_maps, usuarios_remotos)
     if args.only in ('todos','produtos'):
         send_rows('produtos',valid_products,url=url,key=key,conflict='ean',size=250)
         send_rows('catalogo_pendencias',[{'codigo_original':x['ean'],'codigo_interno':x['codigo_interno'],
                    'descricao':x['descricao'],'secao':x['secao']} for x in skipped_products],
                    url=url,key=key,conflict='codigo_original',size=250)
-    if args.only in ('todos','mapas'):
-        built=[]
-        for m in valid_maps:
-            uid_value=uid(m['mapa_nome'],m['loja_id']) if m['tipo_mapa']=='funcionario' else None
-            built.append({**m,'funcionario_id':uid_value,'produto_id':None})
-        send_rows('mapa_lancamentos',built,url=url,key=key,conflict='origem_migracao')
+    if args.only in ('todos','operacionais','mapas'):
+        send_rows('mapa_lancamentos',mapas_vinculados,url=url,key=key,conflict='origem_migracao')
         send_rows('migracao_pendencias',pending_maps,url=url,key=key,conflict='origem_migracao')
-    if args.only in ('todos','vencidos'):
+    if args.only in ('todos','operacionais','vencidos'):
         built=[]
         for r in valid_venc:
             built.append({'loja_id':r['loja_id'],'ean':None,'codigo_interno':r['codigo_interno'] or None,
@@ -219,7 +300,7 @@ def main():
                           'criado_em':r['criado_em'] or None,'origem_migracao':r['origem_migracao']})
         send_rows('vencidos',built,url=url,key=key,conflict='origem_migracao')
         send_rows('migracao_pendencias',pending_venc,url=url,key=key,conflict='origem_migracao')
-    if args.only in ('todos','queima'):
+    if args.only in ('todos','operacionais','queima'):
         built=[]
         for r in valid_queima:
             built.append({'loja_id':r['loja_id'],'ean':r['ean'],'lote':r['lote'] or None,
@@ -228,7 +309,7 @@ def main():
                           'criado_em':r['criado_em'],'origem_migracao':r['origem_migracao']})
         send_rows('queima',built,url=url,key=key,conflict='origem_migracao')
         send_rows('migracao_pendencias',pending_queima,url=url,key=key,conflict='origem_migracao')
-    if args.only in ('todos','auditoria'):
+    if args.only in ('todos','operacionais','auditoria'):
         built=[]
         for r in hist:
             built.append({'loja_id':r['loja_id'],'acao':r['acao'],'criado_em':r['criado_em'],

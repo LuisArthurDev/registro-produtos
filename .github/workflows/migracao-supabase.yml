@@ -11,6 +11,7 @@ on:
       - 'tests/testar_download_storage.py'
       - 'tests/testar_storage_400.py'
       - 'tests/testar_importacao.py'
+      - 'tests/testar_usuario_fk.py'
   workflow_dispatch:
     inputs:
       etapa:
@@ -24,7 +25,7 @@ on:
           - importar
           - finalizar
       escopo:
-        description: 'Parte a importar (somente na etapa importar)'
+        description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
         type: choice
         default: todos
@@ -32,6 +33,7 @@ on:
           - todos
           - usuarios
           - produtos
+          - operacionais
           - mapas
           - vencidos
           - queima
