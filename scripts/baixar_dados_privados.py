@@ -1,89 +1,179 @@
 #!/usr/bin/env python3
-"""Obtém um bundle ZIP de migração do Supabase Storage privado ou URL assinada.
+"""Baixa pacote ZIP privado de migração e extrai arquivos autorizados.
 
-Nunca imprime a URL/chaves e só extrai arquivos permitidos em private_data/.
+Segurança:
+- Não imprime URL assinada, URL de projeto com querystring, tokens ou chaves.
+- Diagnósticos por status HTTP, sem exibir corpo da resposta do servidor.
+- Compatível com chaves Supabase modernas sb_secret_ e legadas service_role JWT.
+- Impõe limites a download, total descompactado e caminhos do ZIP.
 """
-import os
-import sys
+from __future__ import annotations
+
 import io
-import zipfile
+import os
+import stat
+import sys
+import urllib.error
+import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / 'private_data'
 MAX_DOWNLOAD = 120 * 1024 * 1024
 MAX_EXTRACT = 250 * 1024 * 1024
-ALLOWED = {'auditoria.csv', 'mapa_lancamentos.csv', 'usuarios_sem_senhas.csv',
-           'vencidos.csv', 'queima.csv', 'transferencias_REVISAR.csv',
-           'inconsistencias.csv', 'manifest.json', 'produtos_ean.db',
-           'estoque_especial.csv'}
-REQUIRED = {'auditoria.csv','mapa_lancamentos.csv','usuarios_sem_senhas.csv',
-            'vencidos.csv','queima.csv','transferencias_REVISAR.csv','produtos_ean.db'}
+ALLOWED = {
+    'auditoria.csv', 'mapa_lancamentos.csv', 'usuarios_sem_senhas.csv',
+    'vencidos.csv', 'queima.csv', 'transferencias_REVISAR.csv',
+    'inconsistencias.csv', 'manifest.json', 'produtos_ean.db',
+    'estoque_especial.csv',
+}
+# O pacote privado fornecido inclui este aviso. Validamos e ignoramos, sem extraí-lo.
+IGNORED = {'LEIA-ME-NAO-PUBLICAR.txt'}
+REQUIRED = {
+    'auditoria.csv', 'mapa_lancamentos.csv', 'usuarios_sem_senhas.csv',
+    'vencidos.csv', 'queima.csv', 'transferencias_REVISAR.csv',
+    'produtos_ean.db',
+}
 
 
-def main():
-    base = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
-    secret = os.environ.get('SUPABASE_SECRET_KEY', '').strip()
-    signed = os.environ.get('MIGRATION_BUNDLE_URL', '').strip()
+def request_config(environ=None):
+    env = os.environ if environ is None else environ
+    base = (env.get('SUPABASE_URL') or '').strip().rstrip('/')
+    secret = (env.get('SUPABASE_SECRET_KEY') or '').strip()
+    signed = (env.get('MIGRATION_BUNDLE_URL') or '').strip()
+
     if signed:
-        if not signed.startswith('https://'):
-            sys.exit('MIGRATION_BUNDLE_URL precisa usar HTTPS.')
-        url = signed
-        headers = {'User-Agent':'registro-validades-import/1.0'}
+        parsed = urllib.parse.urlsplit(signed)
+        if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError('MIGRATION_BUNDLE_URL deve ser uma URL HTTPS válida.')
+        return signed, {'User-Agent': 'registro-validades-import/1.1'}, 'URL assinada'
+
+    if not base.startswith('https://') or not secret:
+        raise ValueError('Configure SUPABASE_URL e SUPABASE_SECRET_KEY no GitHub Actions.')
+    parsed = urllib.parse.urlsplit(base)
+    if not parsed.netloc or parsed.path not in ('', '/') or parsed.query or parsed.fragment:
+        raise ValueError('SUPABASE_URL deve ser somente a URL HTTPS do projeto, sem caminhos.')
+    if secret.startswith('sb_publishable_'):
+        raise ValueError('SUPABASE_SECRET_KEY contém uma chave pública. Use a chave sb_secret_ do Supabase.')
+
+    bucket = (env.get('MIGRATION_STORAGE_BUCKET') or 'migracao').strip()
+    object_name = (env.get('MIGRATION_STORAGE_OBJECT') or 'dados-migracao.zip').strip()
+    if not bucket.isascii() or not bucket.replace('-','').replace('_','').isalnum():
+        raise ValueError('Nome do bucket de migração inválido.')
+    if object_name != 'dados-migracao.zip':
+        raise ValueError('O arquivo esperado nesta versão é dados-migracao.zip.')
+
+    url = (f'{base}/storage/v1/object/authenticated/'
+           f'{urllib.parse.quote(bucket, safe="")}/{urllib.parse.quote(object_name, safe="")}')
+    headers = {'apikey': secret, 'User-Agent': 'registro-validades-import/1.1'}
+    # Uma chave moderna sb_secret_ não é JWT: nunca enviá-la como Bearer.
+    # Uma chave service_role legada JWT requer Authorization: Bearer.
+    if secret.count('.') == 2:
+        headers['Authorization'] = 'Bearer ' + secret
+    return url, headers, 'bucket privado'
+
+
+def http_failure(exc: urllib.error.HTTPError, source: str) -> str:
+    code = exc.code
+    if code == 400:
+        reason = 'requisição inválida; confirme o projeto, bucket e nome do objeto.'
+    elif code == 401:
+        reason = ('autenticação recusada; confira SUPABASE_SECRET_KEY (chave secreta sb_secret_, '
+                  'não a chave pública) e se pertence ao mesmo projeto de SUPABASE_URL.')
+    elif code == 403:
+        reason = 'acesso negado; confira a autorização da chave para o Storage privado.'
+    elif code == 404:
+        reason = ('arquivo ou bucket não encontrado; confira Storage → migracao → '
+                  'dados-migracao.zip (na raiz do bucket, sem pasta adicional).')
+    elif code == 410:
+        reason = 'recurso não disponível; se usou URL assinada, gere outra URL.'
+    elif code == 413:
+        reason = 'arquivo excede o tamanho permitido pela API.'
+    elif code == 429:
+        reason = 'limite de requisições; tente novamente mais tarde.'
+    elif 500 <= code <= 599:
+        reason = 'falha temporária no serviço Supabase; tente novamente.'
     else:
-        if not base.startswith('https://') or not secret:
-            sys.exit('Configure SUPABASE_URL, SUPABASE_SECRET_KEY e o bundle privado.')
-        bucket = os.environ.get('MIGRATION_STORAGE_BUCKET','migracao').strip()
-        obj = os.environ.get('MIGRATION_STORAGE_OBJECT','dados-migracao.zip').strip()
-        if not bucket.isascii() or not bucket.replace('-','').replace('_','').isalnum():
-            sys.exit('Bucket inválido.')
-        if obj != 'dados-migracao.zip':
-            sys.exit('Para esta versão, o nome permitido é dados-migracao.zip.')
-        url = f'{base}/storage/v1/object/authenticated/{bucket}/{obj}'
-        headers = {'apikey':secret,'User-Agent':'registro-validades-import/1.0'}
-        if secret.count('.') == 2:
-            headers['Authorization'] = 'Bearer ' + secret
-    print('Obtendo dados de migração do armazenamento privado...')
-    req = urllib.request.Request(url, headers=headers)
+        reason = 'verifique configurações de armazenamento e autenticação.'
+    if source == 'URL assinada' and code in (400, 401, 403, 404):
+        reason += ' A URL assinada pode ter expirado ou estar incorreta.'
+    return f'Falha ao baixar pacote privado: HTTP {code} ({source}); {reason}'
+
+
+def download(url: str, headers: dict[str, str], source: str) -> bytes:
+    request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            content = resp.read(MAX_DOWNLOAD + 1)
-    except Exception as ex:
-        sys.exit(f'Falha ao baixar pacote privado ({type(ex).__name__}); confira bucket, chave e autorização.')
-    if len(content)>MAX_DOWNLOAD:
-        sys.exit('Bundle excede 120 MB.')
+        with urllib.request.urlopen(request, timeout=120) as response:
+            payload = response.read(MAX_DOWNLOAD + 1)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(http_failure(exc, source)) from None
+    except urllib.error.URLError:
+        raise RuntimeError('Falha de rede/DNS/TLS ao baixar pacote privado; verifique o acesso ao projeto.') from None
+    except TimeoutError:
+        raise RuntimeError('Tempo esgotado ao baixar pacote privado; tente executar o workflow novamente.') from None
+    if len(payload) > MAX_DOWNLOAD:
+        raise RuntimeError('Pacote privado excede o limite de 120 MB.')
+    return payload
+
+
+def extract(bundle: bytes, destination: Path = DATA) -> int:
     try:
-        z = zipfile.ZipFile(io.BytesIO(content))
+        z = zipfile.ZipFile(io.BytesIO(bundle))
     except zipfile.BadZipFile:
-        sys.exit('O arquivo obtido não é um ZIP válido.')
-    extracted = set()
+        raise RuntimeError('O arquivo baixado não é um ZIP válido.') from None
+
+    accepted = {}
+    ignored_seen = set()
     total = 0
-    DATA.mkdir(mode=0o700, parents=True, exist_ok=True)
     for item in z.infolist():
         if item.is_dir():
             continue
-        name=item.filename.replace('\\','/')
-        parts=name.split('/')
-        if len(parts)!=2 or parts[0]!='private_data' or parts[1] not in ALLOWED:
-            sys.exit('O bundle contém um caminho não permitido; use apenas private_data/ com arquivos de migração.')
-        if item.external_attr >> 16 & 0o170000 == 0o120000:
-            sys.exit('Links simbólicos não são permitidos no bundle.')
-        if parts[1] in extracted:
-            sys.exit('Arquivo duplicado no bundle privado.')
+        name = item.filename.replace('\\', '/')
+        segments = name.split('/')
+        if len(segments) != 2 or segments[0] != 'private_data':
+            raise RuntimeError('O ZIP contém caminhos fora de private_data/.')
+        filename = segments[1]
+        if filename not in ALLOWED | IGNORED:
+            raise RuntimeError('O ZIP contém um nome de arquivo não autorizado.')
+        if stat.S_ISLNK(item.external_attr >> 16):
+            raise RuntimeError('Links simbólicos não são permitidos no ZIP.')
+        if filename in accepted or filename in ignored_seen:
+            raise RuntimeError('O ZIP contém arquivos duplicados.')
         total += item.file_size
         if total > MAX_EXTRACT:
-            sys.exit('O bundle excede o limite de extração.')
-        with z.open(item) as source, (DATA/parts[1]).open('wb') as target:
-            import shutil
-            shutil.copyfileobj(source,target)
-        (DATA/parts[1]).chmod(0o600)
-        extracted.add(parts[1])
-    missing = REQUIRED - extracted
+            raise RuntimeError('O conteúdo descompactado excede 250 MB.')
+        if filename in IGNORED:
+            ignored_seen.add(filename)
+        else:
+            accepted[filename] = item
+    missing = REQUIRED - accepted.keys()
     if missing:
-        sys.exit('Faltam arquivos obrigatórios no pacote: ' + ', '.join(sorted(missing)))
-    print(f'Pacote privado validado: {len(extracted)} arquivos. Dados não serão publicados no GitHub.')
+        raise RuntimeError('Faltam arquivos obrigatórios no pacote: ' + ', '.join(sorted(missing)))
+
+    destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for filename, info in accepted.items():
+        with z.open(info) as src, (destination / filename).open('wb') as out:
+            import shutil
+            shutil.copyfileobj(src, out)
+        (destination / filename).chmod(0o600)
+    return len(accepted)
+
+
+def main() -> int:
+    try:
+        url, headers, source = request_config()
+        print('Obtendo dados de migração do armazenamento privado...', flush=True)
+        print(f'Origem: {source}.', flush=True)
+        bundle = download(url, headers, source)
+        count = extract(bundle)
+        print(f'Pacote privado validado: {count} arquivos. Dados não serão publicados no GitHub.')
+        return 0
+    except (ValueError, RuntimeError, zipfile.BadZipFile, OSError) as exc:
+        print(f'ERRO: {exc}', file=sys.stderr)
+        return 1
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

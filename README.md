@@ -64,3 +64,11 @@ Consulte `PUBLICACAO-REPOSITORIO-UNICO.md`, `documentacao/STATUS_E_LACUNAS.md` e
 ## Implantação pela nuvem (GitHub Actions + Vercel)
 
 Leia **[CONFIGURACAO-ACTIONS-VERCEL.md](CONFIGURACAO-ACTIONS-VERCEL.md)** para criar as tabelas e migrar o histórico pelo workflow manual, sem rodar comandos no Windows.
+
+## Diagnóstico de migração via Storage
+
+Se o workflow parar em `Run python scripts/baixar_dados_privados.py`, consulte [`CORRECAO-DOWNLOAD-STORAGE.md`](CORRECAO-DOWNLOAD-STORAGE.md). O script agora mostra o código HTTP sem publicar credenciais.
+
+## Workflow do GitHub Actions
+
+Se o workflow não aparecer ou não iniciar, consulte [RECUPERAR-GITHUB-ACTIONS.md](RECUPERAR-GITHUB-ACTIONS.md).

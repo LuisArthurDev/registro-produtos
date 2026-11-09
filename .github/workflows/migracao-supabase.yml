@@ -1,6 +1,14 @@
 name: Supabase - preparar e importar
 
 on:
+  # Disparo seguro para confirmar que o Actions reconhece atualizações.
+  # NÃO executa SQL nem importa dados automaticamente.
+  push:
+    paths:
+      - '.github/workflows/migracao-supabase.yml'
+      - 'scripts/baixar_dados_privados.py'
+      - 'scripts/importar_dados.py'
+      - 'tests/testar_download_storage.py'
   workflow_dispatch:
     inputs:
       etapa:
@@ -44,7 +52,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verificar-ativacao:
+    name: Verificar ativacao do workflow (sem banco)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Conferir arquivos e Python sem acesso ao Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/001_schema.sql
+          test -f supabase/002_apos_importacao.sql
+          test -f scripts/importar_dados.py
+          test -f scripts/baixar_dados_privados.py
+          python -m compileall -q scripts
+          python -m unittest discover -s tests -p 'testar_download_storage.py' -v
+          echo 'Workflow ativado e arquivos basicos conferidos. Nenhuma alteracao no banco.'
   executar:
+    # O job com credenciais privadas só pode iniciar por execução manual.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -57,6 +89,7 @@ jobs:
       MIGRATION_STORAGE_BUCKET: migracao
       MIGRATION_STORAGE_OBJECT: dados-migracao.zip
       PGSSLMODE: require
+      PGCONNECT_TIMEOUT: "15"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -89,12 +122,47 @@ jobs:
               exit 1
             fi
           fi
+      - name: Verificar URL IPv4 do Supabase antes do SQL
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PYCODE'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          raw = os.environ.get('SUPABASE_DB_URL', '')
+          try:
+              uri = urlsplit(raw)
+              host, port, user, password = uri.hostname or '', uri.port, uri.username or '', uri.password
+          except ValueError:
+              print('ERRO: SUPABASE_DB_URL inválida. Copie a URL de Connect → Session pooler.')
+              sys.exit(1)
+
+          if not host.endswith('.pooler.supabase.com') or port != 5432:
+              print('ERRO: SUPABASE_DB_URL aponta para uma conexão incorreta.')
+              print('GitHub Actions precisa do Shared Session pooler IPv4, porta 5432.')
+              print('No Supabase: Connect → Session pooler → copiar URI e atualizar o secret no GitHub.')
+              sys.exit(1)
+          if not user.startswith('postgres.') or not password:
+              print('ERRO: a conexão do pooler deve usar o usuário postgres.<project-ref> e senha do banco.')
+              sys.exit(1)
+          print('URL do Session pooler validada (IPv4, 5432).')
+          PYCODE
       - name: Preparar cliente PostgreSQL
         if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
+      - name: Testar conexão PostgreSQL sem alterar dados
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -qAt -c 'SELECT 1' | grep -qx '1'
+          echo 'Conexão PostgreSQL confirmada.'
       - name: Criar tabelas, políticas e funções SQL
         if: inputs.etapa == 'estrutura'
         shell: bash

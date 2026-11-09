@@ -44,7 +44,7 @@ No Supabase Dashboard:
 
 1. Abra **Storage → New bucket**; nomeie `migracao` e deixe **Private**.
 2. Faça upload do pacote, renomeando-o para `dados-migracao.zip`.
-3. O Action tentará obter `storage/v1/object/authenticated/migracao/dados-migracao.zip` usando a Secret Key definida nos Secrets.
+3. O Action tentará obter `storage/v1/object/authenticated/migracao/dados-migracao.zip` usando a Secret Key definida nos Secrets. Se falhar, consulte `CORRECAO-DOWNLOAD-STORAGE.md` para diferenciar HTTP 401, 403 e 404.
 
 **Alternativa:** você pode gerar uma URL assinada temporária de acesso ao arquivo no bucket privado e cadastrar **`MIGRATION_BUNDLE_URL`** em Actions Secrets. Essa URL terá prioridade sobre a rota autenticada. Não coloque uma URL assinada em código ou mensagens públicas.
 
