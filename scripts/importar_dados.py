@@ -6,12 +6,14 @@ Por padrão NÃO envia nada. Use --apply após backup e revisão dos CSVs.
 As senhas antigas NÃO são reaproveitadas; gera PINs novos e privados.
 No GitHub Actions, os PINs são derivados de MIGRATION_PIN_SEED e cifrados antes de sair do runner.
 """
-import argparse, csv, hashlib, hmac, json, os, secrets, sqlite3, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, csv, hashlib, hmac, json, os, re, secrets, sqlite3, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / 'private_data'
 SPECIAL = {'Estoque', 'Termolabil', 'Psicotropicos', 'Antibioticos'}
+LOJA_RE = re.compile(r'^[0-9]{1,12}$')
+EAN_RE = re.compile(r'^[0-9]{8,14}$')
 
 
 def read_csv(filename):
@@ -31,6 +33,38 @@ def norm(s):
 
 def uid(name, store):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, 'registro-validades/2026/usuario/' + norm(name) + '/' + str(store or 'GERAL')))
+
+
+def loja_valida(value):
+    """Códigos MANUAL_* identificam lançamentos, não lojas do Procfit."""
+    return bool(LOJA_RE.fullmatch(str(value or '').strip()))
+
+
+def ean_valido(value):
+    return bool(EAN_RE.fullmatch(str(value or '').strip()))
+
+
+def motivo_mapa_invalido(row):
+    if not loja_valida(row.get('loja_id')):
+        return 'Código de loja inválido (não substituído automaticamente)'
+    if not ean_valido(row.get('ean')):
+        return 'EAN fora do padrão de 8 a 14 dígitos'
+    lote = str(row.get('lote') or '').strip()
+    if not 1 <= len(lote) <= 100:
+        return 'Lote vazio ou com mais de 100 caracteres'
+    try:
+        quantidade = int(row.get('quantidade') or '')
+    except (ValueError, TypeError):
+        return 'Quantidade não numérica'
+    if quantidade < 0:
+        return 'Quantidade negativa'
+    return None
+
+
+def pendencia(row, table, reason):
+    """Registra a linha integral para auditoria em vez de perder dados legados."""
+    return {'origem_migracao': row['origem_migracao'],
+            'tabela_origem': table, 'motivo': reason, 'dados': row}
 
 
 def pin_hash(pin):
@@ -97,12 +131,38 @@ def main():
     products = list(catalogo(args.catalogo)) if args.only in ('todos','produtos') else []
     valid_products = [x for x in products if 8<=len(x['ean'])<=14 and x['ean'].isdigit()]
     skipped_products = [x for x in products if not (8<=len(x['ean'])<=14 and x['ean'].isdigit())]
-    valid_maps = [x for x in maps if 8<=len(x['ean'])<=14 and x['ean'].isdigit()]
+    # Validação antes de qualquer escrita: nunca criar loja com identificador MANUAL_*.
+    invalid_users = [u for u in users if (not loja_valida(u.get('loja_id'))
+                     and not (u.get('perfil') == 'geral' and not u.get('loja_id')))]
+    if invalid_users:
+        sys.exit(f'Abortado: {len(invalid_users)} usuário(s) possuem código de loja inválido. '
+                 'Corrija o CSV privado antes de executar a importação.')
+    invalid_maps = [(m, motivo_mapa_invalido(m)) for m in maps]
+    valid_maps = [m for m, motivo in invalid_maps if motivo is None]
+    pending_maps = [pendencia(m, 'mapa_lancamentos', motivo)
+                    for m, motivo in invalid_maps if motivo is not None]
+    valid_venc = [r for r in venc if loja_valida(r.get('loja_id'))]
+    pending_venc = [pendencia(r, 'vencidos', 'Código de loja inválido; '
+                            'verifique as duas colunas LojaOrigem da planilha original')
+                    for r in venc if not loja_valida(r.get('loja_id'))]
+    valid_queima = [r for r in q if loja_valida(r.get('loja_id'))]
+    pending_queima = [pendencia(r, 'queima', 'Código de loja inválido')
+                      for r in q if not loja_valida(r.get('loja_id'))]
+    if pending_maps or pending_venc or pending_queima:
+        print(f'ATENÇÃO: {len(pending_maps)} mapas, {len(pending_venc)} vencidos e '
+              f'{len(pending_queima)} registros de queima serão preservados em '
+              'migracao_pendencias (sem associação indevida a uma loja).', flush=True)
     print(json.dumps({'usuarios':len(users),'produtos_validos':len(valid_products),
-                      'produtos_cadastro_revisar':len(skipped_products),'mapas_validos':len(valid_maps),
-                      'mapas_revisar':len(maps)-len(valid_maps),'vencidos':len(venc),
-                      'queima':len(q),'historico':len(hist),
-                      'transferencias_para_revisar':len(read_csv('transferencias_REVISAR.csv'))},ensure_ascii=False,indent=2))
+                      'produtos_cadastro_revisar':len(skipped_products),
+                      'mapas_para_importar':len(valid_maps),
+                      'mapas_revisar':len(pending_maps),
+                      'vencidos_para_importar':len(valid_venc),
+                      'vencidos_revisar':len(pending_venc),
+                      'queima_para_importar':len(valid_queima),
+                      'queima_revisar':len(pending_queima),
+                      'historico':len(hist),
+                      'transferencias_para_revisar':len(read_csv('transferencias_REVISAR.csv'))},
+                     ensure_ascii=False, indent=2))
     if not args.apply:
         return
     if not url.startswith('https://') or not key or key.startswith('sb_secret_COLE'):
@@ -124,8 +184,10 @@ def main():
         except OSError:pass
         print('ATENÇÃO: PINs novos criados em',pin_file,'— nunca publique esse arquivo.')
     pins={(norm(x['nome']),x['loja']):x['pin'] for x in read_csv('novos_pins_gerados.csv')} if import_users else {}
-    stores={u['loja_id'] for u in users if u['loja_id']}|{m['loja_id'] for m in maps if m['loja_id']}
-    stores |= {x['loja_id'] for x in venc if x['loja_id']}
+    stores={u['loja_id'] for u in users if loja_valida(u.get('loja_id'))}
+    stores |= {m['loja_id'] for m in valid_maps}
+    stores |= {r['loja_id'] for r in valid_venc}
+    stores |= {r['loja_id'] for r in valid_queima}
     send_rows('lojas',[{'id':s,'nome':f'Loja {s}'} for s in sorted(stores)],url=url,key=key,conflict='id')
     if import_users:
         built=[]
@@ -146,26 +208,26 @@ def main():
             uid_value=uid(m['mapa_nome'],m['loja_id']) if m['tipo_mapa']=='funcionario' else None
             built.append({**m,'funcionario_id':uid_value,'produto_id':None})
         send_rows('mapa_lancamentos',built,url=url,key=key,conflict='origem_migracao')
-        send_rows('migracao_pendencias',[{'origem_migracao':m['origem_migracao'],
-                 'tabela_origem':'mapa_lancamentos','motivo':'EAN fora do padrão','dados':m}
-                 for m in maps if m not in valid_maps],url=url,key=key,conflict='origem_migracao')
+        send_rows('migracao_pendencias',pending_maps,url=url,key=key,conflict='origem_migracao')
     if args.only in ('todos','vencidos'):
         built=[]
-        for r in venc:
+        for r in valid_venc:
             built.append({'loja_id':r['loja_id'],'ean':None,'codigo_interno':r['codigo_interno'] or None,
                           'descricao_original':r['descricao_original'],'mapa_origem':r['mapa_origem'],
                           'linha_original':r['linha_original'],'lote':r['lote'] or None,
                           'validade':r['validade'] or None,'quantidade':int(r['quantidade'] or 0),
                           'criado_em':r['criado_em'] or None,'origem_migracao':r['origem_migracao']})
         send_rows('vencidos',built,url=url,key=key,conflict='origem_migracao')
+        send_rows('migracao_pendencias',pending_venc,url=url,key=key,conflict='origem_migracao')
     if args.only in ('todos','queima'):
         built=[]
-        for r in q:
+        for r in valid_queima:
             built.append({'loja_id':r['loja_id'],'ean':r['ean'],'lote':r['lote'] or None,
                           'validade':r['validade'] or None,'quantidade':int(r['quantidade']),
                           'estado':r['estado'],'origem_mapa':r['origem_mapa'],
                           'criado_em':r['criado_em'],'origem_migracao':r['origem_migracao']})
         send_rows('queima',built,url=url,key=key,conflict='origem_migracao')
+        send_rows('migracao_pendencias',pending_queima,url=url,key=key,conflict='origem_migracao')
     if args.only in ('todos','auditoria'):
         built=[]
         for r in hist:

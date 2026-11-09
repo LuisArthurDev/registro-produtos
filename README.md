@@ -72,3 +72,7 @@ Se o workflow parar em `Run python scripts/baixar_dados_privados.py`, consulte [
 ## Workflow do GitHub Actions
 
 Se o workflow não aparecer ou não iniciar, consulte [RECUPERAR-GITHUB-ACTIONS.md](RECUPERAR-GITHUB-ACTIONS.md).
+
+## Correção da importação (loja_codigo)
+
+Leia [CORRECAO-IMPORTACAO-LOJA.md](CORRECAO-IMPORTACAO-LOJA.md) para substituir o bundle privado e repetir as etapas no GitHub Actions.
