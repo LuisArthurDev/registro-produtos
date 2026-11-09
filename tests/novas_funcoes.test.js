@@ -19,7 +19,8 @@ const auth={authorization:'Bearer '+('a'.repeat(64))};
 test('login oferece campo de loja persistente com botão para apagar',()=>{
   const html=read('../public/index.html'), js=read('../public/assets/app.js');
   assert.match(html,/id="login-loja-clear"/);
-  assert.match(js,/input\.addEventListener\('input',update\)/);
+  assert.match(js,/input\.addEventListener\('input',save\)/);
+  assert.match(js,/input\.readOnly=valid/);
   assert.match(js,/localStorage\.setItem\(STORE_KEY,clean\)/);
   assert.match(js,/localStorage\.removeItem\(STORE_KEY\)/);
   assert.match(js,/clear\.onclick=.*input\.focus/);

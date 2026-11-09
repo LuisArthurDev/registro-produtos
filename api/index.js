@@ -206,51 +206,78 @@ async function staff(req,actor,body,query){
     if(nome.length<2||nome.length>120)throw bad('Nome inválido.');
     if(specials.some(x=>normalizarNome(x)===normalizarNome(nome)))throw bad('Nome reservado para mapa especial.');
     const perfil=body.perfil||'funcionario';
-    if(!['funcionario','admin','geral'].includes(perfil))throw bad('Perfil inválido.');
-    if(perfil==='geral')geral(actor);
-    else if(!loja)throw bad('Loja obrigatória.');
-    const data={nome,nome_normalizado:normalizarNome(nome),loja_id:perfil==='geral'?null:loja,perfil,ativo:true,especial:body.especial===true,pin_hash:hashPin(body.pin)};
+    if(!['funcionario','admin'].includes(perfil))throw bad('O perfil Geral é exclusivo e não pode ser criado por este painel.',403);
+    if(actor.perfil==='admin'&&perfil!=='funcionario')throw bad('Somente o Geral pode criar administradores.',403);
+    if(perfil==='admin')geral(actor);
+    if(!loja)throw bad('Loja obrigatória.');
+    const data={nome,nome_normalizado:normalizarNome(nome),loja_id:loja,perfil,ativo:true,especial:body.especial===true,pin_hash:hashPin(body.pin)};
     const u=await db('usuarios',{method:'POST',body:data,prefer:'return=representation'});
     await audit(actor,'cadastrar_usuario',{id:u[0].id,nome});return {sucesso:true,usuario:cleanUser(u[0])};
   }
   const id=norm(body.id);const user=await one('usuarios',{id:`eq.${id}`});if(!user)throw bad('Usuário não encontrado.',404);
-  if(actor.perfil!=='geral'&&(user.loja_id!==actor.loja_id||user.perfil==='geral'))throw bad('Acesso negado.',403);
+  if(actor.perfil!=='geral'&&(user.loja_id!==actor.loja_id||user.perfil!=='funcionario'))throw bad('Somente o Administrador Geral gerencia contas administrativas.',403);
   if(req.method==='PATCH'){
     const patch={};
     if(body.ativo!==undefined)patch.ativo=!!body.ativo;
     if(body.especial!==undefined)patch.especial=!!body.especial;
     if(body.celular_proprio!==undefined)patch.celular_proprio=!!body.celular_proprio;
-    if(body.pin!==undefined)patch.pin_hash=hashPin(body.pin);
+    if(body.pin!==undefined){patch.pin_hash=hashPin(body.pin);patch.tentativas=0;patch.bloqueado_ate=null;}
     if(body.nome!==undefined){if(specials.some(x=>normalizarNome(x)===normalizarNome(body.nome)))throw bad('Nome reservado para mapa especial.');patch.nome=norm(body.nome);patch.nome_normalizado=normalizarNome(body.nome);}
-    if(body.perfil!==undefined){if(actor.perfil!=='geral'&&body.perfil==='geral')throw bad('Acesso negado.',403);patch.perfil=body.perfil;}
+    if(body.perfil!==undefined){if(!['funcionario','admin'].includes(body.perfil))throw bad('O perfil Geral é exclusivo e não pode ser atribuído por este painel.',403);if(actor.perfil!=='geral'&&body.perfil!=='funcionario')throw bad('Somente o Administrador Geral define administradores.',403);if(body.perfil!==user.perfil&&actor.perfil!=='geral')throw bad('Alteração de perfil restrita ao Administrador Geral.',403);patch.perfil=body.perfil;}
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração.');
     await db('usuarios',{method:'PATCH',params:{id:`eq.${id}`},body:patch});
     if(body.ativo===false||body.pin!==undefined)await db('sessoes',{method:'DELETE',params:{usuario_id:`eq.${id}`}});
-    await audit(actor,'editar_usuario',{id,campos:Object.keys(patch).filter(x=>x!=='pin_hash')});return {sucesso:true};
+    await audit(actor,body.pin!==undefined?'redefinir_pin':'editar_usuario',{id,campos:Object.keys(patch).filter(x=>x!=='pin_hash')});return {sucesso:true};
   }
   throw bad('Método não permitido.',405);
 }
+async function enriquecerRegistros(registros, table) {
+  if (!['queima','vencidos','transferencias'].includes(table) || !registros.length) return registros;
+  const eans=[...new Set(registros.map(x=>norm(x.ean)).filter(eanValido))];
+  const internos=[...new Set(registros.filter(x=>!eanValido(x.ean)).map(x=>norm(x.codigo_interno)).filter(Boolean))];
+  let produtos=[];
+  for(let i=0;i<eans.length;i+=70){
+    const grupo=eans.slice(i,i+70);
+    const encontrados=await rows('produtos',{ean:`in.(${grupo.join(',')})`,select:'ean,descricao,codigo_interno'},100,2);
+    produtos.push(...encontrados);
+  }
+  for(let i=0;i<internos.length;i+=70){
+    const grupo=internos.slice(i,i+70).filter(x=>/^\d{1,20}$/.test(x));
+    if(grupo.length)produtos.push(...await rows('produtos',{codigo_interno:`in.(${grupo.join(',')})`,select:'ean,descricao,codigo_interno'},100,2));
+  }
+  const porEan=new Map(produtos.map(x=>[x.ean,x]));
+  const porInterno=new Map();
+  for(const x of produtos){const codigo=norm(x.codigo_interno);if(!codigo)continue;if(!porInterno.has(codigo))porInterno.set(codigo,x);else porInterno.set(codigo,null);}
+  return registros.map(x=>{const encontrado=porEan.get(norm(x.ean))||porInterno.get(norm(x.codigo_interno));return {...x,descricao:encontrado?.descricao||norm(x.descricao_original)||null,ean_resolvido:eanValido(x.ean)?x.ean:encontrado?.ean||null};});
+}
+
 async function genericRecords(req,actor,body,query,table,extras={}) {
   const loja=actorLoja(actor,body.loja||query.get('loja'));
   if(req.method==='GET') {
     admin(actor);
-    return {sucesso:true,registros:await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,select:'*',order:'criado_em.desc'},700,10)};
+    const regs=await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,select:'*',order:'criado_em.desc'},700,10);return {sucesso:true,registros:await enriquecerRegistros(regs,table)};
   }
   admin(actor);
   if(req.method==='POST'){
     const payload={...body};delete payload.loja;delete payload.sessao;
-    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa'];
+    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa','codigo_interno','descricao_original','mapa_origem'];
     const data=Object.fromEntries(Object.entries(payload).filter(([k])=>allowed.includes(k)));
     data[extras.lojaCol||'loja_id']=loja;
     if(extras.usuarioCol!==false)data[extras.usuarioCol||'usuario_id']=actor.id;
     if(data.ean&&!eanValido(data.ean))throw bad('EAN inválido.');
+    if(table==='queima'&&!eanValido(data.ean))throw bad('EAN obrigatório na Queima.');
+    if(table==='vencidos'&&!data.ean&&!data.codigo_interno)throw bad('Informe EAN ou código interno para a retirada.');
+    if(table==='queima')data.motivo='4';
     if(data.quantidade!==undefined&&(!Number.isInteger(Number(data.quantidade))||Number(data.quantidade)<1))throw bad('Quantidade inválida.');
     const r=await db(table,{method:'POST',body:data,prefer:'return=representation'});
     await audit(actor,'cadastrar_'+table,{id:r[0].id});return {sucesso:true,registro:r[0]};
   }
   if(req.method==='PATCH'){
     const atual=await one(table,{id:`eq.${body.id}`,[extras.lojaCol||'loja_id']:`eq.${loja}`});if(!atual)throw bad('Não encontrado.',404);
-    const allowed=extras.patchAllowed||['estado','observacao'];const patch=Object.fromEntries(Object.entries(body).filter(([k])=>allowed.includes(k)));
+    const allowed=extras.patchAllowed||['estado','observacao','situacao'];const patch=Object.fromEntries(Object.entries(body).filter(([k])=>allowed.includes(k)));
+    if(table==='queima'&&patch.estado&&!['pendente','aprovado'].includes(patch.estado))throw bad('Use a operação de relançar para preservar o histórico.');
+    if(table==='queima'&&patch.estado==='aprovado'&&atual.estado!=='pendente')throw bad('Somente uma Queima pendente pode ser aprovada.',409);
+    if(table==='sinalizacoes'&&patch.situacao&&!['aberto','resolvido','negado'].includes(patch.situacao))throw bad('Situação inválida.');
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração válida.');
     await db(table,{method:'PATCH',params:{id:`eq.${atual.id}`},body:patch});await audit(actor,'atualizar_'+table,{id:atual.id});return {sucesso:true};
   }
@@ -338,6 +365,40 @@ async function pendencias(req,actor,body,query){
   return {sucesso:true,resultado};
 }
 
+async function painelGeral(actor) {
+  geral(actor);
+  const [lojas,admins,usuarios]=await Promise.all([
+    rows('lojas',{select:'id,nome',order:'id.asc'},500,5),
+    rows('usuarios',{perfil:'eq.admin',select:'id,nome,loja_id,perfil,ativo',order:'loja_id.asc'},500,5),
+    rows('usuarios',{select:'loja_id,perfil,ativo'},500,10)
+  ]);
+  return {sucesso:true,lojas,administradores:admins,totais:{lojas:lojas.length,administradores:admins.length,funcionarios:usuarios.filter(u=>u.perfil==='funcionario').length}};
+}
+async function encaminharMapa(req,actor,body){
+  admin(actor);
+  const loja=actorLoja(actor,body.loja);
+  const ids=body.ids;
+  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>!/^[0-9a-f-]{36}$/i.test(norm(id))))throw bad('Selecione de 1 a 100 registros válidos.');
+  if(!['queima','vencidos'].includes(body.destino))throw bad('Destino inválido.');
+  const resultado=await db('rpc/encaminhar_mapa',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_destino:body.destino}});
+  await audit(actor,'encaminhar_mapa',{ids,destino:body.destino});
+  return {sucesso:true,resultado};
+}
+async function relancarQueima(req,actor,body){
+  admin(actor); const loja=actorLoja(actor,body.loja);
+  if(!/^[0-9a-f-]{36}$/i.test(norm(body.id)))throw bad('Identificador inválido.');
+  const result=await db('rpc/relancar_queima',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_id:body.id}});
+  await audit(actor,'relancar_queima',{id:body.id});return {sucesso:true,resultado:result};
+}
+async function retirarDanificado(req,actor,body){
+  admin(actor);const loja=actorLoja(actor,body.loja);
+  const registro=await one('vencidos',{id:`eq.${norm(body.id)}`,loja_id:`eq.${loja}`,motivo:'eq.danificado'});
+  if(!registro)throw bad('Registro danificado não encontrado.',404);
+  if(registro.retirado_em)return {sucesso:true,jaRetirado:true};
+  await db('vencidos',{method:'PATCH',params:{id:`eq.${registro.id}`,loja_id:`eq.${loja}`},body:{retirado_em:new Date().toISOString(),retirado_por:actor.id}});
+  await audit(actor,'retirar_danificado',{id:registro.id});return {sucesso:true};
+}
+
 async function handle(req){
   const origin=req.headers.origin,host=req.headers.host;
   if(origin){let same=false;try{same=new URL(origin).host===host;}catch{}if(!same)throw bad('Origem não autorizada.',403);}
@@ -356,6 +417,10 @@ async function handle(req){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};
   }
   if(pathname.startsWith('/produtos'))return produtos(req,actor,pathname,body,query);
+  if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
+  if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
+  if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
+  if(pathname==='/vencidos/retirar'&&req.method==='POST')return retirarDanificado(req,actor,body);
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
   if(pathname.startsWith('/estoque'))return stock(req,actor,pathname,body,query);
   if(pathname.startsWith('/usuarios'))return staff(req,actor,body,query);

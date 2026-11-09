@@ -12,6 +12,12 @@ GitHub Pages (apenas redirecionamento)
 
 Este pacote inclui o frontend, APIs, schema, scripts de migração e o redirecionamento GitHub Pages. É o pacote de **código sem dados privados**, organizado para um único repositório. **Não está conectado a um Supabase real.** A URL do Vercel e chaves do Supabase ainda precisam ser configuradas. Não considere o projeto concluído para produção sem testes com dados reais.
 
+## Atualização de compatibilidade do Painel Conferente (09/11/2026)
+
+O painel recebeu menus recolhíveis, Mapa de Validades com novo lançamento em modal, filtros/paginação/impressão/exportação, Controle de Validade, estoque especial, perdas, Queima e Vencidos, Produtos EAN, Pendências e Painel Geral exclusivo. A instalação da função transacional requer executar **GitHub Actions → Supabase - preparar e importar → etapa `atualizar_painel`** antes de testar no Vercel.
+
+**Atenção — paridade incompleta:** a integração real do OneSignal (alertas e agendamento de 6h), autorização individual de aparelhos e algumas rotinas externas do Procfit ainda não foram finalizadas. Consulte [MATRIZ-PARIDADE-PAINEL-CONFERENTE.md](documentacao/MATRIZ-PARIDADE-PAINEL-CONFERENTE.md) para o levantamento completo e os testes de homologação. Não substitua a produção até validar essas lacunas.
+
 ## Um único repositório no GitHub
 
 Primeiro teste a migração em uma branch `migracao-supabase`, preservando a `main` com o sistema atual. A aplicação Vercel usa a raiz (`/`): `public/`, `api/` e `vercel.json`. O GitHub Pages usa **Settings → Pages → Deploy from a branch → main → /docs**. A documentação foi movida para `documentacao/` para que a pasta `/docs` tenha o `index.html` de redirecionamento. Ative o redirecionamento apenas depois de homologar o Vercel e configure `docs/config.js` com a URL real. Veja `PUBLICACAO-REPOSITORIO-UNICO.md`.
@@ -47,8 +53,8 @@ Os fluxos principais já possuem código substituto, mas **não há paridade com
 
 - OneSignal: cadastro do dispositivo, segmentação por funcionário e loja, notificações agendadas a cada 6h, painel administrativo e ciclo de vencidos.
 - Autorização de celular próprio por dispositivo; a flag existe, mas o fluxo do antigo `login.gs` ainda não foi reproduzido.
-- Operações especiais completas de Vencidos, Sinalização e Queima (aprovação/relançamento, motivo 4 e ações históricas), regras da seção e sincronização Procfit.
-- Importação ODS/XLSX diretamente no navegador; atualmente aceita CSV e fornece conversor ODS→CSV por script.
+- Operações especiais de Vencidos, Sinalização e Queima foram adicionadas à nova API, mas sua equivalência com os procedimentos do legado e sua execução real no Supabase ainda precisam ser homologadas.
+- A importação ODS/CSV já está implementada no navegador para saldo Procfit. XLSX ainda precisa de conversão e o ODS deve ser testado com exportações reais.
 - Trabalho offline completo, sincronização e alertas de possíveis conflitos; há reenvio idempotente em um lançamento pendente, mas não fila offline de vários itens.
 - Migração revisada das 21 transferências com cabeçalhos inconsistentes e solução dos códigos EAN pendentes.
 - Políticas de backup, recuperação, limite de acesso, proteção antiabuso do login e observabilidade em produção.

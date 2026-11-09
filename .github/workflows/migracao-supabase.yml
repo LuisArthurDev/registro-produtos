@@ -25,6 +25,7 @@ on:
           - importar
           - finalizar
           - ajustar_pendencias
+          - atualizar_painel
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -112,7 +113,7 @@ jobs:
           if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
             echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
           fi
-          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' ]]; then
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' ]]; then
             if [[ -z "$SUPABASE_DB_URL" ]]; then
               echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
             fi
@@ -128,7 +129,7 @@ jobs:
             fi
           fi
       - name: Verificar URL IPv4 do Supabase antes do SQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel'
         shell: bash
         run: |
           set -euo pipefail
@@ -156,13 +157,13 @@ jobs:
           print('URL do Session pooler validada (IPv4, 5432).')
           PYCODE
       - name: Preparar cliente PostgreSQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
       - name: Testar conexão PostgreSQL sem alterar dados
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel'
         shell: bash
         run: |
           set -euo pipefail
@@ -181,6 +182,13 @@ jobs:
         run: |
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/003_pendencias.sql
+      - name: Atualizar funções do Painel Conferente (aditivo)
+        if: inputs.etapa == 'atualizar_painel'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/003_pendencias.sql
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/004_painel_conferente.sql
       - name: Baixar pacote de dados do Supabase Storage privado
         if: inputs.etapa == 'validar' || inputs.etapa == 'importar'
         run: python scripts/baixar_dados_privados.py
