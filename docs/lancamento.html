@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex,follow">
+  <title>Registro de Validades — Novo endereço</title>
+  <style>
+    :root{font:16px system-ui,sans-serif;color:#e9f8ff;background:#0a1424}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
+    main{width:min(100%,490px);padding:clamp(24px,5vw,45px);border:1px solid #294359;border-radius:20px;background:#142337;box-shadow:0 15px 70px #0005}
+    .mark{display:grid;place-items:center;width:52px;height:52px;border-radius:14px;background:#50d9ce;color:#10242c;font-size:31px}
+    h1{font-size:clamp(24px,5vw,34px);letter-spacing:-.04em;line-height:1.15}
+    p{color:#afc4d6;line-height:1.65}
+    a{color:#00232e;background:#58e1d4;padding:13px 19px;border-radius:10px;display:inline-block;text-decoration:none;font-weight:750}
+    .meta{font-size:12px;color:#8bacc2;margin-top:20px}.alert{background:#453025;border:1px solid #78503a;padding:12px;border-radius:8px}
+    .loader{display:inline-block;width:14px;height:14px;border:2px solid #fff8;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:8px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.loader{animation:none}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">◈</div>
+    <h1>O Registro de Validades mudou de endereço</h1>
+    <p id="message" role="status"><span class="loader"></span> Redirecionando para o novo sistema…</p>
+    <p><a id="open" href="#" rel="noopener noreferrer">Abrir o novo sistema</a></p>
+    <p class="meta">Você continuará usando o mesmo login após a migração das contas. Adicione o novo endereço aos favoritos.</p>
+  </main>
+  <script src="config.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    const message=document.getElementById('message');
+    const link=document.getElementById('open');
+    const value=String(window.VERCEL_DESTINO||'').trim();
+    let base;
+    try {
+      base=new URL(value);
+      if(base.protocol!=='https:' || base.hostname==='seu-projeto.vercel.app' || !base.hostname.endsWith('.vercel.app') && !base.hostname.includes('.'))throw Error('URL incorreta');
+      if(base.username||base.password||base.search||base.hash)throw Error('URL de destino inválida');
+    }catch(err){message.textContent='Redirecionamento ainda não configurado. Edite config.js com a URL do Vercel.';message.classList.add('alert');link.hidden=true;return;}
+    const rotas={
+      'index.html':'','lancamento.html':'#lancamentos','visualizacao.html':'#mapas',
+      'painelconferente.html':'#dashboard','painelgeral.html':'#dashboard',
+      'instalar.html':'','erro.html':'','404.html':''
+    };
+    const path=decodeURIComponent(window.location.pathname.split('/').pop()||'index.html').toLowerCase();
+    const route=Object.prototype.hasOwnProperty.call(rotas,path)?rotas[path]:'';
+    // Não transferimos query strings do sistema anterior para evitar vazar PIN, sessão ou tokens.
+    const url=base.origin+base.pathname.replace(/\/$/,'')+'/'+route;
+    link.href=url;
+    window.setTimeout(()=>window.location.replace(url),350);
+  })();
+  </script>
+</body>
+</html>
