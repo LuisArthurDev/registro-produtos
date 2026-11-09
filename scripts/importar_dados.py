@@ -4,8 +4,9 @@
 Requer apenas Python 3.10+ (biblioteca padrão). Sem chave -> validação offline.
 Por padrão NÃO envia nada. Use --apply após backup e revisão dos CSVs.
 As senhas antigas NÃO são reaproveitadas; gera PINs novos e privados.
+No GitHub Actions, os PINs são derivados de MIGRATION_PIN_SEED e cifrados antes de sair do runner.
 """
-import argparse, csv, hashlib, json, os, secrets, sqlite3, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, csv, hashlib, hmac, json, os, secrets, sqlite3, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +81,7 @@ def main():
     p.add_argument('--apply', action='store_true', help='Envia dados; exige variáveis de ambiente com credenciais')
     p.add_argument('--only', choices=['todos','usuarios','produtos','mapas','vencidos','queima','auditoria'], default='todos')
     p.add_argument('--catalogo', default=str(DATA / 'produtos_ean.db'))
+    p.add_argument('--sem-usuarios', action='store_true', help='Não recria nem reinsere contas e PINs')
     args = p.parse_args()
     url = os.environ.get('SUPABASE_URL','').strip()
     key = (os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or '').strip()
@@ -105,21 +107,27 @@ def main():
         return
     if not url.startswith('https://') or not key or key.startswith('sb_secret_COLE'):
         sys.exit('Defina SUPABASE_URL e SUPABASE_SECRET_KEY no terminal antes de --apply.')
-    if not (DATA/'novos_pins_gerados.csv').exists() and args.only in ('todos','usuarios'):
+    import_users = args.only in ('todos','usuarios') and not args.sem_usuarios
+    if import_users and not os.environ.get('MIGRATION_PIN_SEED', '').strip():
+        sys.exit('Defina MIGRATION_PIN_SEED (segredo longo e estável) para garantir PINs iguais em reexecuções.')
+    if not (DATA/'novos_pins_gerados.csv').exists() and import_users:
         pins=[]
         for u in users:
-            pins.append({'nome':u['nome'],'loja':u['loja_id'], 'pin': ''.join(str(secrets.randbelow(10)) for _ in range(10))})
+            ident=(norm(u['nome']) + '/' + u['loja_id']).encode('utf-8')
+            digest=hmac.new(os.environ['MIGRATION_PIN_SEED'].encode('utf-8'), ident, hashlib.sha256).digest()
+            pin=str(int.from_bytes(digest, 'big') % (10**10)).zfill(10)
+            pins.append({'nome':u['nome'],'loja':u['loja_id'], 'pin': pin})
         pin_file=DATA/'novos_pins_gerados.csv'
         with pin_file.open('w', encoding='utf-8', newline='') as f:
             w=csv.DictWriter(f,fieldnames=['nome','loja','pin']);w.writeheader();w.writerows(pins)
         try:os.chmod(pin_file,0o600)
         except OSError:pass
         print('ATENÇÃO: PINs novos criados em',pin_file,'— nunca publique esse arquivo.')
-    pins={(norm(x['nome']),x['loja']):x['pin'] for x in read_csv('novos_pins_gerados.csv')} if args.only in ('todos','usuarios') else {}
+    pins={(norm(x['nome']),x['loja']):x['pin'] for x in read_csv('novos_pins_gerados.csv')} if import_users else {}
     stores={u['loja_id'] for u in users if u['loja_id']}|{m['loja_id'] for m in maps if m['loja_id']}
     stores |= {x['loja_id'] for x in venc if x['loja_id']}
     send_rows('lojas',[{'id':s,'nome':f'Loja {s}'} for s in sorted(stores)],url=url,key=key,conflict='id')
-    if args.only in ('todos','usuarios'):
+    if import_users:
         built=[]
         for u in users:
             pin = pins[(norm(u['nome']),u['loja_id'])]
@@ -165,9 +173,10 @@ def main():
                           'dados':{'origem':'Google Sheets','autor_original':r['usuario_original'],
                           'perfil_original':r['perfil_original'],'descricao':r['descricao_original'],
                           'referencia':r['referencia_original'],'login_id_original':r['login_id_original']}})
-        # Histórico não tem origem_migracao e não é idempotente: importar somente uma vez.
-        print('AVISO: auditoria não tem chave de idempotência. Importe uma única vez.')
-        send_rows('auditoria',built,url=url,key=key)
+        # Garante idempotência mesmo em reexecuções do Actions.
+        for pos, item in enumerate(built, 1):
+            item['origem_migracao'] = 'sheets:audit:' + str(pos)
+        send_rows('auditoria',built,url=url,key=key,conflict='origem_migracao')
     print('Concluído. Execute supabase/002_apos_importacao.sql no SQL Editor e valide contagens antes de redirecionar GitHub Pages.')
 
 if __name__=='__main__':

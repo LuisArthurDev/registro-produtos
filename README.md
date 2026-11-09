@@ -60,3 +60,7 @@ O backend usa exclusivamente a chave `SUPABASE_SECRET_KEY` **no servidor**. Sess
 **Importante:** o PIN administrativo gerado no processo de migração deve ser alterado e entregue individualmente. `private_data/novos_pins_gerados.csv` contém credenciais e nunca deve ser versionado ou compartilhado.
 
 Consulte `PUBLICACAO-REPOSITORIO-UNICO.md`, `documentacao/STATUS_E_LACUNAS.md` e `documentacao/VERCEL_E_REDIRECIONAMENTO.md` antes de publicar.
+
+## Implantação pela nuvem (GitHub Actions + Vercel)
+
+Leia **[CONFIGURACAO-ACTIONS-VERCEL.md](CONFIGURACAO-ACTIONS-VERCEL.md)** para criar as tabelas e migrar o histórico pelo workflow manual, sem rodar comandos no Windows.

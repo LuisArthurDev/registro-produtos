@@ -1,0 +1,34 @@
+name: Validar sistema
+
+on:
+  push:
+    branches: [main, migracao-supabase]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validar aplicação e API
+        run: npm run check
+      - name: Validar scripts Python
+        run: python -m compileall -q scripts
+      - name: Validar arquivos de redirecionamento
+        run: test -f docs/index.html && test -f docs/config.js && test -f public/index.html

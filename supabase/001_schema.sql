@@ -182,9 +182,12 @@ create table if not exists public.auditoria (
   loja_id text,
   usuario_id uuid references public.usuarios(id),
   acao text not null,
+  origem_migracao text unique,
   dados jsonb not null default '{}'::jsonb,
   criado_em timestamptz not null default now()
 );
+alter table public.auditoria add column if not exists origem_migracao text;
+create unique index if not exists idx_auditoria_origem_migracao on public.auditoria(origem_migracao);
 create index if not exists idx_auditoria_loja on public.auditoria(loja_id, criado_em desc);
 
 -- Visão unificada, sem duplicar descrição/código e saldo.

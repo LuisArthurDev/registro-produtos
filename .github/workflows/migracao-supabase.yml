@@ -1,0 +1,146 @@
+name: Supabase - preparar e importar
+
+on:
+  workflow_dispatch:
+    inputs:
+      etapa:
+        description: 'Etapa (execute estrutura → validar → importar → finalizar)'
+        required: true
+        type: choice
+        default: validar
+        options:
+          - estrutura
+          - validar
+          - importar
+          - finalizar
+      escopo:
+        description: 'Parte a importar (somente na etapa importar)'
+        required: true
+        type: choice
+        default: todos
+        options:
+          - todos
+          - usuarios
+          - produtos
+          - mapas
+          - vencidos
+          - queima
+          - auditoria
+      confirmar_gravacao:
+        description: 'Confirmo a importação para o banco (obrigatório para importar)'
+        required: true
+        type: boolean
+        default: false
+      pular_usuarios:
+        description: 'Evitar reimportar contas e gerar PINs novos (escopo todos)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-migracao
+  cancel-in-progress: false
+
+jobs:
+  executar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      MIGRATION_PIN_SEED: ${{ secrets.MIGRATION_PIN_SEED }}
+      PINS_PASSPHRASE: ${{ secrets.PINS_PASSPHRASE }}
+      MIGRATION_BUNDLE_URL: ${{ secrets.MIGRATION_BUNDLE_URL }}
+      MIGRATION_STORAGE_BUCKET: migracao
+      MIGRATION_STORAGE_OBJECT: dados-migracao.zip
+      PGSSLMODE: require
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Conferir autorização e configurações
+        env:
+          ETAPA: ${{ inputs.etapa }}
+          ESCOPO: ${{ inputs.escopo }}
+          CONFIRMAR: ${{ inputs.confirmar_gravacao }}
+          PULAR: ${{ inputs.pular_usuarios }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
+            echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
+          fi
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' ]]; then
+            if [[ -z "$SUPABASE_DB_URL" ]]; then
+              echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
+            fi
+          else
+            if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_SECRET_KEY" ]]; then
+              echo 'Defina SUPABASE_URL e SUPABASE_SECRET_KEY em Actions Secrets.'; exit 1
+            fi
+          fi
+          if [[ "$ETAPA" == 'importar' && "$PULAR" != 'true' && ( "$ESCOPO" == 'todos' || "$ESCOPO" == 'usuarios' ) ]]; then
+            if [[ ${#MIGRATION_PIN_SEED} -lt 32 || ${#PINS_PASSPHRASE} -lt 16 ]]; then
+              echo 'Defina MIGRATION_PIN_SEED (32+ caracteres) e PINS_PASSPHRASE (16+ caracteres) em Actions Secrets.'
+              exit 1
+            fi
+          fi
+      - name: Preparar cliente PostgreSQL
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar'
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Criar tabelas, políticas e funções SQL
+        if: inputs.etapa == 'estrutura'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/001_schema.sql
+      - name: Baixar pacote de dados do Supabase Storage privado
+        if: inputs.etapa == 'validar' || inputs.etapa == 'importar'
+        run: python scripts/baixar_dados_privados.py
+      - name: Validar dados (não grava nada)
+        if: inputs.etapa == 'validar'
+        run: python scripts/importar_dados.py
+      - name: Importar dados para o Supabase
+        if: inputs.etapa == 'importar'
+        shell: bash
+        env:
+          ESCOPO: ${{ inputs.escopo }}
+          PULAR: ${{ inputs.pular_usuarios }}
+        run: |
+          set -euo pipefail
+          args=(--apply --only "$ESCOPO")
+          if [[ "$PULAR" == 'true' && "$ESCOPO" == 'todos' ]]; then args+=(--sem-usuarios); fi
+          python scripts/importar_dados.py "${args[@]}"
+      - name: Criptografar PINs de primeiro acesso (nunca publicar texto puro)
+        if: always() && inputs.etapa == 'importar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f private_data/novos_pins_gerados.csv ]]; then
+            printf '%s' "$PINS_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 --symmetric --cipher-algo AES256 \
+              --output pins-iniciais.csv.gpg private_data/novos_pins_gerados.csv
+            rm -f private_data/novos_pins_gerados.csv
+            echo 'PINs protegidos; somente a versão criptografada será disponibilizada.'
+          fi
+      - name: Disponibilizar PINs criptografados por 3 dias
+        if: always() && inputs.etapa == 'importar'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pins-iniciais-criptografados
+          path: pins-iniciais.csv.gpg
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Consolidar vínculos e validar contagens
+        if: inputs.etapa == 'finalizar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/002_apos_importacao.sql
