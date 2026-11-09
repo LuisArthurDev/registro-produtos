@@ -81,7 +81,7 @@ async function login(body) {
   const nome=normalizarNome(body.nome), pin=String(body.pin??'');
   if(nome.length<2||nome.length>120||!/^\d{4,12}$/.test(pin))throw bad('Credenciais inválidas.',401);
   let candidatos=await rows('usuarios',{nome_normalizado:`eq.${nome}`,ativo:'eq.true',select:'*'},100);
-  if(body.loja) candidatos=candidatos.filter(u=>u.loja_id===String(body.loja));
+  if(body.loja) {const sameStore=candidatos.filter(u=>u.loja_id===String(body.loja));candidatos=sameStore.length?sameStore:candidatos.filter(u=>u.perfil==='geral'&&u.loja_id===null);}
   if(candidatos.length>1)throw bad('Há nomes iguais em mais de uma loja. Informe o número da loja.',409);
   const user=candidatos[0];
   if(!user)throw bad('Credenciais inválidas.',401);
@@ -159,12 +159,13 @@ async function mapas(req,actor,pathname,body,query){
   const existente=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`});if(!existente)throw bad('Registro não encontrado.',404);
   if(req.method==='PATCH'){
     const patch={};
-    if(body.quantidade!==undefined){if(!Number.isInteger(Number(body.quantidade))||Number(body.quantidade)<0)throw bad('Quantidade inválida.');patch.quantidade=Number(body.quantidade);}
-    if(body.lote!==undefined){if(!norm(body.lote))throw bad('Lote obrigatório.');patch.lote=norm(body.lote).toUpperCase();}
+    if(body.ean!==undefined){if(!eanValido(norm(body.ean)))throw bad('EAN deve ter de 8 a 14 dígitos.');patch.ean=norm(body.ean);const produto=await one('produtos',{ean:`eq.${patch.ean}`,select:'id'});patch.produto_id=produto?.id||null;}
+    if(body.quantidade!==undefined){if(!Number.isInteger(Number(body.quantidade))||Number(body.quantidade)<0||Number(body.quantidade)>999999)throw bad('Quantidade inválida.');patch.quantidade=Number(body.quantidade);}
+    if(body.lote!==undefined){if(!norm(body.lote)||norm(body.lote).length>100)throw bad('Lote obrigatório, com no máximo 100 caracteres.');patch.lote=norm(body.lote).toUpperCase();}
     if(body.validade!==undefined){if(!dataValida(body.validade))throw bad('Data inválida.');patch.validade=body.validade;}
     if(!Object.keys(patch).length)throw bad('Nenhum campo válido.');
     await db('mapa_lancamentos',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`},body:{...patch,atualizado_em:new Date().toISOString()}});
-    await audit(actor,'editar_mapa',{id});return {sucesso:true};
+    await audit(actor,'editar_mapa',{id,mapa:existente.mapa_nome,antes:{ean:existente.ean,lote:existente.lote,validade:existente.validade,quantidade:existente.quantidade},alterado:patch});return {sucesso:true};
   }
   if(req.method==='DELETE'){
     await db('mapa_lancamentos',{method:'DELETE',params:{id:`eq.${id}`,loja_id:`eq.${loja}`}});
@@ -255,6 +256,88 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
   }
   throw bad('Método não permitido.',405);
 }
+// Pendências históricas: original imutável; correções ficam em tabelas operacionais
+// e o registro pendente recebe um marcador e um resumo auditável.
+const lojaCorreta=v=>/^\d{1,12}$/.test(norm(v));
+const dataMapMes=v=>/^\d{4}-(0[1-9]|1[0-2])-01$/.test(norm(v));
+function validatePendingBasic(d,{quantidadeMin=0}={}){
+  if(!lojaCorreta(d.loja_id))throw bad('Informe uma loja numérica válida.');
+  if(d.ean&&!eanValido(d.ean))throw bad('EAN deve ter de 8 a 14 dígitos.');
+  if(d.validade&&!dataValida(d.validade))throw bad('Validade inválida.');
+  if(!Number.isInteger(Number(d.quantidade))||Number(d.quantidade)<quantidadeMin||Number(d.quantidade)>999999)throw bad('Quantidade inválida.');
+}
+function pendingVisible(actor,item){
+  if(actor.perfil==='geral')return true;
+  return String(item?.dados?.loja_id||'')===String(actor.loja_id||'');
+}
+async function pendencias(req,actor,body,query){
+  admin(actor);
+  if(req.method==='GET'){
+    const [catalogo,migracao]=await Promise.all([
+      rows('catalogo_pendencias',{status:'eq.pendente',select:'codigo_original,codigo_interno,descricao,secao,motivo,status',order:'importado_em.asc'},500,5),
+      rows('migracao_pendencias',{status:'eq.pendente',select:'origem_migracao,tabela_origem,motivo,dados,status',order:'importado_em.asc'},500,5)
+    ]);
+    const visiveis=migracao.filter(x=>pendingVisible(actor,x));
+    return {sucesso:true,catalogo,migracao:visiveis,totais:{catalogo:catalogo.length,migracao:visiveis.length}};
+  }
+  if(req.method!=='PATCH')throw bad('Método não permitido.',405);
+  const tipo=norm(body.tipo),id=norm(body.id),entrada=body.correcao;
+  if(!['catalogo','migracao'].includes(tipo)||!id||!entrada||typeof entrada!=='object'||Array.isArray(entrada))throw bad('Dados de correção inválidos.');
+  const table=tipo==='catalogo'?'catalogo_pendencias':'migracao_pendencias';
+  const key=tipo==='catalogo'?'codigo_original':'origem_migracao';
+  const pend=await one(table,{[key]:`eq.${id}`,status:'eq.pendente',select:'*'});
+  if(!pend)throw bad('Pendência não encontrada ou já resolvida. Atualize a lista.',409);
+  const store=norm(entrada.loja_id||pend.dados?.loja_id);
+  if(tipo==='migracao'){
+    if(!pendingVisible(actor,pend))throw bad('Pendência fora da sua loja.',403);
+    if(actor.perfil!=='geral'&&store!==String(actor.loja_id))throw bad('Não é permitido transferir pendências para outra loja.',403);
+  }
+  let resultado;
+  if(tipo==='catalogo'){
+    const ean=norm(entrada.ean),descricao=norm(entrada.descricao??pend.descricao),secao=norm(entrada.secao??pend.secao),codigo=norm(entrada.codigo_interno??pend.codigo_interno)||null;
+    if(!eanValido(ean)||!descricao)throw bad('Informe EAN válido e descrição.');
+    const existing=await one('produtos',{ean:`eq.${ean}`,select:'id,ean,codigo_interno,descricao,secao'});
+    if(existing&&(norm(existing.descricao)!==descricao || (codigo&&existing.codigo_interno&&norm(existing.codigo_interno)!==codigo) || (secao&&existing.secao&&norm(existing.secao)!==secao)))throw bad('Este EAN já existe com dados diferentes. Confira no cadastro de produtos antes de corrigir.',409);
+    if(!existing)await db('produtos',{method:'POST',body:{ean,descricao,secao,codigo_interno:codigo},params:{on_conflict:'ean'},prefer:'resolution=ignore-duplicates,return=minimal'});
+    resultado={ean,descricao,secao,codigo_interno:codigo,origem_codigo:pend.codigo_original};
+  }else{
+    const orig=pend.dados||{};const origem=pend.tabela_origem;
+    const ean=norm(entrada.ean??orig.ean),lote=norm(entrada.lote??orig.lote),validade=norm(entrada.validade??orig.validade);
+    const quantidade=Number(entrada.quantidade??orig.quantidade);
+    const nova={...orig,loja_id:store,ean,lote,validade,quantidade};
+    if(!['mapa_lancamentos','vencidos','queima'].includes(origem))throw bad('Este tipo de pendência exige revisão pelo administrador geral.',422);
+    validatePendingBasic(nova,{quantidadeMin:origem==='mapa_lancamentos'?0:origem==='queima'?0:1});
+    if(origem==='mapa_lancamentos'){
+      if(!eanValido(ean)||!lote||lote.length>100||!dataValida(validade)||!dataMapMes(norm(orig.mes_lancamento)))throw bad('Confira EAN, lote (máximo 100 caracteres), validade e mês original do mapa.');
+      const mapa=norm(orig.mapa_nome),tipoMapa=norm(orig.tipo_mapa);
+      if(tipoMapa!=='funcionario'&&!specials.includes(tipoMapa))throw bad('Tipo de mapa desconhecido.');
+      let usuario=null;
+      if(tipoMapa==='funcionario'){
+        usuario=await one('usuarios',{loja_id:`eq.${store}`,nome_normalizado:`eq.${normalizarNome(mapa)}`,select:'id'});
+        if(!usuario)throw bad('Funcionário do mapa não está cadastrado na loja. Cadastre-o primeiro.',409);
+      }
+      const prod=await one('produtos',{ean:`eq.${ean}`,select:'id'});
+      const item={origem_migracao:pend.origem_migracao,loja_id:store,mapa_nome:mapa,tipo_mapa:tipoMapa,funcionario_id:usuario?.id||null,produto_id:prod?.id||null,ean,lote:lote.toUpperCase(),validade,quantidade,mes_lancamento:orig.mes_lancamento,criado_em:orig.criado_em||new Date().toISOString()};
+      await db('mapa_lancamentos',{method:'POST',body:item,params:{on_conflict:'origem_migracao'},prefer:'resolution=ignore-duplicates,return=minimal'});
+      resultado={tabela:origem,loja_id:store,ean,lote:item.lote,validade,quantidade,mes_lancamento:item.mes_lancamento};
+    } else if(origem==='vencidos'){
+      if(!dataValida(validade))throw bad('Validade inválida.');
+      const item={origem_migracao:pend.origem_migracao,loja_id:store,ean:eanValido(ean)?ean:null,codigo_interno:norm(orig.codigo_interno)||null,descricao_original:norm(orig.descricao_original),mapa_origem:norm(orig.mapa_origem),linha_original:norm(orig.linha_original),lote:lote||null,validade,quantidade,criado_em:orig.criado_em||new Date().toISOString()};
+      await db('vencidos',{method:'POST',body:item,params:{on_conflict:'origem_migracao'},prefer:'resolution=ignore-duplicates,return=minimal'});
+      resultado={tabela:origem,loja_id:store,ean:item.ean,lote,validade,quantidade};
+    }else{
+      if(!eanValido(ean)||!dataValida(validade))throw bad('EAN e validade obrigatórios para Queima.');
+      const item={origem_migracao:pend.origem_migracao,loja_id:store,ean,lote:lote||null,validade,quantidade,estado:['pendente','aprovado','relancado'].includes(orig.estado)?orig.estado:'pendente',origem_mapa:norm(orig.origem_mapa)||null,criado_em:orig.criado_em||new Date().toISOString()};
+      await db('queima',{method:'POST',body:item,params:{on_conflict:'origem_migracao'},prefer:'resolution=ignore-duplicates,return=minimal'});
+      resultado={tabela:origem,loja_id:store,ean,lote,validade,quantidade};
+    }
+  }
+  // Se a atualização do marcador falhar, o reenvio por origem_migracao é idempotente.
+  await db(table,{method:'PATCH',params:{[key]:`eq.${id}`,status:'eq.pendente'},body:{status:'corrigido',corrigido_em:new Date().toISOString(),corrigido_por:actor.id,resultado}});
+  await audit(actor,'corrigir_pendencia',{tipo,id,resultado});
+  return {sucesso:true,resultado};
+}
+
 async function handle(req){
   const origin=req.headers.origin,host=req.headers.host;
   if(origin){let same=false;try{same=new URL(origin).host===host;}catch{}if(!same)throw bad('Origem não autorizada.',403);}
@@ -265,7 +348,7 @@ async function handle(req){
   if(req.method==='OPTIONS')return {sucesso:true};
   if(req.method!=='GET'&&Number(req.headers['content-length']||0)>2_000_000)throw bad('Solicitação muito grande.',413);
   const body=req.method==='GET'?{}:requestBody(req);
-  if(pathname==='/health')return {sucesso:true,servico:'operacional',supabaseConfigurado:!!(urlBase()&&secret())};
+  if(pathname==='/health') {const configurado=!!(urlBase()&&secret());if(query.get('check')==='1'){if(!configurado)throw bad('Configuração Supabase ausente no Vercel.',503);await one('lojas',{select:'id'});return {sucesso:true,servico:'operacional',banco:'acessivel'};}return {sucesso:true,servico:'operacional',supabaseConfigurado:configurado};}
   if(pathname==='/login'&&req.method==='POST')return login(body);
   const {actor,sessao}=await authenticate(req);
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
@@ -276,6 +359,7 @@ async function handle(req){
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
   if(pathname.startsWith('/estoque'))return stock(req,actor,pathname,body,query);
   if(pathname.startsWith('/usuarios'))return staff(req,actor,body,query);
+  if(pathname==='/pendencias')return pendencias(req,actor,body,query);
   if(pathname==='/vencidos')return genericRecords(req,actor,body,query,'vencidos');
   if(pathname==='/queima')return genericRecords(req,actor,body,query,'queima',{patchAllowed:['estado','motivo']});
   if(pathname==='/sinalizacoes')return genericRecords(req,actor,body,query,'sinalizacoes',{usuarioCol:'atualizado_por'});
@@ -287,7 +371,15 @@ async function handle(req){
 }
 export default async function handler(req,res){
   try {const result=await handle(req);json(res,200,result);}
-  catch(e){const code=e.status&&e.status>=400&&e.status<600?e.status:500;
-    if(code>=500)console.error('Falha API',e.message);
-    json(res,code,{sucesso:false,mensagem:code>=500?'Falha ao consultar o servidor. Tente novamente.':e.message});}
+  catch(e){
+    const code=e.status&&e.status>=400&&e.status<600?e.status:500;
+    const referencia=randomBytes(4).toString('hex').toUpperCase();
+    if(code>=500){
+      console.error(`[API ${referencia}] ${req.method} ${String(req.url).split('?')[0]} - ${e.name}: ${e.message}`);
+    }
+    const mensagem=code===503?'Serviço indisponível: confira as variáveis de ambiente no Vercel.':
+      code===502?'Falha na comunicação com o Supabase. Verifique a conexão e tente novamente.':
+      code>=500?'Erro interno no servidor. Consulte os logs do Vercel com a referência informada.':e.message;
+    json(res,code,{sucesso:false,mensagem,...(code>=500?{referencia}:{})});
+  }
 }

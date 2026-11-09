@@ -18,7 +18,9 @@
     <div class="login-intro"><span class="eyebrow">Acesso restrito</span><h1>Bem-vindo de volta.</h1><p>Entre com seu usuário, loja e PIN para continuar.</p></div>
     <form id="form-login" class="stack" autocomplete="off">
       <label>Nome de usuário<input id="login-nome" name="nome" placeholder="Nome cadastrado" maxlength="120" required autocomplete="username"></label>
-      <label>Loja <span class="subtle">(necessária quando há nomes repetidos)</span><input id="login-loja" name="loja" inputmode="numeric" placeholder="151" pattern="[0-9]*"></label>
+      <label for="login-loja">Loja <span class="subtle">(lembrada neste dispositivo)</span></label>
+      <div class="store-input-wrap"><input id="login-loja" name="loja" inputmode="numeric" placeholder="Digite o número da loja" pattern="[0-9]{1,12}" maxlength="12" autocomplete="off" aria-describedby="login-loja-hint"><button type="button" id="login-loja-clear" class="clear-store" title="Apagar loja salva" aria-label="Apagar loja salva" hidden>×</button></div>
+      <small id="login-loja-hint" class="store-help">Salva automaticamente ao digitar. Use × para trocar de loja.</small>
       <label>PIN<input id="login-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,12}" placeholder="••••••" required autocomplete="current-password"></label>
       <label class="checkbox-label"><input type="checkbox" id="login-manter"> Permanecer conectado neste dispositivo</label>
       <button class="primary" id="btn-login" type="submit">Entrar no sistema <span>→</span></button>
@@ -41,6 +43,8 @@
   <div id="menu-backdrop" class="menu-backdrop" hidden></div>
 </div>
 <dialog id="confirm-dialog" class="dialog"><form method="dialog" class="dialog-inner"><h3 id="dialog-title">Confirmar ação</h3><p id="dialog-message"></p><div class="dialog-actions"><button value="cancel" class="btn-outline">Cancelar</button><button value="confirm" class="primary">Confirmar</button></div></form></dialog>
+<dialog id="edit-map-dialog" class="dialog"><form id="edit-map-form" class="dialog-inner"><h3>Editar produto do mapa</h3><p>Corrija os dados sem alterar o mês original do registro.</p><input type="hidden" name="id"><div class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14" required></label><label>Quantidade<input name="quantidade" type="number" min="0" max="999999" step="1" required></label><label>Lote<input name="lote" maxlength="100" required></label><label>Validade<input name="validade" type="date" required></label></div><p class="footer-hint" id="edit-map-context"></p><p class="error-note" id="edit-map-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="edit-map-cancel" class="btn-outline">Cancelar</button><button type="submit" class="primary">Salvar alterações</button></div></form></dialog>
+<dialog id="pending-dialog" class="dialog"><form id="pending-form" class="dialog-inner"><h3 id="pending-title">Corrigir pendência</h3><p id="pending-description">Confira as informações e corrija o registro.</p><div id="pending-fields" class="form-grid"></div><p class="footer-hint">O registro original será mantido para auditoria.</p><p id="pending-error" class="error-note" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="pending-cancel" class="btn-outline">Cancelar</button><button type="submit" class="primary">Confirmar correção</button></div></form></dialog>
 <script type="module" src="/assets/app.js"></script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));</script>
 </body>
