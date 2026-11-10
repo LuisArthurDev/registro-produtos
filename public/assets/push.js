@@ -1,7 +1,27 @@
-/* OneSignal Web SDK: assinatura explícita pelo usuário. REST API Key nunca aparece aqui. */
+/* OneSignal Web SDK v16 — consentimento por dispositivo para todos os perfis. */
 export const ONESIGNAL_APP_ID='2e84a1da-d84f-4f22-a24f-8515dd357558';
+export const PUSH_CHOICE_KEY='rv_notificacoes_escolha_v3';
 let sdkPromise=null;
 const errorMessage=e=>String(e?.message||e||'Falha desconhecida');
+// A escolha é por usuário, não herdada por outro funcionário que use o mesmo aparelho.
+// Antes de autenticar, o consentimento é temporário e transferido somente à conta que entrar.
+const keyUser=user=>`${PUSH_CHOICE_KEY}:${user.id}`;
+export function escolhaPush(user){
+  return user?.id ? localStorage.getItem(keyUser(user)) : sessionStorage.getItem(PUSH_CHOICE_KEY+':prelogin');
+}
+export function salvarEscolhaPush(value,user){
+  if(value!=='sim'&&value!=='nao')return;
+  if(user?.id)localStorage.setItem(keyUser(user),value);
+  else sessionStorage.setItem(PUSH_CHOICE_KEY+':prelogin',value);
+}
+export function transferirEscolhaParaConta(user){
+  if(!user?.id)return;
+  const pending=escolhaPush();
+  // Cada escolha feita antes do login só pode pertencer ao próximo login.
+  // Remover mesmo quando esta conta já tem preferência evita herdá-la por outra.
+  sessionStorage.removeItem(PUSH_CHOICE_KEY+':prelogin');
+  if(pending&&!escolhaPush(user))salvarEscolhaPush(pending,user);
+}
 export function iniciarPush(){
   if(sdkPromise)return sdkPromise;
   sdkPromise=Promise.race([
@@ -9,50 +29,77 @@ export function iniciarPush(){
       window.OneSignalDeferred=window.OneSignalDeferred||[];
       window.OneSignalDeferred.push(async function(OneSignal){
         try{
-          await OneSignal.init({appId:ONESIGNAL_APP_ID,serviceWorkerPath:'push/onesignal/OneSignalSDKWorker.js',serviceWorkerParam:{scope:'/push/onesignal/'},notifyButton:{enable:false}});
+          await OneSignal.init({appId:ONESIGNAL_APP_ID,serviceWorkerPath:'/push/onesignal/OneSignalSDKWorker.js',serviceWorkerParam:{scope:'/push/onesignal/'},notifyButton:{enable:false}});
           resolve(OneSignal);
         }catch(err){reject(err);}
       });
     }),
-    new Promise((_,reject)=>setTimeout(()=>reject(new Error('O SDK do OneSignal não respondeu. Confira a conexão, extensões e configuração Web no painel OneSignal.')),16000))
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('O SDK do OneSignal não respondeu. Confira a conexão, extensões e configuração Web.')),16000))
   ]).catch(e=>{sdkPromise=null;throw e;});
   return sdkPromise;
 }
-export async function associarPush(user,api){
-  if(!user?.id||!user.celularProprio)return;
-  try{
-    const sdk=await iniciarPush();
-    await sdk.login(user.id); // vínculo com a sessão atual; sem permissão automática
-    if(sdk.Notifications.permission&&sdk.User.PushSubscription.id){
-      await registrar(sdk,api);
-    }
-  }catch(err){console.warn('Notificações não iniciadas:',errorMessage(err));}
+function verificarSuporte(sdk){
+  if(!window.isSecureContext||!('serviceWorker' in navigator))throw new Error('Notificações exigem HTTPS e suporte a Service Worker.');
+  if(!sdk.Notifications.isPushSupported())throw new Error('Este navegador não suporta Web Push. No iPhone, adicione o sistema à Tela de Início e abra-o pelo ícone.');
 }
 async function registrar(sdk,api){
   let id=sdk.User.PushSubscription.id;
-  for(let attempt=0;!id&&attempt<12;attempt++){await new Promise(resolve=>setTimeout(resolve,450));id=sdk.User.PushSubscription.id;}
-  if(!id)throw new Error('O navegador ainda não criou uma assinatura de notificações. Verifique as permissões e o domínio configurado.');
-  const info=navigator.userAgent.slice(0,90);
-  return api('/notificacoes/dispositivos',{method:'POST',body:{subscription_id:id,nome_dispositivo:info}});
+  for(let i=0;!id&&i<12;i++){await new Promise(resolve=>setTimeout(resolve,450));id=sdk.User.PushSubscription.id;}
+  if(!id)throw new Error('Assinatura não criada. Confira as permissões e o domínio configurado no OneSignal.');
+  return api('/notificacoes/dispositivos',{method:'POST',body:{subscription_id:id,nome_dispositivo:navigator.userAgent.slice(0,90)}});
 }
-export async function ativarPush(user,api){
-  if(!user?.celularProprio)throw new Error('Peça ao administrador para ativar a opção Celular próprio no seu cadastro.');
-  if(!window.isSecureContext||!('serviceWorker' in navigator))throw new Error('As notificações exigem HTTPS e um navegador com suporte a push.');
-  const sdk=await iniciarPush();
-  if(!sdk.Notifications.isPushSupported())throw new Error('Este navegador não suporta push. No iPhone, instale a PWA na Tela de Início e abra por lá.');
-  await sdk.login(user.id);
+/** Chamada por gesto do usuário. Funciona antes do login; o vínculo da conta ocorre ao autenticar. */
+export async function permitirPush(user,api){
+  const sdk=await iniciarPush();verificarSuporte(sdk);
   if(!sdk.Notifications.permission)await sdk.Notifications.requestPermission();
-  if(!sdk.Notifications.permission)throw new Error('Permissão de notificações não concedida pelo navegador.');
-  return registrar(sdk,api);
+  if(!sdk.Notifications.permission)throw new Error('Você não autorizou notificações no navegador. Se bloqueou, altere nas configurações do site.');
+  if(sdk.User.PushSubscription.optIn)await sdk.User.PushSubscription.optIn();
+  salvarEscolhaPush('sim',user);
+  if(user?.id&&api){await sdk.login(user.id);return registrar(sdk,api);}
+  return {sucesso:true,detalhe:'Notificações permitidas. O aparelho será associado após o login.'};
 }
+export async function associarPush(user,api){
+  transferirEscolhaParaConta(user);
+  if(!user?.id)return;
+  const preferencia=escolhaPush(user);
+  if(preferencia!=='sim'){
+    if(preferencia!=='nao')return; // A pergunta de consentimento ainda está aberta.
+    // Em dispositivo compartilhado, interromper a associação anterior mesmo
+    // quando o novo usuário ainda não autorizou notificações.
+    try{
+      const sdk=await iniciarPush();
+      if(sdk.User.PushSubscription.optOut)await sdk.User.PushSubscription.optOut();
+      if(sdk.logout)await sdk.logout();
+    }catch(err){console.warn('Limpeza de push no aparelho:',errorMessage(err));}
+    return;
+  }
+  try{
+    const sdk=await iniciarPush();verificarSuporte(sdk);
+    if(!sdk.Notifications.permission)return;
+    await sdk.login(user.id);
+    if(sdk.User.PushSubscription.optIn)await sdk.User.PushSubscription.optIn();
+    return await registrar(sdk,api);
+  }catch(err){console.warn('Não foi possível associar push:',errorMessage(err));}
+}
+/** Pausa o envio neste aparelho sem revogar a permissão do navegador. */
+export async function recusarPush(user,api){
+  salvarEscolhaPush('nao',user);
+  try{
+    const sdk=await iniciarPush();
+    const id=sdk.User.PushSubscription.id;
+    if(user?.id&&api&&id)await api('/notificacoes/desativar',{method:'POST',body:{subscription_id:id}});
+    if(sdk.User.PushSubscription.optOut)await sdk.User.PushSubscription.optOut();
+  }catch(err){console.warn('Desativação do push:',errorMessage(err));}
+  return {sucesso:true};
+}
+export const ativarPush=permitirPush;
 export async function desassociarPush(api){
-  // O logout do SDK deve acontecer mesmo que a chamada ao Supabase falhe.
-  // O servidor também valida existência da sessão antes de enviar qualquer alerta.
+  // Ao sair, desvincula o usuário do aparelho. A preferência local permanece salva.
   let sdk;
   try{
     sdk=await iniciarPush();
     const id=sdk.User.PushSubscription.id;
     if(id)await api('/notificacoes/desativar',{method:'POST',body:{subscription_id:id}});
-  }catch(e){console.warn('Não foi possível desativar a assinatura remota:',errorMessage(e));}
-  finally{if(sdk)try{await sdk.logout();}catch(e){console.warn('Logout do OneSignal:',errorMessage(e));}}
+  }catch(err){console.warn('Desvinculação do push:',errorMessage(err));}
+  finally{if(sdk)try{await sdk.logout();}catch(err){console.warn('Logout do OneSignal:',errorMessage(err));}}
 }

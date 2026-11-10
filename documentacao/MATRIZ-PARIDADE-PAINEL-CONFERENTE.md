@@ -42,8 +42,8 @@ Validação de loja também é realizada na API, não apenas pelo menu. Uma cont
 
 ## Lacunas ainda existentes — NÃO considerar concluídas
 
-- **OneSignal (atualização posterior)**: código de registro e aprovação por aparelho, notificação de validades para funcionários com celular próprio e cron a cada 8h foi incluído. **Ainda exige homologação real e configuração de chaves**, e 'Notificar a todos' não está disponível nesta integração.
-- **Aprovação por dispositivo** (além da flag `celular_proprio`): login/validação de aparelho existente no Apps Script ainda depende de API e dados próprios.
+- **OneSignal (atual)**: consentimento opcional para todos os perfis, **sem aprovação por administrador** e sem depender de `Celular próprio`. Backend e cron a cada 8 horas incluídos; **ainda exigem configuração das chaves e homologação real**. O envio manual amplo ainda não foi homologado.
+- **Validação de aparelho para login** no sistema antigo Apps Script (distinta do consentimento OneSignal) ainda não foi migrada completamente. Ela não deve ser confundida com a permissão para receber notificações.
 - **Importação automática de estoque via GitHub/Procfit**: CSV/ODS manual funciona no frontend em testes, mas robô Windows/integração Procfit e atualização programada permanecem separados.
 - **Equivalência exata de todos os cálculos**: nova interface implementa 60/15/3/160 dias e faixa indicativa de 3–9 meses. Faixas que o legado calcula por mês-calendário precisam comparação caso a caso antes de produção.
 - **Scanner por câmera**, quando disponível no legado, não foi reproduzido no fluxo de Queima; leitor físico/teclado continua possível.

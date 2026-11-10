@@ -27,6 +27,8 @@ on:
           - ajustar_pendencias
           - atualizar_painel
           - configurar_notificacoes
+          - notificacoes_para_todos
+          - pin_administrador_geral
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -114,7 +116,7 @@ jobs:
           if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
             echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
           fi
-          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' ]]; then
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' ]]; then
             if [[ -z "$SUPABASE_DB_URL" ]]; then
               echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
             fi
@@ -130,7 +132,7 @@ jobs:
             fi
           fi
       - name: Verificar URL IPv4 do Supabase antes do SQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral'
         shell: bash
         run: |
           set -euo pipefail
@@ -158,13 +160,13 @@ jobs:
           print('URL do Session pooler validada (IPv4, 5432).')
           PYCODE
       - name: Preparar cliente PostgreSQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
       - name: Testar conexão PostgreSQL sem alterar dados
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral'
         shell: bash
         run: |
           set -euo pipefail
@@ -240,3 +242,20 @@ jobs:
         run: |
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/002_apos_importacao.sql
+
+      - name: Permitir inscrição de notificações para todos (SQL aditivo)
+        if: inputs.etapa == 'notificacoes_para_todos'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/006_notificacoes_para_todos.sql
+          echo 'Consentimento de notificações habilitado para todos os perfis.'
+
+      - name: Habilitar troca de PIN do Administrador Geral (SQL aditivo)
+        if: inputs.etapa == 'pin_administrador_geral'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/007_pin_administrador_geral.sql
+          echo 'Troca de PIN próprio do Administrador Geral habilitada.'

@@ -51,7 +51,7 @@ Para executar testes de sintaxe e segurança localmente: `npm run check` (Node.j
 
 Os fluxos principais já possuem código substituto, mas **não há paridade completa** com `code.gs` / `login.gs`. Antes de trocar o sistema real, concluir especialmente:
 
-- OneSignal: cadastro e aprovação de dispositivos, notificações de validades via GitHub Actions a cada 8h e teste individual. A modalidade de envio geral indiscriminado permanece desativada.
+- OneSignal: inscrição voluntária por usuário no dispositivo e envio via GitHub Actions a cada 8h já têm código. Ainda é necessário testar em celulares reais, conferir o consentimento e ativar o envio somente após homologação.
 - Autorização de celular próprio por dispositivo; a flag existe, mas o fluxo do antigo `login.gs` ainda não foi reproduzido.
 - Operações especiais de Vencidos, Sinalização e Queima foram adicionadas à nova API, mas sua equivalência com os procedimentos do legado e sua execução real no Supabase ainda precisam ser homologadas.
 - A importação ODS/CSV já está implementada no navegador para saldo Procfit. XLSX ainda precisa de conversão e o ODS deve ser testado com exportações reais.
@@ -91,3 +91,26 @@ Veja `documentacao/SCANNER-CAMERA-E-INTERFACE.md` para instalação e testes do 
 ## OneSignal e agendamento de 8h (novo)
 
 O App ID público está configurado. Para criar as tabelas, cadastrar as chaves em Vercel/Actions, autorizar um aparelho e ativar os três horários diários, leia [INSTALAR-ONESIGNAL-8H-ACTIONS.md](documentacao/INSTALAR-ONESIGNAL-8H-ACTIONS.md). **O envio permanece desativado por padrão e não foi testado com o Supabase/OneSignal reais.**
+
+## Atualização: todos podem optar por notificações + senha própria do Geral (09/11/2026)
+
+Esta versão altera o fluxo OneSignal para perguntar **Deseja receber notificações?**
+na entrada do site (login e página dedicada de Lançamentos). O usuário pode escolher
+**Permitir notificações** ou **Agora não**, e mudar depois no menu Notificações.
+A permissão nativa é solicitada apenas após tocar em Permitir, e a escolha fica
+associada à conta no dispositivo para não ser herdada por outro funcionário.
+Não exige habilitar `Celular próprio` nem obter aprovação do administrador.
+
+O Administrador Geral também tem **Alterar minha senha** no Painel Geral, exigindo
+o PIN atual, o novo PIN de 6 a 12 números e sua confirmação. As outras sessões
+são encerradas atomicamente, mantendo a sessão corrente.
+
+**Antes do deploy no Vercel, execute no GitHub Actions** (workflow 
+`Supabase - preparar e importar`) as etapas `notificacoes_para_todos` (SQL 006)
+e `pin_administrador_geral` (SQL 007). Essas migrações são aditivas e não apagam
+produtos, mapas ou lançamentos. Caso ainda não tenha criado as tabelas do
+OneSignal, execute `configurar_notificacoes` (SQL 005) antes da 006.
+
+Veja `documentacao/NOTIFICACOES-TODOS-E-PIN-GERAL.md`. A implementação foi testada
+localmente com simuladores; o recebimento real de Web Push, a inscrição dos
+celulares e a execução do cron devem ser homologados no seu domínio Vercel.

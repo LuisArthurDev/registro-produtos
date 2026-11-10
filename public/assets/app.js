@@ -1,13 +1,13 @@
 import { lerODS } from './ods.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
-import { associarPush, ativarPush, desassociarPush } from './push.js';
+import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta } from './push.js';
 /* Registro de Validades — frontend unificado. Não armazene chaves administrativas aqui. */
 const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
 const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
-const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja']];
+const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja'],['notificacoes','bell','Notificações']];
 // Ícones SVG locais: tamanhos e traços uniformes, sem dependência de CDN.
 const menuIconPaths={
  dashboard:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
@@ -112,7 +112,9 @@ function lojaParams(){return state.user?.perfil==='geral'?`loja=${encodeURICompo
 function urlWithLoja(url){return url+(url.includes('?')?'&':'?')+lojaParams();}
 function showLogin(error=''){$('#login-screen').hidden=false;$('#app-shell').hidden=true;if(error){$('#login-erro').textContent=error;$('#login-erro').hidden=false;}}
 function showApp(){
+  transferirEscolhaParaConta(state.user);
   void associarPush(state.user,request);
+  queueMicrotask(exibirConsentimento);
   $('#login-screen').hidden=true;$('#app-shell').hidden=false;
   $('#user-name').textContent=state.user.nome;
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
@@ -166,7 +168,7 @@ function navigate(route){
  renderRoute(route);
 }
 async function renderRoute(route){const content=$('#content');content.innerHTML=loading();try{
-  if(isGeral()&&!['painel-geral','admins-geral'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
+  if(isGeral()&&!['painel-geral','admins-geral','notificacoes'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
    case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
    case 'perdas':await perdas();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
@@ -455,10 +457,36 @@ function parseCSV(txt){const first=(txt.split(/\r?\n/)[0]||''),sep=first.include
 async function painelGeral(){
  const r=await request('/geral',{timeout:55000});const lojas=r.lojas||[],admins=r.administradores||[];
  $('#content').innerHTML=header('Painel Geral','Administração central. Somente o Administrador Geral pode gerenciar todas as lojas e seus administradores.',
- '<button class="primary" id="geral-admin-new" type="button">Cadastrar administrador</button>')+
+ '<button class="btn-outline" id="geral-change-pin" type="button">Alterar minha senha</button><button class="primary" id="geral-admin-new" type="button">Cadastrar administrador</button>')+
  `<div class="stat-grid"><div class="card stat"><small>Lojas cadastradas</small><strong>${lojas.length}</strong><p>Unidades no Supabase</p></div><div class="card stat"><small>Administradores de loja</small><strong>${admins.length}</strong><p>Contas com perfil administrativo</p></div><div class="card stat"><small>Funcionários</small><strong>${H(r.totais?.funcionarios||0)}</strong></div><div class="card stat"><small>Acesso</small><strong>Geral</strong><p>Sem acesso direto ao Painel Conferente</p></div></div>
  <section class="card card-pad"><h2>Unidades cadastradas</h2>${table(['Loja','Nome','Administradores'],lojas.map(l=>`<tr><td>${H(l.id)}</td><td>${H(l.nome||'Loja '+l.id)}</td><td>${H(admins.filter(a=>a.loja_id===l.id).map(a=>a.nome).join(', ')||'Nenhum')}</td></tr>`))}</section>`;
  $('#geral-admin-new').onclick=()=>navigate('admins-geral');
+ $('#geral-change-pin').onclick=abrirMeuPin;
+}
+function abrirMeuPin(){
+ if(!isGeral())return toast('Acesso exclusivo do Administrador Geral.',true);
+ const dialog=$('#meu-pin-dialog'),form=$('#meu-pin-form'),error=$('#meu-pin-error');
+ form.reset();error.hidden=true;dialog.showModal();
+ form.elements.pinAtual.focus();
+}
+function configurarMinhaSenha(){
+ const dialog=$('#meu-pin-dialog'),form=$('#meu-pin-form'),error=$('#meu-pin-error');
+ if(!dialog || !form)return; // A página dedicada de Lançamentos não contém o modal do Painel Geral.
+ $('#meu-pin-cancel').onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>{form.reset();error.hidden=true;});
+ form.onsubmit=async e=>{
+  e.preventDefault();error.hidden=true;
+  if(!isGeral()){error.textContent='Acesso restrito ao Administrador Geral.';error.hidden=false;return;}
+  const pinAtual=form.elements.pinAtual.value,pinNovo=form.elements.pinNovo.value,confirmacao=form.elements.confirmacao.value;
+  if(pinNovo!==confirmacao){error.textContent='Os PINs novos não coincidem.';error.hidden=false;return;}
+  if(!/^\d{6,12}$/.test(pinNovo)){error.textContent='O novo PIN deve conter de 6 a 12 dígitos.';error.hidden=false;return;}
+  if(pinAtual===pinNovo){error.textContent='Informe um PIN diferente do atual.';error.hidden=false;return;}
+  const submit=form.querySelector('[type="submit"]');submit.disabled=true;
+  try{const res=await request('/conta/pin',{method:'POST',body:{pinAtual,pinNovo,confirmacao},retries:0,timeout:50000});
+   dialog.close();toast(res.mensagem||'PIN atualizado.');
+  }catch(err){error.textContent=err.message;error.hidden=false;}
+  finally{submit.disabled=false;}
+ };
 }
 async function administradoresGeral(){
  if(!isGeral())throw new Error('Acesso exclusivo do Administrador Geral.');
@@ -528,30 +556,28 @@ async function controleValidade(){
  $('#ctrl-print').onclick=()=>printableTable('#ctrl-list',()=>makeTable(filtered));$('#ctrl-update').onclick=()=>renderRoute(state.route);render();
 }
 async function notificacoes(){
- const isManager=canManage();
- const d=await request(urlWithLoja('/notificacoes/dispositivos'));
+ const d=await request(isGeral()?'/notificacoes/dispositivos':urlWithLoja('/notificacoes/dispositivos'));
  const devices=d.dispositivos||[];
- const pending=devices.filter(x=>!x.autorizado).length;
- $('#content').innerHTML=header('Notificações','Cadastro e autorização de aparelhos · OneSignal a cada 8 horas.')+
- `<section class="card card-pad"><h2>Notificações no celular</h2>
- <p class="footer-hint">Apenas aparelhos aprovados pelo administrador da loja podem receber notificações. Ative o celular próprio no cadastro do funcionário antes de cadastrar o aparelho.</p>
- <div class="form-actions"><button class="primary" id="push-ativar" type="button">Ativar notificações neste aparelho</button><button class="btn-outline" id="push-atualizar" type="button">Atualizar lista</button></div>
- <p class="footer-hint" id="push-status" role="status"></p></section>`+
- (isManager?`<section class="card card-pad"><h2>Aparelhos cadastrados</h2><p class="footer-hint">${pending} aguardando aprovação · as ações são restritas à loja atual.</p>
- <div class="table-wrap"><table><thead><tr><th>Funcionário</th><th>Dispositivo</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${devices.map(v=>`<tr><td>${H(v.funcionario)}</td><td>${H(v.nome_dispositivo||'Navegador')}</td><td>${v.autorizado?pill('Autorizado','green'):pill('Aguardando','amber')} ${!v.celular_proprio?pill('Sem celular próprio','red'):''}</td><td><button type="button" class="btn-outline" data-push-toggle="${H(v.id)}" data-active="${v.autorizado?'1':'0'}">${v.autorizado?'Revogar':'Autorizar'}</button> ${v.autorizado?`<button type="button" class="btn-outline" data-push-test="${H(v.id)}">Testar</button>`:''}</td></tr>`).join('')||'<tr><td colspan="4">Nenhum aparelho cadastrado nesta loja.</td></tr>'}</tbody></table></div></section>`:
- `<section class="card card-pad"><h2>Meus aparelhos</h2><p class="footer-hint">${devices.length?devices.map(v=>(v.autorizado?'Autorizado':'Aguardando aprovação')+' · '+H(v.nome_dispositivo)).join('<br>'):'Nenhum aparelho cadastrado. Clique em Ativar notificações acima.'}</p></section>`);
+ const own=devices.filter(x=>x.usuario_id===state.user.id);
+ const enabled=escolhaPush(state.user)==='sim';
+ const isManager=canManage();
+ $('#content').innerHTML=header('Notificações','Avisos de validade para todos os usuários que aceitarem receber.')+
+ `<section class="card card-pad"><h2>Notificações neste aparelho</h2>
+ <p class="footer-hint">Você escolhe receber ou não. Não é necessário marcar Celular próprio ou solicitar aprovação. Os avisos são enviados a cada 8 horas quando há vencimentos que precisam de atenção na loja.</p>
+ <div class="form-actions"><button class="primary" id="push-ativar" type="button">${enabled?'Reativar notificações':'Permitir notificações'}</button><button class="btn-outline" id="push-desativar" type="button">Não receber neste aparelho</button><button class="btn-outline" id="push-atualizar" type="button">Atualizar lista</button></div>
+ <p class="footer-hint" id="push-status" role="status">Preferência neste aparelho: ${enabled?'Permitir':'Não receber ou ainda não definida'}.</p></section>`+
+ (isManager?`<section class="card card-pad"><h2>Aparelhos inscritos</h2><p class="footer-hint">A assinatura é voluntária e individual. O administrador pode enviar um teste, mas não autoriza outros aparelhos.</p>
+ <div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Dispositivo</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${devices.map(v=>`<tr><td>${H(v.funcionario)}</td><td>${H(v.nome_dispositivo||'Navegador')}</td><td>${v.ativo&&v.consentimento_em?pill('Recebendo','green'):pill('Desativado','amber')}</td><td>${v.ativo&&v.consentimento_em?`<button type="button" class="btn-outline" data-push-test="${H(v.id)}">Testar</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">Nenhum aparelho cadastrado nesta loja.</td></tr>'}</tbody></table></div></section>`:
+ `<section class="card card-pad"><h2>Meus aparelhos</h2><p class="footer-hint">${own.length?own.map(v=>(v.ativo&&v.consentimento_em?'Recebendo':'Desativado')+' · '+H(v.nome_dispositivo)).join('<br>'):'Nenhum aparelho vinculado à sua conta.'}</p></section>`);
  $('#push-ativar').onclick=async()=>{
    const btn=$('#push-ativar'),status=$('#push-status');btn.disabled=true;status.textContent='Solicitando permissão ao navegador…';
-   try{const r=await ativarPush(state.user,request);status.textContent=r.detalhe||'Aparelho cadastrado.';toast(status.textContent);}
+   try{const r=await ativarPush(state.user,request);status.textContent=r.detalhe||'Notificações ativadas.';toast(status.textContent);}
    catch(e){status.textContent=e.message;toast(e.message,true);}finally{btn.disabled=false;}
  };
+ $('#push-desativar').onclick=async()=>{const btn=$('#push-desativar');btn.disabled=true;try{await recusarPush(state.user,request);toast('Notificações desativadas neste aparelho.');await renderRoute('notificacoes');}catch(e){toast(e.message,true);btn.disabled=false;}};
  $('#push-atualizar').onclick=()=>renderRoute('notificacoes');
- document.querySelectorAll('[data-push-toggle]').forEach(b=>b.onclick=async()=>{
-   const permitir=b.dataset.active!=='1';if(!confirm((permitir?'Autorizar':'Revogar')+' este aparelho?'))return;
-   b.disabled=true;try{await request('/notificacoes/dispositivos',{method:'PATCH',body:{id:b.dataset.pushToggle,autorizado:permitir,...(isGeral()?{loja:state.loja}:{})}});toast('Permissão atualizada.');await renderRoute('notificacoes');}catch(e){toast(e.message,true);b.disabled=false;}
- });
  document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=async()=>{
-   b.disabled=true;try{const r=await request('/notificacoes/teste',{method:'POST',body:{id:b.dataset.pushTest,...(isGeral()?{loja:state.loja}:{})}});toast(r.detalhe||'Mensagem aceita pelo OneSignal.');}catch(e){toast(e.message,true);}finally{b.disabled=false;}
+   b.disabled=true;try{const r=await request('/notificacoes/teste',{method:'POST',body:{id:b.dataset.pushTest,...(isGeral()&&state.loja?{loja:state.loja}:{})}});toast(r.detalhe||'Mensagem aceita pelo OneSignal.');}catch(e){toast(e.message,true);}finally{b.disabled=false;}
  });
 }
 
@@ -650,6 +676,25 @@ function setupRememberedStore(){
  clear.onclick=()=>{input.readOnly=false;input.value='';localStorage.removeItem(STORE_KEY);clear.hidden=true;input.title='';input.focus();};
 }
 setupRememberedStore();
+configurarMinhaSenha();
+// Primeiro acesso em qualquer página: pergunta clara antes de pedir permissão nativa.
+// Não exige aceitar para usar o sistema e não insiste após uma escolha no dispositivo.
+const consentDialog=$('#push-consent-dialog');
+function exibirConsentimento(){if(!escolhaPush(state.user)&&!consentDialog.open)consentDialog.showModal();}
+$('#push-consent-yes').onclick=async()=>{
+ const b=$('#push-consent-yes'),msg=$('#push-consent-feedback');b.disabled=true;msg.textContent='Solicitando permissão ao navegador…';
+ try{const r=await ativarPush(state.user, state.user?request:null);consentDialog.close();toast(r.detalhe||'Notificações ativadas.');}
+ catch(err){msg.textContent=err.message;b.disabled=false;}
+};
+$('#push-consent-no').onclick=async()=>{
+ consentDialog.close();
+ // Não bloqueia login e não chama a API caso não tenha uma sessão.
+ void recusarPush(state.user,state.user?request:null);
+ toast('Você pode ativar notificações depois no menu Notificações.');
+};
+// Se a pessoa ainda não escolheu, o diálogo é oferecido na entrada (inclusive no login).
+queueMicrotask(exibirConsentimento);
+
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
 $('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#top-open-launch').onclick=()=>IS_LAUNCH_PAGE?window.location.assign('/#dashboard'):abrirNovoLancamento();$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

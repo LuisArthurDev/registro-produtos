@@ -98,6 +98,25 @@ async function login(body) {
   await db('sessoes',{method:'POST',body:{token_hash:sha(token),usuario_id:user.id,expira_em:new Date(Date.now()+(manter?30*24:8)*3600000).toISOString(),manter_conectado:manter},prefer:'return=minimal'});
   return {sucesso:true,token,usuario:cleanUser(user)};
 }
+// Troca de PIN do próprio Administrador Geral. Nunca aceita ID fornecido pelo navegador.
+async function alterarMeuPinGeral(actor,sessao,body){
+  geral(actor);
+  const atual=String(body.pinAtual??''),novo=String(body.pinNovo??''),confirmacao=String(body.confirmacao??'');
+  if(!/^\d{6,12}$/.test(novo))throw bad('O novo PIN deve conter de 6 a 12 dígitos.',422);
+  if(novo!==confirmacao)throw bad('A confirmação não corresponde ao novo PIN.',422);
+  if(novo===atual)throw bad('Escolha um PIN diferente do atual.',422);
+  if(actor.bloqueado_ate&&Date.parse(actor.bloqueado_ate)>Date.now())throw bad('Aguarde o fim do bloqueio temporário antes de alterar o PIN.',429);
+  if(!validarPin(atual,actor.pin_hash)){
+    const n=(Number(actor.tentativas)||0)+1;
+    await db('usuarios',{method:'PATCH',params:{id:`eq.${actor.id}`},body:{tentativas:n>=5?0:n,bloqueado_ate:n>=5?new Date(Date.now()+15*60000).toISOString():null}});
+    throw bad(n>=5?'Muitas tentativas incorretas. Aguarde 15 minutos.':'PIN atual incorreto.',n>=5?429:422);
+  }
+  // RPC transacional: altera apenas a própria conta e invalida outras sessões.
+  const ok=await db('rpc/alterar_pin_geral',{method:'POST',body:{p_usuario:actor.id,p_sessao_hash:sessao.token_hash,p_pin_hash:hashPin(novo)}});
+  if(ok!==true)throw bad('Não foi possível alterar seu PIN. Atualize a página e tente novamente.',409);
+  await audit(actor,'alterar_proprio_pin',{outras_sessoes_encerradas:true});
+  return {sucesso:true,mensagem:'Seu PIN foi atualizado e as demais sessões foram encerradas.'};
+}
 async function produtos(req,actor,pathname,body,query){
   if(req.method==='GET'){
     const filtro=norm(query.get('q')); if(filtro.length>100)throw bad('Pesquisa muito longa.');
@@ -415,6 +434,7 @@ async function handle(req){
   if(pathname.startsWith('/notificacoes/'))return tratarNotificacoes(req,{pathname,body,query,db,rows,one,authenticate,admin,actorLoja,audit});
   const {actor,sessao}=await authenticate(req);
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
+  if(pathname==='/conta/pin'&&req.method==='POST')return alterarMeuPinGeral(actor,sessao,body);
   if(pathname==='/logout'&&req.method==='POST'){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};
   }

@@ -1,3 +1,5 @@
+> **Separação importante:** esta seção antiga descreve autenticação de dispositivos para **acesso ao sistema**, não a inscrição em notificações. O OneSignal da versão atual requer somente consentimento do próprio usuário, sem aprovação de administradores.
+
 # Plano de integração — offline, dispositivos e OneSignal (8 horas)
 
 Este documento especifica as próximas integrações. **Não é uma declaração de que já estejam ativas**.

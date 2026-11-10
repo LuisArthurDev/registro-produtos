@@ -63,39 +63,55 @@ export async function tratarNotificacoes(req,{pathname,body,query,db,rows,one,au
     autorizadoCron();
     if(process.env.NOTIFICATIONS_ENABLED!=='true')return {sucesso:true,habilitado:false,detalhe:'O envio está desativado. Configure NOTIFICATIONS_ENABLED=true após a homologação.'};
     if(!process.env.ONESIGNAL_REST_API_KEY)throw falha('REST API Key do OneSignal não configurada.',503);
-    // Apenas os usuários ativos + celular próprio + aparelhos aprovados + sessão ainda válida.
-    const [users,devices,sessions]=await Promise.all([
-      rows('usuarios',{perfil:'eq.funcionario',ativo:'eq.true',celular_proprio:'eq.true',select:'id,loja_id,nome'},250,10),
-      rows('push_dispositivos',{autorizado:'eq.true',ativo:'eq.true',select:'id,loja_id,usuario_id,subscription_id,sessao_token_hash'},250,10),
-      rows('sessoes',{select:'token_hash,expira_em'},500,10)
+    // Todos os perfis ativos que aceitaram as notificações, sem aprovação de aparelho nem exigência de Celular próprio.
+    const [users,devices]=await Promise.all([
+      rows('usuarios',{ativo:'eq.true',select:'id,loja_id,nome,perfil'},250,10),
+      rows('push_dispositivos',{autorizado:'eq.true',ativo:'eq.true',consentimento_em:'not.is.null',select:'id,loja_id,usuario_id,subscription_id,consentimento_em'},250,10)
     ]);
-    const activeSessions=new Set(sessions.filter(s=>Date.parse(s.expira_em)>Date.now()).map(s=>s.token_hash));
-    const approved=devices.filter(d=>d.sessao_token_hash&&activeSessions.has(d.sessao_token_hash)&&users.some(u=>u.id===d.usuario_id&&u.loja_id===d.loja_id));
+    const byUser=new Map(users.map(u=>[u.id,u]));
+    const approved=devices.filter(d=>{
+      const u=byUser.get(d.usuario_id);
+      return u && (u.perfil==='geral' || (u.loja_id&&u.loja_id===d.loja_id));
+    });
     const janela=janelaOitoHoras();
-    if(!approved.length)return {sucesso:true,janela,aparelhos:0,enviados:0,detalhe:'Nenhum aparelho aprovado com sessão ativa.'};
+    if(!approved.length)return {sucesso:true,janela,aparelhos:0,enviados:0,detalhe:'Nenhum usuário ativo aceitou notificações neste aparelho.'};
     const baseHoje=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     // Guardar apenas datas elegíveis; a regra específica da seção é aplicada depois.
     const limite=new Date(Date.parse(baseHoje+'T12:00:00Z')+30*864e5).toISOString().slice(0,10);
-    const stores=[...new Set(approved.map(x=>x.loja_id))];
+    // Um alerta por loja: inclui os mapas de funcionários e todas as abas especiais.
+    // O Administrador Geral recebe um resumo das lojas, sem detalhar dados individuais.
+    const lojas=[...new Set(users.map(u=>u.loja_id).filter(Boolean))];
     const mapas=[];
-    for(const loja of stores){
+    for(const loja of lojas){
       const chunk=await rows('mapa_lancamentos',{
-        loja_id:`eq.${loja}`,tipo_mapa:'eq.funcionario',quantidade:'gt.0',validade:`lte.${limite}`,
-        select:'funcionario_id,loja_id,tipo_mapa,quantidade,validade,produtos(secao)'},500,20);
+        loja_id:`eq.${loja}`,quantidade:'gt.0',validade:`lte.${limite}`,
+        select:'loja_id,quantidade,validade,produtos(secao)'},500,20);
       mapas.push(...chunk);
     }
-    const resumo=elegiveisPorUsuario(mapas,users,baseHoje);
+    const totalPorLoja=new Map();
+    let geralTotal=0;
+    for(const r of mapas){
+      const secao=String(r.produtos?.secao||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+      const limiteDias=/ALIMENT|CONVENI|NUTRI/.test(secao)?15:30;
+      if(diasAte(r.validade,baseHoje)>limiteDias)continue;
+      const loja=String(r.loja_id||'');
+      totalPorLoja.set(loja,(totalPorLoja.get(loja)||0)+1);
+      geralTotal++;
+    }
     let enviados=0,pulados=0,falhas=0;
     // Limite por execução: evita timeout e mensagens incontroláveis com muitas lojas.
-    if(approved.length>60)throw falha('Mais de 60 aparelhos elegíveis. Divida o envio por lotes antes de ativar.',413);
+    if(approved.length>60)throw falha('Mais de 60 aparelhos inscritos. Configure envio em lotes antes de aumentar a equipe.',413);
     const processar=async dev=>{
-      const item=resumo.get(dev.usuario_id);
-      if(!item?.contagem)return;
+      const user=byUser.get(dev.usuario_id);
+      const total=user?.perfil==='geral'?geralTotal:(totalPorLoja.get(String(user.loja_id))||0);
+      if(!total){pulados++;return;}
       try{
-        const reservation=await db('rpc/reservar_notificacao_push',{method:'POST',body:{p_janela:janela,p_tipo:'vencimentos',p_dispositivo:dev.id,p_quantidade:item.contagem}});
+        const reservation=await db('rpc/reservar_notificacao_push',{method:'POST',body:{p_janela:janela,p_tipo:'vencimentos',p_dispositivo:dev.id,p_quantidade:total}});
         if(!reservation){pulados++;return;}
-        const titulo='Mapa de Validade — atenção';
-        const mensagem=`Você tem ${item.contagem} registro(s) que exigem atenção no seu mapa. Consulte os prazos no sistema.`;
+        const titulo='Validades — atenção';
+        const mensagem=user.perfil==='geral'
+          ?`Existem ${total} registro(s) que exigem atenção nas lojas. Acesse o Painel Geral.`
+          :`A loja ${user.loja_id} tem ${total} registro(s) próximos do vencimento ou vencidos. Consulte o sistema.`;
         try{
           const messageId=await enviarOneSignal({include_subscription_ids:[dev.subscription_id],headings:{pt:titulo,en:titulo},contents:{pt:mensagem,en:mensagem}});
           await db('notificacao_envios',{method:'PATCH',params:{id:`eq.${reservation}`},body:{situacao:'enviado',onesignal_message_id:messageId,atualizado_em:new Date().toISOString()}});
@@ -115,48 +131,44 @@ export async function tratarNotificacoes(req,{pathname,body,query,db,rows,one,au
   if(pathname==='/notificacoes/dispositivos'&&req.method==='GET'){
     const adminLoja=actor.perfil==='admin',geral=actor.perfil==='geral';
     const loja=adminLoja?actor.loja_id:geral?(query.get('loja')||''):actor.loja_id;
-    if(geral&&!/^\d{1,12}$/.test(loja))throw falha('Informe a loja para consultar aparelhos.',400);
-    const params={loja_id:`eq.${loja}`,select:'id,usuario_id,loja_id,nome_dispositivo,autorizado,ativo,criado_em,atualizado_em',order:'criado_em.desc'};
-    if(actor.perfil==='funcionario')params.usuario_id=`eq.${actor.id}`;
+    // Geral, sem filtro de loja: somente seus aparelhos; admin de loja: aparelhos da loja.
+    const params={select:'id,usuario_id,loja_id,nome_dispositivo,autorizado,ativo,consentimento_em,criado_em,atualizado_em',order:'criado_em.desc'};
+    if(adminLoja)params.loja_id=`eq.${loja}`;
+    else if(geral&&loja){if(!/^\d{1,12}$/.test(loja))throw falha('Loja inválida.',400);params.loja_id=`eq.${loja}`;}
+    else params.usuario_id=`eq.${actor.id}`;
     const dispositivos=await rows('push_dispositivos',params,200,10);
-    const lista=(adminLoja||geral)?await rows('usuarios',{loja_id:`eq.${loja}`,select:'id,nome,celular_proprio,ativo'},200,10):[];
+    const lista=(adminLoja||(geral&&loja))?await rows('usuarios',{loja_id:`eq.${loja}`,select:'id,nome,ativo'},200,10):[];
     const byId=new Map(lista.map(u=>[u.id,u]));
-    return {sucesso:true,dispositivos:dispositivos.map(d=>({...d,funcionario:byId.get(d.usuario_id)?.nome||'Minha conta',celular_proprio:byId.get(d.usuario_id)?.celular_proprio??actor.celular_proprio}))};
+    return {sucesso:true,dispositivos:dispositivos.map(d=>({...d,funcionario:byId.get(d.usuario_id)?.nome||(d.usuario_id===actor.id?actor.nome:'Usuário da loja')}))};
   }
   if(pathname==='/notificacoes/dispositivos'&&req.method==='POST'){
-    if(!actor.ativo||!actor.celular_proprio)throw falha('Seu perfil não está habilitado como celular próprio.',403);
-    const id=limpa(body.subscription_id);if(!uuid.test(id))throw falha('Assinatura do OneSignal inválida. Ative a permissão no navegador.',400);
-    const existing=await one('push_dispositivos',{subscription_id:`eq.${id}`});
-    const mudou=existing && existing.usuario_id!==actor.id;
-    const data={usuario_id:actor.id,loja_id:actor.loja_id,subscription_id:id,
+    if(!actor.ativo)throw falha('Usuário inativo.',403);
+    const id=limpa(body.subscription_id);if(!uuid.test(id))throw falha('Assinatura do OneSignal inválida. Autorize as notificações no navegador.',400);
+    // A inscrição é criada somente após um clique afirmativo e a permissão nativa.
+    const data={usuario_id:actor.id,loja_id:actor.loja_id||null,subscription_id:id,
       nome_dispositivo:limpa(body.nome_dispositivo).slice(0,100)||'Navegador',sessao_token_hash:sessao.token_hash,
-      ativo:true,autorizado:mudou?false:!!existing?.autorizado,atualizado_em:new Date().toISOString()};
+      ativo:true,autorizado:true,consentimento_em:new Date().toISOString(),atualizado_em:new Date().toISOString()};
     await db('push_dispositivos',{method:'POST',body:data,params:{on_conflict:'subscription_id'},prefer:'resolution=merge-duplicates,return=minimal'});
-    return {sucesso:true,autorizado:data.autorizado,detalhe:data.autorizado?'Aparelho autorizado.':'Cadastro realizado. Peça autorização ao administrador da sua loja.'};
+    return {sucesso:true,autorizado:true,detalhe:'Notificações ativadas neste aparelho.'};
   }
-  if(pathname==='/notificacoes/dispositivos'&&req.method==='PATCH'){
-    admin(actor);const id=limpa(body.id);if(!uuid.test(id))throw falha('Aparelho inválido.');
-    const loja=actorLoja(actor,body.loja);
-    const dev=await one('push_dispositivos',{id:`eq.${id}`,loja_id:`eq.${loja}`});
-    if(!dev)throw falha('Aparelho não encontrado nesta loja.',404);
-    const usuario=await one('usuarios',{id:`eq.${dev.usuario_id}`,loja_id:`eq.${loja}`});
-    if(!usuario?.ativo||!usuario.celular_proprio)throw falha('Marque o funcionário como ativo e com celular próprio antes de autorizar.',409);
-    await db('push_dispositivos',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`},body:{autorizado:body.autorizado===true,atualizado_em:new Date().toISOString()}});
-    await audit(actor,body.autorizado?'autorizar_dispositivo_push':'revogar_dispositivo_push',{id,usuario_id:dev.usuario_id});
-    return {sucesso:true};
-  }
+  if(pathname==='/notificacoes/dispositivos'&&req.method==='PATCH')throw falha('Cada usuário gerencia seu consentimento no próprio aparelho.',405);
   if(pathname==='/notificacoes/desativar'&&req.method==='POST'){
     const id=limpa(body.subscription_id);if(!uuid.test(id))throw falha('Assinatura inválida.');
-    await db('push_dispositivos',{method:'PATCH',params:{usuario_id:`eq.${actor.id}`,subscription_id:`eq.${id}`},body:{sessao_token_hash:null,ativo:false,atualizado_em:new Date().toISOString()}});
+    await db('push_dispositivos',{method:'PATCH',params:{usuario_id:`eq.${actor.id}`,subscription_id:`eq.${id}`},body:{sessao_token_hash:null,ativo:false,autorizado:false,consentimento_em:null,atualizado_em:new Date().toISOString()}});
     return {sucesso:true};
   }
   if(pathname==='/notificacoes/teste'&&req.method==='POST'){
-    admin(actor);const loja=actorLoja(actor,body.loja);
+    admin(actor);
+    const loja=actor.perfil==='geral'?(body.loja||''):actor.loja_id;
     const id=limpa(body.id);if(!uuid.test(id))throw falha('Aparelho inválido.');
-    const dev=await one('push_dispositivos',{id:`eq.${id}`,loja_id:`eq.${loja}`,autorizado:'eq.true',ativo:'eq.true'});
-    if(!dev)throw falha('Aparelho não autorizado.',403);
-    const user=await one('usuarios',{id:`eq.${dev.usuario_id}`,loja_id:`eq.${loja}`,ativo:'eq.true',celular_proprio:'eq.true'});
-    if(!user)throw falha('Funcionário sem autorização de celular próprio.',403);
+    const params={id:`eq.${id}`,autorizado:'eq.true',ativo:'eq.true',consentimento_em:'not.is.null'};
+    if(actor.perfil==='admin')params.loja_id=`eq.${actor.loja_id}`;
+    else if(loja)params.loja_id=`eq.${actorLoja(actor,loja)}`;
+    else params.usuario_id=`eq.${actor.id}`;
+    const dev=await one('push_dispositivos',params);
+    if(!dev)throw falha('Aparelho não autorizado pelo usuário ou fora da loja.',403);
+    const user=await one('usuarios',{id:`eq.${dev.usuario_id}`,ativo:'eq.true'});
+    if(!user)throw falha('Usuário inativo.',403);
     const mid=await enviarOneSignal({include_subscription_ids:[dev.subscription_id],headings:{pt:'Teste de notificações',en:'Teste de notificações'},contents:{pt:'Este aparelho está conectado ao Registro de Validades.',en:'Este aparelho está conectado ao Registro de Validades.'}});
     await audit(actor,'teste_onesignal',{dispositivo_id:dev.id,message_id:mid});return {sucesso:true,detalhe:'Notificação aceita pelo OneSignal.',mensagem_id:mid};
   }

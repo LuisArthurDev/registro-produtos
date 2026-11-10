@@ -1,3 +1,5 @@
+> **ATENÇÃO: guia histórico.** A versão atual **não exige aprovação de administrador**, nem “Celular próprio”. Consulte [NOTIFICACOES-TODOS-E-PIN-GERAL.md](NOTIFICACOES-TODOS-E-PIN-GERAL.md) e [INSTALAR-ONESIGNAL-8H-ACTIONS.md](INSTALAR-ONESIGNAL-8H-ACTIONS.md) para a implantação ativa.
+
 > **ATUALIZAÇÃO:** a integração e o workflow foram implementados após este rascunho inicial. Para instalar a versão atual, use [INSTALAR-ONESIGNAL-8H-ACTIONS.md](INSTALAR-ONESIGNAL-8H-ACTIONS.md). As instruções abaixo são histórico técnico, não a sequência recomendada.
 
 # Configurar OneSignal no Registro de Validades (Supabase + Vercel)
@@ -52,7 +54,7 @@ Na configuração **Custom Code**, adicione ao `<head>` de `public/index.html` *
 
 ## 4. Vincular a assinatura ao funcionário certo
 
-Depois de validar a sessão do usuário no backend e aprovar seu aparelho:
+Depois de validar a sessão do usuário no backend, quando ele próprio aceitar receber notificações:
 
 ```js
 window.OneSignalDeferred.push(async function(OneSignal) {
