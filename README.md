@@ -1,3 +1,7 @@
+## Novidade — Correções de 10/11/2026
+
+Consulte [ATUALIZACAO-LOGIN-ONESIGNAL-PERDAS-TRANSFERENCIAS-2026-11-10.md](ATUALIZACAO-LOGIN-ONESIGNAL-PERDAS-TRANSFERENCIAS-2026-11-10.md). Antes de usar os botões novos, execute as migrações SQL `008` (se pendente) e `009` no GitHub Actions.
+
 # Atualização de fluxos e transferências
 
 Consulte [ATUALIZAR-FLUXOS-OPERACIONAIS.md](ATUALIZAR-FLUXOS-OPERACIONAIS.md) antes de publicar.

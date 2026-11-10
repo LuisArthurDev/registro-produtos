@@ -10,7 +10,8 @@
   <link rel="stylesheet" href="/assets/app.css">
   <title>Lançamentos · Registro de Validades</title>
   <meta name="description" content="Lançamento responsivo de lotes e validades com leitor EAN por câmera.">
-  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>window.OneSignalDeferred=window.OneSignalDeferred||[];</script>
+  <script id="onesignal-sdk" src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer onload="window.__oneSignalLoaded=true" onerror="window.__oneSignalLoadError=true"></script>
 </head>
 <body class="launch-route">
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -27,6 +28,7 @@
       <label class="checkbox-label"><input type="checkbox" id="login-manter"> Permanecer conectado neste dispositivo</label>
       <button class="primary" id="btn-login" type="submit">Entrar no sistema <span>→</span></button>
       <p id="login-erro" role="alert" class="error-note" hidden></p>
+      <button id="btn-revalidar-sessao" type="button" class="btn-outline" hidden>Tentar confirmar sessão novamente</button>
     </form>
     <p class="login-footer">A conexão é necessária para autenticação. As tentativas de lançamento podem ser retomadas após oscilações de rede.</p>
   </div>

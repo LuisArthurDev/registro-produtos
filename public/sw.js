@@ -1,5 +1,5 @@
 // Service worker conservador: recursos estáticos ficam disponíveis offline; API nunca é cacheada.
-const NAME='registro-validades-v9-fluxos-operacionais';
+const NAME='registro-validades-v11-validade-perdas-one';
 const STATIC=['/','/index.html','/lancamentos.html','/assets/app.css','/assets/app.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(NAME).then(c=>c.addAll(STATIC)));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const name of await caches.keys())if(name.startsWith('registro-validades-')&&name!==NAME)await caches.delete(name);await self.clients.claim();})());});

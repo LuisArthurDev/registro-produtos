@@ -1,11 +1,14 @@
 import { lerODS } from './ods.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
-import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta } from './push.js';
+import { elegivelTentativaVenda } from './tentativa.js';
+import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta, prepararPush, diagnosticarPush } from './push.js';
 /* Registro de Validades — frontend unificado. Não armazene chaves administrativas aqui. */
 const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
+// Transferência efêmera de um login já confirmado no servidor para a página móvel.
+const AUTH_BRIDGE_KEY='rv_login_validado_para_lancamentos_v1';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
 const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
 const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja'],['notificacoes','bell','Notificações']];
@@ -55,7 +58,7 @@ function table(headers,rows){if(!rows.length)return empty();return `<div class="
 function paginarTabelasSimples(){
  const content=$('#content');if(!content)return;
  for(const wrap of content.querySelectorAll('.table-wrap')){
-   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list'))continue;
+   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list,#tv-list,#transfer-list'))continue;
    const trs=[...wrap.querySelectorAll('tbody > tr')];if(!trs.length)continue;
    wrap.dataset.paginado='1';let page=0;
    const foot=document.createElement('div');foot.className='pager pager-auto';
@@ -105,18 +108,45 @@ async function request(path,{method='GET',body=null,retries=method==='GET'?2:0,t
     }catch(e){last=e;if(e.code===401&&state.user){logout(false);throw new Error('Sessão encerrada. Entre novamente.');}if(n>=retries||e.code&&e.code<500)break;await new Promise(ok=>setTimeout(ok,600*(n+1)));}
     finally{clearTimeout(t);}
   }
-  throw new Error(last?.name==='AbortError'?'Tempo excedido. A operação pode ter sido concluída no servidor. Verifique antes de enviar novamente.':last?.message||'Falha de conexão.');
+  const erro=new Error(last?.name==='AbortError'?'Tempo excedido. A operação pode ter sido concluída no servidor. Verifique antes de enviar novamente.':last?.message||'Falha de conexão.');
+  // Preservar o HTTP 401/403: não confundir sessão expirada com falha de internet.
+  erro.code=last?.code;
+  throw erro;
 }
 function isAdmin(){return state.user?.perfil==='admin';}
 function isGeral(){return state.user?.perfil==='geral';}
 function canManage(){return isAdmin()||isGeral();}
 function lojaParams(){return state.user?.perfil==='geral'?`loja=${encodeURIComponent(state.loja)}`:'';}
 function urlWithLoja(url){return url+(url.includes('?')?'&':'?')+lojaParams();}
-function showLogin(error=''){$('#login-screen').hidden=false;$('#app-shell').hidden=true;if(error){$('#login-erro').textContent=error;$('#login-erro').hidden=false;}}
+function showLogin(error=''){
+  $('#login-screen').hidden=false;$('#app-shell').hidden=true;
+  const retry=$('#btn-revalidar-sessao');if(retry)retry.hidden=!(error&&state.token);
+  const note=$('#login-erro');note.textContent=error;note.hidden=!error;
+}
+function criarPonteDeLogin(){
+  if(!state.user?.id||!state.token)return;
+  sessionStorage.setItem(AUTH_BRIDGE_KEY,JSON.stringify({token:state.token,usuario:state.user,emissao:Date.now()}));
+}
+function consumirPonteDeLogin(){
+  if(!IS_LAUNCH_PAGE||!state.token)return null;
+  const raw=sessionStorage.getItem(AUTH_BRIDGE_KEY);sessionStorage.removeItem(AUTH_BRIDGE_KEY);
+  if(!raw)return null;
+  try{
+    const v=JSON.parse(raw);
+    if(v.token!==state.token||Date.now()-v.emissao>30000||Date.now()<v.emissao||
+       !/^[a-f\d-]{36}$/i.test(v.usuario?.id||'')||
+       !['admin','funcionario'].includes(v.usuario?.perfil)||
+       typeof v.usuario?.nome!=='string')return null;
+    return v.usuario;
+  }catch{return null;}
+}
 function showApp(){
   // Ao autenticar no celular, abrir diretamente a página dedicada de lançamentos.
   // O link explícito /#dashboard continua sendo a entrada do administrador no painel.
   if(!IS_LAUNCH_PAGE && !isGeral() && window.matchMedia('(max-width: 900px)').matches && !location.hash){
+    // O servidor acabou de autenticar esta conta; não exigir uma segunda ida ao banco
+    // ao abrir a página de lançamentos no mesmo navegador.
+    criarPonteDeLogin();
     window.location.replace('/lancamentos.html');return;
   }
   transferirEscolhaParaConta(state.user);
@@ -153,7 +183,7 @@ async function logout(call=true){
    await Promise.race([desassociarPush(request),new Promise(resolve=>setTimeout(resolve,2300))]);
    await request('/logout',{method:'POST',timeout:7000}).catch(()=>{});
  }
- localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);
+ localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(AUTH_BRIDGE_KEY);
  state.token='';state.user=null;showLogin();
 }
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
@@ -177,7 +207,7 @@ async function renderRoute(route){const content=$('#content');content.innerHTML=
   if(isGeral()&&!['painel-geral','admins-geral','notificacoes'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
    case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
-   case 'perdas':await perdas();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
+   case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
  }catch(e){content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
@@ -367,7 +397,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span><span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${pill(...statusVal(r.validade,r.secao))}</td>
- ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir</button>${Number(r.quantidade)>0?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="${statusVal(r.validade,r.secao)[0]==='Vencido'?'vencidos':'queima'}">${statusVal(r.validade,r.secao)[0]==='Vencido'?'Lançar como Vencido':'Lançar na Queima'}</button>${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}</td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="${statusVal(r.validade,r.secao)[0]==='Vencido'?'vencidos':'queima'}">${statusVal(r.validade,r.secao)[0]==='Vencido'?'Lançar como Vencido':'Lançar na Queima'}</button>${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}</td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
@@ -398,7 +428,7 @@ async function mapas(forced=''){
  };
  const apply=()=>{const q=$('#map-search').value.toLowerCase().trim(),l=$('#map-lot').value.toLowerCase().trim(),st=$('#map-status').value,owner=$('#map-owner')?.value||forced,
  m=$('#map-month').value,v1=$('#map-valid-from').value,v2=$('#map-valid-to').value;
-  filtered=rows.filter(r=>Number(r.quantidade)>0&&(!owner||r.mapa_nome===owner)&&(!st||statusVal(r.validade,r.secao)[0]===st)
+  filtered=rows.filter(r=>(!owner||r.mapa_nome===owner)&&(!st||statusVal(r.validade,r.secao)[0]===st)
    &&(!m||String(r.mes_lancamento).slice(0,7)===m)&&(!v1||r.validade>=v1)&&(!v2||r.validade<=v2)
    &&(!l||String(r.lote).toLowerCase().includes(l))&&(!q||[r.ean,r.codigoInterno,r.descricao,r.secao].join(' ').toLowerCase().includes(q)));
   page=0;draw();};
@@ -639,12 +669,13 @@ async function controleValidade(){
  const falta=saldos.filter(x=>x.ean&&!emap.has(x.ean));
  const vencidos=vivos.filter(x=>statusVal(x.validade,x.secao)[0]==='Vencido');
  const em7=vivos.filter(x=>{const d=diasVencimento(x.validade);return d!=null&&d>=0&&d<=7;});
- const elegiveis=vivos.filter(x=>{const d=diasVencimento(x.validade);return d!=null&&d>=90&&d<=270;});
+ const elegiveis=vivos.filter(x=>elegivelTentativaVenda(x.validade,nowBrISO()));
  let page=0,choice='todos',filtered=[];
  $('#content').innerHTML=header('Controle de Validade','Situação por produto, meses e seções. Os saldos Procfit sem mapa são mostrados separadamente.',
  '<button class="btn-outline" id="ctrl-update" type="button">Atualizar controle</button>')+
- `<div class="stat-grid"><div class="card stat"><small>Dentro da validade</small><strong>${vivos.length-vencidos.length}</strong></div><div class="card stat warn"><small>Vencem em 7 dias</small><strong>${em7.length}</strong></div><div class="card stat danger"><small>Vencidos</small><strong>${vencidos.length}</strong></div><div class="card stat"><small>Saldo sem mapa</small><strong>${falta.length}</strong></div></div>
+ `<div class="stat-grid"><div class="card stat"><small>Dentro da validade</small><strong>${vivos.length-vencidos.length}</strong></div><div class="card stat warn"><small>Vencem em 7 dias</small><strong>${em7.length}</strong></div><div class="card stat danger"><small>Vencidos</small><strong>${vencidos.length}</strong></div><div class="card stat"><small>Saldo sem mapa</small><strong>${falta.length}</strong></div><div class="card stat"><small>Tentativa de Venda (3–9 meses)</small><strong>${elegiveis.length}</strong></div></div>
  <section class="card card-pad"><h2>Controle de vencimentos</h2><div class="filter-row"><input id="ctrl-search" class="wide" placeholder="Produto, EAN, código ou lote"><select id="ctrl-status"><option value="todos">Todas as situações</option><option value="vencido">Vencidos</option><option value="a-vencer">A vencer</option><option value="vendavel">Dentro da validade</option><option value="sete">Vencem em 7 dias</option><option value="elegiveis">Elegíveis de 3 a 9 meses</option></select><select id="ctrl-page-size"><option>15</option><option>25</option><option>50</option></select><button class="btn-outline" id="ctrl-export" type="button">Exportar CSV</button><button class="btn-outline" id="ctrl-print" type="button">Imprimir</button></div><p class="footer-hint" id="ctrl-count"></p><div id="ctrl-list"></div><div class="pager"><button id="ctrl-prev" class="btn-outline">Anterior</button><span id="ctrl-pages"></span><button id="ctrl-next" class="btn-outline">Próxima</button></div></section>
+ <section class="card card-pad"><div class="page-head subsection-head"><div><h2>Elegíveis a Tentativa de Venda / Prevenção</h2><p>Validade entre 3 e 9 meses de calendário a partir de hoje (inclusive).</p></div><div class="toolbar"><button class="btn-outline" id="tv-export" type="button">Exportar CSV</button><button class="btn-outline" id="tv-print" type="button">Imprimir</button></div></div><div class="filter-row"><select id="tv-owner"><option value="">Todos os funcionários / abas</option>${[...new Set(elegiveis.map(r=>r.mapa_nome))].sort().map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('')}</select><input id="tv-search" class="wide" placeholder="Buscar código, descrição, lote ou funcionário"><label>Por página <select id="tv-size"><option>15</option><option>25</option><option>50</option></select></label></div><p id="tv-count" class="footer-hint"></p><div id="tv-list"></div><div class="pager"><button id="tv-prev" type="button" class="btn-outline">Anterior</button><span id="tv-pages"></span><button id="tv-next" type="button" class="btn-outline">Próxima</button></div></section>
  <section class="card card-pad secondary-card"><h2>Saldo Procfit ainda não mapeado</h2><p>Itens com quantidade em estoque, mas sem correspondência no Mapa de Validade. Não são registros de vencimento.</p>${table(['EAN','Descrição','Código interno','Saldo Procfit'],falta.slice(0,200).map(x=>`<tr><td>${H(x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.codigo_interno)}</td><td>${H(x.quantidade)}</td></tr>`))}</section>`;
  const makeTable=data=>table(['Produto / EAN','Mapa','Lote','Validade','Dias restantes','Quantidade','Status'],data.map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(diasVencimento(r.validade)??'—')}</td><td>${H(r.quantidade)}</td><td>${pill(...statusVal(r.validade,r.secao))}</td></tr>`));
  const render=()=>{const q=$('#ctrl-search').value.trim().toLowerCase(),st=$('#ctrl-status').value;
@@ -656,6 +687,30 @@ async function controleValidade(){
  $('#ctrl-search').oninput=()=>{page=0;render();};$('#ctrl-status').onchange=()=>{page=0;render();};$('#ctrl-page-size').onchange=()=>{page=0;render();};
  $('#ctrl-prev').onclick=()=>{page--;render();};$('#ctrl-next').onclick=()=>{page++;render();};
  $('#ctrl-export').onclick=()=>exportCsv('controle-validades-'+nowBrISO()+'.csv',['Mapa','EAN','Descricao','Lote','Validade','Quantidade','Dias','Status'],filtered.map(x=>[x.mapa_nome,x.ean,x.descricao,x.lote,x.validade,x.quantidade,diasVencimento(x.validade),statusVal(x.validade,x.secao)[0]]));
+ const eligibleHeader=['Código/EAN','Descrição','Lote','Validade','Dias','Quantidade','Funcionário / Aba','Ações'];
+ const tvTable=data=>table(eligibleHeader,data.map(r=>`<tr><td>${H(r.codigoInterno||r.ean)}</td><td>${H(r.descricao||'Sem descrição')}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(diasVencimento(r.validade))}</td><td>${H(r.quantidade)}</td><td>${H(r.mapa_nome)}</td><td>${isAdmin()?`<button type="button" class="action-link danger-text" data-tv-retirar="${H(r.id)}" title="Retirar da Loja (registrado no histórico)">Retirar da Loja</button>`:'—'}</td></tr>`));
+ let tvPagina=0,tvFiltrados=[];
+ const tvRender=()=>{
+  const busca=$('#tv-search').value.toLocaleLowerCase('pt-BR').trim(),owner=$('#tv-owner').value;
+  tvFiltrados=elegiveis.filter(r=>(!owner||r.mapa_nome===owner)&&(!busca||[r.ean,r.codigoInterno,r.descricao,r.lote,r.mapa_nome].join(' ').toLocaleLowerCase('pt-BR').includes(busca)));
+  const size=Number($('#tv-size').value),pages=Math.max(1,Math.ceil(tvFiltrados.length/size));tvPagina=Math.min(tvPagina,pages-1);
+  $('#tv-list').innerHTML=tvTable(tvFiltrados.slice(tvPagina*size,(tvPagina+1)*size));
+  $('#tv-count').textContent=`${tvFiltrados.length} produtos elegíveis · ${tvFiltrados.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidades`;
+  $('#tv-pages').textContent=`Página ${tvPagina+1} de ${pages}`;$('#tv-prev').disabled=tvPagina===0;$('#tv-next').disabled=tvPagina>=pages-1;
+ };
+ $('#tv-search').oninput=$('#tv-owner').onchange=$('#tv-size').onchange=()=>{tvPagina=0;tvRender();};
+ $('#tv-prev').onclick=()=>{tvPagina--;tvRender();};$('#tv-next').onclick=()=>{tvPagina++;tvRender();};
+ $('#tv-export').onclick=()=>exportCsv('tentativa-de-venda-'+nowBrISO()+'.csv',eligibleHeader.slice(0,7),tvFiltrados.map(r=>[r.codigoInterno||r.ean,r.descricao,r.lote,r.validade,diasVencimento(r.validade),r.quantidade,r.mapa_nome]));
+ $('#tv-print').onclick=()=>printableTable('#tv-list',()=>tvTable(tvFiltrados));
+ $('#tv-list').onclick=async e=>{
+  const btn=e.target.closest('[data-tv-retirar]');if(!btn||!isAdmin())return;
+  const reg=elegiveis.find(x=>x.id===btn.dataset.tvRetirar);if(!reg)return;
+  if(!await confirmDialog('Retirar da Loja',`Remover ${reg.descricao||reg.ean} (lote ${reg.lote}) da lista de produtos da loja? O registro será preservado para auditoria.`))return;
+  btn.disabled=true;
+  try{await request('/mapas/retirar-loja',{method:'POST',body:{id:reg.id}});toast('Registro retirado da loja e auditado.');await renderRoute(state.route);}
+  catch(err){toast(err.message,true);btn.disabled=false;}
+ };
+ tvRender();
  $('#ctrl-print').onclick=()=>printableTable('#ctrl-list',()=>makeTable(filtered));$('#ctrl-update').onclick=()=>renderRoute(state.route);render();
 }
 async function notificacoes(){
@@ -667,7 +722,7 @@ async function notificacoes(){
  $('#content').innerHTML=header('Notificações','Avisos de validade para todos os usuários que aceitarem receber.')+
  `<section class="card card-pad"><h2>Notificações neste aparelho</h2>
  <p class="footer-hint">Você escolhe receber ou não. Não é necessário marcar Celular próprio ou solicitar aprovação. Os avisos são enviados a cada 8 horas quando há vencimentos que precisam de atenção na loja.</p>
- <div class="form-actions"><button class="primary" id="push-ativar" type="button">${enabled?'Reativar notificações':'Permitir notificações'}</button><button class="btn-outline" id="push-desativar" type="button">Não receber neste aparelho</button><button class="btn-outline" id="push-atualizar" type="button">Atualizar lista</button></div>
+ <div class="form-actions"><button class="primary" id="push-ativar" type="button">${enabled?'Reativar notificações':'Permitir notificações'}</button><button class="btn-outline" id="push-desativar" type="button">Não receber neste aparelho</button><button class="btn-outline" id="push-atualizar" type="button">Atualizar lista</button><button class="btn-outline" id="push-diagnosticar" type="button">Diagnosticar OneSignal</button></div>
  <p class="footer-hint" id="push-status" role="status">Preferência neste aparelho: ${enabled?'Permitir':'Não receber ou ainda não definida'}.</p></section>`+
  (isManager?`<section class="card card-pad"><h2>Aparelhos inscritos</h2><p class="footer-hint">A assinatura é voluntária e individual. O administrador pode enviar um teste, mas não autoriza outros aparelhos.</p>
  <div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Dispositivo</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${devices.map(v=>`<tr><td>${H(v.funcionario)}</td><td>${H(v.nome_dispositivo||'Navegador')}</td><td>${v.ativo&&v.consentimento_em?pill('Recebendo','green'):pill('Desativado','amber')}</td><td>${v.ativo&&v.consentimento_em?`<button type="button" class="btn-outline" data-push-test="${H(v.id)}">Testar</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">Nenhum aparelho cadastrado nesta loja.</td></tr>'}</tbody></table></div></section>`:
@@ -679,6 +734,12 @@ async function notificacoes(){
  };
  $('#push-desativar').onclick=async()=>{const btn=$('#push-desativar');btn.disabled=true;try{await recusarPush(state.user,request);toast('Notificações desativadas neste aparelho.');await renderRoute('notificacoes');}catch(e){toast(e.message,true);btn.disabled=false;}};
  $('#push-atualizar').onclick=()=>renderRoute('notificacoes');
+ $('#push-diagnosticar').onclick=async()=>{
+   const btn=$('#push-diagnosticar'),status=$('#push-status');btn.disabled=true;status.textContent='Verificando Site URL e Service Worker…';
+   try{const d=await diagnosticarPush();status.textContent=`Origem: ${d.origem} · HTTPS: ${d.https?'sim':'não'} · Permissão: ${d.navegador} · SDK: ${d.sdk} · Worker: ${d.worker}. Caso falhe, confira a Site URL no OneSignal e tente sem bloqueador de conteúdo.`;}
+   catch(err){status.textContent='Diagnóstico indisponível: '+err.message;}
+   finally{btn.disabled=false;}
+ };
  document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=async()=>{
    b.disabled=true;try{const r=await request('/notificacoes/teste',{method:'POST',body:{id:b.dataset.pushTest,...(isGeral()&&state.loja?{loja:state.loja}:{})}});toast(r.detalhe||'Mensagem aceita pelo OneSignal.');}catch(e){toast(e.message,true);}finally{b.disabled=false;}
  });
@@ -744,6 +805,48 @@ async function generic(pathname,title){
  };
  apply();
 }
+async function transferenciasPainel(){
+ if(!isAdmin())throw new Error('Somente o Administrador de Loja acessa Transferências.');
+ const response=await request('/transferencias');const registros=response.registros||[];
+ let page=0,filtered=[];
+ $('#content').innerHTML=header('Transferências','Transferências recebidas pela sua loja; todos os movimentos são auditados.',
+ '<button class="primary" id="transfer-new" type="button">Registrar Transferência</button><button class="btn-outline" id="transfer-print" type="button">Imprimir</button><button class="btn-outline" id="transfer-csv" type="button">Exportar CSV</button>')+
+ `<section class="card card-pad"><div class="filter-row"><input class="wide" id="transfer-search" placeholder="EAN, descrição, lote, romaneio ou origem"><label>Por página <select id="transfer-size"><option>15</option><option>25</option><option>50</option></select></label><button type="button" id="transfer-refresh" class="btn-outline">Atualizar</button></div><p id="transfer-count" class="footer-hint"></p><div id="transfer-list"></div><div class="pager"><button type="button" id="transfer-prev" class="btn-outline">Anterior</button><span id="transfer-pages"></span><button type="button" id="transfer-next" class="btn-outline">Próxima</button></div></section>
+ <dialog id="transfer-dialog" class="dialog operational-dialog"><form id="transfer-form" class="dialog-inner"><h2 id="transfer-title">Registrar Transferência</h2><p class="footer-hint">A loja de destino é definida pela sua sessão e não pode ser modificada.</p><div class="form-grid">
+ <label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14" required></label><label>Lote<input name="lote" maxlength="100" required></label>
+ <label>Validade<input name="validade" type="date" required></label><label>Quantidade<input name="quantidade" type="number" min="1" max="999999" step="1" required></label>
+ <label>Loja de origem<input name="loja_origem" pattern="[0-9]{1,12}" inputmode="numeric" maxlength="12" required></label><label>Romaneio<input name="romaneio" maxlength="100" required></label>
+ <div class="notice full">Loja de destino: ${H(state.user.loja)} (automaticamente)</div></div>
+ <div class="dialog-actions"><button type="button" id="transfer-cancel" class="btn-outline">Cancelar</button><button type="submit" class="primary" id="transfer-save">Salvar Transferência</button></div><p id="transfer-error" role="alert" class="error-note" hidden></p></form></dialog>`;
+ const form=$('#transfer-form'),dlg=$('#transfer-dialog');let editId='',requestId='';
+ const renderRows=records=>table(['Data','Produto / EAN','Lote','Validade','Qtd.','Origem','Destino','Romaneio','Ações'],records.map(r=>`<tr><td>${dtBR(r.criado_em)}</td><td><strong>${H(r.descricao||'Sem descrição')}</strong><span class="second">${H(r.ean_resolvido||r.ean)}</span></td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(r.loja_origem)}</td><td>${H(r.loja_destino)}</td><td>${H(r.romaneio)}</td><td class="row-actions"><button type="button" class="action-link" data-transfer-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-transfer-delete="${H(r.id)}">Excluir</button></td></tr>`));
+ const draw=()=>{const size=Number($('#transfer-size').value),total=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,total-1);$('#transfer-list').innerHTML=renderRows(filtered.slice(page*size,(page+1)*size));$('#transfer-count').textContent=`${filtered.length} transferência(s)`;$('#transfer-pages').textContent=`Página ${page+1} de ${total}`;$('#transfer-prev').disabled=page===0;$('#transfer-next').disabled=page===total-1;};
+ const apply=()=>{const q=$('#transfer-search').value.toLowerCase().trim();filtered=registros.filter(r=>[r.ean,r.ean_resolvido,r.descricao,r.lote,r.loja_origem,r.romaneio].join(' ').toLowerCase().includes(q));page=0;draw();};
+ const abrir=registro=>{form.reset();editId=registro?.id||'';requestId=editId?'':newId();$('#transfer-title').textContent=editId?'Editar Transferência':'Registrar Transferência';$('#transfer-error').hidden=true;
+  if(registro)for(const key of ['ean','lote','validade','quantidade','loja_origem','romaneio'])form.elements[key].value=key==='validade'?String(registro[key]||'').slice(0,10):registro[key]??'';
+  dlg.showModal();form.elements.ean.focus();};
+ $('#transfer-new').onclick=()=>abrir(null);$('#transfer-cancel').onclick=()=>dlg.close();$('#transfer-refresh').onclick=()=>renderRoute(state.route);
+ $('#transfer-search').oninput=apply;$('#transfer-size').onchange=apply;$('#transfer-prev').onclick=()=>{page--;draw();};$('#transfer-next').onclick=()=>{page++;draw();};
+ $('#transfer-print').onclick=()=>printableTable('#transfer-list',()=>renderRows(filtered));
+ $('#transfer-csv').onclick=()=>exportCsv('transferencias-'+nowBrISO()+'.csv',['Data','EAN','Descrição','Lote','Validade','Quantidade','Origem','Destino','Romaneio'],filtered.map(r=>[r.criado_em,r.ean,r.descricao,r.lote,r.validade,r.quantidade,r.loja_origem,r.loja_destino,r.romaneio]));
+ $('#transfer-list').onclick=async e=>{
+  const edit=e.target.closest('[data-transfer-edit]'),del=e.target.closest('[data-transfer-delete]');if(!edit&&!del)return;
+  const id=edit?.dataset.transferEdit||del?.dataset.transferDelete,reg=registros.find(r=>r.id===id);if(!reg)return;
+  if(edit){abrir(reg);return;}
+  if(!await confirmDialog('Excluir Transferência',`Excluir a transferência ${reg.romaneio||reg.ean} da listagem? Os dados originais permanecerão na auditoria.`))return;
+  del.disabled=true;try{await request('/transferencias',{method:'DELETE',body:{id:reg.id}});toast('Transferência excluída e auditada.');await renderRoute(state.route);}catch(err){toast(err.message,true);del.disabled=false;}
+ };
+ form.onsubmit=async e=>{e.preventDefault();if(!form.reportValidity())return;
+  const data={...Object.fromEntries(new FormData(form)),quantidade:Number(form.elements.quantidade.value)};
+  if(data.loja_origem===String(state.user.loja))return toast('A loja de origem deve ser diferente da loja de destino.',true);
+  if(!editId)data.requestId=requestId;
+  const btn=$('#transfer-save');btn.disabled=true;$('#transfer-error').hidden=true;
+  try{await request('/transferencias',{method:editId?'PATCH':'POST',body:editId?{...data,id:editId}:data});dlg.close();requestId='';toast(editId?'Transferência atualizada.':'Transferência registrada.');await renderRoute(state.route);}
+  catch(err){$('#transfer-error').textContent=err.message;$('#transfer-error').hidden=false;}
+  finally{btn.disabled=false;}
+ };apply();
+}
+
 async function perdas(){
  const [v,m]=await Promise.all([request('/vencidos'),getMaps()]),items=v.registros||[],salon=m.filter(x=>statusVal(x.validade,x.secao)[0]==='Vencido'&&Number(x.quantidade)>0);
  let tab='retirados',q='';const retirados=items.filter(x=>x.motivo!=='danificado'),danificados=items.filter(x=>x.motivo==='danificado');
@@ -753,15 +856,29 @@ async function perdas(){
  `<div class="stat-grid"><div class="card stat"><small>Retirados / Vencidos</small><strong>${retirados.length}</strong></div><div class="card stat"><small>Danificados</small><strong>${danificados.length}</strong></div><div class="card stat warn"><small>Vencidos nos mapas</small><strong>${salon.length}</strong></div><div class="card stat"><small>Unidades registradas</small><strong>${items.reduce((a,x)=>a+Number(x.quantidade||0),0)}</strong></div></div>
  <section class="card card-pad"><div class="page-subnav"><button class="btn-outline" data-loss-tab="retirados" aria-pressed="true">Retirados</button><button class="btn-outline" data-loss-tab="danificados" aria-pressed="false">Danificados</button><button class="btn-outline" data-loss-tab="salao" aria-pressed="false">Vencidos no mapa</button></div>
  <div class="filter-row"><input id="loss-search" class="wide" placeholder="Buscar EAN, descrição ou lote"><button id="loss-new" class="primary" type="button">Adicionar danificado</button></div><p id="loss-total" class="footer-hint"></p><div id="loss-list"></div></section>
+ <dialog id="loss-edit-dialog" class="dialog operational-dialog"><form id="loss-edit-form" class="dialog-inner"><h2>Editar registro de Perdas</h2><div class="form-grid"><label>EAN<input name="ean" inputmode="numeric" maxlength="14"></label><label>Código interno<input name="codigo_interno"></label><label class="full">Descrição<input name="descricao_original"></label><label>Lote<input name="lote" maxlength="100"></label><label>Validade<input name="validade" type="date"></label><label>Quantidade<input name="quantidade" type="number" min="1" max="999999" step="1" required></label><label>Motivo<select name="motivo"><option value="vencido">Vencido</option><option value="danificado">Danificado</option><option value="retirado">Retirado</option></select></label></div><p id="loss-edit-error" class="error-note" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="loss-edit-cancel" class="btn-outline">Cancelar</button><button class="primary" type="submit" id="loss-edit-save">Salvar alterações</button></div></form></dialog>
  <section class="card card-pad secondary-card" id="loss-form-card" hidden><h2>Registrar produto danificado</h2><form id="loss-form" class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}"></label><label>Código interno<input name="codigo_interno"></label><label class="full">Descrição<input name="descricao_original" required></label><label>Lote<input name="lote"></label><label>Validade<input name="validade" type="date" required></label><label>Quantidade<input name="quantidade" type="number" min="1" required></label><div class="form-actions"><button class="primary">Salvar danificado</button></div></form></section>`;
  const draw=()=>{const list=tab==='danificados'?danificados:tab==='salao'?salon:retirados,found=list.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote].join(' ').toLowerCase().includes(q));
  $('#loss-total').textContent=`${found.length} registro(s)`;
- $('#loss-list').innerHTML=table(['EAN','Descrição','Lote','Validade','Quantidade','Registrado em',...(tab==='danificados'?['Ação']:[])],found.map(x=>`<tr><td>${H(showEan(x))}</td><td>${H(x.descricao||x.descricao_original||'Sem descrição')}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${H(x.quantidade)}</td><td>${tab==='salao'?H(x.mapa_nome):dtBR(x.criado_em)}</td>${tab==='danificados'?`<td>${x.retirado_em?pill('Retirado','green'):`<button class="action-link" data-remove-damaged="${H(x.id)}">Confirmar retirada</button>`}</td>`:''}</tr>`));};
+ $('#loss-list').innerHTML=table(['EAN','Descrição','Lote','Validade','Quantidade','Registrado em',...(tab==='salao'?[]:['Ações'])],found.map(x=>`<tr><td>${H(showEan(x))}</td><td>${H(x.descricao||x.descricao_original||'Sem descrição')}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${H(x.quantidade)}</td><td>${tab==='salao'?H(x.mapa_nome):dtBR(x.criado_em)}</td>${tab!=='salao'?`<td class="row-actions"><button type="button" class="action-link" data-loss-edit="${H(x.id)}">Editar</button><button type="button" class="action-link danger-text" data-loss-delete="${H(x.id)}">Excluir</button>${tab==='danificados'?(x.retirado_em?pill('Retirado','green'):`<button type="button" class="action-link" data-remove-damaged="${H(x.id)}">Confirmar retirada</button>`):''}</td>`:''}</tr>`));};
  for(const b of document.querySelectorAll('[data-loss-tab]'))b.onclick=()=>{tab=b.dataset.lossTab;document.querySelectorAll('[data-loss-tab]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));draw();};
  $('#loss-search').oninput=e=>{q=e.target.value.toLowerCase();draw();};$('#loss-new').onclick=()=>{$('#loss-form-card').hidden=!$('#loss-form-card').hidden;};
  $('#loss-print').onclick=()=>printableTable('#loss-list',()=>$('#loss-list').innerHTML);
- $('#loss-list').onclick=async e=>{const id=e.target.closest('[data-remove-damaged]')?.dataset.removeDamaged;if(!id)return;if(!await confirmDialog('Confirmar retirada','Confirmar que o danificado foi retirado da loja? O registro será preservado no histórico.'))return;
-  try{await request('/vencidos/retirar',{method:'POST',body:{id}});toast('Retirada confirmada.');renderRoute(state.route);}catch(err){toast(err.message,true);}
+ const editDlg=$('#loss-edit-dialog'),editForm=$('#loss-edit-form');let editId='';$('#loss-edit-cancel').onclick=()=>editDlg.close();
+ $('#loss-list').onclick=async e=>{
+  const editar=e.target.closest('[data-loss-edit]'),excluir=e.target.closest('[data-loss-delete]'),retirar=e.target.closest('[data-remove-damaged]');
+  if(!editar&&!excluir&&!retirar)return;
+  const id=editar?.dataset.lossEdit||excluir?.dataset.lossDelete||retirar?.dataset.removeDamaged,item=items.find(x=>x.id===id);if(!item)return;
+  if(editar){editId=id;editForm.reset();for(const key of ['ean','codigo_interno','descricao_original','lote','validade','quantidade','motivo'])editForm.elements[key].value=key==='validade'?String(item[key]||'').slice(0,10):(item[key]??'');$('#loss-edit-error').hidden=true;editDlg.showModal();return;}
+  if(excluir){if(!await confirmDialog('Excluir registro de Perdas',`Excluir ${item.ean||item.codigo_interno} (lote ${item.lote||'—'}) da listagem? Os dados serão preservados para auditoria.`))return;
+   excluir.disabled=true;try{await request('/vencidos',{method:'DELETE',body:{id}});toast('Registro de Perdas excluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);excluir.disabled=false;}return;}
+  if(!await confirmDialog('Confirmar retirada','Confirmar que o danificado foi retirado da loja? O registro será preservado no histórico.'))return;
+  try{await request('/vencidos/retirar',{method:'POST',body:{id}});toast('Retirada confirmada.');await renderRoute(state.route);}catch(err){toast(err.message,true);}
+ };
+ editForm.onsubmit=async e=>{e.preventDefault();if(!editForm.reportValidity())return;const btn=$('#loss-edit-save');btn.disabled=true;$('#loss-edit-error').hidden=true;
+  const data={...Object.fromEntries(new FormData(editForm)),id:editId,quantidade:Number(editForm.elements.quantidade.value)};
+  try{await request('/vencidos',{method:'PATCH',body:data});editDlg.close();toast('Perdas atualizadas.');await renderRoute(state.route);}
+  catch(err){$('#loss-edit-error').textContent=err.message;$('#loss-edit-error').hidden=false;}finally{btn.disabled=false;}
  };
  $('#loss-form').onsubmit=async e=>{e.preventDefault();const form=e.target,body={...Object.fromEntries(new FormData(form)),motivo:'danificado',quantidade:Number(form.elements.quantidade.value)};
   if(!body.ean&&!body.codigo_interno)return toast('Informe EAN ou código interno.',true);
@@ -769,7 +886,29 @@ async function perdas(){
  };draw();
 }
 
-async function restoreSession(){if(!state.token)return showLogin();try{const d=await request('/sessao',{retries:1,timeout:40000});state.user=d.usuario;showApp();}catch(e){if(e.code===401||e.code===403){logout(false);}else showLogin('Não foi possível confirmar sua sessão devido à conexão. Tente entrar novamente quando houver sinal.');}}
+async function restoreSession(){
+ if(!state.token)return showLogin();
+ // Ponte válida SOMENTE no redirecionamento imediato após um /login confirmado.
+ // Não reutiliza a credencial após F5; APIs de mapas e lançamentos validam
+ // a sessão no servidor a cada requisição.
+ const autenticado=consumirPonteDeLogin();
+ if(autenticado){state.user=autenticado;showApp();return;}
+ const retry=$('#btn-revalidar-sessao');if(retry){retry.disabled=true;retry.textContent='Confirmando sessão…';}
+ try{
+   const d=await request('/sessao',{retries:3,timeout:18000});
+   if(!d?.usuario?.id)throw new Error('O servidor não retornou os dados da sessão.');
+   state.user=d.usuario;showApp();
+ }catch(e){
+   if(e.code===401||e.code===403){await logout(false);showLogin('Sessão expirada. Entre novamente.');}
+   else showLogin((navigator.onLine===false?'Sem conexão com a internet. ': 'Não foi possível confirmar a sessão. ')+(e.message||'Verifique a conexão.')+' Sua sessão foi preservada: use Tentar confirmar sessão novamente, sem redigitar a senha.');
+ }finally{if(retry){retry.disabled=false;retry.textContent='Tentar confirmar sessão novamente';}}
+}
+let aguardandoRetornoRede=false;
+window.addEventListener('online',()=>{
+ if(aguardandoRetornoRede||!state.token||state.user||!$('#login-screen')||$('#login-screen').hidden)return;
+ aguardandoRetornoRede=true;
+ void restoreSession().finally(()=>{aguardandoRetornoRede=false;});
+});
 // Salva a loja na primeira digitação (sem armazenar usuário/PIN) e permite limpá-la com ×.
 function setupRememberedStore(){
  const input=$('#login-loja'),clear=$('#login-loja-clear'),saved=localStorage.getItem(STORE_KEY)||'';
@@ -786,6 +925,7 @@ function setupRememberedStore(){
 }
 setupRememberedStore();
 configurarMinhaSenha();
+prepararPush();
 // Primeiro acesso em qualquer página: pergunta clara antes de pedir permissão nativa.
 // Não exige aceitar para usar o sistema e não insiste após uma escolha no dispositivo.
 const consentDialog=$('#push-consent-dialog');
@@ -803,6 +943,7 @@ $('#push-consent-no').onclick=async()=>{
 };
 // Oferecer após login: a autorização é vinculada à conta, nunca a uma conta desconhecida.
 
+$('#btn-revalidar-sessao').onclick=()=>restoreSession();
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
 $('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

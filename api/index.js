@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { tratarNotificacoes } from './notificacoes.js';
+import { elegivelTentativaVenda } from '../public/assets/tentativa.js';
 
 const urlBase = () => String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const secret = () => process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -74,7 +75,10 @@ async function authenticate(req){
   const user=await one('usuarios',{id:`eq.${sessao.usuario_id}`,select:'*'});
   if(!user?.ativo)throw bad('Usuário inativo ou inexistente.',403);
   if(hora-Date.parse(sessao.ultima_atividade)>60*1000) {
-    await db('sessoes',{method:'PATCH',params:{token_hash:`eq.${sessao.token_hash}`},body:{ultima_atividade:new Date().toISOString()}});
+    // Falha transitória ao atualizar a atividade não invalida uma sessão lida
+    // e conferida com sucesso. Evita erro de login após redirecionamento.
+    try{await db('sessoes',{method:'PATCH',params:{token_hash:`eq.${sessao.token_hash}`},body:{ultima_atividade:new Date().toISOString()}});}
+    catch(err){console.warn('Atualização de atividade não concluída:',err.name);}
   }
   return {actor:user, sessao};
 }
@@ -146,6 +150,18 @@ async function mapas(req,actor,pathname,body,query){
     else if(nome)params.mapa_nome=`eq.${nome}`;
     const registros=await rows('mapa_lancamentos',params,800,20);
     return {sucesso:true,registros:registros.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||''}))};
+  }
+  if(pathname==='/mapas/retirar-loja'){
+    if(req.method!=='POST')throw bad('Método não permitido.',405);
+    if(actor.perfil!=='admin')throw bad('Somente o Administrador de Loja pode retirar registros.',403);
+    const id=norm(body.id),item=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'});
+    if(!item)throw bad('Registro não encontrado ou já retirado.',404);
+    const hoje=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'America/Sao_Paulo'}).format(new Date());
+    // A regra corresponde à Tentativa de Venda do painel legado (meses de calendário).
+    if(!elegivelTentativaVenda(item.validade,hoje)||Number(item.quantidade)<=0)throw bad('Este registro não está elegível a Tentativa de Venda.',409);
+    await db('mapa_lancamentos',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'},body:{excluido_em:new Date().toISOString(),excluido_por:actor.id,retirada_loja_em:new Date().toISOString(),retirada_loja_por:actor.id},prefer:'return=minimal'});
+    await audit(actor,'retirar_da_loja_tentativa_venda',{id,ean:item.ean,lote:item.lote,validade:item.validade,quantidade:item.quantidade,mapa:item.mapa_nome});
+    return {sucesso:true};
   }
   if(pathname.endsWith('/descer')){
     admin(actor);const destino=norm(body.destino);if(!destino||destino==='Estoque')throw bad('Destino inválido.');
@@ -273,7 +289,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
   const loja=actorLoja(actor,body.loja||query.get('loja'));
   if(req.method==='GET') {
     admin(actor);
-    const regs=await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,select:'*',order:'criado_em.desc'},700,10);return {sucesso:true,registros:await enriquecerRegistros(regs,table)};
+    const regs=await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,...(['vencidos','transferencias'].includes(table)?{excluido_em:'is.null'}:{}),select:'*',order:'criado_em.desc'},700,10);return {sucesso:true,registros:await enriquecerRegistros(regs,table)};
   }
   admin(actor);
   if(req.method==='POST'){
@@ -308,6 +324,37 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(atual.estado!=='pendente')throw bad('Somente Queima pendente pode ser excluída. Registros aprovados devem ser preservados.',409);
     await db('queima',{method:'DELETE',params:{id:`eq.${atual.id}`,loja_id:`eq.${loja}`,estado:'eq.pendente'}});
     await audit(actor,'excluir_queima',{id:atual.id,registro:atual});return {sucesso:true};
+  }
+  if(req.method==='DELETE'&&['vencidos','transferencias'].includes(table)){
+    const id=norm(body.id),key=extras.lojaCol||'loja_id';
+    if(!/^[0-9a-f-]{36}$/i.test(id))throw bad('ID inválido.',422);
+    const antigo=await one(table,{id:`eq.${id}`,[key]:`eq.${loja}`,excluido_em:'is.null'});
+    if(!antigo)throw bad('Registro não encontrado ou excluído anteriormente.',404);
+    await db(table,{method:'PATCH',params:{id:`eq.${id}`,[key]:`eq.${loja}`,excluido_em:'is.null'},body:{excluido_em:new Date().toISOString(),excluido_por:actor.id,atualizado_em:new Date().toISOString()},prefer:'return=minimal'});
+    await audit(actor,'excluir_'+table,{id,antes:antigo});return {sucesso:true};
+  }
+  if(req.method==='PATCH'&&['vencidos','transferencias'].includes(table)){
+    const id=norm(body.id),key=extras.lojaCol||'loja_id';
+    if(!/^[0-9a-f-]{36}$/i.test(id))throw bad('ID inválido.',422);
+    const antigo=await one(table,{id:`eq.${id}`,[key]:`eq.${loja}`,excluido_em:'is.null'});
+    if(!antigo)throw bad('Registro não encontrado ou excluído anteriormente.',404);
+    const campos=table==='vencidos'?['ean','codigo_interno','descricao_original','lote','validade','quantidade','motivo']:['ean','lote','validade','quantidade','loja_origem','romaneio'];
+    const patch=Object.fromEntries(Object.entries(body).filter(([c])=>campos.includes(c)));
+    if(!Object.keys(patch).length)throw bad('Informe os campos a alterar.',422);
+    if(patch.ean!==undefined&&patch.ean!==''&&!eanValido(patch.ean))throw bad('EAN inválido.',422);
+    if(table==='transferencias'){
+      if(patch.ean!==undefined&&!eanValido(patch.ean))throw bad('EAN obrigatório.',422);
+      if(patch.loja_origem!==undefined){const origem=norm(patch.loja_origem);if(!/^\d{1,12}$/.test(origem)||origem===loja)throw bad('Loja de origem inválida.',422);await db('lojas',{method:'POST',params:{on_conflict:'id'},body:{id:origem,nome:`Loja ${origem}`},prefer:'resolution=ignore-duplicates,return=minimal'});patch.loja_origem=origem;}
+      if(patch.romaneio!==undefined&&(!norm(patch.romaneio)||norm(patch.romaneio).length>100))throw bad('Romaneio obrigatório (até 100 caracteres).',422);
+    }else if(patch.motivo!==undefined&&!['danificado','vencido','retirado'].includes(norm(patch.motivo)))throw bad('Motivo inválido.',422);
+    if(patch.validade!==undefined&&patch.validade!==null&&patch.validade!==''&&!dataValida(patch.validade))throw bad('Data de validade inválida.',422);
+    if(table==='transferencias'&&patch.validade!==undefined&&!dataValida(patch.validade))throw bad('Validade obrigatória.',422);
+    if(patch.quantidade!==undefined&&(!Number.isInteger(Number(patch.quantidade))||Number(patch.quantidade)<=0||Number(patch.quantidade)>999999))throw bad('Quantidade inválida.',422);
+    if(patch.lote!==undefined&&norm(patch.lote).length>100)throw bad('Lote muito longo.',422);
+    if(table==='vencidos'&&patch.ean==='')patch.ean=null;
+    patch.atualizado_em=new Date().toISOString();
+    await db(table,{method:'PATCH',params:{id:`eq.${id}`,[key]:`eq.${loja}`,excluido_em:'is.null'},body:patch,prefer:'return=minimal'});
+    await audit(actor,'editar_'+table,{id,antes:antigo,campos:Object.keys(patch).filter(c=>c!=='atualizado_em')});return {sucesso:true};
   }
   if(req.method==='PATCH'){
     const atual=await one(table,{id:`eq.${body.id}`,[extras.lojaCol||'loja_id']:`eq.${loja}`});if(!atual)throw bad('Não encontrado.',404);
