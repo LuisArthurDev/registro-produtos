@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1728">
+  <meta name="description" content="Gestão integrada de mapas de validade, catálogo EAN e estoque por loja.">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/app.css">
+  <title>Lançamentos · Registro de Validades</title>
+  <meta name="description" content="Lançamento responsivo de lotes e validades com leitor EAN por câmera.">
+</head>
+<body class="launch-route">
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<section id="login-screen" class="login-stage">
+  <div class="login-panel">
+    <div class="brand"><span class="brand-icon">◈</span><div><strong>Registro de Validades</strong><small>Gestão integrada · Supabase</small></div></div>
+    <div class="login-intro"><span class="eyebrow">Acesso restrito</span><h1>Bem-vindo de volta.</h1><p>Entre com seu usuário, loja e PIN para continuar.</p></div>
+    <form id="form-login" class="stack" autocomplete="off">
+      <label>Nome de usuário<input id="login-nome" name="nome" placeholder="Nome cadastrado" maxlength="120" required autocomplete="username"></label>
+      <label for="login-loja">Loja <span class="subtle">(lembrada neste dispositivo)</span></label>
+      <div class="store-input-wrap"><input id="login-loja" name="loja" inputmode="numeric" placeholder="Digite o número da loja" pattern="[0-9]{1,12}" maxlength="12" autocomplete="off" aria-describedby="login-loja-hint"><button type="button" id="login-loja-clear" class="clear-store" title="Apagar loja salva" aria-label="Apagar loja salva" hidden>×</button></div>
+      <small id="login-loja-hint" class="store-help">Salva automaticamente ao digitar. Use × para trocar de loja.</small>
+      <label>PIN<input id="login-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,12}" placeholder="••••••" required autocomplete="current-password"></label>
+      <label class="checkbox-label"><input type="checkbox" id="login-manter"> Permanecer conectado neste dispositivo</label>
+      <button class="primary" id="btn-login" type="submit">Entrar no sistema <span>→</span></button>
+      <p id="login-erro" role="alert" class="error-note" hidden></p>
+    </form>
+    <p class="login-footer">A conexão é necessária para autenticação. As tentativas de lançamento podem ser retomadas após oscilações de rede.</p>
+  </div>
+  <div class="login-art"><div class="mesh"></div><div class="hero-content"><span class="hero-pill">Painel operacional</span><h2>Produtos, validades e estoque. <em>Em um só lugar.</em></h2><p>Controle rastreável por funcionário, lote e loja, com todas as abas especiais preservadas.</p><div class="hero-stats"><span>EAN + Código interno</span><span>Controle por lote</span><span>Registro mensal</span></div></div></div>
+</section>
+<div id="app-shell" class="shell" hidden>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand sidebar-brand"><button type="button" id="sidebar-collapse" class="brand-icon brand-toggle" aria-label="Recolher menu" aria-expanded="true" title="Recolher menu">◈</button><div><strong>Validades</strong><small>Painel operacional</small></div></div>
+    <div class="workspace"><span class="workspace-dot"></span><div><small>Loja ativa</small><strong id="workspace-store">—</strong></div></div>
+    <nav id="menu" aria-label="Menu principal" class="nav"></nav>
+    <div class="side-bottom"><div class="user-profile"><span id="avatar">U</span><div><strong id="user-name">—</strong><small id="user-role">—</small></div></div><a id="side-open-launch" class="side-launch" href="/lancamentos.html" hidden aria-label="Ir para lançamentos"><span aria-hidden="true" class="side-action-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg></span><span class="side-launch-label">Ir para lançamentos</span></a><button id="btn-logout" class="side-logout" type="button"><span aria-hidden="true" class="side-action-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5m5 5H9"/></svg></span><span class="side-logout-label">Sair da conta</span></button></div>
+  </aside>
+  <div class="page-wrap"><header class="topbar"><button type="button" id="menu-toggle" class="icon-button mobile-only" aria-label="Abrir menu"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="breadcrumb"><span class="breadcrumb-start">Operação /</span> <strong id="breadcrumb-current">Visão geral</strong></div><div class="header-actions"><button class="btn-outline top-action" id="top-open-launch" type="button" hidden>Novo lançamento</button><span id="net-pill" class="net-pill">● Conectado</span><span id="today-label" class="today-label"></span></div></header>
+    <main id="content" class="page-content" tabindex="-1"></main>
+  </div>
+  <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+</div>
+<dialog id="launch-dialog" class="dialog dialog-wide"><div class="modal-head"><strong>Novo lançamento</strong><div class="modal-actions"><button id="launch-to-panel" class="btn-outline" type="button" hidden>Ir ao Painel Conferente</button><button id="launch-close" class="icon-button" type="button" aria-label="Fechar lançamento">×</button></div></div><div id="launch-body" class="launch-body"></div></dialog>
+<dialog id="product-dialog" class="dialog"><form class="dialog-inner" id="product-modal-form"><h3>Adicionar produto EAN</h3><p>Cadastre um item no catálogo sem alterar os mapas de validade.</p><div class="form-grid"><label>EAN<input name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14"></label><label>Código interno<input name="codigo_interno" maxlength="40"></label><label class="full">Descrição<input name="descricao" maxlength="350" required></label><label>Seção<input name="secao" maxlength="120"></label></div><p class="error-note" id="product-modal-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="product-modal-cancel" class="btn-outline">Cancelar</button><button class="primary" type="submit">Salvar produto</button></div></form></dialog>
+<dialog id="pin-dialog" class="dialog"><form class="dialog-inner" id="pin-form"><h3>Redefinir PIN</h3><p id="pin-target"></p><input type="hidden" name="id"><label>Novo PIN de 6 a 12 dígitos<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="new-password" required></label><label>Confirmar PIN<input name="confirmar" type="password" inputmode="numeric" pattern="[0-9]{6,12}" required></label><p class="notice warn">As sessões anteriores deste funcionário serão encerradas.</p><p id="pin-error" class="error-note" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="pin-cancel" class="btn-outline">Cancelar</button><button class="primary" type="submit">Redefinir PIN</button></div></form></dialog>
+<dialog id="confirm-dialog" class="dialog"><form method="dialog" class="dialog-inner"><h3 id="dialog-title">Confirmar ação</h3><p id="dialog-message"></p><div class="dialog-actions"><button value="cancel" class="btn-outline">Cancelar</button><button value="confirm" class="primary">Confirmar</button></div></form></dialog>
+<dialog id="edit-map-dialog" class="dialog"><form id="edit-map-form" class="dialog-inner"><h3>Editar produto do mapa</h3><p>Corrija os dados sem alterar o mês original do registro.</p><input type="hidden" name="id"><div class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14" required></label><label>Quantidade<input name="quantidade" type="number" min="0" max="999999" step="1" required></label><label>Lote<input name="lote" maxlength="100" required></label><label>Validade<input name="validade" type="date" required></label></div><p class="footer-hint" id="edit-map-context"></p><p class="error-note" id="edit-map-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="edit-map-cancel" class="btn-outline">Cancelar</button><button type="submit" class="primary">Salvar alterações</button></div></form></dialog>
+<dialog id="pending-actions-dialog" class="dialog" aria-labelledby="pending-action-title">
+  <div class="dialog-inner"><h3 id="pending-action-title">Ações da pendência</h3><p id="pending-action-info"></p><div class="pending-choice-list"><button type="button" id="pending-action-edit" class="primary">Corrigir registro</button><button type="button" id="pending-action-original" class="btn-outline">Ver os dados originais</button><button type="button" id="pending-action-cancel" class="btn-outline">Manter pendente</button></div><pre id="pending-action-details" class="pending-raw" hidden></pre><p class="footer-hint">A pendência só é marcada como corrigida após salvar e validar os dados; o registro histórico original é mantido.</p></div>
+</dialog>
+<dialog id="pending-dialog" class="dialog"><form id="pending-form" class="dialog-inner"><h3 id="pending-title">Corrigir pendência</h3><p id="pending-description">Confira as informações e corrija o registro.</p><div id="pending-fields" class="form-grid"></div><p class="footer-hint">O registro original será mantido para auditoria.</p><p id="pending-error" class="error-note" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="pending-cancel" class="btn-outline">Cancelar</button><button type="submit" class="primary">Confirmar correção</button></div></form></dialog>
+<dialog id="ean-scanner-dialog" class="dialog scanner-dialog" aria-labelledby="ean-scanner-title" aria-describedby="ean-scanner-status">
+  <div class="modal-head"><strong id="ean-scanner-title">Leitor de EAN pela câmera</strong><button id="ean-scanner-close" type="button" class="icon-button" aria-label="Fechar scanner">×</button></div>
+  <div class="scanner-body"><div id="ean-scanner-view" class="scanner-view" aria-label="Imagem da câmera"></div><p id="ean-scanner-status" role="status" aria-live="polite">Preparando câmera…</p><p class="footer-hint">Aponte a câmera traseira para o código de barras. A leitura preenche o EAN e consulta o catálogo, mas não envia o lançamento.</p><button type="button" id="ean-scanner-cancel" class="btn-outline scanner-cancel">Cancelar leitura</button></div>
+</dialog>
+<script type="module" src="/assets/app.js"></script>
+<script>if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));</script>
+</body>
+</html>

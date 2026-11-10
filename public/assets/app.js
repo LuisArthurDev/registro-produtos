@@ -5,9 +5,34 @@ const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
-const menus=[['dashboard','◫','Dashboard'],['mapas','▤','Mapa de Validade'],['controle-validade','◷','Controle de Validade'],['perdas','⊖','Perdas'],['estoque-mapa','▣','Estoque'],['saldo','≋','Saldo Procfit'],['produtos','▦','Produtos EAN'],['queima','♻','Queima'],['transferencias','⇄','Transferências'],['sinalizacoes','⚑','Sinalizados'],['usuarios','♙','Funcionários'],['auditoria','☷','Histórico'],['pendencias','⚠','Pendências'],['notificacoes','♧','Notificações']];
-const menusGeral=[['painel-geral','◈','Painel Geral'],['admins-geral','♙','Administradores de loja']];
+const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
+const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja']];
+// Ícones SVG locais: tamanhos e traços uniformes, sem dependência de CDN.
+const menuIconPaths={
+ dashboard:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+ clipboard:'<rect x="5" y="5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/>',
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 5 2 2 4-4"/>',
+ 'package-x':'<path d="m12 3-9 5v9l9 5 9-5V8l-9-5Zm0 0v19M3 8l9 5 9-5"/><path d="m15 15 4 4m0-4-4 4"/>',
+ warehouse:'<path d="M3 21V9l9-6 9 6v12H3ZM3 10h18M7 21v-8h10v8M10 13v8M14 13v8"/>',
+ scale:'<path d="M12 3v18M5 7h14M7 7l-4 8h8L7 7Zm10 0-4 8h8l-4-8ZM8 21h8"/>',
+ barcode:'<path d="M3 5v14M6 7v10M9 5v14M13 7v10M16 5v14M20 7v10"/>',
+ recycle:'<path d="m7 7 3-5 3 5M10 2 5 11h5m9-1 3 5h-6m6 0-5 6h-5m-4-5-5-2 2-3m-2 3 5 7h6"/>',
+ arrows:'<path d="M3 7h18m-5-4 5 4-5 4M21 17H3m5-4-5 4 5 4"/>',
+ flag:'<path d="M5 21V4m0 1c6-3 8 3 15 0v11c-7 3-9-3-15 0"/>',
+ users:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5"/>',
+ history:'<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6M12 7v5l3 2"/>',
+ alert:'<path d="m12 3 10 18H2L12 3Zm0 7v4m0 4h.01"/>',
+ bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 10h18c0-2-3-3-3-10ZM10 21h4"/>',
+ shield:'<path d="m12 2 9 4v6c0 5-3.4 8-9 10-5.6-2-9-5-9-10V6l9-4Zm-4 10 3 3 5-6"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5m5 5H9"/>',
+ launch:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/>',
+ menu:'<path d="M4 7h16M4 12h16M4 17h16"/>'
+};
+function navIcon(name){return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${menuIconPaths[name]||menuIconPaths.dashboard}</svg>`;}
+
 const SIDEBAR_KEY='rv_sidebar_recolhido';
+// O mesmo app atende ao painel e à página dedicada para lançamentos no Vercel.
+const IS_LAUNCH_PAGE=location.pathname.replace(/\/+$/, '')==='/lancamentos.html';
 
 const state={token:localStorage.getItem(TOKEN_KEY)||sessionStorage.getItem(TOKEN_KEY)||'',user:null,route:'dashboard',loja:localStorage.getItem(STORE_KEY)||'151',mapRows:[],staff:[],pending:null};
 let toastTimeout;
@@ -43,6 +68,25 @@ function paginarTabelasSimples(){
    select.onchange=()=>{page=0;draw();};prev.onclick=()=>{page--;draw();};next.onclick=()=>{page++;draw();};draw();
  }
 }
+// Mantém um único acesso a Lançamentos mesmo se uma versão antiga adicionar botões repetidos.
+// A página de destino é própria do Vercel; não duplica o formulário nem o estado da SPA.
+function garantirAcessoUnicoAoLancamento(){
+  const sidebar=$('#sidebar'),bottom=sidebar?.querySelector('.side-bottom');
+  if(!sidebar||!bottom)return;
+  const found=[...sidebar.querySelectorAll('#side-open-launch, .side-launch')];
+  if(!found.length)return;
+  const principal=found.find(el=>el.tagName==='A')||found[0];
+  for(const el of found)if(el!==principal)el.remove();
+  if(principal.tagName==='A'){
+    if(principal.getAttribute('href')!=='/lancamentos.html')principal.setAttribute('href','/lancamentos.html');
+  }
+  const logout=bottom.querySelector('#btn-logout');
+  if(logout&&principal.nextElementSibling!==logout)bottom.insertBefore(principal,logout);
+}
+const observerAcessoLancamentos=new MutationObserver(garantirAcessoUnicoAoLancamento);
+observerAcessoLancamentos.observe($('#sidebar'),{childList:true,subtree:true});
+garantirAcessoUnicoAoLancamento();
+
 const observerTabelas=new MutationObserver(paginarTabelasSimples);
 observerTabelas.observe($('#content'),{subtree:true,childList:true});
 
@@ -72,9 +116,9 @@ function showApp(){
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
-  $('#top-open-launch').hidden=isGeral();$('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
+  $('#top-open-launch').hidden=isGeral()||IS_LAUNCH_PAGE;$('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
   const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0]));
-  $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${icon}</span><span class="nav-label">${H(title)}</span></button>`).join('');
+  $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
   const p=localStorage.getItem(PENDING_KEY);if(p){try{state.pending=JSON.parse(p);}catch{localStorage.removeItem(PENDING_KEY);}}
   const collapsed=localStorage.getItem(SIDEBAR_KEY)==='1';
@@ -82,6 +126,12 @@ function showApp(){
   $('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));
   $('#sidebar-collapse').textContent='◈';
   $('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';
+  $('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');
+  if(IS_LAUNCH_PAGE){
+    if(isGeral()){window.location.replace('/#painel-geral');return;}
+    navigate('lancamentos');
+    return;
+  }
   const allowed=items.map(x=>x[0]),requested=(location.hash||'').replace('#','');
   navigate(allowed.includes(requested)?requested:(isGeral()?'painel-geral':'dashboard'));
   if(requested==='lancamentos'&&!isGeral())queueMicrotask(abrirNovoLancamento);
@@ -90,6 +140,12 @@ function logout(call=true){void fecharScanner();if(call&&state.token)request('/l
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
 function navigate(route){
  void fecharScanner();
+ if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign('/#'+encodeURIComponent(route));return;}
+ if(route==='lancamentos'&&IS_LAUNCH_PAGE&&!isGeral()){
+   state.route='lancamentos';if(location.hash!=='#lancamentos')location.hash='lancamentos';mobileClose();
+   $('#breadcrumb-current').textContent='Lançamentos';
+   renderRoute('lancamentos');return;
+ }
  const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0])).map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
@@ -101,7 +157,7 @@ function navigate(route){
 async function renderRoute(route){const content=$('#content');content.innerHTML=loading();try{
   if(isGeral()&&!['painel-geral','admins-geral'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
-   case 'dashboard':await dashboard();break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
+   case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
    case 'perdas':await perdas();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
@@ -140,9 +196,13 @@ async function dashboard(){
 
 async function staffList(){if(!isAdmin())return [];const d=await request(urlWithLoja('/usuarios'));state.staff=d.usuarios||[];return state.staff;}
 async function lancamentos(emModal=false){const staff=isAdmin()?await staffList():[];const mapaOpts=[...staff.filter(u=>u.perfil!=='geral'&&u.ativo).map(u=>u.nome),...special];const options=[...new Set(mapaOpts)].map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('');const saved=state.pending;const notice=saved?`<div class="notice warn">Existe um lançamento ainda não confirmado neste aparelho (EAN ${H(saved.ean)}). Utilize <strong>Retomar lançamento pendente</strong> antes de criar outro.</div>`:'';
- const launchMarkup=header('Novo lançamento','Registre o lote no mapa do funcionário ou na aba especial correspondente.')+`<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}<form id="form-launch" class="stack"><div class="form-grid">${isAdmin()?`<label>Mapa de destino<select name="mapa" required>${options}</select></label>`:`<label>Mapa de destino<input value="${H(state.user.nome)}" disabled></label>`}<div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" placeholder="Bipe ou digite o EAN" autofocus><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div><label>Lote<input name="lote" required maxlength="100" placeholder="Lote informado na embalagem"></label><label>Validade<input name="validade" required type="date"></label><label>Quantidade<input name="quantidade" required type="number" min="1" step="1" value="1"></label></div><div class="notice">O mês de lançamento é registrado automaticamente na data da gravação. Uma falha de internet não deve gerar outra solicitação com ID diferente.</div><div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar lançamento pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div></form><div id="launch-result" aria-live="polite"></div></div><div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite um código e use “Consultar EAN”. O lançamento também é permitido quando o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">EANs são tratados como texto para preservar zeros à esquerda. Não pressione “Registrar” novamente enquanto houver uma solicitação pendente: use o botão de retomada.</div></div></div>`;
+ const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/#${isAdmin()?'dashboard':'mapas'}">← ${isAdmin()?'Painel Conferente':'Meus mapas'}</a><button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
+ const launchMarkup=header('Novo lançamento','Registre o lote no mapa do funcionário ou na aba especial correspondente.',standaloneActions)+`<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}<form id="form-launch" class="stack"><div class="form-grid">${isAdmin()?`<label>Mapa de destino<select name="mapa" required>${options}</select></label>`:`<label>Mapa de destino<input value="${H(state.user.nome)}" disabled></label>`}<div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div><label>Lote<input name="lote" required maxlength="100" placeholder="Lote informado na embalagem"></label><label>Validade<input name="validade" required type="date"></label><label>Quantidade<input name="quantidade" required type="number" min="1" step="1" value="1"></label></div><div class="notice">O mês de lançamento é registrado automaticamente na data da gravação. Uma falha de internet não deve gerar outra solicitação com ID diferente.</div><div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar lançamento pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div></form><div id="launch-result" aria-live="polite"></div></div><div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite um código e use “Consultar EAN”. O lançamento também é permitido quando o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">EANs são tratados como texto para preservar zeros à esquerda. Não pressione “Registrar” novamente enquanto houver uma solicitação pendente: use o botão de retomada.</div></div></div>`;
  if(emModal){$('#launch-body').innerHTML=launchMarkup;$('#launch-dialog').showModal();}else{$('#content').innerHTML=launchMarkup;}
- const f=$('#form-launch'); f.elements.ean.focus();f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};$('#lookup-product').onclick=async()=>{const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);$('#product-preview').textContent='Consultando…';try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];$('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';}catch(e){$('#product-preview').textContent='Consulta indisponível: '+e.message;}};
+  const f=$('#form-launch');
+  if(IS_LAUNCH_PAGE){const exit=$('#launch-logout-standalone');if(exit)exit.onclick=()=>logout();}
+  if(!IS_LAUNCH_PAGE||window.matchMedia('(min-width:768px)').matches)f.elements.ean.focus();
+  f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};$('#lookup-product').onclick=async()=>{const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);$('#product-preview').textContent='Consultando…';try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];$('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';}catch(e){$('#product-preview').textContent='Consulta indisponível: '+e.message;}};
  f.onsubmit=async e=>{e.preventDefault();if(state.pending){toast('Conclua ou confira o lançamento pendente antes de criar outro.',true);return;}const x={requestId:newId(),mapa:isAdmin()?f.elements.mapa.value:state.user.nome,ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:f.elements.validade.value,quantidade:Number(f.elements.quantidade.value)};if(!x.ean||!x.lote||!x.validade||x.quantidade<=0)return toast('Preencha todos os campos.',true);state.pending=x;localStorage.setItem(PENDING_KEY,JSON.stringify(x));await submitLaunch(x,f);};
  if(saved)$('#retry-launch').onclick=()=>submitLaunch(saved,f);
 }
@@ -557,5 +617,5 @@ function setupRememberedStore(){
 }
 setupRememberedStore();
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
-$('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
-$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#side-open-launch').onclick=abrirNovoLancamento;$('#top-open-launch').onclick=abrirNovoLancamento;$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
+$('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
+$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#top-open-launch').onclick=()=>IS_LAUNCH_PAGE?window.location.assign('/#dashboard'):abrirNovoLancamento();$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
