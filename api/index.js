@@ -49,7 +49,7 @@ async function rows(table,params={},size=1000,maxPages=25) {
   throw bad('Muitos registros para esta consulta. Utilize filtros.',413);
 }
 async function one(table,params={}) {const d=await db(table,{params:{...params,limit:1}});return d?.[0]||null;}
-const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.perfil==='geral'||u.acesso_geral===true,administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
+const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.titular_painel_geral===true&&(u.perfil==='geral'||u.acesso_geral===true),administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
 function requestBody(req){if(req.body&&typeof req.body==='object')return req.body;try{return JSON.parse(req.body||'{}');}catch{throw bad('Corpo JSON inválido.');}}
 function actorLoja(actor,requested){
   if(actor.perfil==='geral'){
@@ -60,7 +60,7 @@ function actorLoja(actor,requested){
   return actor.loja_id;
 }
 function admin(actor){if(actor.perfil==='funcionario')throw bad('Acesso restrito ao administrador.',403);}
-function geral(actor){if(actor.perfil!=='geral')throw bad('Acesso restrito ao administrador geral.',403);}
+function geral(actor){if(actor.perfil!=='geral'||actor.titular_painel_geral!==true)throw bad('Painel Geral exclusivo da conta titular.',403);}
 function podeMapa(actor,mapa){if(actor.perfil==='funcionario'&&normalizarNome(mapa)!==actor.nome_normalizado)throw bad('Você só pode acessar seu próprio mapa.',403);}
 async function audit(actor,acao,dados={}) {try {await db('auditoria',{method:'POST',body:{loja_id:actor.loja_id,usuario_id:actor.id,acao,dados},prefer:'return=minimal'});}catch(e){console.error('Auditoria indisponível:',e.message);}}
 async function authenticate(req){
@@ -73,7 +73,8 @@ async function authenticate(req){
     throw bad('Sessão expirada. Faça login novamente.',401);
   }
   const user=await one('usuarios',{id:`eq.${sessao.usuario_id}`,select:'*'});
-  if(!user?.ativo)throw bad('Usuário inativo ou inexistente.',403);
+  if(!user?.ativo||user.excluido_em)throw bad('Usuário inativo ou inexistente.',403);
+  if(user.perfil==='geral'&&user.titular_painel_geral!==true)throw bad('Painel Geral exclusivo da conta titular.',403);
   if(hora-Date.parse(sessao.ultima_atividade)>60*1000) {
     // Falha transitória ao atualizar a atividade não invalida uma sessão lida
     // e conferida com sucesso. Evita erro de login após redirecionamento.
@@ -82,7 +83,7 @@ async function authenticate(req){
   }
   // Perfil é resolvido NO SERVIDOR a cada chamada, nunca pelo campo perfil da requisição.
   // O acesso Geral temporário só vale para uma sessão autorizada com o PIN da própria conta.
-  const geralAtivo=user.perfil==='admin' && user.acesso_geral===true &&
+  const geralAtivo=user.perfil==='admin' && user.titular_painel_geral===true && user.acesso_geral===true &&
     sessao.modo_acesso==='geral' && Date.parse(sessao.modo_expira_em)>hora;
   const actor={...user,perfilBase:user.perfil,perfil:geralAtivo?'geral':user.perfil};
   return {actor, sessao};
@@ -94,7 +95,7 @@ async function login(body) {
   if(body.loja) {const sameStore=candidatos.filter(u=>u.loja_id===String(body.loja));candidatos=sameStore.length?sameStore:candidatos.filter(u=>u.perfil==='geral'&&u.loja_id===null);}
   if(candidatos.length>1)throw bad('Há nomes iguais em mais de uma loja. Informe o número da loja.',409);
   const user=candidatos[0];
-  if(!user)throw bad('Credenciais inválidas.',401);
+  if(!user||user.excluido_em||(user.perfil==='geral'&&user.titular_painel_geral!==true))throw bad('Credenciais inválidas.',401);
   if(user.bloqueado_ate&&Date.parse(user.bloqueado_ate)>Date.now())throw bad('Login temporariamente bloqueado. Aguarde 15 minutos.',429);
   if(!validarPin(pin,user.pin_hash)){
     const tentativas=(user.tentativas||0)+1;
@@ -110,7 +111,7 @@ async function login(body) {
 // Alternar perfis na mesma conta: confirma o PIN atual para elevar uma sessão a Geral.
 // O navegador jamais determina qual ID ou loja ganha permissão.
 async function alternarModo(actor,sessao,body){
-  if(actor.perfilBase!=='admin'||actor.acesso_geral!==true)
+  if(actor.perfilBase!=='admin'||actor.acesso_geral!==true||actor.titular_painel_geral!==true)
     throw bad('Esta conta não possui acesso duplo habilitado.',403);
   const modo=norm(body.modo);
   if(!['admin','geral'].includes(modo))throw bad('Modo de acesso inválido.',422);
@@ -362,14 +363,14 @@ async function stock(req,actor,pathname,body,query){
 async function staff(req,actor,body,query){
   admin(actor);const loja=actor.perfil==='geral'?norm(body.loja||query.get('loja')):actor.loja_id;
   if(req.method==='GET'){
-    const params={select:'id,nome,loja_id,perfil,especial,ativo,celular_proprio',order:'nome.asc'};
+    const params={select:'id,nome,loja_id,perfil,especial,ativo,celular_proprio',excluido_em:'is.null',order:'nome.asc'};
     if(actor.perfil!=='geral'||loja)params.loja_id=`eq.${loja}`;
     return {sucesso:true,usuarios:await rows('usuarios',params,200)};
   }
   const nome=norm(body.nome);
   if(req.method==='POST'){
     if(nome.length<2||nome.length>120)throw bad('Nome inválido.');
-    if(specials.some(x=>normalizarNome(x)===normalizarNome(nome)))throw bad('Nome reservado para mapa especial.');
+    if(specials.some(x=>normalizarNome(x)===normalizarNome(nome))||normalizarNome(nome)==='sem responsavel')throw bad('Nome reservado para mapa especial ou pendências.');
     const perfil=body.perfil||'funcionario';
     if(!['funcionario','admin'].includes(perfil))throw bad('O perfil Geral é exclusivo e não pode ser criado por este painel.',403);
     if(actor.perfil==='admin'&&perfil!=='funcionario')throw bad('Somente o Geral pode criar administradores.',403);
@@ -379,7 +380,8 @@ async function staff(req,actor,body,query){
     const u=await db('usuarios',{method:'POST',body:data,prefer:'return=representation'});
     await audit(actor,'cadastrar_usuario',{id:u[0].id,nome});return {sucesso:true,usuario:cleanUser(u[0])};
   }
-  const id=norm(body.id);const user=await one('usuarios',{id:`eq.${id}`});if(!user)throw bad('Usuário não encontrado.',404);
+  const id=norm(body.id);if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador inválido.',422);const user=await one('usuarios',{id:`eq.${id}`});if(!user)throw bad('Usuário não encontrado.',404);
+  if(user.excluido_em)throw bad('Conta excluída. O histórico foi preservado.',410);
   if(actor.perfil!=='geral'&&(user.loja_id!==actor.loja_id||user.perfil!=='funcionario'))throw bad('Somente o Administrador Geral gerencia contas administrativas.',403);
   if(req.method==='PATCH'){
     const patch={};
@@ -387,14 +389,74 @@ async function staff(req,actor,body,query){
     if(body.especial!==undefined)patch.especial=!!body.especial;
     if(body.celular_proprio!==undefined)patch.celular_proprio=!!body.celular_proprio;
     if(body.pin!==undefined){patch.pin_hash=hashPin(body.pin);patch.tentativas=0;patch.bloqueado_ate=null;}
-    if(body.nome!==undefined){if(specials.some(x=>normalizarNome(x)===normalizarNome(body.nome)))throw bad('Nome reservado para mapa especial.');patch.nome=norm(body.nome);patch.nome_normalizado=normalizarNome(body.nome);}
+    if(body.nome!==undefined){
+      if(user.perfil!=='funcionario'||actor.perfil!=='admin')throw bad('A renomeação de funcionários deve ser realizada pela loja.',403);
+      if(Object.keys(body).some(k=>!['id','nome'].includes(k)))throw bad('Altere o nome separadamente dos demais campos.',422);
+      const novo=norm(body.nome),normalizado=normalizarNome(novo);
+      if(novo.length<2||novo.length>120||specials.some(x=>normalizarNome(x)===normalizado)||normalizado==='sem responsavel')throw bad('Nome inválido ou reservado.',422);
+      const resultado=await db('rpc/renomear_funcionario_v12',{method:'POST',body:{p_administrador:actor.id,p_loja:actor.loja_id,p_funcionario:user.id,p_nome:novo,p_nome_normalizado:normalizado}});
+      return resultado;
+    }
     if(body.perfil!==undefined){if(!['funcionario','admin'].includes(body.perfil))throw bad('O perfil Geral é exclusivo e não pode ser atribuído por este painel.',403);if(actor.perfil!=='geral'&&body.perfil!=='funcionario')throw bad('Somente o Administrador Geral define administradores.',403);if(body.perfil!==user.perfil&&actor.perfil!=='geral')throw bad('Alteração de perfil restrita ao Administrador Geral.',403);patch.perfil=body.perfil;}
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração.');
     await db('usuarios',{method:'PATCH',params:{id:`eq.${id}`},body:patch});
     if(body.ativo===false||body.pin!==undefined)await db('sessoes',{method:'DELETE',params:{usuario_id:`eq.${id}`}});
     await audit(actor,body.pin!==undefined?'redefinir_pin':'editar_usuario',{id,campos:Object.keys(patch).filter(x=>x!=='pin_hash')});return {sucesso:true};
   }
+  if(req.method==='DELETE'){
+    if(actor.perfil!=='admin'||user.perfil!=='funcionario'||user.excluido_em)throw bad('Só funcionários da própria loja podem ser excluídos.',403);
+    const modo=norm(body.modo),destino=norm(body.destino_id);
+    if(!['transferir','flutuar'].includes(modo))throw bad('Escolha como distribuir os lançamentos.',422);
+    if(modo==='transferir'&&!/^[a-f0-9-]{36}$/i.test(destino))throw bad('Selecione um funcionário de destino.',422);
+    if(modo==='flutuar'&&destino)throw bad('A opção sem responsável não permite destinatário.',422);
+    return db('rpc/excluir_funcionario_v12',{method:'POST',body:{p_administrador:actor.id,p_loja:actor.loja_id,p_funcionario:user.id,p_destino:modo==='transferir'?destino:null,p_modo:modo}});
+  }
   throw bad('Método não permitido.',405);
+}
+function validarMesTitularidade(mes){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(norm(mes)))throw bad('Informe o mês no formato AAAA-MM.',422);return mes+'-01';}
+async function listarLancamentosTitularidade(actor,query){
+  if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode transferir lançamentos.',403);
+  const origem=norm(query.get('origem')),mes=validarMesTitularidade(query.get('mes'));
+  if(!origem)throw bad('Escolha um funcionário ou itens sem responsável.',422);
+  const base={loja_id:`eq.${actor.loja_id}`,tipo_mapa:'eq.funcionario',excluido_em:'is.null',mes_lancamento:`eq.${mes}`,select:'id,funcionario_id,mapa_nome,ean,lote,validade,quantidade,mes_lancamento,produtos(descricao,secao)',order:'validade.asc'};
+  let lista=[];
+  if(origem==='flutuando')lista=await rows('mapa_lancamentos',{...base,funcionario_id:'is.null',mapa_nome:'eq.Sem responsável'},500,10);
+  else {
+    if(!/^[a-f0-9-]{36}$/i.test(origem))throw bad('Funcionário de origem inválido.',422);
+    const u=await one('usuarios',{id:`eq.${origem}`,loja_id:`eq.${actor.loja_id}`,perfil:'eq.funcionario',excluido_em:'is.null'});
+    if(!u)throw bad('Funcionário de origem não encontrado nesta loja.',404);
+    const [ativos,legados]=await Promise.all([
+      rows('mapa_lancamentos',{...base,funcionario_id:`eq.${origem}`},500,10),
+      rows('mapa_lancamentos',{...base,funcionario_id:'is.null',mapa_nome:`eq.${u.nome}`},500,10)
+    ]);
+    lista=[...ativos,...legados];
+  }
+  const vistos=new Set();lista=lista.filter(x=>{if(vistos.has(x.id))return false;vistos.add(x.id);return true;});
+  // Lançamentos legados podem não ter produto_id. Resolvemos a seção pelo EAN
+  // para que os filtros por seção funcionem também nesses registros importados.
+  const semProduto=[...new Set(lista.filter(x=>!x.produtos&&eanValido(x.ean)).map(x=>x.ean))];
+  const catalogo=new Map();
+  for(let i=0;i<semProduto.length;i+=70){
+    for(const p of await rows('produtos',{ean:`in.(${semProduto.slice(i,i+70).join(',')})`,select:'ean,secao,descricao'},100,2))catalogo.set(p.ean,p);
+  }
+  const dados=lista.map(x=>({...x,catalogo:x.produtos||catalogo.get(x.ean)||{}}));
+  return {sucesso:true,quantidade:dados.length,secoes:[...new Set(dados.map(x=>norm(x.catalogo?.secao)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),
+    registros:dados.map(x=>({id:x.id,ean:x.ean,lote:x.lote,validade:x.validade,quantidade:x.quantidade,mes_lancamento:x.mes_lancamento,
+      mapa_nome:x.mapa_nome,secao:norm(x.catalogo?.secao),descricao:norm(x.catalogo?.descricao)}))};
+}
+async function transferirTitularidade(actor,body){
+  if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode transferir lançamentos.',403);
+  const origem=norm(body.origem),destino=norm(body.destino),mes=validarMesTitularidade(body.mes),secao=norm(body.secao);
+  const uid=/^[a-f0-9-]{36}$/i;
+  if(origem!=='flutuando'&&!uid.test(origem))throw bad('Origem inválida.',422);
+  if(destino!=='flutuando'&&!uid.test(destino))throw bad('Destino inválido.',422);
+  if(origem===destino)throw bad('Origem e destino devem ser diferentes.',422);
+  if(secao.length>150)throw bad('Seção inválida.',422);
+  const todos=body.todos===true,ids=body.ids||[];
+  if(!Array.isArray(ids)||(!todos&&(ids.length<1||ids.length>1000))||ids.some(x=>!uid.test(x)))throw bad('Selecione itens válidos ou todos os filtrados.',422);
+  return db('rpc/transferir_lancamentos_v12',{method:'POST',body:{p_administrador:actor.id,p_loja:actor.loja_id,
+    p_origem:origem==='flutuando'?null:origem,p_destino:destino==='flutuando'?null:destino,
+    p_mes:mes,p_secao:secao||null,p_ids:todos?[]:ids,p_todos:todos}});
 }
 async function enriquecerRegistros(registros, table) {
   if (!['queima','vencidos','transferencias'].includes(table) || !registros.length) return registros;
@@ -668,6 +730,8 @@ async function handle(req){
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
   if(pathname.startsWith('/visualizacao/'))return visualizacao(req,actor,pathname,body,query);
   if(pathname.startsWith('/estoque'))return stock(req,actor,pathname,body,query);
+  if(pathname==='/usuarios/lancamentos'&&req.method==='GET')return listarLancamentosTitularidade(actor,query);
+  if(pathname==='/usuarios/transferir'&&req.method==='POST')return transferirTitularidade(actor,body);
   if(pathname.startsWith('/usuarios'))return staff(req,actor,body,query);
   if(pathname==='/pendencias')return pendencias(req,actor,body,query);
   if(pathname==='/vencidos')return genericRecords(req,actor,body,query,'vencidos');

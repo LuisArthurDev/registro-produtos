@@ -772,19 +772,115 @@ function openPinReset(person){
  };dlg.showModal();
 }
 async function usuarios(){
- if(!isAdmin())throw new Error('Painel disponível somente para administradores de loja.');
- const [r,ms]=await Promise.all([request('/usuarios'),getMaps()]);const rows=r.usuarios||[],counts=new Map();
- for(const m of ms){const k=String(m.mapa_nome||'').toLowerCase();counts.set(k,(counts.get(k)||0)+1);}
- $('#content').innerHTML=header('Funcionários','Cadastre e gerencie funcionários somente desta loja. A criação de administradores pertence ao Painel Geral.')+
- `<section class="card card-pad"><div class="filter-row"><input id="staff-search" class="wide" placeholder="Buscar funcionário"><select id="staff-filter"><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option></select><button class="btn-outline" id="staff-print" type="button">Imprimir</button></div><p id="staff-total" class="footer-hint"></p><div id="staff-list"></div></section>
- <section class="card card-pad secondary-card"><h2>Adicionar funcionário</h2><form id="user-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>PIN inicial<input required type="password" name="pin" inputmode="numeric" pattern="[0-9]{6,12}" autocomplete="new-password"></label><div class="form-actions"><button class="primary">Cadastrar funcionário</button></div></form></section>`;
- const render=()=>{const q=$('#staff-search').value.toLowerCase().trim(),f=$('#staff-filter').value;const filtered=rows.filter(u=>u.perfil==='funcionario'&&u.nome.toLowerCase().includes(q)&&(f==='ativo'?u.ativo:f==='inativo'?!u.ativo:f==='com'?counts.get(u.nome.toLowerCase())>0:f==='sem'?!counts.get(u.nome.toLowerCase()):true));
- $('#staff-total').textContent=`${filtered.length} funcionário(s) nesta visualização.`;
- $('#staff-list').innerHTML=table(['Funcionário','Loja','Lançamentos','Situação','Celular próprio','Ações'],filtered.map(u=>`<tr><td>${H(u.nome)}</td><td>${H(u.loja_id)}</td><td>${counts.get(u.nome.toLowerCase())||0}</td><td>${pill(u.ativo?'Ativo':'Inativo',u.ativo?'green':'red')}</td><td>${H(u.celular_proprio?'Sim':'Não')}</td><td><button class="action-link" data-user="${H(u.id)}" data-flag="ativo">${u.ativo?'Inativar':'Ativar'}</button> <button class="action-link" data-user="${H(u.id)}" data-flag="celular_proprio">${u.celular_proprio?'Bloquear':'Permitir'} celular</button> <button class="action-link" data-pin="${H(u.id)}">Redefinir PIN</button></td></tr>`));return filtered;};
+ if(!isAdmin())throw new Error('Funcionários podem ser gerenciados somente por administradores de loja.');
+ const [resp,mapasAtivos]=await Promise.all([request('/usuarios'),getMaps()]);
+ const usuarios=(resp.usuarios||[]).filter(u=>u.perfil==='funcionario');
+ const ativos=usuarios.filter(u=>u.ativo);
+ const counts=new Map();
+ for(const m of mapasAtivos){if(m.tipo_mapa!=='funcionario')continue;
+   const k=m.funcionario_id||`nome:${String(m.mapa_nome||'').toLowerCase()}`;
+   counts.set(k,(counts.get(k)||0)+1);
+ }
+ const quantidadeUsuario=u=>(counts.get(u.id)||0)+(counts.get(`nome:${u.nome.toLowerCase()}`)||0);
+ const semResponsavel=mapasAtivos.filter(x=>x.tipo_mapa==='funcionario'&&!x.funcionario_id&&x.mapa_nome==='Sem responsável').length;
+ const opUsuario=u=>`<option value="${H(u.id)}">${H(u.nome)}${u.ativo?'':' (inativo)'}</option>`;
+ $('#content').innerHTML=header('Funcionários','Edite os nomes, transfira lançamentos por mês e seção ou exclua contas preservando todos os mapas.',
+ '<button class="primary" id="staff-move-open" type="button">Transferir lançamentos</button>')+
+ `<section class="card card-pad"><div class="filter-row"><input id="staff-search" class="wide" placeholder="Buscar funcionário"><select id="staff-filter"><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option></select><button class="btn-outline" id="staff-print" type="button">Imprimir</button></div>
+ <p id="staff-total" class="footer-hint"></p><div class="notice" style="margin-bottom:14px"><strong>Lançamentos sem responsável:</strong> ${semResponsavel}. Utilize <strong>Transferir lançamentos</strong> para atribuí-los a um novo funcionário.</div><div id="staff-list"></div></section>
+ <section class="card card-pad secondary-card"><h2>Adicionar funcionário</h2><form id="user-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>PIN inicial<input required type="password" name="pin" inputmode="numeric" pattern="[0-9]{6,12}" autocomplete="new-password"></label><div class="form-actions"><button class="primary">Cadastrar funcionário</button></div></form></section>
+ <dialog id="staff-rename-dialog" class="dialog operational-dialog"><form id="staff-rename-form" class="dialog-inner"><h2>Editar nome do funcionário</h2><p class="footer-hint">Todos os lançamentos ativos do mapa acompanharão o novo nome, sem alterar os registros históricos de auditoria.</p><label>Novo nome<input name="nome" maxlength="120" minlength="2" required></label><p role="alert" id="staff-rename-error" class="error-note" hidden></p><div class="dialog-actions"><button class="btn-outline" type="button" data-close-staff>Cancelar</button><button class="primary" type="submit">Salvar nome</button></div></form></dialog>
+ <dialog id="staff-delete-dialog" class="dialog operational-dialog"><form id="staff-delete-form" class="dialog-inner"><h2>Excluir funcionário</h2><p id="staff-delete-description" class="notice warn"></p><p class="footer-hint">A conta será desativada e o PIN deixará de funcionar. Nenhum lançamento será apagado. O histórico conservará o nome original.</p>
+ <label>O que fazer com os lançamentos?<select name="modo" id="staff-delete-mode"><option value="flutuar">Deixar sem responsável (flutuando)</option><option value="transferir">Transferir todos para outro funcionário</option></select></label>
+ <label id="staff-delete-destination-wrap" hidden>Funcionário de destino<select name="destino_id" id="staff-delete-destination"><option value="">Escolha um funcionário</option></select></label>
+ <p id="staff-delete-error" role="alert" class="error-note" hidden></p><div class="dialog-actions"><button type="button" class="btn-outline" data-close-staff>Cancelar</button><button type="submit" class="btn-outline danger">Confirmar exclusão</button></div></form></dialog>
+ <dialog id="staff-move-dialog" class="dialog operational-dialog staff-move-dialog"><div class="dialog-inner"><h2>Transferir lançamentos</h2><p class="footer-hint">Filtre pelo mês em que o produto foi lançado e pela seção. Escolha o novo dono do mapa ou deixe os itens sem responsável para atribuição futura.</p>
+ <div class="form-grid"><label>Origem<select id="staff-move-source"><option value="">Escolha um responsável</option>${usuarios.map(opUsuario).join('')}<option value="flutuando">Sem responsável (flutuando)</option></select></label>
+ <label>Destino<select id="staff-move-target"><option value="">Escolha um destino</option>${ativos.map(opUsuario).join('')}<option value="flutuando">Sem responsável (flutuando)</option></select></label>
+ <label>Mês do lançamento<input type="month" id="staff-move-month" value="${nowBrISO().slice(0,7)}" required></label>
+ <label>Seção<select id="staff-move-section"><option value="">Todas as seções</option></select></label></div>
+ <div class="filter-row" style="margin-top:12px"><button class="btn-outline" id="staff-move-reload" type="button">Consultar lançamentos</button></div>
+ <p id="staff-move-summary" class="footer-hint" role="status">Selecione origem e mês para consultar os itens.</p>
+ <label class="checkbox-label"><input id="staff-move-all" type="checkbox">Transferir <strong>todos</strong> os lançamentos filtrados por mês/seção (mesmo os que não aparecem na prévia)</label>
+ <div class="staff-move-items" id="staff-move-items"></div>
+ <p id="staff-move-error" role="alert" class="error-note" hidden></p>
+ <div class="dialog-actions"><button class="btn-outline" type="button" data-close-staff>Cancelar</button><button class="primary" id="staff-move-confirm" type="button">Transferir selecionados</button></div></div></dialog>`;
+ const render=()=>{const q=$('#staff-search').value.toLowerCase().trim(),f=$('#staff-filter').value;
+  const filtrados=usuarios.filter(u=>u.nome.toLowerCase().includes(q)&&(f==='ativo'?u.ativo:f==='inativo'?!u.ativo:f==='com'?quantidadeUsuario(u)>0:f==='sem'?quantidadeUsuario(u)===0:true));
+  $('#staff-total').textContent=`${filtrados.length} funcionário(s) · ${usuarios.length} conta(s) cadastrada(s) nesta loja.`;
+  $('#staff-list').innerHTML=table(['Funcionário','Loja','Lançamentos','Situação','Celular próprio','Ações'],filtrados.map(u=>`<tr><td>${H(u.nome)}</td><td>${H(u.loja_id)}</td><td>${quantidadeUsuario(u)}</td><td>${pill(u.ativo?'Ativo':'Inativo',u.ativo?'green':'red')}</td><td>${H(u.celular_proprio?'Sim':'Não')}</td><td class="row-actions"><button class="action-link" data-staff-rename="${H(u.id)}">Editar nome</button><button class="action-link" data-staff-move="${H(u.id)}">Transferir lançamentos</button><button class="action-link danger-text" data-staff-delete="${H(u.id)}">Excluir</button><button class="action-link" data-user="${H(u.id)}" data-flag="ativo">${u.ativo?'Inativar':'Ativar'}</button><button class="action-link" data-user="${H(u.id)}" data-flag="celular_proprio">${u.celular_proprio?'Bloquear':'Permitir'} celular</button><button class="action-link" data-pin="${H(u.id)}">Redefinir PIN</button></td></tr>`));};
  $('#staff-search').oninput=render;$('#staff-filter').onchange=render;render();
  $('#staff-print').onclick=()=>printableTable('#staff-list',()=>$('#staff-list').innerHTML);
- $('#staff-list').onclick=async e=>{const pin=e.target.closest('[data-pin]');if(pin){const u=rows.find(x=>x.id===pin.dataset.pin);if(u)openPinReset(u);return;}
-  const b=e.target.closest('[data-user]');if(!b)return;const u=rows.find(x=>x.id===b.dataset.user);if(!u)return;const flag=b.dataset.flag;
+ document.querySelectorAll('[data-close-staff]').forEach(x=>x.onclick=()=>x.closest('dialog').close());
+ const renomearDlg=$('#staff-rename-dialog'),renomearForm=$('#staff-rename-form');let renameId='';
+ function abrirRenomear(user){renameId=user.id;renomearForm.reset();renomearForm.elements.nome.value=user.nome;$('#staff-rename-error').hidden=true;renomearDlg.showModal();renomearForm.elements.nome.focus();}
+ renomearForm.onsubmit=async e=>{e.preventDefault();const novo=renomearForm.elements.nome.value.trim(),btn=renomearForm.querySelector('[type="submit"]');btn.disabled=true;
+  try{const r=await request('/usuarios',{method:'PATCH',body:{id:renameId,nome:novo}});renomearDlg.close();toast(`${r.quantidade??0} lançamento(s) atualizado(s) com o novo nome.`);await renderRoute('usuarios');}
+  catch(err){$('#staff-rename-error').textContent=err.message;$('#staff-rename-error').hidden=false;}finally{btn.disabled=false;}
+ };
+ const excluirDlg=$('#staff-delete-dialog'),excluirForm=$('#staff-delete-form');let deleteId='';
+ function abrirExcluir(user){deleteId=user.id;excluirForm.reset();$('#staff-delete-error').hidden=true;
+  $('#staff-delete-description').textContent=`Excluir a conta ${user.nome}? Os ${quantidadeUsuario(user)} lançamento(s) ativos do seu mapa precisam de um destino.`;
+  $('#staff-delete-destination').innerHTML='<option value="">Escolha um funcionário</option>'+ativos.filter(x=>x.id!==user.id).map(opUsuario).join('');
+  $('#staff-delete-mode').onchange=()=>{const transf=$('#staff-delete-mode').value==='transferir';$('#staff-delete-destination-wrap').hidden=!transf;$('#staff-delete-destination').required=transf;};
+  $('#staff-delete-mode').dispatchEvent(new Event('change'));excluirDlg.showModal();
+ }
+ excluirForm.onsubmit=async e=>{e.preventDefault();const modo=$('#staff-delete-mode').value,destino=$('#staff-delete-destination').value;
+  if(modo==='transferir'&&!destino){$('#staff-delete-error').textContent='Selecione um funcionário ativo.';$('#staff-delete-error').hidden=false;return;}
+  const resumo=modo==='flutuar'?'sem responsável':`para ${ativos.find(u=>u.id===destino)?.nome||'outro funcionário'}`;
+  if(!await confirmDialog('Confirmar exclusão',`Desativar a conta e mover todos os seus lançamentos ${resumo}? Esta operação será auditada.`))return;
+  const btn=excluirForm.querySelector('[type="submit"]');btn.disabled=true;
+  try{const r=await request('/usuarios',{method:'DELETE',body:{id:deleteId,modo,destino_id:modo==='transferir'?destino:null}});excluirDlg.close();toast(`Funcionário excluído. ${r.quantidade??0} lançamento(s) preservados e movidos.`);await renderRoute('usuarios');}
+  catch(err){$('#staff-delete-error').textContent=err.message;$('#staff-delete-error').hidden=false;}finally{btn.disabled=false;}
+ };
+ let todosOsItens=[];let selecionados=new Set();let cacheOrigem='';let cacheMes='';
+ const moveDlg=$('#staff-move-dialog'),selectOrigem=$('#staff-move-source'),selectDestino=$('#staff-move-target'),selectMes=$('#staff-move-month'),selectSecao=$('#staff-move-section');
+ function abrirMover(usuario=null){selectOrigem.value=usuario?.id||'';selectDestino.value='';selectMes.value=nowBrISO().slice(0,7);selectSecao.innerHTML='<option value="">Todas as seções</option>';
+  $('#staff-move-all').checked=false;$('#staff-move-error').hidden=true;$('#staff-move-summary').textContent='Escolha o mês e a origem e consulte.';$('#staff-move-items').innerHTML='';todosOsItens=[];selecionados.clear();cacheOrigem='';cacheMes='';moveDlg.showModal();if(usuario)void consultarItens();}
+ async function consultarItens(){const origem=selectOrigem.value,mes=selectMes.value;
+  if(!origem||!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)){$('#staff-move-summary').textContent='Selecione um funcionário e um mês válido.';return;}
+  const btn=$('#staff-move-reload');btn.disabled=true;$('#staff-move-summary').textContent='Consultando lançamentos…';$('#staff-move-error').hidden=true;
+  try{const r=await request('/usuarios/lancamentos?origem='+encodeURIComponent(origem)+'&mes='+encodeURIComponent(mes));
+   todosOsItens=r.registros||[];selecionados.clear();cacheOrigem=origem;cacheMes=mes;
+   const anterior=selectSecao.value;selectSecao.innerHTML='<option value="">Todas as seções</option>'+(r.secoes||[]).map(sec=>`<option value="${H(sec)}">${H(sec)}</option>`).join('');
+   if([...selectSecao.options].some(o=>o.value===anterior))selectSecao.value=anterior;$('#staff-move-all').checked=false;desenharItens();
+  }catch(err){todosOsItens=[];selecionados.clear();$('#staff-move-summary').textContent='Consulta indisponível.';$('#staff-move-error').textContent=err.message;$('#staff-move-error').hidden=false;}
+  finally{btn.disabled=false;}
+ }
+ function itensFiltrados(){return todosOsItens.filter(x=>!selectSecao.value||x.secao.toLowerCase().trim()===selectSecao.value.toLowerCase().trim());}
+ function desenharItens(){const filtrados=itensFiltrados(),todos=$('#staff-move-all').checked;
+  $('#staff-move-summary').textContent=`${filtrados.length} lançamento(s) · ${selecionados.size} selecionado(s) · mês ${cacheMes||'—'}. ${filtrados.length>150?'Mostrando os primeiros 150; use “todos os filtrados” para incluir os demais.':''}`;
+  $('#staff-move-items').innerHTML=filtrados.length?filtrados.slice(0,150).map(x=>`<label class="staff-move-item"><input type="checkbox" data-transfer-item="${H(x.id)}" ${selecionados.has(x.id)?'checked':''} ${todos?'disabled':''}><span><strong>${H(x.descricao||x.ean)}</strong><small>${H(x.secao||'Sem seção')} · EAN ${H(x.ean)} · Lote ${H(x.lote)} · Val. ${dataBR(x.validade)} · ${H(x.quantidade)} un.</small></span></label>`).join(''):empty('Nenhum lançamento encontrado para o mês e a seção.');
+  $('#staff-move-confirm').textContent=todos?`Transferir todos (${filtrados.length})`:`Transferir selecionados (${selecionados.size})`;
+ }
+ $('#staff-move-items').onchange=e=>{const box=e.target.closest('[data-transfer-item]');if(!box)return;if(box.checked)selecionados.add(box.dataset.transferItem);else selecionados.delete(box.dataset.transferItem);desenharItens();};
+ $('#staff-move-all').onchange=()=>{selecionados.clear();desenharItens();};
+ selectSecao.onchange=()=>{selecionados.clear();$('#staff-move-all').checked=false;desenharItens();};
+ selectOrigem.onchange=()=>{cacheOrigem='';void consultarItens();};selectMes.onchange=()=>{cacheMes='';void consultarItens();};
+ $('#staff-move-reload').onclick=consultarItens;
+ $('#staff-move-open').onclick=()=>abrirMover();
+ $('#staff-move-confirm').onclick=async()=>{
+  const origem=selectOrigem.value,destino=selectDestino.value,mes=selectMes.value,secao=selectSecao.value,todos=$('#staff-move-all').checked;
+  if(!origem||!destino||origem===destino){$('#staff-move-error').textContent='Escolha origem e destino diferentes.';$('#staff-move-error').hidden=false;return;}
+  if(cacheOrigem!==origem||cacheMes!==mes){$('#staff-move-error').textContent='Atualize a consulta antes de transferir.';$('#staff-move-error').hidden=false;return;}
+  const filtrados=itensFiltrados();const ids=filtrados.filter(x=>selecionados.has(x.id)).map(x=>x.id);
+  if(!(todos?filtrados.length:ids.length)){$('#staff-move-error').textContent='Selecione pelo menos um produto ou todos os filtrados.';$('#staff-move-error').hidden=false;return;}
+  const descricaoDestino=destino==='flutuando'?'Sem responsável':usuarios.find(u=>u.id===destino)?.nome;
+  const total=todos?filtrados.length:ids.length;
+  if(!await confirmDialog('Transferir lançamentos',`Transferir ${total} lançamento(s) do mês ${mes}, seção ${secao||'todas'}, para ${descricaoDestino}?`))return;
+  const btn=$('#staff-move-confirm');btn.disabled=true;$('#staff-move-error').hidden=true;
+  try{const r=await request('/usuarios/transferir',{method:'POST',body:{origem,destino,mes,secao,todos,ids:todos?[]:ids}});
+   moveDlg.close();toast(`${r.quantidade??0} lançamento(s) transferido(s).`);await renderRoute('usuarios');
+  }catch(err){$('#staff-move-error').textContent=err.message;$('#staff-move-error').hidden=false;}
+  finally{btn.disabled=false;}
+ };
+ $('#staff-list').onclick=async e=>{
+  const rn=e.target.closest('[data-staff-rename]'),del=e.target.closest('[data-staff-delete]'),move=e.target.closest('[data-staff-move]');
+  if(rn){const u=usuarios.find(x=>x.id===rn.dataset.staffRename);if(u)abrirRenomear(u);return;}
+  if(del){const u=usuarios.find(x=>x.id===del.dataset.staffDelete);if(u)abrirExcluir(u);return;}
+  if(move){const u=usuarios.find(x=>x.id===move.dataset.staffMove);if(u)abrirMover(u);return;}
+  const pin=e.target.closest('[data-pin]');if(pin){const u=usuarios.find(x=>x.id===pin.dataset.pin);if(u)openPinReset(u);return;}
+  const b=e.target.closest('[data-user]');if(!b)return;const u=usuarios.find(x=>x.id===b.dataset.user);if(!u)return;const flag=b.dataset.flag;
   if(!await confirmDialog('Alterar funcionário',`Confirmar alteração de ${flag==='ativo'?'situação':'autorização de celular'} de ${u.nome}?`))return;
   try{await request('/usuarios',{method:'PATCH',body:{id:u.id,[flag]:!u[flag]}});toast('Funcionário atualizado.');renderRoute(state.route);}catch(err){toast(err.message,true);}
  };

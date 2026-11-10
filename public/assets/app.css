@@ -396,3 +396,13 @@ body:has(#login-screen:not([hidden])) .login-panel{height:100%;max-height:100%;m
 .dual-mode-button{font-size:12px;line-height:1.25;max-width:240px;padding:8px 12px;white-space:normal;flex-shrink:0}
 @media(max-width:700px){.dual-mode-button{max-width:145px;font-size:11px;padding:7px 9px}}
 #dual-mode-dialog input{width:100%}
+
+/* Gestão de funcionários: transferência por mês/seção e seleção de registros. */
+.staff-move-dialog{width:min(760px,calc(100vw - 22px));max-width:calc(100vw - 22px)}
+.staff-move-items{max-height:min(36vh,360px);overflow-y:auto;border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:6px;margin:12px 0}
+.staff-move-item{display:flex;align-items:center;gap:12px;padding:9px;background:#17283c;border-radius:9px;cursor:pointer;font-weight:400;min-width:0}
+.staff-move-item input{flex:0 0 17px!important}
+.staff-move-item span{display:flex;flex-direction:column;gap:3px;min-width:0;overflow-wrap:anywhere}
+.staff-move-item small{font-size:11px;color:var(--muted)}
+.staff-move-dialog .dialog-inner{max-height:calc(100dvh - 38px);overflow-y:auto}
+@media(max-width:580px){.staff-move-dialog .form-grid{grid-template-columns:1fr}.staff-move-dialog .dialog-actions button{width:100%}}

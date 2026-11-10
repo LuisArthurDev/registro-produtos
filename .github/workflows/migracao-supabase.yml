@@ -33,6 +33,7 @@ on:
           - atualizar_perdas_transferencias
           - atualizar_visualizacao
           - habilitar_duplo_perfil
+          - proteger_geral_e_funcionarios
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -120,7 +121,7 @@ jobs:
           if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
             echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
           fi
-          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' ]]; then
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' || "$ETAPA" == 'proteger_geral_e_funcionarios' ]]; then
             if [[ -z "$SUPABASE_DB_URL" ]]; then
               echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
             fi
@@ -136,7 +137,7 @@ jobs:
             fi
           fi
       - name: Verificar URL IPv4 do Supabase antes do SQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios'
         shell: bash
         run: |
           set -euo pipefail
@@ -164,13 +165,13 @@ jobs:
           print('URL do Session pooler validada (IPv4, 5432).')
           PYCODE
       - name: Preparar cliente PostgreSQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
       - name: Testar conexão PostgreSQL sem alterar dados
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios'
         shell: bash
         run: |
           set -euo pipefail
@@ -203,6 +204,13 @@ jobs:
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/009_operacoes_perdas_transferencias.sql
           echo 'Ações auditáveis habilitadas.'
+      - name: Restringir Painel Geral e habilitar transferência de lançamentos (SQL 012)
+        if: inputs.etapa == 'proteger_geral_e_funcionarios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/012_exclusividade_geral_funcionarios.sql
+          echo 'Titular exclusivo e gestão de lançamentos atualizados.'
       - name: Habilitar acesso duplo Luis Arthur Loja 151 (SQL 011)
         if: inputs.etapa == 'habilitar_duplo_perfil'
         shell: bash

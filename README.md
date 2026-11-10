@@ -1,3 +1,7 @@
+# Atualização v20 — equipes, titularidade e Painel Geral
+
+Leia [ATUALIZAR-V20-FUNCIONARIOS-E-PAINEL-GERAL.md](ATUALIZAR-V20-FUNCIONARIOS-E-PAINEL-GERAL.md) antes de publicar. A migração SQL 012 é obrigatória **antes** de liberar esta versão em produção.
+
 ## v19 — Cadastro de lojas no Painel Geral
 
 O **Painel Geral não está associado a nenhuma loja fixa**. A conta Luis Arthur pode manter

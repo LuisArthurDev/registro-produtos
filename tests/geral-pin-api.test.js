@@ -10,7 +10,7 @@ process.env.SUPABASE_URL='https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY='sb_secret_example';
 async function simulate(role,body){
  const fetchOld=globalThis.fetch;
- let calls=[];const actor={id:session.usuario_id,ativo:true,perfil:role,loja_id:role==='geral'?null:'151',pin_hash:hashPin('123456'),tentativas:0,bloqueado_ate:null};
+ let calls=[];const actor={id:session.usuario_id,ativo:true,perfil:role,loja_id:role==='geral'?null:'151',titular_painel_geral:true,pin_hash:hashPin('123456'),tentativas:0,bloqueado_ate:null};
  globalThis.fetch=async(url,params)=>{
    const endpoint=new URL(url).pathname.split('/rest/v1/')[1];
    calls.push({endpoint,method:params.method,body:params.body?JSON.parse(params.body):null});

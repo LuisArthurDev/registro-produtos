@@ -16,7 +16,7 @@ process.env.SUPABASE_SECRET_KEY='sb_secret_testing_only';
 function mockBackend({role='admin',duplo=true}={}){
  const original=globalThis.fetch;
  const calls=[];
- const user={id:accountId,nome:'Luis Arthur',nome_normalizado:'luis arthur',loja_id:role==='geral'?null:'151',perfil:role,acesso_geral:duplo,ativo:true,pin_hash:hashPin('123456'),tentativas:0,bloqueado_ate:null};
+ const user={id:accountId,nome:'Luis Arthur',nome_normalizado:'luis arthur',loja_id:role==='geral'?null:'151',perfil:role,acesso_geral:duplo,titular_painel_geral:true,ativo:true,pin_hash:hashPin('123456'),tentativas:0,bloqueado_ate:null};
  const session={token_hash:hash,usuario_id:accountId,expira_em:'2099-11-01T00:00:00Z',ultima_atividade:new Date().toISOString(),manter_conectado:true,modo_acesso:'admin',modo_expira_em:null};
  const fake=async (url,opt={})=>{
   const parsed=new URL(url),table=parsed.pathname.split('/rest/v1/')[1];

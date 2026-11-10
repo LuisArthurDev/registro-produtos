@@ -15,7 +15,7 @@ function mock({profile='admin',asGeral=true,duplo=true,forceRace=false}={}){
   const old=globalThis.fetch;
   const calls=[];
   const lojas=[{id:'151',nome:'Loja 151'},{id:'200',nome:'Loja 200'}];
-  const usuario={id:accountId,nome:'Luis Arthur',loja_id:'151',perfil:profile,acesso_geral:duplo,ativo:true,pin_hash:hashPin('123456')};
+  const usuario={id:accountId,nome:'Luis Arthur',loja_id:'151',perfil:profile,acesso_geral:duplo,titular_painel_geral:true,ativo:true,pin_hash:hashPin('123456')};
   const sessao={usuario_id:accountId,token_hash:tokenHash,expira_em:'2099-01-01T00:00:00Z',ultima_atividade:new Date().toISOString(),manter_conectado:true,modo_acesso:asGeral?'geral':'admin',modo_expira_em:asGeral?'2099-01-01T00:00:00Z':null};
   globalThis.fetch=async (url,opts={})=>{
     const target=new URL(url);const table=target.pathname.split('/rest/v1/')[1],method=opts.method||'GET';

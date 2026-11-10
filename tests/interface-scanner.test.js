@@ -24,6 +24,6 @@ test('menu e pendências mantêm ações e paginação de 15, 25 ou 50',()=>{
  assert.match(css,/\.pager-auto/);
 });
 test('Service Worker atualiza scanner.js no cache do PWA',()=>{
- assert.match(sw,/v18-duplo-perfil-funcionario-sem-dashboard/);
+ assert.match(sw,/v20-equipe-titularidade/);
  assert.match(sw,/assets\/scanner\.js/);
 });
