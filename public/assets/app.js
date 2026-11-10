@@ -157,6 +157,44 @@ function consumirPonteDeLogin(){
     return v.usuario;
   }catch{return null;}
 }
+function configurarBotaoDuploPerfil(){
+ const btn=$('#dual-mode-button');
+ if(!btn)return;
+ const permitido=state.user?.acessoGeral===true && state.user?.perfilBase==='admin';
+ btn.hidden=!permitido;
+ if(!permitido)return;
+ btn.textContent=isGeral()?'← Painel Conferente':'Acessar Painel Geral';
+ btn.title=isGeral()?'Voltar às operações da Loja '+String(state.user?.loja||''):'Confirmar PIN para acessar Painel Geral';
+}
+async function alternarPerfilParaLoja(){
+ const btn=$('#dual-mode-button');btn.disabled=true;
+ try{
+   const r=await request('/conta/modo',{method:'POST',body:{modo:'admin'},retries:0});
+   state.user=r.usuario;
+   window.location.assign('/#dashboard');
+ }catch(err){toast(err.message,true);}finally{btn.disabled=false;}
+}
+function configurarAcessoDuplo(){
+ const btn=$('#dual-mode-button'),dlg=$('#dual-mode-dialog'),form=$('#dual-mode-form');
+ if(!btn||!dlg||!form)return;
+ $('#dual-mode-cancel').onclick=()=>dlg.close();
+ dlg.addEventListener('close',()=>{form.reset();$('#dual-mode-error').hidden=true;});
+ btn.onclick=()=>{
+   if(!state.user?.acessoGeral||state.user?.perfilBase!=='admin')return;
+   if(isGeral()){void alternarPerfilParaLoja();return;}
+   form.reset();$('#dual-mode-error').hidden=true;dlg.showModal();form.elements.pin.focus();
+ };
+ form.onsubmit=async e=>{
+   e.preventDefault();const error=$('#dual-mode-error'),save=form.querySelector('[type="submit"]');
+   error.hidden=true;save.disabled=true;
+   try{
+     const r=await request('/conta/modo',{method:'POST',body:{modo:'geral',pin:form.elements.pin.value},retries:0,timeout:45000});
+     form.elements.pin.value='';state.user=r.usuario;dlg.close();
+     window.location.assign('/#painel-geral');
+   }catch(err){error.textContent=err.message;error.hidden=false;form.elements.pin.value='';form.elements.pin.focus();}
+   finally{save.disabled=false;}
+ };
+}
 function showApp(fromLogin=false){
   // Funcionários NUNCA entram no Dashboard/Painel Conferente.
   // No celular, após efetuar login, inclusive com #dashboard antigo na URL,
@@ -174,6 +212,7 @@ function showApp(fromLogin=false){
   void associarPush(state.user,request);
   queueMicrotask(exibirConsentimento);
   $('#login-screen').hidden=true;$('#app-shell').hidden=false;
+  configurarBotaoDuploPerfil();
   $('#user-name').textContent=state.user.nome;
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
@@ -652,7 +691,7 @@ async function painelGeral(){
  const r=await request('/geral',{timeout:55000});const lojas=r.lojas||[],admins=r.administradores||[];
  $('#content').innerHTML=header('Painel Geral','Administração central. Somente o Administrador Geral pode gerenciar todas as lojas e seus administradores.',
  '<button class="btn-outline" id="geral-change-pin" type="button">Alterar minha senha</button><button class="primary" id="geral-admin-new" type="button">Cadastrar administrador</button>')+
- `<div class="stat-grid"><div class="card stat"><small>Lojas cadastradas</small><strong>${lojas.length}</strong><p>Unidades no Supabase</p></div><div class="card stat"><small>Administradores de loja</small><strong>${admins.length}</strong><p>Contas com perfil administrativo</p></div><div class="card stat"><small>Funcionários</small><strong>${H(r.totais?.funcionarios||0)}</strong></div><div class="card stat"><small>Acesso</small><strong>Geral</strong><p>Sem acesso direto ao Painel Conferente</p></div></div>
+ `<div class="stat-grid"><div class="card stat"><small>Lojas cadastradas</small><strong>${lojas.length}</strong><p>Unidades no Supabase</p></div><div class="card stat"><small>Administradores de loja</small><strong>${admins.length}</strong><p>Contas com perfil administrativo</p></div><div class="card stat"><small>Funcionários</small><strong>${H(r.totais?.funcionarios||0)}</strong></div><div class="card stat"><small>Acesso</small><strong>Geral</strong><p>${state.user?.perfilBase==='admin'?'Acesso duplo: use o botão Painel Conferente no topo.':'Administração geral'}</p></div></div>
  <section class="card card-pad"><h2>Unidades cadastradas</h2>${table(['Loja','Nome','Administradores'],lojas.map(l=>`<tr><td>${H(l.id)}</td><td>${H(l.nome||'Loja '+l.id)}</td><td>${H(admins.filter(a=>a.loja_id===l.id).map(a=>a.nome).join(', ')||'Nenhum')}</td></tr>`))}</section>`;
  $('#geral-admin-new').onclick=()=>navigate('admins-geral');
  $('#geral-change-pin').onclick=abrirMeuPin;
@@ -986,6 +1025,7 @@ function setupRememberedStore(){
 }
 setupRememberedStore();
 configurarMinhaSenha();
+configurarAcessoDuplo();
 prepararPush();
 // Primeiro acesso em qualquer página: pergunta clara antes de pedir permissão nativa.
 // Não exige aceitar para usar o sistema e não insiste após uma escolha no dispositivo.

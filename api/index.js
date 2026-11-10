@@ -49,7 +49,7 @@ async function rows(table,params={},size=1000,maxPages=25) {
   throw bad('Muitos registros para esta consulta. Utilize filtros.',413);
 }
 async function one(table,params={}) {const d=await db(table,{params:{...params,limit:1}});return d?.[0]||null;}
-const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
+const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.perfil==='geral'||u.acesso_geral===true,administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
 function requestBody(req){if(req.body&&typeof req.body==='object')return req.body;try{return JSON.parse(req.body||'{}');}catch{throw bad('Corpo JSON inválido.');}}
 function actorLoja(actor,requested){
   if(actor.perfil==='geral'){
@@ -80,7 +80,12 @@ async function authenticate(req){
     try{await db('sessoes',{method:'PATCH',params:{token_hash:`eq.${sessao.token_hash}`},body:{ultima_atividade:new Date().toISOString()}});}
     catch(err){console.warn('Atualização de atividade não concluída:',err.name);}
   }
-  return {actor:user, sessao};
+  // Perfil é resolvido NO SERVIDOR a cada chamada, nunca pelo campo perfil da requisição.
+  // O acesso Geral temporário só vale para uma sessão autorizada com o PIN da própria conta.
+  const geralAtivo=user.perfil==='admin' && user.acesso_geral===true &&
+    sessao.modo_acesso==='geral' && Date.parse(sessao.modo_expira_em)>hora;
+  const actor={...user,perfilBase:user.perfil,perfil:geralAtivo?'geral':user.perfil};
+  return {actor, sessao};
 }
 async function login(body) {
   const nome=normalizarNome(body.nome), pin=String(body.pin??'');
@@ -101,6 +106,37 @@ async function login(body) {
   await db('usuarios',{method:'PATCH',params:{id:`eq.${user.id}`},body:{tentativas:0,bloqueado_ate:null}});
   await db('sessoes',{method:'POST',body:{token_hash:sha(token),usuario_id:user.id,expira_em:new Date(Date.now()+(manter?30*24:8)*3600000).toISOString(),manter_conectado:manter},prefer:'return=minimal'});
   return {sucesso:true,token,usuario:cleanUser(user)};
+}
+// Alternar perfis na mesma conta: confirma o PIN atual para elevar uma sessão a Geral.
+// O navegador jamais determina qual ID ou loja ganha permissão.
+async function alternarModo(actor,sessao,body){
+  if(actor.perfilBase!=='admin'||actor.acesso_geral!==true)
+    throw bad('Esta conta não possui acesso duplo habilitado.',403);
+  const modo=norm(body.modo);
+  if(!['admin','geral'].includes(modo))throw bad('Modo de acesso inválido.',422);
+  if(modo==='geral'){
+    if(actor.bloqueado_ate && Date.parse(actor.bloqueado_ate)>Date.now())
+      throw bad('PIN temporariamente bloqueado. Tente novamente mais tarde.',429);
+    const pin=String(body.pin??'');
+    if(!/^\d{6,12}$/.test(pin)||!validarPin(pin,actor.pin_hash)){
+      const tentativas=(Number(actor.tentativas)||0)+1;
+      await db('usuarios',{method:'PATCH',params:{id:`eq.${actor.id}`},body:{
+        tentativas:tentativas>=5?0:tentativas,
+        bloqueado_ate:tentativas>=5?new Date(Date.now()+15*60000).toISOString():null
+      }});
+      throw bad(tentativas>=5?'Muitas tentativas. Aguarde 15 minutos.':'PIN incorreto.',tentativas>=5?429:401);
+    }
+    // Elevação limitada a 30 minutos; ao expirar, a sessão retorna a Administrador.
+    await db('sessoes',{method:'PATCH',params:{token_hash:`eq.${sessao.token_hash}`,usuario_id:`eq.${actor.id}`},body:{
+      modo_acesso:'geral',modo_expira_em:new Date(Date.now()+30*60*1000).toISOString()
+    }});
+    await db('usuarios',{method:'PATCH',params:{id:`eq.${actor.id}`},body:{tentativas:0,bloqueado_ate:null}});
+    await audit(actor,'alternar_perfil',{de:'admin',para:'geral'});
+    return {sucesso:true,usuario:cleanUser({...actor,perfil:'geral'})};
+  }
+  await db('sessoes',{method:'PATCH',params:{token_hash:`eq.${sessao.token_hash}`,usuario_id:`eq.${actor.id}`},body:{modo_acesso:'admin',modo_expira_em:null}});
+  await audit(actor,'alternar_perfil',{de:'geral',para:'admin'});
+  return {sucesso:true,usuario:cleanUser({...actor,perfil:'admin'})};
 }
 // Troca de PIN do próprio Administrador Geral. Nunca aceita ID fornecido pelo navegador.
 async function alterarMeuPinGeral(actor,sessao,body){
@@ -599,6 +635,7 @@ async function handle(req){
   if(pathname.startsWith('/notificacoes/'))return tratarNotificacoes(req,{pathname,body,query,db,rows,one,authenticate,admin,actorLoja,audit});
   const {actor,sessao}=await authenticate(req);
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
+  if(pathname==='/conta/modo'&&req.method==='POST')return alternarModo(actor,sessao,body);
   if(pathname==='/conta/pin'&&req.method==='POST')return alterarMeuPinGeral(actor,sessao,body);
   if(pathname==='/logout'&&req.method==='POST'){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};

@@ -390,3 +390,9 @@ body:has(#login-screen:not([hidden])) .login-panel{height:100%;max-height:100%;m
 
 .queima-key.nao-lancado{background:#536b85}
 .queima-donut-legend strong small{color:var(--muted);font-size:11px;font-weight:500}
+
+/* V18: alternância autenticada de perfis sem duplicar o usuário */
+.dual-mode-button[hidden]{display:none!important}
+.dual-mode-button{font-size:12px;line-height:1.25;max-width:240px;padding:8px 12px;white-space:normal;flex-shrink:0}
+@media(max-width:700px){.dual-mode-button{max-width:145px;font-size:11px;padding:7px 9px}}
+#dual-mode-dialog input{width:100%}

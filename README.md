@@ -1,3 +1,7 @@
+# V18 — Login duplo Admin + Geral (Luis Arthur)
+
+O login pode alternar entre Administrador de Loja e Administrador Geral usando o mesmo PIN. Antes de publicar, leia [ATIVAR-LOGIN-DUPLO-LUIS-ARTHUR.md](ATIVAR-LOGIN-DUPLO-LUIS-ARTHUR.md) e aplique o SQL 011 em homologação.
+
 # Atualização v17 — funcionários sem Dashboard
 
 Consulte [ATUALIZACAO-V17-LOGIN-MOBILE-SEM-DASHBOARD-FUNCIONARIO.md](ATUALIZACAO-V17-LOGIN-MOBILE-SEM-DASHBOARD-FUNCIONARIO.md).
