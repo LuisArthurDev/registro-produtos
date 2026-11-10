@@ -141,7 +141,7 @@ async function mapas(req,actor,pathname,body,query){
   if(req.method==='GET'){
     const nome=norm(query.get('mapa'));
     if(nome)podeMapa(actor,nome);
-    const params={loja_id:`eq.${loja}`,select:'*,produtos(codigo_interno,descricao,secao)',order:'validade.asc'};
+    const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao)',order:'validade.asc'};
     if(actor.perfil==='funcionario')params.mapa_nome=`eq.${actor.nome}`;
     else if(nome)params.mapa_nome=`eq.${nome}`;
     const registros=await rows('mapa_lancamentos',params,800,20);
@@ -149,7 +149,7 @@ async function mapas(req,actor,pathname,body,query){
   }
   if(pathname.endsWith('/descer')){
     admin(actor);const destino=norm(body.destino);if(!destino||destino==='Estoque')throw bad('Destino inválido.');
-    const origem=await one('mapa_lancamentos',{id:`eq.${body.id}`,loja_id:`eq.${loja}`,tipo_mapa:'eq.Estoque'});
+    const origem=await one('mapa_lancamentos',{id:`eq.${body.id}`,loja_id:`eq.${loja}`,tipo_mapa:'eq.Estoque',excluido_em:'is.null'});
     if(!origem)throw bad('Registro não localizado no Estoque.',404);
     // Somente mapa do funcionário da loja ou uma categoria especial é permitido.
     if(!specials.includes(destino)){
@@ -166,17 +166,15 @@ async function mapas(req,actor,pathname,body,query){
     if(!eanValido(ean)||!dataValida(validade)||lote.length<1||lote.length>100||!Number.isInteger(quantidade)||quantidade<1||quantidade>999999)throw bad('EAN, lote, validade ou quantidade inválidos.');
     if(tipo==='Estoque'&&new Date(validade)<new Date(new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}))){} // Não alterar regra de validade dos mapas especiais.
     if(tipo!=='funcionario')admin(actor);
-    if(actor.perfil!=='funcionario' && tipo==='funcionario'){
-      const pessoa=await one('usuarios',{loja_id:`eq.${loja}`,nome_normalizado:`eq.${normalizarNome(mapa)}`,ativo:'eq.true'});
-      if(!pessoa || pessoa.perfil==='geral')throw bad('Mapa de funcionário inexistente ou inativo.',403);
-    }
+    if(actor.perfil==='admin' && tipo==='funcionario')throw bad('Administradores só podem lançar nas abas especiais. O mapa de funcionário pertence ao próprio login.',403);
+    if(actor.perfil==='geral')throw bad('Administrador Geral não realiza lançamentos no Painel Conferente.',403);
     const registro=await db('rpc/gravar_lancamento',{method:'POST',body:{p_request_id:norm(body.requestId),p_usuario_id:actor.id,p_loja_id:loja,p_mapa_nome:mapa,p_tipo_mapa:tipo,p_ean:ean,p_lote:lote,p_validade:validade,p_quantidade:quantidade,p_confirmar_duplicado:body.confirmarDuplicado===true}});
     if(registro.status==='saved')await audit(actor,'lancamento',{id:registro.id,mapa,ean});
     return {sucesso:registro.status==='saved',...registro};
   }
   admin(actor);
   const id=norm(body.id);if(!/^[a-f0-9-]{36}$/.test(id))throw bad('Identificador inválido.');
-  const existente=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`});if(!existente)throw bad('Registro não encontrado.',404);
+  const existente=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'});if(!existente)throw bad('Registro não encontrado.',404);
   if(req.method==='PATCH'){
     const patch={};
     if(body.ean!==undefined){if(!eanValido(norm(body.ean)))throw bad('EAN deve ter de 8 a 14 dígitos.');patch.ean=norm(body.ean);const produto=await one('produtos',{ean:`eq.${patch.ean}`,select:'id'});patch.produto_id=produto?.id||null;}
@@ -188,8 +186,8 @@ async function mapas(req,actor,pathname,body,query){
     await audit(actor,'editar_mapa',{id,mapa:existente.mapa_nome,antes:{ean:existente.ean,lote:existente.lote,validade:existente.validade,quantidade:existente.quantidade},alterado:patch});return {sucesso:true};
   }
   if(req.method==='DELETE'){
-    await db('mapa_lancamentos',{method:'DELETE',params:{id:`eq.${id}`,loja_id:`eq.${loja}`}});
-    await audit(actor,'excluir_mapa',{id});return {sucesso:true};
+    await db('mapa_lancamentos',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'},body:{excluido_em:new Date().toISOString(),excluido_por:actor.id}});
+    await audit(actor,'excluir_mapa',{id,modo:'exclusao_logica',anterior:{ean:existente.ean,lote:existente.lote,validade:existente.validade,quantidade:existente.quantidade}});return {sucesso:true};
   }
   throw bad('Método não permitido.',405);
 }
@@ -288,15 +286,40 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(table==='queima'&&!eanValido(data.ean))throw bad('EAN obrigatório na Queima.');
     if(table==='vencidos'&&!data.ean&&!data.codigo_interno)throw bad('Informe EAN ou código interno para a retirada.');
     if(table==='queima')data.motivo='4';
+    if(table==='transferencias'){
+      if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode registrar transferências.',403);
+      if(!/^\d{1,12}$/.test(norm(data.loja_origem)))throw bad('Informe a loja de origem numérica.',422);
+      if(norm(data.loja_origem)===norm(loja))throw bad('A loja de origem deve ser diferente da loja de destino.',422);
+      if(!norm(data.romaneio)||norm(data.romaneio).length>100)throw bad('Informe o romaneio com até 100 caracteres.',422);
+      if(!dataValida(data.validade)||!norm(data.lote)||norm(data.lote).length>100)throw bad('Confira lote e validade.',422);
+      if(!/^[a-zA-Z0-9-]{16,100}$/.test(norm(body.requestId)))throw bad('Identificador único da transferência ausente.',422);
+      data.request_id=norm(body.requestId);
+      // O Procfit pode informar uma loja de origem ainda ausente do cadastro local.
+      await db('lojas',{method:'POST',params:{on_conflict:'id'},body:{id:norm(data.loja_origem),nome:`Loja ${norm(data.loja_origem)}`},prefer:'resolution=ignore-duplicates,return=minimal'});
+    }
     if(data.quantidade!==undefined&&(!Number.isInteger(Number(data.quantidade))||Number(data.quantidade)<1))throw bad('Quantidade inválida.');
-    const r=await db(table,{method:'POST',body:data,prefer:'return=representation'});
-    await audit(actor,'cadastrar_'+table,{id:r[0].id});return {sucesso:true,registro:r[0]};
+    const r=await db(table,{method:'POST',body:data,...(table==='transferencias'?{params:{on_conflict:'request_id'},prefer:'resolution=ignore-duplicates,return=representation'}:{prefer:'return=representation'})});
+    if(table==='transferencias'&&!r?.length)return {sucesso:true,idempotente:true,status:'saved'};
+    await audit(actor,'cadastrar_'+table,{id:r[0].id});return {sucesso:true,status:'saved',registro:r[0]};
+  }
+  if(req.method==='DELETE'&&table==='queima'){
+    const atual=await one('queima',{id:`eq.${norm(body.id)}`,loja_id:`eq.${loja}`});
+    if(!atual)throw bad('Registro de Queima não encontrado.',404);
+    if(atual.estado!=='pendente')throw bad('Somente Queima pendente pode ser excluída. Registros aprovados devem ser preservados.',409);
+    await db('queima',{method:'DELETE',params:{id:`eq.${atual.id}`,loja_id:`eq.${loja}`,estado:'eq.pendente'}});
+    await audit(actor,'excluir_queima',{id:atual.id,registro:atual});return {sucesso:true};
   }
   if(req.method==='PATCH'){
     const atual=await one(table,{id:`eq.${body.id}`,[extras.lojaCol||'loja_id']:`eq.${loja}`});if(!atual)throw bad('Não encontrado.',404);
     const allowed=extras.patchAllowed||['estado','observacao','situacao'];const patch=Object.fromEntries(Object.entries(body).filter(([k])=>allowed.includes(k)));
     if(table==='queima'&&patch.estado&&!['pendente','aprovado'].includes(patch.estado))throw bad('Use a operação de relançar para preservar o histórico.');
-    if(table==='queima'&&patch.estado==='aprovado'&&atual.estado!=='pendente')throw bad('Somente uma Queima pendente pode ser aprovada.',409);
+    if(table==='queima'&&patch.estado==='aprovado'){
+      if(atual.estado!=='pendente')throw bad('Somente uma Queima pendente pode ser aprovada.',409);
+      // O front exige relançar o mês anterior; mesmo a chamada direta não pode aprovar.
+      const [yy,mm]=String(atual.criado_em).slice(0,7).split('-');
+      const nowParts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+      if(`${yy}-${mm}`!==`${nowParts.year}-${nowParts.month}`)throw bad('Queima de mês anterior: relance antes de aprovar.',409);
+    }
     if(table==='sinalizacoes'&&patch.situacao&&!['aberto','resolvido','negado'].includes(patch.situacao))throw bad('Situação inválida.');
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração válida.');
     await db(table,{method:'PATCH',params:{id:`eq.${atual.id}`},body:patch});await audit(actor,'atualizar_'+table,{id:atual.id});return {sucesso:true};
@@ -452,7 +475,7 @@ async function handle(req){
   if(pathname==='/sinalizacoes')return genericRecords(req,actor,body,query,'sinalizacoes',{usuarioCol:'atualizado_por'});
   if(pathname==='/transferencias')return genericRecords(req,actor,body,query,'transferencias',{lojaCol:'loja_destino',allowed:['ean','lote','validade','quantidade','romaneio','loja_origem']});
   if(pathname==='/auditoria'&&req.method==='GET'){
-    admin(actor);const loja=actorLoja(actor,query.get('loja'));return {sucesso:true,registros:await rows('auditoria',{loja_id:`eq.${loja}`,select:'id,acao,dados,criado_em,usuario_id',order:'criado_em.desc'},500,2)};
+    admin(actor);const loja=actorLoja(actor,query.get('loja'));return {sucesso:true,registros:await rows('auditoria',{loja_id:`eq.${loja}`,select:'id,acao,dados,criado_em,usuario_id,usuarios(nome)',order:'criado_em.desc'},500,2)};
   }
   throw bad('Rota não implementada.',404);
 }

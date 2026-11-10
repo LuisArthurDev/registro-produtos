@@ -50,9 +50,18 @@ async function registrar(sdk,api){
 }
 /** Chamada por gesto do usuário. Funciona antes do login; o vínculo da conta ocorre ao autenticar. */
 export async function permitirPush(user,api){
+  // Pedido nativo inicia diretamente no clique. Aguardar o carregamento remoto do
+  // SDK antes de pedir permissão pode perder o gesto do usuário em navegadores móveis.
+  if(!window.isSecureContext||!('serviceWorker' in navigator)||!('Notification' in window))
+    throw new Error('Notificações indisponíveis. Use HTTPS; no iPhone instale o app na Tela de Início.');
+  if(Notification.permission==='denied')throw new Error('Permissão bloqueada no navegador. Abra as configurações deste site e permita notificações.');
+  if(Notification.permission==='default'){
+    const consent=await Notification.requestPermission();
+    if(consent!=='granted')throw new Error('Permissão não concedida. Você pode habilitá-la depois no navegador.');
+  }
   const sdk=await iniciarPush();verificarSuporte(sdk);
   if(!sdk.Notifications.permission)await sdk.Notifications.requestPermission();
-  if(!sdk.Notifications.permission)throw new Error('Você não autorizou notificações no navegador. Se bloqueou, altere nas configurações do site.');
+  if(!sdk.Notifications.permission)throw new Error('Permissão nativa concedida, mas o OneSignal não conseguiu registrar a assinatura. Confira o domínio e o Service Worker.');
   if(sdk.User.PushSubscription.optIn)await sdk.User.PushSubscription.optIn();
   salvarEscolhaPush('sim',user);
   if(user?.id&&api){await sdk.login(user.id);return registrar(sdk,api);}

@@ -285,3 +285,19 @@ body:has(#login-screen:not([hidden])) .login-panel{height:100%;max-height:100%;m
  body:has(#login-screen:not([hidden])) .login-panel{justify-content:flex-start;overflow-y:auto;scrollbar-width:none}
  body:has(#login-screen:not([hidden])) .login-panel::-webkit-scrollbar{display:none}
 }
+
+/* Atualização operacional v9 — identidade do produto antes do EAN e ações legíveis. */
+.product-identity{display:flex;flex-direction:column;gap:5px;padding:13px 15px;border:1px solid #285f62;border-radius:12px;background:linear-gradient(135deg,#113d42,#17263b);color:#e8fffd;min-width:0;overflow-wrap:anywhere}
+.product-identity strong{font-size:15px;line-height:1.35}
+.product-identity span{font-size:12px;color:#a7dbdb}
+.row-actions{min-width:180px;white-space:normal;vertical-align:middle}
+.row-actions .action-link{padding:6px 9px;border-radius:7px;border:1px solid #3b5567;margin:2px;color:#b3fff1;font-weight:650;white-space:nowrap;max-width:100%}
+.row-actions .action-link:hover{background:#1e3e49}
+.row-actions .action-link.danger-text{color:#ffb3be;border-color:#714350}
+.row-actions .action-link[disabled]{opacity:.52;cursor:default;pointer-events:none;color:#b1bdc9;border-color:#34455a}
+#launch-transfer-fields{padding:14px;border:1px solid var(--line);border-radius:12px;background:#14253a;min-width:0}
+#launch-transfer-fields .footer-hint{margin:0}
+#stock-descent-form label{margin:14px 0 8px}
+#stock-descent-form select,#stock-descent-form input{width:100%}
+#form-launch [name=validade_digitada]{font-variant-numeric:tabular-nums;letter-spacing:.025em}
+@media(max-width:620px){.row-actions{min-width:180px}.row-actions .action-link{display:inline-flex;min-height:36px;align-items:center}.product-identity strong{font-size:14px}}

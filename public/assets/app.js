@@ -1,5 +1,6 @@
 import { lerODS } from './ods.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
+import { mascararValidade, validadeParaISO } from './validade.js';
 import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta } from './push.js';
 /* Registro de Validades — frontend unificado. Não armazene chaves administrativas aqui. */
 const $=s=>document.querySelector(s);
@@ -41,6 +42,7 @@ function toast(msg,error=false){const el=$('#toast');el.textContent=msg;el.class
 const dataBR=x=>{if(!x)return '—';const y=String(x).slice(0,10);const m=y.match(/^(\d{4})-(\d\d)-(\d\d)/);return m?`${m[3]}/${m[2]}/${m[1]}`:H(y);};
 const dtBR=x=>{if(!x)return '—';const d=new Date(x);return Number.isNaN(+d)?String(x):new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(d);};
 function nowBrISO(){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));return `${parts.year}-${parts.month}-${parts.day}`;}
+function mesBrasil(timestamp){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).formatToParts(new Date(timestamp)).map(p=>[p.type,p.value]));return `${parts.year}-${parts.month}`;}
 const newId=()=>globalThis.crypto?.randomUUID?.()||`rv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 function statusVal(d,secao='',emQueima=false){const n=Date.parse(`${String(d).slice(0,10)}T12:00:00Z`),h=Date.parse(`${nowBrISO()}T12:00:00Z`);if(!Number.isFinite(n))return ['Sem validade',''];const dias=Math.round((n-h)/86400000);const sensivel=/ALIMENT|CONVENI|NUTRI/i.test(String(secao).normalize('NFD').replace(/[\u0300-\u036f]/g,''));const limite=sensivel?(emQueima?3:15):60;if(dias<=limite)return ['Vencido','red'];if(dias<=160)return ['A vencer','amber'];return ['Vendável','green'];}
 const pill=(text,kind='')=>`<span class="pill ${kind}">${H(text)}</span>`;
@@ -112,6 +114,11 @@ function lojaParams(){return state.user?.perfil==='geral'?`loja=${encodeURICompo
 function urlWithLoja(url){return url+(url.includes('?')?'&':'?')+lojaParams();}
 function showLogin(error=''){$('#login-screen').hidden=false;$('#app-shell').hidden=true;if(error){$('#login-erro').textContent=error;$('#login-erro').hidden=false;}}
 function showApp(){
+  // Ao autenticar no celular, abrir diretamente a página dedicada de lançamentos.
+  // O link explícito /#dashboard continua sendo a entrada do administrador no painel.
+  if(!IS_LAUNCH_PAGE && !isGeral() && window.matchMedia('(max-width: 900px)').matches && !location.hash){
+    window.location.replace('/lancamentos.html');return;
+  }
   transferirEscolhaParaConta(state.user);
   void associarPush(state.user,request);
   queueMicrotask(exibirConsentimento);
@@ -120,11 +127,11 @@ function showApp(){
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
-  $('#top-open-launch').hidden=isGeral()||IS_LAUNCH_PAGE;$('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
+  $('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
   const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos','notificacoes'].includes(m[0]));
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
-  const p=localStorage.getItem(PENDING_KEY);if(p){try{state.pending=JSON.parse(p);}catch{localStorage.removeItem(PENDING_KEY);}}
+  const p=localStorage.getItem(PENDING_KEY);if(p){try{const saved=JSON.parse(p);state.pending=(!saved.ownerId||saved.ownerId===state.user.id)?saved:null;}catch{localStorage.removeItem(PENDING_KEY);}}
   const collapsed=localStorage.getItem(SIDEBAR_KEY)==='1';
   $('#app-shell').classList.toggle('sidebar-collapsed',collapsed);
   $('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));
@@ -133,8 +140,7 @@ function showApp(){
   $('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');
   if(IS_LAUNCH_PAGE){
     if(isGeral()){window.location.replace('/#painel-geral');return;}
-    navigate('lancamentos');
-    return;
+    navigate('lancamentos');return;
   }
   const allowed=items.map(x=>x[0]),requested=(location.hash||'').replace('#','');
   navigate(allowed.includes(requested)?requested:(isGeral()?'painel-geral':'dashboard'));
@@ -208,17 +214,64 @@ async function dashboard(){
 }
 
 async function staffList(){if(!isAdmin())return [];const d=await request(urlWithLoja('/usuarios'));state.staff=d.usuarios||[];return state.staff;}
-async function lancamentos(emModal=false){const staff=isAdmin()?await staffList():[];const mapaOpts=[...staff.filter(u=>u.perfil!=='geral'&&u.ativo).map(u=>u.nome),...special];const options=[...new Set(mapaOpts)].map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('');const saved=state.pending;const notice=saved?`<div class="notice warn">Existe um lançamento ainda não confirmado neste aparelho (EAN ${H(saved.ean)}). Utilize <strong>Retomar lançamento pendente</strong> antes de criar outro.</div>`:'';
- const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/#${isAdmin()?'dashboard':'mapas'}">← ${isAdmin()?'Painel Conferente':'Meus mapas'}</a><button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
- const launchMarkup=header('Novo lançamento','Registre o lote no mapa do funcionário ou na aba especial correspondente.',standaloneActions)+`<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}<form id="form-launch" class="stack"><div class="form-grid">${isAdmin()?`<label>Mapa de destino<select name="mapa" required>${options}</select></label>`:`<label>Mapa de destino<input value="${H(state.user.nome)}" disabled></label>`}<div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div><label>Lote<input name="lote" required maxlength="100" placeholder="Lote informado na embalagem"></label><label>Validade<input name="validade" required type="date"></label><label>Quantidade<input name="quantidade" required type="number" min="1" step="1" value="1"></label></div><div class="notice">O mês de lançamento é registrado automaticamente na data da gravação. Uma falha de internet não deve gerar outra solicitação com ID diferente.</div><div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar lançamento pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div></form><div id="launch-result" aria-live="polite"></div></div><div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite um código e use “Consultar EAN”. O lançamento também é permitido quando o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">EANs são tratados como texto para preservar zeros à esquerda. Não pressione “Registrar” novamente enquanto houver uma solicitação pendente: use o botão de retomada.</div></div></div>`;
+async function lancamentos(emModal=false){
+ const saved=state.pending;
+ const notice=saved?`<div class="notice warn">Existe uma solicitação ainda não confirmada neste dispositivo (EAN ${H(saved.ean)}). Use <strong>Retomar tentativa</strong> antes de criar outra.</div>`:'';
+ const standaloneActions=IS_LAUNCH_PAGE?`${isAdmin()?'<a class="btn-outline" href="/#dashboard">← Painel Conferente</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
+ const specialOptions=special.map(m=>`<option value="${H(m)}">${H(m)}</option>`).join('');
+ const adminControls=isAdmin()?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa especial</option><option value="transferencia">Transferência recebida</option></select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${specialOptions}</select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
+   `<div class="notice full"><strong>Mapa de destino:</strong> ${H(state.user.nome)}. O destino é definido automaticamente pelo seu login.</div>`;
+ const launchMarkup=header('Novo lançamento','Lançamento no mapa da sessão; administradores também podem lançar nas abas especiais ou registrar transferências.',standaloneActions)+
+ `<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}
+ <form id="form-launch" class="stack"><div class="form-grid">${adminControls}
+ <div class="full product-identity" id="product-identity" aria-live="polite"><strong>Produto não consultado</strong><span>Leia ou digite um EAN para identificar o produto.</span></div>
+ <div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" maxlength="14" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div>
+ <label>Lote<input name="lote" required maxlength="100" placeholder="Lote da embalagem"></label>
+ <label>Validade (DD/MM/AA ou MM/AA)<input id="launch-validade" name="validade_digitada" required type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ex.: 31/01/26 ou 01/26"><small>Quando informar só mês e ano, será considerado o último dia do mês.</small></label>
+ <label>Quantidade<input name="quantidade" required type="number" min="1" max="999999" step="1" value="1"></label></div>
+ <div class="notice">A gravação registra o mês automaticamente e mantém o identificador da tentativa caso a conexão caia.</div>
+ <div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar tentativa pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div>
+ </form><div id="launch-result" aria-live="polite"></div></div>
+ <div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite o EAN e consulte. Você ainda pode registrar o produto se o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">O nome encontrado também aparece sobre o EAN. Códigos são sempre tratados como texto, inclusive os que começam com zero.</div></div></div>`;
  if(emModal){$('#launch-body').innerHTML=launchMarkup;$('#launch-dialog').showModal();}else{$('#content').innerHTML=launchMarkup;}
-  const f=$('#form-launch');
-  if(IS_LAUNCH_PAGE){const exit=$('#launch-logout-standalone');if(exit)exit.onclick=()=>logout();}
-  if(!IS_LAUNCH_PAGE||window.matchMedia('(min-width:768px)').matches)f.elements.ean.focus();
-  f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};$('#lookup-product').onclick=async()=>{const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);$('#product-preview').textContent='Consultando…';try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];$('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';}catch(e){$('#product-preview').textContent='Consulta indisponível: '+e.message;}};
- f.onsubmit=async e=>{e.preventDefault();if(state.pending){toast('Conclua ou confira o lançamento pendente antes de criar outro.',true);return;}const x={requestId:newId(),mapa:isAdmin()?f.elements.mapa.value:state.user.nome,ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:f.elements.validade.value,quantidade:Number(f.elements.quantidade.value)};if(!x.ean||!x.lote||!x.validade||x.quantidade<=0)return toast('Preencha todos os campos.',true);state.pending=x;localStorage.setItem(PENDING_KEY,JSON.stringify(x));await submitLaunch(x,f);};
- if(saved)$('#retry-launch').onclick=()=>submitLaunch(saved,f);
+ const f=$('#form-launch'),ident=$('#product-identity');
+ if(IS_LAUNCH_PAGE){const exit=$('#launch-logout-standalone');if(exit)exit.onclick=()=>logout();}
+ if(!IS_LAUNCH_PAGE||window.matchMedia('(min-width:768px)').matches)f.elements.ean.focus();
+ const mode=f.elements.tipoRegistro;
+ if(mode){mode.onchange=()=>{
+   const transfer=mode.value==='transferencia';
+   $('#launch-transfer-fields').hidden=!transfer;
+   $('#launch-map-destination').hidden=transfer;
+   f.elements.mapa.required=!transfer;
+   f.elements.loja_origem.required=transfer;
+   f.elements.romaneio.required=transfer;
+   $('#save-launch').textContent=transfer?'Registrar transferência':'Registrar produto';
+ };}
+ const validade=f.elements.validade_digitada;
+ validade.oninput=()=>{const pos=validade.selectionStart;const old=validade.value;validade.value=mascararValidade(old);if(document.activeElement===validade&&pos===old.length)validade.setSelectionRange(validade.value.length,validade.value.length);};
+ f.elements.ean.oninput=()=>{ident.innerHTML='<strong>Produto não consultado</strong><span>Consulte o EAN para confirmar a descrição.</span>';};
+ f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};
+ $('#lookup-product').onclick=async()=>{
+   const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);
+   $('#product-preview').textContent='Consultando…';ident.textContent='Consultando produto…';
+   try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];
+     ident.innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><span>${H(r.secao||'Seção não informada')} · Código interno: ${H(r.codigo_interno||'—')}</span>`:'<strong>Produto não localizado no catálogo</strong><span>Confirme o EAN antes de salvar.</span>';
+     $('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';
+   }catch(e){ident.innerHTML='<strong>Catálogo indisponível</strong><span>Confira o EAN manualmente.</span>';$('#product-preview').textContent='Consulta indisponível: '+e.message;}
+ };
+ f.onsubmit=async e=>{
+   e.preventDefault();prepararAudio();if(state.pending){toast('Conclua ou confira a solicitação pendente antes de criar outra.',true);return;}
+   let iso;try{iso=validadeParaISO(f.elements.validade_digitada.value);}catch(err){toast(err.message,true);validade.focus();return;}
+   const transfer=isAdmin()&&mode?.value==='transferencia';
+   const x={requestId:newId(),ownerId:state.user.id,tipoRegistro:transfer?'transferencia':'mapa',ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:iso,quantidade:Number(f.elements.quantidade.value)};
+   if(transfer){x.loja_origem=f.elements.loja_origem.value.trim();x.romaneio=f.elements.romaneio.value.trim();}
+   else x.mapa=isAdmin()?f.elements.mapa.value:state.user.nome;
+   if(!/^\d{8,14}$/.test(x.ean)||!x.lote||x.quantidade<=0||(transfer&&(!/^\d{1,12}$/.test(x.loja_origem)||!x.romaneio))){toast('Confira os campos do lançamento.',true);return;}
+   state.pending=x;localStorage.setItem(PENDING_KEY,JSON.stringify(x));await submitLaunch(x,f);
+ };
+ if(saved)$('#retry-launch').onclick=()=>{prepararAudio();submitLaunch(saved,f);};
 }
+
 async function abrirNovoLancamento(){
  if(isGeral())return;
  const dialog=$('#launch-dialog');if(dialog.open)return;
@@ -226,12 +279,33 @@ async function abrirNovoLancamento(){
  try{await lancamentos(true);}catch(e){toast(e.message,true);$('#launch-body').innerHTML=`<p class="notice danger">${H(e.message)}</p>`;dialog.showModal();}
 }
 
+let audioConfirmacao=null;
+function prepararAudio(){
+  // A ativação acontece na interação com o botão de registrar (não depois do fetch).
+  try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+    audioConfirmacao=audioConfirmacao||new Audio();
+    if(audioConfirmacao.state==='suspended')void audioConfirmacao.resume();
+  }catch{/* Som opcional. */}
+}
+function tocarConfirmacao(){
+ try{if(!audioConfirmacao||audioConfirmacao.state!=='running')return;
+   const ctx=audioConfirmacao,osc=ctx.createOscillator(),gain=ctx.createGain();
+   osc.type='sine';osc.frequency.setValueAtTime(770,ctx.currentTime);
+   osc.frequency.setValueAtTime(980,ctx.currentTime+.085);
+   gain.gain.setValueAtTime(.0001,ctx.currentTime);
+   gain.gain.exponentialRampToValueAtTime(.07,ctx.currentTime+.012);
+   gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.19);
+   osc.connect(gain).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+.20);
+ }catch{/* Em navegadores sem áudio permitido, a gravação continua funcionando. */}
+}
+let envioLancamentoEmAndamento=false;
 async function submitLaunch(data, form) {
+ if(envioLancamentoEmAndamento)return;envioLancamentoEmAndamento=true;
  const btn = $('#save-launch');
  if (btn) btn.disabled = true;
  $('#launch-result').innerHTML = '<div class="notice">Enviando ao servidor… Aguarde a confirmação.</div>';
  try {
-   const r = await request(urlWithLoja('/mapas'), {
+   const r = await request(urlWithLoja(data.tipoRegistro === 'transferencia' ? '/transferencias' : '/mapas'), {
      method: 'POST',
      body: {...data, ...(state.user.perfil === 'geral' ? {loja: state.loja} : {})},
      timeout: 60000
@@ -241,18 +315,22 @@ async function submitLaunch(data, form) {
      if (accepted) {
        data.confirmarDuplicado = true;
        localStorage.setItem(PENDING_KEY, JSON.stringify(data));
-       return await submitLaunch(data, form);
+       envioLancamentoEmAndamento=false;return await submitLaunch(data, form);
      }
-     $('#launch-result').innerHTML = '<div class="notice warn">Nenhuma linha foi gravada. Confira o mapa antes de descartar a tentativa.</div>';
+     state.pending=null;localStorage.removeItem(PENDING_KEY);
+     $('#launch-result').innerHTML = '<div class="notice warn">Lançamento repetido cancelado. Nenhuma linha foi gravada.</div>';
      return;
    }
-   if (r.status === 'saved') {
+   if (r.status === 'saved' || (data.tipoRegistro === 'transferencia' && r.sucesso === true)) {
      state.pending = null;
      localStorage.removeItem(PENDING_KEY);
-     $('#launch-result').innerHTML = `<div class="result-tip">✔ Produto registrado com sucesso. ${r.idempotente ? '(Resposta recuperada após reenvio)' : ''}</div>`;
-     toast('Produto registrado com sucesso.');
+     $('#launch-result').innerHTML = `<div class="result-tip">✔ ${data.tipoRegistro === 'transferencia' ? 'Transferência registrada' : 'Produto registrado'} com sucesso. ${r.idempotente ? '(Resposta recuperada após reenvio)' : ''}</div>`;
+     toast(data.tipoRegistro === 'transferencia' ? 'Transferência registrada com sucesso.' : 'Produto registrado com sucesso.');
+     tocarConfirmacao();
      form.reset();
      form.elements.quantidade.value = 1;
+     form.querySelector('#launch-kind')?.dispatchEvent(new Event('change'));
+     form.querySelector('#product-identity').innerHTML='<strong>Produto não consultado</strong><span>Leia o próximo EAN.</span>';
      form.elements.ean.focus();
      return;
    }
@@ -260,9 +338,9 @@ async function submitLaunch(data, form) {
  } catch (e) {
    toast(e.message, true);
    $('#launch-result').innerHTML = `<div class="notice warn">${H(e.message)} A solicitação permanece salva neste aparelho. <button class="btn-outline" id="retry-pending-inline" type="button">Reenviar a mesma tentativa</button></div>`;
-   $('#retry-pending-inline').onclick = () => submitLaunch(data, form);
+   $('#retry-pending-inline').onclick = () => {prepararAudio();submitLaunch(data, form);};
  } finally {
-   if (btn) btn.disabled = false;
+   if (btn) btn.disabled = false;envioLancamentoEmAndamento=false;
  }
 }
 
@@ -289,7 +367,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span><span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${pill(...statusVal(r.validade,r.secao))}</td>
- ${actions?`<td><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button></td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir</button>${Number(r.quantidade)>0?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="${statusVal(r.validade,r.secao)[0]==='Vencido'?'vencidos':'queima'}">${statusVal(r.validade,r.secao)[0]==='Vencido'?'Lançar como Vencido':'Lançar na Queima'}</button>${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}</td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
@@ -332,8 +410,33 @@ async function mapas(forced=''){
  $('#map-print').onclick=()=>printableTable('#maps-table',()=>mapsTable(filtered,{actions:false}));
  $('#map-csv').onclick=()=>exportCsv('mapa-'+nowBrISO()+'.csv',['Mapa','EAN','Codigo interno','Descricao','Lote','Validade','Quantidade','Mes lancamento','Situacao'],filtered.map(r=>[r.mapa_nome,r.ean,r.codigoInterno,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento).slice(0,7),statusVal(r.validade,r.secao)[0]]));
  $('#map-novo')?.addEventListener('click',abrirNovoLancamento);
- $('#maps-table').onclick=e=>{const cb=e.target.closest('[data-check-map]');if(cb){if(cb.checked)selected.add(cb.dataset.checkMap);else selected.delete(cb.dataset.checkMap);draw();return;}
-  const id=e.target.closest('[data-edit]')?.dataset.edit,reg=rows.find(x=>x.id===id);if(reg)openMapEdit(reg);};
+ $('#maps-table').onclick=async e=>{
+   const cb=e.target.closest('[data-check-map]');if(cb){if(cb.checked)selected.add(cb.dataset.checkMap);else selected.delete(cb.dataset.checkMap);draw();return;}
+   const edit=e.target.closest('[data-edit]');if(edit){const reg=rows.find(x=>x.id===edit.dataset.edit);if(reg)openMapEdit(reg);return;}
+   const remove=e.target.closest('[data-remove-map]');if(remove){const reg=rows.find(x=>x.id===remove.dataset.removeMap);if(!reg)return;
+     if(!await confirmDialog('Excluir lançamento',`Excluir o lançamento do mapa ${reg.mapa_nome} (EAN ${reg.ean}, lote ${reg.lote})? Esta ação será registrada na auditoria.`))return;
+     try{await request('/mapas',{method:'DELETE',body:{id:reg.id}});toast('Lançamento excluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
+   }
+   const descer=e.target.closest('[data-descer-map]');if(descer){const reg=rows.find(x=>x.id===descer.dataset.descerMap);if(!reg)return;
+     try{
+       const staff=await staffList(),destinos=[...new Set([...staff.filter(x=>x.perfil==='funcionario'&&x.ativo).map(x=>x.nome),...special.filter(x=>x!=='Estoque')])];
+       const dlg=$('#stock-descent-dialog'),form=$('#stock-descent-form');
+       $('#stock-descent-label').textContent=`${reg.ean} · ${reg.lote} · ${reg.quantidade} unidade(s) disponíveis`;
+       form.elements.destino.innerHTML=destinos.map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('');
+       form.elements.quantidade.max=String(reg.quantidade);form.elements.quantidade.value=String(reg.quantidade);
+       form.onsubmit=async ev=>{ev.preventDefault();const quantity=Number(form.elements.quantidade.value);
+         if(!Number.isInteger(quantity)||quantity<1||quantity>Number(reg.quantidade)){toast('Quantidade inválida para o Estoque.',true);return;}
+         const btn=form.querySelector('[type=submit]');btn.disabled=true;
+         try{await request('/mapas/descer',{method:'POST',body:{id:reg.id,destino:form.elements.destino.value,quantidade:quantity,requestId:newId()}});dlg.close();toast('Produto encaminhado ao mapa.');await renderRoute(state.route);}
+         catch(err){toast(err.message,true);}finally{btn.disabled=false;}
+       };dlg.showModal();
+     }catch(err){toast(err.message,true);}return;
+   }
+   const send=e.target.closest('[data-send-map]');if(send){const destino=send.dataset.sendTo,reg=rows.find(x=>x.id===send.dataset.sendMap);if(!reg)return;
+     if(!await confirmDialog(destino==='vencidos'?'Lançar como Vencido':'Lançar na Queima',`Encaminhar ${reg.quantidade} unidade(s) do EAN ${reg.ean} (${reg.mapa_nome})?`))return;
+     try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
+   }
+ };
  if(able){
   $('#map-select-all').onchange=e=>{for(const r of paged()){if(e.target.checked)selected.add(r.id);else selected.delete(r.id);}draw();};
   $('#map-unselect').onclick=()=>{selected.clear();$('#map-select-all').checked=false;draw();};
@@ -593,17 +696,22 @@ async function generic(pathname,title){
  <form id="generic-form" class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" ${isVenc?'':'required'}></label>
  ${isVenc?'<label>Código interno (opcional)<input name="codigo_interno"></label><label class="full">Descrição original<input name="descricao_original"></label>':''}
  ${isSinal?'<label class="full">Motivo / observação<input name="observacao" required maxlength="600"></label>':`<label>Lote<input name="lote" maxlength="100"></label><label>Validade<input type="date" name="validade"></label><label>Quantidade<input type="number" min="1" value="1" name="quantidade" required></label>`}
- ${isTrans?'<label>Loja de origem<input name="loja_origem" inputmode="numeric"></label><label>Romaneio<input name="romaneio"></label>':''}
+ ${isTrans?`<label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" required></label><label>Romaneio<input name="romaneio" maxlength="100" required></label><div class="notice full">Loja destino: ${H(state.user.loja)} (automática, não editável).</div>`:''}
  ${isVenc?'<label>Motivo<select name="motivo"><option value="vencido">Vencido</option><option value="danificado">Danificado</option></select></label>':''}
  <div class="form-actions"><button class="primary">Registrar</button></div></form></section>`:'');
  const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
   const ean=r.ean_resolvido||r.ean||'Não informado',desc=r.descricao||r.descricao_original||'Sem descrição cadastrada';
-  if(isAudit){const obj=r.dados&&typeof r.dados==='object'?r.dados:{},orig=obj.autor_original||null;
-   return `<tr><td>${dtBR(r.criado_em)}</td><td>${H(orig||'Conta '+String(r.usuario_id||'sem identificação').slice(0,8))}</td><td>${H(r.acao)}</td><td>${H(obj.descricao||[obj.mapa,obj.ean,obj.lote,obj.destino].filter(Boolean).join(' · ')||'Evento registrado')}</td></tr>`;
+  if(isAudit){const obj=r.dados&&typeof r.dados==='object'?r.dados:{},orig=r.usuarios?.nome||obj.autor_original||obj.nome_usuario||null;
+   return `<tr><td>${dtBR(r.criado_em)}</td><td>${H(orig||'Usuário não identificado')}</td><td>${H(r.acao)}</td><td>${H(obj.descricao||[obj.mapa,obj.ean,obj.lote,obj.destino].filter(Boolean).join(' · ')||'Evento registrado')}</td></tr>`;
   }
-  if(isQueima)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':r.estado==='pendente'?'amber':'')}</td><td>${r.estado==='pendente'?`<button class="action-link" data-approve="${H(r.id)}">Aprovar</button>`:r.estado==='aprovado'?`<button class="action-link" data-relaunch="${H(r.id)}">Relançar</button>`:'—'}</td></tr>`;
+  if(isQueima){
+    const lastMonth=mesBrasil(r.criado_em)!==nowBrISO().slice(0,7),pendente=r.estado==='pendente';
+    const primary=pendente?(lastMonth?`<button class="action-link" data-relaunch="${H(r.id)}">Relançar</button>`:`<button class="action-link" data-approve="${H(r.id)}">Aprovar</button>`):`<button type="button" class="action-link" disabled title="Registro não pode ser aprovado novamente">${r.estado==='aprovado'?'Aprovado':'Relançado'}</button>`;
+    const apagar=pendente?` <button class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`:'';
+    return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
+  }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
   return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.observacao)}<td>${pill(r.situacao||'aberto',r.situacao==='resolvido'?'green':r.situacao==='negado'?'red':'amber')}</td><td>${!r.situacao||r.situacao==='aberto'?`<button class="action-link" data-sinal="${H(r.id)}" data-status="resolvido">Resolver</button> <button class="action-link" data-sinal="${H(r.id)}" data-status="negado">Negar</button>`:'—'}</td></tr>`;
@@ -615,23 +723,24 @@ async function generic(pathname,title){
  for(const id of ['gen-search','gen-status','gen-since'])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
-  const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.dados?.autor_original||x.usuario_id,'Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
+  const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
  })));
  $('#gen-list').onclick=async e=>{
-  const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]');if(!appr&&!rel&&!sin)return;
-  const id=appr?.dataset.approve||rel?.dataset.relaunch||sin?.dataset.sinal,old=rows.find(x=>x.id===id);if(!old)return;
-  const action=appr?'aprovar':rel?'relançar':'alterar sinalização para '+sin.dataset.status;
+  const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]');if(!appr&&!rel&&!sin&&!del)return;
+  const id=appr?.dataset.approve||rel?.dataset.relaunch||sin?.dataset.sinal||del?.dataset.deleteBurn,old=rows.find(x=>x.id===id);if(!old)return;
+  const action=appr?'aprovar':rel?'relançar':del?'excluir':'alterar sinalização para '+sin.dataset.status;
   if(!await confirmDialog('Confirmar operação',`Deseja ${action} este registro?`))return;
   try{if(appr)await request('/queima',{method:'PATCH',body:{id,estado:'aprovado'}});
    else if(rel)await request('/queima/relancar',{method:'POST',body:{id}});
+   else if(del)await request('/queima',{method:'DELETE',body:{id}});
    else await request('/sinalizacoes',{method:'PATCH',body:{id,situacao:sin.dataset.status}});
    toast('Operação registrada.');renderRoute(state.route);
   }catch(err){toast(err.message,true);}
  };
  const form=$('#generic-form');if(form)form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('[type="submit"]'),body=Object.fromEntries(new FormData(form));
-  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isQueima){body.motivo='4';body.estado='pendente';}
+  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isTrans){body.requestId=form.dataset.requestId||newId();form.dataset.requestId=body.requestId;}if(isQueima){body.motivo='4';body.estado='pendente';}
   if(isVenc&&!body.ean&&!body.codigo_interno)return toast('Informe EAN ou código interno.',true);
-  btn.disabled=true;try{await request('/'+pathname,{method:'POST',body});toast('Registro incluído.');renderRoute(state.route);}catch(err){toast(err.message,true);}finally{btn.disabled=false;}
+  btn.disabled=true;try{await request('/'+pathname,{method:'POST',body});toast('Registro incluído.');if(isTrans)delete form.dataset.requestId;renderRoute(state.route);}catch(err){toast(err.message,true);}finally{btn.disabled=false;}
  };
  apply();
 }
@@ -683,7 +792,7 @@ const consentDialog=$('#push-consent-dialog');
 function exibirConsentimento(){if(!escolhaPush(state.user)&&!consentDialog.open)consentDialog.showModal();}
 $('#push-consent-yes').onclick=async()=>{
  const b=$('#push-consent-yes'),msg=$('#push-consent-feedback');b.disabled=true;msg.textContent='Solicitando permissão ao navegador…';
- try{const r=await ativarPush(state.user, state.user?request:null);consentDialog.close();toast(r.detalhe||'Notificações ativadas.');}
+ try{const r=await ativarPush(state.user, state.user?request:null);msg.textContent=r.detalhe||'Permissão registrada.';consentDialog.close();toast(r.detalhe||'Notificações ativadas.');}
  catch(err){msg.textContent=err.message;b.disabled=false;}
 };
 $('#push-consent-no').onclick=async()=>{
@@ -692,9 +801,8 @@ $('#push-consent-no').onclick=async()=>{
  void recusarPush(state.user,state.user?request:null);
  toast('Você pode ativar notificações depois no menu Notificações.');
 };
-// Se a pessoa ainda não escolheu, o diálogo é oferecido na entrada (inclusive no login).
-queueMicrotask(exibirConsentimento);
+// Oferecer após login: a autorização é vinculada à conta, nunca a uma conta desconhecida.
 
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
-$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#top-open-launch').onclick=()=>IS_LAUNCH_PAGE?window.location.assign('/#dashboard'):abrirNovoLancamento();$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
+$('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

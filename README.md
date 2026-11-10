@@ -1,3 +1,7 @@
+# Atualização de fluxos e transferências
+
+Consulte [ATUALIZAR-FLUXOS-OPERACIONAIS.md](ATUALIZAR-FLUXOS-OPERACIONAIS.md) antes de publicar.
+
 # Registro de Validades — migração para Supabase + Vercel
 
 **Estado: base funcional para homologação, NÃO pronta para substituir a produção.**
