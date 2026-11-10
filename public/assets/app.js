@@ -157,14 +157,18 @@ function consumirPonteDeLogin(){
     return v.usuario;
   }catch{return null;}
 }
-function showApp(){
-  // Ao autenticar no celular, abrir diretamente a página dedicada de lançamentos.
-  // O link explícito /#dashboard continua sendo a entrada do administrador no painel.
-  if(!IS_LAUNCH_PAGE && !IS_VIEW_PAGE && !isGeral() && window.matchMedia('(max-width: 900px)').matches && !location.hash){
-    // O servidor acabou de autenticar esta conta; não exigir uma segunda ida ao banco
-    // ao abrir a página de lançamentos no mesmo navegador.
-    criarPonteDeLogin();
-    window.location.replace('/lancamentos.html');return;
+function showApp(fromLogin=false){
+  // Funcionários NUNCA entram no Dashboard/Painel Conferente.
+  // No celular, após efetuar login, inclusive com #dashboard antigo na URL,
+  // abrir a página dedicada de Lançamentos. Acesso explícito do admin a
+  // /#dashboard continua permitido após o login.
+  if(!IS_LAUNCH_PAGE && !IS_VIEW_PAGE && !isGeral()){
+    const mobile=window.matchMedia('(max-width: 900px)').matches;
+    if(!isAdmin() || (mobile && (fromLogin || !location.hash))){
+      criarPonteDeLogin();
+      window.location.replace(mobile?'/lancamentos.html':'/visualizacao.html');
+      return;
+    }
   }
   transferirEscolhaParaConta(state.user);
   void associarPush(state.user,request);
@@ -175,7 +179,7 @@ function showApp(){
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
   $('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
-  const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos','notificacoes'].includes(m[0]));
+  const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||m[0]==='notificacoes');
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
   const p=localStorage.getItem(PENDING_KEY);if(p){try{const saved=JSON.parse(p);state.pending=(!saved.ownerId||saved.ownerId===state.user.id)?saved:null;}catch{localStorage.removeItem(PENDING_KEY);}}
@@ -210,6 +214,10 @@ async function logout(call=true){
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
 function navigate(route){
  void fecharScanner();
+ if(!isAdmin()&&!isGeral()&&!IS_VIEW_PAGE&&!IS_LAUNCH_PAGE){
+   // URL/hash digitado manualmente não concede acesso ao Dashboard.
+   window.location.replace(window.matchMedia('(max-width: 900px)').matches?'/lancamentos.html':'/visualizacao.html');return;
+ }
  // A Visualização é uma página independente também para o Administrador de Loja.
  // Ela não é rota do menu lateral do Painel Conferente.
  if(IS_VIEW_PAGE){
@@ -223,13 +231,13 @@ function navigate(route){
    mobileClose();$('#breadcrumb-current').textContent='Visualização dos Lançamentos';
    renderRoute('visualizacao');return;
  }
- if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign('/#'+encodeURIComponent(route));return;}
+ if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign(isAdmin()?'/#'+encodeURIComponent(route):'/visualizacao.html');return;}
  if(route==='lancamentos'&&IS_LAUNCH_PAGE&&!isGeral()){
    state.route='lancamentos';if(location.hash!=='#lancamentos')location.hash='lancamentos';mobileClose();
    $('#breadcrumb-current').textContent='Lançamentos';
    renderRoute('lancamentos');return;
  }
- const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||['dashboard','mapas','produtos','notificacoes'].includes(m[0])).map(x=>x[0]);
+ const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||m[0]==='notificacoes').map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
  state.route=route;location.hash=route;mobileClose();
@@ -237,7 +245,12 @@ function navigate(route){
  $('#breadcrumb-current').textContent=[...menus,...menusGeral].find(m=>m[0]===route)?.[2]||'Painel';
  renderRoute(route);
 }
-async function renderRoute(route){const content=$('#content');content.innerHTML=loading();try{
+async function renderRoute(route){
+ const content=$('#content');content.innerHTML=loading();try{
+  if(state.user?.perfil==='funcionario'&&!['lancamentos','visualizacao'].includes(route)){
+    // Guarda adicional contra chamadas diretas ou hash alterado por funcionário.
+    window.location.replace(window.matchMedia('(max-width:900px)').matches?'/lancamentos.html':'/visualizacao.html');return;
+  }
   if(isGeral()&&!['painel-geral','admins-geral','notificacoes'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
    case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'visualizacao':await renderVisualizacao({request,content,user:state.user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
@@ -992,6 +1005,6 @@ $('#push-consent-no').onclick=async()=>{
 // Oferecer após login: a autorização é vinculada à conta, nunca a uma conta desconhecida.
 
 $('#btn-revalidar-sessao').onclick=()=>restoreSession();
-$('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
+$('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp(true);}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
 $('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

@@ -1,3 +1,7 @@
+# Atualização v17 — funcionários sem Dashboard
+
+Consulte [ATUALIZACAO-V17-LOGIN-MOBILE-SEM-DASHBOARD-FUNCIONARIO.md](ATUALIZACAO-V17-LOGIN-MOBILE-SEM-DASHBOARD-FUNCIONARIO.md).
+
 ## Versão v16 — Visualização Administrador e Gráfico da Queima com 3 situações
 
 Veja [ATUALIZACAO-V16-VISUALIZACAO-GRAFICO-QUEIMA.md](ATUALIZACAO-V16-VISUALIZACAO-GRAFICO-QUEIMA.md).
