@@ -1,3 +1,16 @@
+## v19 — Cadastro de lojas no Painel Geral
+
+O **Painel Geral não está associado a nenhuma loja fixa**. A conta Luis Arthur pode manter
+**Loja 151** como contexto ao usar o modo **Administrador de Loja**, enquanto o modo
+**Administrador Geral** consulta e cadastra lojas de todo o sistema.
+
+Em **Painel Geral → Cadastrar loja** informe código numérico (até 12 dígitos) e nome.
+Se a loja já existir, o sistema informa a duplicidade e não substitui seus dados.
+Após cadastrar, a nova unidade fica disponível no seletor ao criar administradores.
+**Não há migração SQL adicional**: `public.lojas` já existe no esquema inicial.
+O endpoint `POST /api/geral/lojas` verifica o modo Geral no servidor, não confia em
+loja do navegador e grava auditoria com `loja_id = null` para a ação global.
+
 # V18 — Login duplo Admin + Geral (Luis Arthur)
 
 O login pode alternar entre Administrador de Loja e Administrador Geral usando o mesmo PIN. Antes de publicar, leia [ATIVAR-LOGIN-DUPLO-LUIS-ARTHUR.md](ATIVAR-LOGIN-DUPLO-LUIS-ARTHUR.md) e aplique o SQL 011 em homologação.

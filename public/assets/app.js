@@ -690,11 +690,39 @@ function parseCSV(txt){const first=(txt.split(/\r?\n/)[0]||''),sep=first.include
 async function painelGeral(){
  const r=await request('/geral',{timeout:55000});const lojas=r.lojas||[],admins=r.administradores||[];
  $('#content').innerHTML=header('Painel Geral','Administração central. Somente o Administrador Geral pode gerenciar todas as lojas e seus administradores.',
- '<button class="btn-outline" id="geral-change-pin" type="button">Alterar minha senha</button><button class="primary" id="geral-admin-new" type="button">Cadastrar administrador</button>')+
+ '<button class="btn-outline" id="geral-change-pin" type="button">Alterar minha senha</button><button class="btn-outline" id="geral-store-new" type="button">Cadastrar loja</button><button class="primary" id="geral-admin-new" type="button">Cadastrar administrador</button>')+
  `<div class="stat-grid"><div class="card stat"><small>Lojas cadastradas</small><strong>${lojas.length}</strong><p>Unidades no Supabase</p></div><div class="card stat"><small>Administradores de loja</small><strong>${admins.length}</strong><p>Contas com perfil administrativo</p></div><div class="card stat"><small>Funcionários</small><strong>${H(r.totais?.funcionarios||0)}</strong></div><div class="card stat"><small>Acesso</small><strong>Geral</strong><p>${state.user?.perfilBase==='admin'?'Acesso duplo: use o botão Painel Conferente no topo.':'Administração geral'}</p></div></div>
- <section class="card card-pad"><h2>Unidades cadastradas</h2>${table(['Loja','Nome','Administradores'],lojas.map(l=>`<tr><td>${H(l.id)}</td><td>${H(l.nome||'Loja '+l.id)}</td><td>${H(admins.filter(a=>a.loja_id===l.id).map(a=>a.nome).join(', ')||'Nenhum')}</td></tr>`))}</section>`;
+ <section class="card card-pad"><h2>Unidades cadastradas</h2>${table(['Loja','Nome','Administradores'],lojas.map(l=>`<tr><td>${H(l.id)}</td><td>${H(l.nome||'Loja '+l.id)}</td><td>${H(admins.filter(a=>a.loja_id===l.id).map(a=>a.nome).join(', ')||'Nenhum')}</td></tr>`))}</section>
+ <dialog id="geral-store-dialog" class="dialog" aria-labelledby="geral-store-title"><form id="geral-store-form" class="dialog-inner" autocomplete="off">
+ <h2 id="geral-store-title">Cadastrar nova loja</h2><p class="footer-hint">O Painel Geral administra todas as lojas. O cadastro não muda a Loja 151 de origem da sua conta.</p>
+ <label>Código da loja<input name="codigo" type="text" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Ex.: 152" required></label>
+ <label>Nome da loja<input name="nome" type="text" minlength="2" maxlength="120" placeholder="Ex.: Loja 152 - Centro" required></label>
+ <p class="error-note" id="geral-store-error" role="alert" hidden></p>
+ <div class="dialog-actions"><button type="button" class="btn-outline" id="geral-store-cancel">Cancelar</button><button type="submit" class="primary">Cadastrar loja</button></div>
+ </form></dialog>`;
  $('#geral-admin-new').onclick=()=>navigate('admins-geral');
  $('#geral-change-pin').onclick=abrirMeuPin;
+ $('#geral-store-new').onclick=()=>{
+   if(!isGeral())return toast('Acesso exclusivo do Administrador Geral.',true);
+   const dlg=$('#geral-store-dialog'),form=$('#geral-store-form');
+   form.reset();$('#geral-store-error').hidden=true;dlg.showModal();form.elements.codigo.focus();
+ };
+ $('#geral-store-cancel').onclick=()=>$('#geral-store-dialog').close();
+ $('#geral-store-form').onsubmit=async event=>{
+   event.preventDefault();
+   if(!isGeral())return toast('Acesso exclusivo do Administrador Geral.',true);
+   const form=event.currentTarget,save=form.querySelector('[type=submit]'),error=$('#geral-store-error');
+   error.hidden=true;save.disabled=true;
+   try{
+     const codigo=form.elements.codigo.value.trim(),nome=form.elements.nome.value.trim();
+     if(!/^\d{1,12}$/.test(codigo))throw new Error('O código deve ter de 1 a 12 números.');
+     if(nome.length<2||nome.length>120)throw new Error('Informe um nome de 2 a 120 caracteres.');
+     await request('/geral/lojas',{method:'POST',body:{codigo,nome}});
+     $('#geral-store-dialog').close();toast(`Loja ${codigo} cadastrada.`);
+     await renderRoute('painel-geral'); // atualiza lista e total; novo cadastro aparece no select dos administradores
+   }catch(err){error.textContent=err.message;error.hidden=false;}finally{save.disabled=false;}
+ };
+
 }
 function abrirMeuPin(){
  if(!isGeral())return toast('Acesso exclusivo do Administrador Geral.',true);

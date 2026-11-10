@@ -586,6 +586,25 @@ async function pendencias(req,actor,body,query){
   return {sucesso:true,resultado};
 }
 
+// Cadastro GLOBAL de lojas: não utiliza actor.loja_id nem aceita loja implícita (151).
+async function cadastrarLojaGeral(actor,body){
+  geral(actor); // exige sessão autenticada em modo Geral, inclusive no perfil duplo
+  const id=norm(body.codigo??body.id),nome=norm(body.nome).replace(/\s+/g,' ');
+  if(!/^\d{1,12}$/.test(id))throw bad('Informe um código de loja numérico de 1 a 12 dígitos.',422);
+  if(nome.length<2||nome.length>120)throw bad('Informe o nome da loja com 2 a 120 caracteres.',422);
+  if(await one('lojas',{id:`eq.${id}`,select:'id'}))throw bad(`A loja ${id} já está cadastrada.`,409);
+  const inserted=await db('lojas',{
+    method:'POST',params:{on_conflict:'id'},body:{id,nome},
+    prefer:'resolution=ignore-duplicates,return=representation'
+  });
+  // Evita substituir uma loja existente mesmo em cadastros concorrentes.
+  if(!Array.isArray(inserted)||inserted.length!==1)throw bad('Loja já cadastrada. Atualize a lista.',409);
+  // Painel Geral não é de uma loja específica: auditoria de ação global tem loja_id null.
+  try{await db('auditoria',{method:'POST',body:{loja_id:null,usuario_id:actor.id,acao:'cadastrar_loja_geral',dados:{codigo:id,nome}},prefer:'return=minimal'});}
+  catch(err){console.error('Falha ao auditar cadastro global de loja:',err.message);}
+  return {sucesso:true,loja:{id,nome}};
+}
+
 async function painelGeral(actor) {
   geral(actor);
   const [lojas,admins,usuarios]=await Promise.all([
@@ -642,6 +661,7 @@ async function handle(req){
   }
   if(pathname.startsWith('/produtos'))return produtos(req,actor,pathname,body,query);
   if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
+  if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
   if(pathname==='/vencidos/retirar'&&req.method==='POST')return retirarDanificado(req,actor,body);
