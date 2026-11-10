@@ -1,10 +1,11 @@
 import { lerODS } from './ods.js';
+import { abrirScannerEAN, fecharScanner } from './scanner.js';
 /* Registro de Validades — frontend unificado. Não armazene chaves administrativas aqui. */
 const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
-const menus=[['dashboard','◫','Dashboard'],['mapas','▤','Mapa de Validade'],['controle-validade','◷','Controle de Validade'],['perdas','⊖','Perdas'],['estoque-mapa','▣','Estoque (mapa especial)'],['saldo','≋','Saldo Procfit'],['produtos','▦','Produtos EAN'],['queima','♻','Queima'],['transferencias','⇄','Transferências'],['sinalizacoes','⚑','Sinalizados'],['usuarios','♙','Funcionários'],['auditoria','☷','Histórico'],['pendencias','⚠','Pendências'],['notificacoes','♧','Notificações']];
+const menus=[['dashboard','◫','Dashboard'],['mapas','▤','Mapa de Validade'],['controle-validade','◷','Controle de Validade'],['perdas','⊖','Perdas'],['estoque-mapa','▣','Estoque'],['saldo','≋','Saldo Procfit'],['produtos','▦','Produtos EAN'],['queima','♻','Queima'],['transferencias','⇄','Transferências'],['sinalizacoes','⚑','Sinalizados'],['usuarios','♙','Funcionários'],['auditoria','☷','Histórico'],['pendencias','⚠','Pendências'],['notificacoes','♧','Notificações']];
 const menusGeral=[['painel-geral','◈','Painel Geral'],['admins-geral','♙','Administradores de loja']];
 const SIDEBAR_KEY='rv_sidebar_recolhido';
 
@@ -21,6 +22,30 @@ function loading(label='Consultando servidor…'){return `<section class="card c
 function empty(label='Nenhum registro encontrado.'){return `<div class="empty"><span class="empty-icon">◎</span><strong>${H(label)}</strong><span>Altere os filtros ou consulte novamente.</span></div>`;}
 function header(title,subtitle,extra=''){return `<div class="page-head"><div><span class="eyebrow">Registro de validades</span><h1>${H(title)}</h1><p>${H(subtitle)}</p></div><div class="toolbar">${extra}</div></div>`;}
 function table(headers,rows){if(!rows.length)return empty();return `<div class="table-wrap"><table><thead><tr>${headers.map(x=>`<th scope="col">${H(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;}
+/* Paginação progressiva das tabelas sem paginação própria.
+   Mapas/Controle/Queima já paginam antes de montar as linhas: não paginar novamente. */
+function paginarTabelasSimples(){
+ const content=$('#content');if(!content)return;
+ for(const wrap of content.querySelectorAll('.table-wrap')){
+   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list'))continue;
+   const trs=[...wrap.querySelectorAll('tbody > tr')];if(!trs.length)continue;
+   wrap.dataset.paginado='1';let page=0;
+   const foot=document.createElement('div');foot.className='pager pager-auto';
+   foot.innerHTML='<label>Itens por página <select aria-label="Itens por página"><option>15</option><option>25</option><option>50</option></select></label><button type="button" class="btn-outline" data-prev>Anterior</button><span class="page-info"></span><button type="button" class="btn-outline" data-next>Próxima</button>';
+   wrap.after(foot);
+   const select=foot.querySelector('select'),prev=foot.querySelector('[data-prev]'),next=foot.querySelector('[data-next]'),info=foot.querySelector('.page-info');
+   const draw=()=>{
+     const n=Number(select.value),total=Math.max(1,Math.ceil(trs.length/n));page=Math.max(0,Math.min(page,total-1));
+     trs.forEach((tr,i)=>{tr.hidden=i<page*n||i>=(page+1)*n;});
+     info.textContent=`Página ${page+1} de ${total} · ${trs.length} registro(s)`;
+     prev.disabled=page===0;next.disabled=page===total-1;
+   };
+   select.onchange=()=>{page=0;draw();};prev.onclick=()=>{page--;draw();};next.onclick=()=>{page++;draw();};draw();
+ }
+}
+const observerTabelas=new MutationObserver(paginarTabelasSimples);
+observerTabelas.observe($('#content'),{subtree:true,childList:true});
+
 async function request(path,{method='GET',body=null,retries=method==='GET'?2:0,timeout=45000}={}){
   let last;
   for(let n=0;n<=retries;n++){
@@ -47,7 +72,7 @@ function showApp(){
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
-  $('#top-open-launch').hidden=isGeral();$('#launch-to-panel').hidden=!isAdmin();
+  $('#top-open-launch').hidden=isGeral();$('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
   const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0]));
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${icon}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
@@ -55,14 +80,16 @@ function showApp(){
   const collapsed=localStorage.getItem(SIDEBAR_KEY)==='1';
   $('#app-shell').classList.toggle('sidebar-collapsed',collapsed);
   $('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));
-  $('#sidebar-collapse').textContent=collapsed?'›':'‹';
+  $('#sidebar-collapse').textContent='◈';
   $('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';
   const allowed=items.map(x=>x[0]),requested=(location.hash||'').replace('#','');
   navigate(allowed.includes(requested)?requested:(isGeral()?'painel-geral':'dashboard'));
+  if(requested==='lancamentos'&&!isGeral())queueMicrotask(abrirNovoLancamento);
 }
-function logout(call=true){if(call&&state.token)request('/logout',{method:'POST'}).catch(()=>{});localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);state.token='';state.user=null;showLogin();}
+function logout(call=true){void fecharScanner();if(call&&state.token)request('/logout',{method:'POST'}).catch(()=>{});localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);state.token='';state.user=null;showLogin();}
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
 function navigate(route){
+ void fecharScanner();
  const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0])).map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
@@ -113,9 +140,9 @@ async function dashboard(){
 
 async function staffList(){if(!isAdmin())return [];const d=await request(urlWithLoja('/usuarios'));state.staff=d.usuarios||[];return state.staff;}
 async function lancamentos(emModal=false){const staff=isAdmin()?await staffList():[];const mapaOpts=[...staff.filter(u=>u.perfil!=='geral'&&u.ativo).map(u=>u.nome),...special];const options=[...new Set(mapaOpts)].map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('');const saved=state.pending;const notice=saved?`<div class="notice warn">Existe um lançamento ainda não confirmado neste aparelho (EAN ${H(saved.ean)}). Utilize <strong>Retomar lançamento pendente</strong> antes de criar outro.</div>`:'';
- const launchMarkup=header('Novo lançamento','Registre o lote no mapa do funcionário ou na aba especial correspondente.')+`<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}<form id="form-launch" class="stack"><div class="form-grid">${isAdmin()?`<label>Mapa de destino<select name="mapa" required>${options}</select></label>`:`<label>Mapa de destino<input value="${H(state.user.nome)}" disabled></label>`}<label>EAN (8 a 14 dígitos)<input name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" placeholder="Bipe ou digite o EAN" autofocus></label><label>Lote<input name="lote" required maxlength="100" placeholder="Lote informado na embalagem"></label><label>Validade<input name="validade" required type="date"></label><label>Quantidade<input name="quantidade" required type="number" min="1" step="1" value="1"></label></div><div class="notice">O mês de lançamento é registrado automaticamente na data da gravação. Uma falha de internet não deve gerar outra solicitação com ID diferente.</div><div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar lançamento pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div></form><div id="launch-result" aria-live="polite"></div></div><div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite um código e use “Consultar EAN”. O lançamento também é permitido quando o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">EANs são tratados como texto para preservar zeros à esquerda. Não pressione “Registrar” novamente enquanto houver uma solicitação pendente: use o botão de retomada.</div></div></div>`;
+ const launchMarkup=header('Novo lançamento','Registre o lote no mapa do funcionário ou na aba especial correspondente.')+`<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}<form id="form-launch" class="stack"><div class="form-grid">${isAdmin()?`<label>Mapa de destino<select name="mapa" required>${options}</select></label>`:`<label>Mapa de destino<input value="${H(state.user.nome)}" disabled></label>`}<div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" placeholder="Bipe ou digite o EAN" autofocus><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div><label>Lote<input name="lote" required maxlength="100" placeholder="Lote informado na embalagem"></label><label>Validade<input name="validade" required type="date"></label><label>Quantidade<input name="quantidade" required type="number" min="1" step="1" value="1"></label></div><div class="notice">O mês de lançamento é registrado automaticamente na data da gravação. Uma falha de internet não deve gerar outra solicitação com ID diferente.</div><div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar lançamento pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div></form><div id="launch-result" aria-live="polite"></div></div><div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite um código e use “Consultar EAN”. O lançamento também é permitido quando o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">EANs são tratados como texto para preservar zeros à esquerda. Não pressione “Registrar” novamente enquanto houver uma solicitação pendente: use o botão de retomada.</div></div></div>`;
  if(emModal){$('#launch-body').innerHTML=launchMarkup;$('#launch-dialog').showModal();}else{$('#content').innerHTML=launchMarkup;}
- const f=$('#form-launch'); f.elements.ean.focus();$('#lookup-product').onclick=async()=>{const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);$('#product-preview').textContent='Consultando…';try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];$('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';}catch(e){$('#product-preview').textContent='Consulta indisponível: '+e.message;}};
+ const f=$('#form-launch'); f.elements.ean.focus();f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};$('#lookup-product').onclick=async()=>{const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);$('#product-preview').textContent='Consultando…';try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];$('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';}catch(e){$('#product-preview').textContent='Consulta indisponível: '+e.message;}};
  f.onsubmit=async e=>{e.preventDefault();if(state.pending){toast('Conclua ou confira o lançamento pendente antes de criar outro.',true);return;}const x={requestId:newId(),mapa:isAdmin()?f.elements.mapa.value:state.user.nome,ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:f.elements.validade.value,quantidade:Number(f.elements.quantidade.value)};if(!x.ean||!x.lote||!x.validade||x.quantidade<=0)return toast('Preencha todos os campos.',true);state.pending=x;localStorage.setItem(PENDING_KEY,JSON.stringify(x));await submitLaunch(x,f);};
  if(saved)$('#retry-launch').onclick=()=>submitLaunch(saved,f);
 }
@@ -179,8 +206,8 @@ function exportCsv(nome, cabecalho, linhas){
  a.href=url;a.download=nome;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function printableTable(target,makeAll){
- const host=$(target),before=host.innerHTML;host.innerHTML=makeAll();
- const done=()=>{host.innerHTML=before;window.removeEventListener('afterprint',done);};
+ const host=$(target),before=host.innerHTML;host.innerHTML=makeAll();host.querySelectorAll('tbody tr[hidden]').forEach(x=>x.hidden=false);host.querySelectorAll('.pager-auto').forEach(x=>x.hidden=true);
+ const done=()=>{host.innerHTML=before;for(const wrap of host.querySelectorAll('.table-wrap[data-paginado]')){wrap.removeAttribute('data-paginado');wrap.nextElementSibling?.matches('.pager-auto')&&wrap.nextElementSibling.remove();}host.querySelectorAll('tbody tr[hidden]').forEach(x=>x.hidden=false);paginarTabelasSimples();window.removeEventListener('afterprint',done);};
  window.addEventListener('afterprint',done,{once:true});
  window.print();setTimeout(done,12000);
 }
@@ -194,7 +221,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
  const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[];
- const title=isStock?'Estoque — mapa especial':'Mapa de Validade';
+ const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; filtros por funcionário, mês, validade e situação.',
  `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
  $('#content').innerHTML=head+`<section class="card card-pad"><div class="filter-row">
@@ -305,13 +332,27 @@ async function pendencias(){
   area.innerHTML=table(['Origem','Identificação','Motivo','Ação'],selected.slice(0,500).map(r=>{
     const d=r.dados||{};const title=r._tipo==='catalogo'?`Código original: ${r.codigo_original}`:`${r.tabela_origem} · ${d.mapa_nome||d.mapa_origem||d.loja_id||'sem loja'}`;
     const sub=r._tipo==='catalogo'?r.descricao||'Sem descrição':`${d.ean||d.codigo_interno||'Sem EAN'} · ${d.lote||'Sem lote'}`;
-    return `<tr><td>${pill(r._tipo==='catalogo'?'Produto EAN':'Registro','amber')}</td><td><strong>${H(title)}</strong><span class="second">${H(sub)}</span></td><td>${H(r.motivo)}</td><td><button class="action-link" type="button" data-pending-id="${H(r._id)}" data-pending-type="${H(r._tipo)}">Corrigir</button></td></tr>`;
+    return `<tr><td>${pill(r._tipo==='catalogo'?'Produto EAN':'Registro','amber')}</td><td><strong>${H(title)}</strong><span class="second">${H(sub)}</span></td><td>${H(r.motivo)}</td><td><button class="action-link" type="button" data-pending-id="${H(r._id)}" data-pending-type="${H(r._tipo)}">Ações</button></td></tr>`;
   }));
   if(selected.length>500)area.insertAdjacentHTML('beforeend','<p class="footer-hint">Exibindo até 500 registros. Use a busca para encontrar os demais.</p>');
  };
  $('#pending-search').addEventListener('input',render);$('#pending-kind').addEventListener('change',render);
- area.onclick=e=>{const b=e.target.closest('[data-pending-id]');if(!b)return;const r=all.find(x=>x._tipo===b.dataset.pendingType&&x._id===b.dataset.pendingId);if(r)openPendingEdit(r);};
+ area.onclick=e=>{const b=e.target.closest('[data-pending-id]');if(!b)return;const r=all.find(x=>x._tipo===b.dataset.pendingType&&x._id===b.dataset.pendingId);if(r)openPendingActions(r);};
  render();
+}
+function openPendingActions(registro){
+ const dlg=$('#pending-actions-dialog'),info=$('#pending-action-info'),title=$('#pending-action-title'),details=$('#pending-action-details');
+ const isCatalog=registro._tipo==='catalogo',d=registro.dados||{};
+ title.textContent=isCatalog?'Ações — Produto EAN':'Ações — Pendência de '+(registro.tabela_origem||'mapa');
+ info.textContent=isCatalog?'Revise o código EAN e o cadastro antes de aplicar a correção.':'Confirme lote, validade e quantidade antes de regularizar o registro histórico.';
+ details.hidden=true;details.textContent='';
+ $('#pending-action-edit').textContent=isCatalog?'Corrigir EAN e cadastro':'Corrigir registro do mapa';
+ $('#pending-action-edit').onclick=()=>{dlg.close();openPendingEdit(registro);};
+ $('#pending-action-original').onclick=()=>{details.hidden=!details.hidden;details.textContent=JSON.stringify(isCatalog?{
+   codigo_original:registro.codigo_original,codigo_interno:registro.codigo_interno,descricao:registro.descricao,secao:registro.secao,motivo:registro.motivo
+ }:{origem:registro.tabela_origem,motivo:registro.motivo,dados:d},null,2);};
+ $('#pending-action-cancel').onclick=()=>dlg.close();
+ dlg.showModal();
 }
 function openPendingEdit(r){
  const dialog=$('#pending-dialog'),form=$('#pending-form'),fields=$('#pending-fields'),error=$('#pending-error');
@@ -417,7 +458,7 @@ async function controleValidade(){
 }
 async function notificacoes(){
  $('#content').innerHTML=header('Notificações','Configuração de dispositivos e disparos OneSignal.')+
- `<section class="card card-pad"><h2>Integração pendente de homologação</h2><div class="notice warn">O cadastro de dispositivos, segmentação por funcionário e loja, envio de avisos e disparos automáticos a cada seis horas ainda não foram migrados para a API Vercel. Não enviaremos notificações sem validar os destinatários.</div><p>Os dados e a lógica do antigo Apps Script foram preservados como referência em <code>documentacao/</code>. Para ativar os envios será necessário configurar as credenciais OneSignal no Vercel e revisar as tags por loja e funcionário.</p></section>`;
+ `<section class="card card-pad"><h2>Integração pendente de homologação</h2><div class="notice warn">O cadastro de dispositivos, segmentação por funcionário e loja, envio de avisos e disparos automáticos a cada oito horas ainda não foram migrados para a API Vercel. Não enviaremos notificações sem validar os destinatários.</div><p>Os dados e a lógica do antigo Apps Script foram preservados como referência em <code>documentacao/</code>. Para ativar os envios será necessário configurar as credenciais OneSignal no Vercel e revisar as tags por loja e funcionário.</p></section>`;
 }
 
 async function generic(pathname,title){
@@ -516,5 +557,5 @@ function setupRememberedStore(){
 }
 setupRememberedStore();
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp();}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
-$('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent=collapsed?'›':'‹';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
-$('#top-open-launch').onclick=abrirNovoLancamento;$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
+$('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
+$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#side-open-launch').onclick=abrirNovoLancamento;$('#top-open-launch').onclick=abrirNovoLancamento;$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

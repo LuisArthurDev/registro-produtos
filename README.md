@@ -82,3 +82,7 @@ Se o workflow não aparecer ou não iniciar, consulte [RECUPERAR-GITHUB-ACTIONS.
 ## Correção da importação (loja_codigo)
 
 Leia [CORRECAO-IMPORTACAO-LOJA.md](CORRECAO-IMPORTACAO-LOJA.md) para substituir o bundle privado e repetir as etapas no GitHub Actions.
+
+## Atualização do scanner de EAN por câmera
+
+Veja `documentacao/SCANNER-CAMERA-E-INTERFACE.md` para instalação e testes do scanner no Android/iPhone e `documentacao/PLANO-OFFLINE-DISPOSITIVOS-ONESIGNAL.md` para integrações ainda pendentes.
