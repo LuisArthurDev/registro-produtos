@@ -219,43 +219,63 @@ async function visualizacao(req,actor,pathname,body,query){
  const loja=actorLoja(actor,query.get('loja'));
  if(actor.perfil==='geral')throw bad('O Administrador Geral utiliza o Painel Geral.',403);
  const employee=actor.perfil==='funcionario';
- const own=x=>x&&x.loja_id===loja&&x.tipo_mapa==='funcionario'&&
-   normalizarNome(x.mapa_nome)===(actor.nome_normalizado||normalizarNome(actor.nome))&&(!x.funcionario_id||x.funcionario_id===actor.id);
- const ownRows=async()=>rows('mapa_lancamentos',{
-   loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,
+ // Mesmo fluxo de visualização; o funcionário vê somente o próprio mapa,
+ // enquanto o admin de loja vê somente Estoque, Termolabil, Psicotropicos e Antibioticos.
+ const allowed=x=>x&&x.loja_id===loja&&(employee?
+   (x.tipo_mapa==='funcionario'&&normalizarNome(x.mapa_nome)===(actor.nome_normalizado||normalizarNome(actor.nome))&&
+    (!x.funcionario_id||x.funcionario_id===actor.id)):
+   specials.includes(x.tipo_mapa)&&x.mapa_nome===x.tipo_mapa);
+ const allowedRows=async()=>rows('mapa_lancamentos',employee?{
+   loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,tipo_mapa:'eq.funcionario',
    select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id'
- },500,20);
+  }:{
+   loja_id:`eq.${loja}`,tipo_mapa:`in.(${specials.join(',')})`,
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id'
+  },500,20);
  const getRecord=async id=>{
    if(!/^[0-9a-f-]{36}$/i.test(norm(id)))throw bad('Registro inválido.',422);
    const r=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`});
    if(!r)throw bad('Registro não encontrado.',404);
-   if(employee&&!own(r))throw bad('Este registro não pertence ao seu mapa.',403);
+   if(!allowed(r))throw bad(employee?'Este registro não pertence ao seu mapa.':'A Visualização do administrador permite somente as abas especiais.',403);
    return r;
  };
+ if(pathname==='/visualizacao/mapas'&&req.method==='GET'){
+   const mapa=norm(query.get('mapa'));
+   if(mapa&&(employee?normalizarNome(mapa)!==(actor.nome_normalizado||normalizarNome(actor.nome)):!specials.includes(mapa)))
+     throw bad('Mapa não autorizado para esta conta.',403);
+   const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao)',order:'validade.asc'};
+   if(employee){params.tipo_mapa='eq.funcionario';params.mapa_nome=`eq.${actor.nome}`;}
+   else{params.tipo_mapa=`in.(${specials.join(',')})`;if(mapa)params.mapa_nome=`eq.${mapa}`;}
+   const lista=(await rows('mapa_lancamentos',params,800,20)).filter(allowed);
+   return {sucesso:true,registros:lista.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||''})),
+     abasPermitidas:employee?[actor.nome]:specials};
+ }
  if(pathname==='/visualizacao/vencidos'&&req.method==='GET'){
    // Retiradas legadas podem não ter lancamento_id: mapa_origem pode identificá-las.
    // O resultado é filtrado antes de qualquer resposta ao navegador.
    const [regs,owners]=await Promise.all([
      rows('vencidos',{loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*',order:'criado_em.desc'},500,20),
-     employee?ownRows():Promise.resolve([])
+     allowedRows()
    ]);
-   const ids=new Set(owners.filter(own).map(x=>x.id));
-   const ownReg=employee?regs.filter(x=>ids.has(x.lancamento_id)||
-     (normalizarNome(x.mapa_origem)===(actor.nome_normalizado||normalizarNome(actor.nome))&&!x.lancamento_id)):regs;
-   return {sucesso:true,registros:await enriquecerRegistros(ownReg,'vencidos')};
+   const ids=new Set(owners.filter(allowed).map(x=>x.id));
+   // Registros antigos podem não possuir ID original. Nesse caso, validar a origem nominal.
+   const permitted=regs.filter(x=>ids.has(x.lancamento_id)||(!x.lancamento_id&&
+     (employee?normalizarNome(x.mapa_origem)===(actor.nome_normalizado||normalizarNome(actor.nome)):
+       specials.includes(x.mapa_origem))));
+   return {sucesso:true,registros:await enriquecerRegistros(permitted,'vencidos')};
  }
  if(pathname==='/visualizacao/sinalizacoes'&&req.method==='GET'){
    const [regs,owners]=await Promise.all([
      rows('sinalizacoes',{loja_id:`eq.${loja}`,select:'id,lancamento_id,ean,observacao,situacao,criado_em,atualizado_por',order:'criado_em.desc'},500,20),
-     employee?ownRows():Promise.resolve([])
+     allowedRows()
    ]);
-   const ids=new Set(owners.filter(own).map(x=>x.id));
-   return {sucesso:true,registros:employee?regs.filter(x=>ids.has(x.lancamento_id)):regs};
+   const ids=new Set(owners.filter(allowed).map(x=>x.id));
+   return {sucesso:true,registros:regs.filter(x=>ids.has(x.lancamento_id))};
  }
  if(pathname==='/visualizacao/queima'&&req.method==='GET'){
    const item=await getRecord(query.get('id'));
    const lista=await rows('queima',{loja_id:`eq.${loja}`,lancamento_id:`eq.${item.id}`,
-      select:'id,criado_em,ean,lote,validade,quantidade,motivo,estado',order:'criado_em.desc'},100,5);
+      select:'id,criado_em,atualizado_em,ean,lote,validade,quantidade,motivo,estado,origem_mapa',order:'criado_em.desc'},100,5);
    return {sucesso:true,registros:lista};
  }
  if(pathname==='/visualizacao/sinalizar'&&req.method==='POST'){

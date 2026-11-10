@@ -16,19 +16,19 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  if(user.perfil==='geral')throw new Error('O Administrador Geral deve utilizar o Painel Geral.');
  const loggedAdmin=isAdmin();
  const [mapData,vencData,signalsData]=await Promise.all([
-  request('/mapas'),
+  request('/visualizacao/mapas'),
   request('/visualizacao/vencidos').catch(err=>({registros:[],warning:'Não foi possível carregar Vencidos: '+err.message})),
   request('/visualizacao/sinalizacoes').catch(err=>({registros:[],warning:'Não foi possível carregar sinalizações: '+err.message}))
  ]);
  const mapas=mapData.registros||[],vencidos=vencData.registros||[],sinalizacoes=signalsData.registros||[];
  const hoje=nowBrISO(),mesAtual=hoje.slice(0,7);
  if(!prefs.month)prefs.month=mesAtual;
- const owners=[...new Set(mapas.map(r=>r.mapa_nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
- const ownerOptions=loggedAdmin?`<label>Mapa<select id="view-owner"><option value="">Todos os mapas da loja</option>${owners.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select></label>`:`<div class="notice view-fixed-owner"><strong>Meu mapa:</strong> ${escapeHtml(user.nome)} · Loja ${escapeHtml(user.loja)}</div>`;
+ const owners=loggedAdmin?(mapData.abasPermitidas||['Estoque','Termolabil','Psicotropicos','Antibioticos']):[user.nome];
+ const ownerOptions=loggedAdmin?`<label>Mapa<select id="view-owner"><option value="">Todas as abas especiais</option>${owners.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select></label>`:`<div class="notice view-fixed-owner"><strong>Meu mapa:</strong> ${escapeHtml(user.nome)} · Loja ${escapeHtml(user.loja)}</div>`;
  const actions=`<a class="btn-outline" href="/lancamentos.html">← Lançamentos</a>${loggedAdmin?'<a class="btn-outline" href="/#dashboard">Painel Conferente</a>':''}<button class="btn-outline" type="button" id="view-logout">Sair da conta</button>`;
- content.innerHTML=`<div class="page-head view-title"><div><span class="eyebrow">Registro de validades</span><h1>Visualização dos Lançamentos</h1><p>${loggedAdmin?'Histórico dos mapas da loja, com controle por funcionário.':`Histórico do mapa de ${escapeHtml(user.nome)}, seus vencimentos e sinalizações.`}</p></div><div class="toolbar">${actions}</div></div>
+ content.innerHTML=`<div class="page-head view-title"><div><span class="eyebrow">Registro de validades</span><h1>Visualização dos Lançamentos</h1><p>${loggedAdmin?'Histórico das abas especiais da loja, com filtros de mapa, mês e validade.':`Histórico do mapa de ${escapeHtml(user.nome)}, seus vencimentos e sinalizações.`}</p></div><div class="toolbar">${actions}</div></div>
  <section class="card card-pad view-quick-stats"><div class="stat-grid view-stats" id="view-stats"></div></section>
- <section class="card card-pad view-filter-card"><div class="view-tabs" role="group" aria-label="Visualizar dados"><button type="button" data-view-tab="mapas">Meu mapa / Lançamentos</button><button type="button" data-view-tab="vencidos">Vencidos / Retiradas</button><button type="button" data-view-tab="sinalizacoes">Sinalizações</button></div>
+ <section class="card card-pad view-filter-card"><div class="view-tabs" role="group" aria-label="Visualizar dados"><button type="button" data-view-tab="mapas">Mapa / Lançamentos</button><button type="button" data-view-tab="vencidos">Vencidos / Retiradas</button><button type="button" data-view-tab="sinalizacoes">Sinalizações</button></div>
  <div id="view-month-mode" class="view-month-modes"><button type="button" data-view-mode="mes">Por mês de lançamento</button><button type="button" data-view-mode="validade">Validade (a vencer)</button></div>
  <div class="filter-row view-filters">${ownerOptions}
  <label id="view-month-field">Mês do lançamento<input id="view-month" type="month"></label>
@@ -67,7 +67,7 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  const refreshStats=()=>{
   const a=mapas.filter(r=>Number(r.quantidade)>0);const win=a.filter(r=>statusVal(r.validade,r.secao)[0]==='A vencer');const expired=a.filter(withdrawn);
   const closest=win.map(x=>days(x.validade)).filter(Number.isFinite).sort((x,y)=>x-y)[0];
-  $('#view-stats').innerHTML=`<div class="card stat"><small>Lançamentos</small><strong>${money(mapas.length)}</strong><p>Todos os meses</p></div><div class="card stat"><small>Unidades</small><strong>${money(a.reduce((n,r)=>n+Number(r.quantidade||0),0))}</strong><p>Quantidade registrada</p></div><div class="card stat warn"><small>A vencer</small><strong>${money(win.length)}</strong><p>${closest!==undefined?`Próximo em ${closest} ${closest===1?'dia':'dias'}`:'Nenhum próximo ao vencimento'}</p></div><div class="card stat danger"><small>Vencidos / Prazo de retirada</small><strong>${money(expired.length)}</strong><p>Itens que exigem atenção</p></div><div class="card stat"><small>Retiradas</small><strong>${money(vencidos.length)}</strong><p>Histórico de vencidos</p></div>${loggedAdmin?`<div class="card stat"><small>Funcionários nos mapas</small><strong>${money(owners.filter(x=>!['Estoque','Termolabil','Psicotropicos','Antibioticos'].includes(x)).length)}</strong><p>Mapas individuais cadastrados</p></div>`:''}`;
+  $('#view-stats').innerHTML=`<div class="card stat"><small>Lançamentos</small><strong>${money(mapas.length)}</strong><p>Todos os meses</p></div><div class="card stat"><small>Unidades</small><strong>${money(a.reduce((n,r)=>n+Number(r.quantidade||0),0))}</strong><p>Quantidade registrada</p></div><div class="card stat warn"><small>A vencer</small><strong>${money(win.length)}</strong><p>${closest!==undefined?`Próximo em ${closest} ${closest===1?'dia':'dias'}`:'Nenhum próximo ao vencimento'}</p></div><div class="card stat danger"><small>Vencidos / Prazo de retirada</small><strong>${money(expired.length)}</strong><p>Itens que exigem atenção</p></div><div class="card stat"><small>Retiradas</small><strong>${money(vencidos.length)}</strong><p>Histórico de vencidos</p></div>${loggedAdmin?`<div class="card stat"><small>Abas especiais disponíveis</small><strong>${money(owners.length)}</strong><p>Selecione a aba no filtro Mapa</p></div>`:''}`;
  };
  let showing=[];
  const draw=()=>{

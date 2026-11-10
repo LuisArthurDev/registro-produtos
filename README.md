@@ -1,3 +1,7 @@
+## Versão v16 — Visualização Administrador e Gráfico da Queima com 3 situações
+
+Veja [ATUALIZACAO-V16-VISUALIZACAO-GRAFICO-QUEIMA.md](ATUALIZACAO-V16-VISUALIZACAO-GRAFICO-QUEIMA.md).
+
 ## Atualização v14 — Visualização do próprio mapa
 
 Leia [ATUALIZAR-VISUALIZACAO-FUNCIONARIOS.md](ATUALIZAR-VISUALIZACAO-FUNCIONARIOS.md). O arquivo `public/visualizacao.html` foi restaurado como página dedicada, com acesso seguro ao próprio mapa e ao histórico de vencidos/sinalizações. Antes do deploy execute `atualizar_visualizacao` no GitHub Actions.

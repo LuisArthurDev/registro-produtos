@@ -1,5 +1,6 @@
 import { lerODS } from './ods.js';
 import { renderVisualizacao } from './visualizacao.js';
+import { resumoQueima } from './queima-grafico.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -74,7 +75,7 @@ function table(headers,rows){if(!rows.length)return empty();return `<div class="
 function paginarTabelasSimples(){
  const content=$('#content');if(!content)return;
  for(const wrap of content.querySelectorAll('.table-wrap')){
-   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list,#tv-list,#transfer-list'))continue;
+   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list,#tv-list,#transfer-list,#view-table'))continue;
    const trs=[...wrap.querySelectorAll('tbody > tr')];if(!trs.length)continue;
    wrap.dataset.paginado='1';let page=0;
    const foot=document.createElement('div');foot.className='pager pager-auto';
@@ -209,6 +210,19 @@ async function logout(call=true){
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
 function navigate(route){
  void fecharScanner();
+ // A Visualização é uma página independente também para o Administrador de Loja.
+ // Ela não é rota do menu lateral do Painel Conferente.
+ if(IS_VIEW_PAGE){
+   if(route!=='visualizacao'){
+     if(route==='lancamentos'){window.location.assign('/lancamentos.html');return;}
+     if(isAdmin()){window.location.assign('/#'+encodeURIComponent(route));return;}
+     route='visualizacao'; // funcionário não possui acesso ao painel
+   }
+   state.route='visualizacao';
+   if(location.hash!=='#visualizacao')history.replaceState(null,'',location.pathname+location.search+'#visualizacao');
+   mobileClose();$('#breadcrumb-current').textContent='Visualização dos Lançamentos';
+   renderRoute('visualizacao');return;
+ }
  if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign('/#'+encodeURIComponent(route));return;}
  if(route==='lancamentos'&&IS_LAUNCH_PAGE&&!isGeral()){
    state.route='lancamentos';if(location.hash!=='#lancamentos')location.hash='lancamentos';mobileClose();
@@ -236,7 +250,7 @@ function counts(rows){const d={total:0,vencido:0,proximo:0,ok:0};for(const r of 
 async function dashboard(){
  const base=await getMaps(),ativos=base.filter(x=>Number(x.quantidade)>0);
  const now=nowBrISO().slice(0,7),status=counts(ativos);
- const [queima,vencidos,estoque]=isAdmin()?await Promise.all([request('/queima').catch(()=>({registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
+ const [queima,vencidos,estoque]=isAdmin()?await Promise.all([request('/queima').catch(e=>({_erro:e.message,registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
  const queue=queima.registros||[],removed=vencidos.registros||[],stock=estoque.registros||[];
  const mes=base.filter(x=>String(x.mes_lancamento||'').startsWith(now));
  const semMapa=stock.filter(x=>Number(x.quantidade)>0&&!ativos.some(m=>m.ean===x.ean));
@@ -245,22 +259,24 @@ async function dashboard(){
  // Relançamento de mês anterior gera novo registro: não somar o histórico relançado duas vezes.
  const queueAtiva=queue.filter(x=>x.estado!=='relancado');
  const queimados=queueAtiva.length;
- const aprovados=queueAtiva.filter(x=>x.estado==='aprovado').length;
- const naoAprovados=Math.max(0,queimados-aprovados);
- const taxaAprovacao=queimados?Math.round(aprovados/queimados*100):0;
  const queimaMes=queueAtiva.filter(x=>mesBrasil(x.criado_em)===now).length;
+ const grafico=resumoQueima(ativos,queue);
+ const pctAprovado=grafico.total?100*grafico.aprovados/grafico.total:0;
+ const pctPendente=grafico.total?100*grafico.pendentes/grafico.total:0;
+ const fimAprovado=pctAprovado;
+ const fimPendente=pctAprovado+pctPendente;
  const atencao=ativos.filter(x=>statusVal(x.validade,x.secao)[0]!=='Vendável').sort((a,b)=>String(a.validade).localeCompare(String(b.validade)));
  const countStatus={dentro:ativos.filter(x=>statusVal(x.validade,x.secao)[0]==='Vendável').length,proximos:proximos.length,vencidos:status.vencido,sem:semMapa.length},total=Object.values(countStatus).reduce((a,b)=>a+b,0)||1;
  $('#content').innerHTML=header('Painel Conferente','Indicadores calculados sobre os registros da loja. Mês de lançamento separado do vencimento.',
  `${isAdmin()?'<button id="dash-new" class="primary" type="button">Ir para Lançamentos</button>':''}<button id="dash-print" class="btn-outline" type="button">Imprimir resumo</button><button id="dash-refresh" class="btn-outline" type="button">Atualizar</button>`)+
  `<div class="stat-grid"><div class="card stat"><small>Total de lançamentos</small><strong>${base.length}</strong><p class="stat-subtitle">Lançamentos do mês: <b>${mes.length}</b></p></div>
- <div class="card stat"><small>Total lançado na Queima</small><strong>${queimados}</strong><p class="stat-subtitle">Lançamentos do mês: <b>${queimaMes}</b></p></div>
+ <div class="card stat"><small>Total lançado na Queima</small><strong>${queima._erro?'—':queimados}</strong><p class="stat-subtitle">${queima._erro?'Consulta indisponível':`Lançamentos do mês: <b>${queimaMes}</b>`}</p></div>
  <div class="card stat warn"><small>A vencer (até 160 dias)</small><strong>${proximos.length}</strong><p class="stat-subtitle">${primeiroPrazo===null?'Sem registros a vencer':`Próxima validade em ${primeiroPrazo} ${primeiroPrazo===1?'dia':'dias'}`}</p></div>
  <div class="card stat danger"><small>Vencidos (regras da loja)</small><strong>${status.vencido}</strong><p>Inclui limite de retirada antecipada</p></div></div>
- <section class="card card-pad queima-progress"><div class="page-head"><div><h2>Queima — produtos lançados e aprovados</h2><p>Percentual de aprovação sobre os lançamentos válidos na Queima (registros, sem duplicar relançamentos históricos).</p></div></div>
- <div class="queima-progress-layout"><div class="queima-donut" role="img" aria-label="${aprovados} de ${queimados} lançamentos aprovados; ${taxaAprovacao}% aprovados" style="--percentual-aprovado:${taxaAprovacao}%">
- <div class="queima-donut-center"><strong>${taxaAprovacao}%</strong><small>Aprovados</small></div></div>
- <div class="queima-donut-legend"><div><span class="queima-key aprovado"></span><span>Aprovados</span><strong>${aprovados}</strong></div><div><span class="queima-key pendente"></span><span>Não aprovados</span><strong>${naoAprovados}</strong></div><div class="queima-legend-total"><span>Total lançado na Queima</span><strong>${queimados}</strong></div><small>${queimados?'Base: todos os registros atuais de Queima, sem contar novamente os relançamentos.':'Ainda não existem lançamentos na Queima para calcular a aprovação.'}</small></div></div></section>
+ ${queima._erro?`<section class="card card-pad queima-progress"><h2>Queima — situação dos produtos</h2><div class="notice warn">Não foi possível carregar a Queima. Atualize o Dashboard para recalcular o gráfico; valores indisponíveis não são considerados como zero.</div></section>`:`<section class="card card-pad queima-progress"><div class="page-head"><div><h2>Queima — situação dos produtos dos mapas</h2><p>Distribuição dos registros ativos dos mapas e dos lançamentos na Queima da loja, sem duplicar relançamentos anteriores.</p></div></div>
+ <div class="queima-progress-layout"><div class="queima-donut" role="img" aria-label="${grafico.naoLancados} não lançados na Queima, ${grafico.pendentes} lançados e não aprovados, ${grafico.aprovados} aprovados. Total ${grafico.total} registros." style="--percentual-aprovado:${fimAprovado}%;--percentual-pendente:${fimPendente}%">
+ <div class="queima-donut-center"><strong>${grafico.total}</strong><small>Registros</small></div></div>
+ <div class="queima-donut-legend"><div><span class="queima-key nao-lancado"></span><span>Não lançados na Queima</span><strong>${grafico.naoLancados} <small>(${grafico.percentuais.naoLancados}%)</small></strong></div><div><span class="queima-key pendente"></span><span>Lançados, não aprovados</span><strong>${grafico.pendentes} <small>(${grafico.percentuais.pendentes}%)</small></strong></div><div><span class="queima-key aprovado"></span><span>Aprovados</span><strong>${grafico.aprovados} <small>(${grafico.percentuais.aprovados}%)</small></strong></div><div class="queima-legend-total"><span>Total de registros acompanhados</span><strong>${grafico.total}</strong></div><small>Base: lançamentos ativos dos mapas + lançamentos sem mapa vinculado na Queima. Cada lançamento é contado uma vez; os estados históricos “Relançado” não são somados.</small></div></div></section>`}
  <div class="split"><section class="card card-pad"><h2>Resumo de validade</h2><div class="kpi-list">
  ${[['Dentro da validade',countStatus.dentro],['A vencer',countStatus.proximos],['Vencidos',countStatus.vencidos],['Sem informação no mapa',countStatus.sem]].map(([label,n])=>`<div><span>${H(label)}${label==='A vencer'&&primeiroPrazo!==null?`<small class="validade-minima">Próximo: ${primeiroPrazo} ${primeiroPrazo===1?'dia':'dias'}</small>`:''}</span><strong>${n} (${Math.round(n/total*100)}%)</strong></div>`).join('')}</div>
  <div class="footer-hint">Regras de corte operacional preservadas: padrão 60 dias, alimentos/nutrição/conveniência 15 dias, Queima sensível 3 dias; faixa de atenção até 160 dias.</div></section>
