@@ -14,7 +14,7 @@ O `code.gs` fornecido contém 139 funções e o `login.gs`, 38 funções. A migr
 | Visualização | Lista todos os meses, filtros de status sem exigir data | Implementado, verifique política de vencimento por seção |
 | Dashboard | Totais e vencimentos da loja | Base implementada, relatórios antigos não equivalentes |
 | Vencidos / Queima / Transferências / Sinalizações | Tabelas, consultas básicas, criação e edição de campos selecionados | **Parcial**, não trocar produção |
-| OneSignal e notificações 6h | Chaves previstas no `.env.example`, sem fluxo funcional | **Pendente** |
+| OneSignal e notificações 8h | SDK, aprovação por loja, endpoint protegido, deduplicação e workflow incluídos; faltam chaves e teste real | **Implementado para homologação** |
 | Celular próprio / autorização de dispositivo | Campo no banco, sem token por dispositivo | **Pendente** |
 | Histórico admin | Tabela e visualização; importação dos 45 eventos históricos | Implementado em parte; operações antigas não completas |
 | Apps Script | API nova não depende dele nas rotas implementadas | Demais recursos dependem de adaptação |

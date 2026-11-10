@@ -42,7 +42,7 @@ Validação de loja também é realizada na API, não apenas pelo menu. Uma cont
 
 ## Lacunas ainda existentes — NÃO considerar concluídas
 
-- **OneSignal**: registro de dispositivo, segmentação loja/funcionário/celular próprio, disparos 'Notificar a todos', 'Notificar Vencidos' e execução a cada 6 horas. A tela de notificações explica explicitamente que não envia mensagens. Não afirmar que está funcional.
+- **OneSignal (atualização posterior)**: código de registro e aprovação por aparelho, notificação de validades para funcionários com celular próprio e cron a cada 8h foi incluído. **Ainda exige homologação real e configuração de chaves**, e 'Notificar a todos' não está disponível nesta integração.
 - **Aprovação por dispositivo** (além da flag `celular_proprio`): login/validação de aparelho existente no Apps Script ainda depende de API e dados próprios.
 - **Importação automática de estoque via GitHub/Procfit**: CSV/ODS manual funciona no frontend em testes, mas robô Windows/integração Procfit e atualização programada permanecem separados.
 - **Equivalência exata de todos os cálculos**: nova interface implementa 60/15/3/160 dias e faixa indicativa de 3–9 meses. Faixas que o legado calcula por mês-calendário precisam comparação caso a caso antes de produção.

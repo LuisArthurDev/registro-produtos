@@ -16,7 +16,7 @@ Este pacote inclui o frontend, APIs, schema, scripts de migração e o redirecio
 
 O painel recebeu menus recolhíveis, Mapa de Validades com novo lançamento em modal, filtros/paginação/impressão/exportação, Controle de Validade, estoque especial, perdas, Queima e Vencidos, Produtos EAN, Pendências e Painel Geral exclusivo. A instalação da função transacional requer executar **GitHub Actions → Supabase - preparar e importar → etapa `atualizar_painel`** antes de testar no Vercel.
 
-**Atenção — paridade incompleta:** a integração real do OneSignal (alertas e agendamento de 6h), autorização individual de aparelhos e algumas rotinas externas do Procfit ainda não foram finalizadas. Consulte [MATRIZ-PARIDADE-PAINEL-CONFERENTE.md](documentacao/MATRIZ-PARIDADE-PAINEL-CONFERENTE.md) para o levantamento completo e os testes de homologação. Não substitua a produção até validar essas lacunas.
+**Atenção — paridade ainda em homologação:** o envio OneSignal e a autorização individual de aparelhos agora possuem implementação no projeto, com agendamento pelo Actions de 8h, mas ainda precisam de configuração de chaves, teste com dispositivos reais e ativação explícita (`NOTIFICATIONS_ENABLED=true`). Algumas rotinas externas do Procfit continuam pendentes. Consulte [MATRIZ-PARIDADE-PAINEL-CONFERENTE.md](documentacao/MATRIZ-PARIDADE-PAINEL-CONFERENTE.md) para o levantamento completo e os testes de homologação. Não substitua a produção até validar essas lacunas.
 
 ## Um único repositório no GitHub
 
@@ -51,7 +51,7 @@ Para executar testes de sintaxe e segurança localmente: `npm run check` (Node.j
 
 Os fluxos principais já possuem código substituto, mas **não há paridade completa** com `code.gs` / `login.gs`. Antes de trocar o sistema real, concluir especialmente:
 
-- OneSignal: cadastro do dispositivo, segmentação por funcionário e loja, notificações agendadas a cada 6h, painel administrativo e ciclo de vencidos.
+- OneSignal: cadastro e aprovação de dispositivos, notificações de validades via GitHub Actions a cada 8h e teste individual. A modalidade de envio geral indiscriminado permanece desativada.
 - Autorização de celular próprio por dispositivo; a flag existe, mas o fluxo do antigo `login.gs` ainda não foi reproduzido.
 - Operações especiais de Vencidos, Sinalização e Queima foram adicionadas à nova API, mas sua equivalência com os procedimentos do legado e sua execução real no Supabase ainda precisam ser homologadas.
 - A importação ODS/CSV já está implementada no navegador para saldo Procfit. XLSX ainda precisa de conversão e o ODS deve ser testado com exportações reais.
@@ -86,3 +86,8 @@ Leia [CORRECAO-IMPORTACAO-LOJA.md](CORRECAO-IMPORTACAO-LOJA.md) para substituir 
 ## Atualização do scanner de EAN por câmera
 
 Veja `documentacao/SCANNER-CAMERA-E-INTERFACE.md` para instalação e testes do scanner no Android/iPhone e `documentacao/PLANO-OFFLINE-DISPOSITIVOS-ONESIGNAL.md` para integrações ainda pendentes.
+
+
+## OneSignal e agendamento de 8h (novo)
+
+O App ID público está configurado. Para criar as tabelas, cadastrar as chaves em Vercel/Actions, autorizar um aparelho e ativar os três horários diários, leia [INSTALAR-ONESIGNAL-8H-ACTIONS.md](documentacao/INSTALAR-ONESIGNAL-8H-ACTIONS.md). **O envio permanece desativado por padrão e não foi testado com o Supabase/OneSignal reais.**

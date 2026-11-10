@@ -1,0 +1,58 @@
+name: OneSignal - avisos de validade (8 horas)
+
+on:
+  schedule:
+    # UTC: 00:17, 08:17 e 16:17. Brasilia (UTC-3): 21:17, 05:17 e 13:17.
+    - cron: '17 0,8,16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: onesignal-validade-8h
+  cancel-in-progress: false
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verificar configuração e chamar Vercel
+        shell: bash
+        env:
+          VERCEL_NOTIFICATION_URL: ${{ secrets.VERCEL_NOTIFICATION_URL }}
+          NOTIFICATION_CRON_SECRET: ${{ secrets.NOTIFICATION_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$VERCEL_NOTIFICATION_URL" || -z "$NOTIFICATION_CRON_SECRET" ]]; then
+            echo 'ERRO: configure VERCEL_NOTIFICATION_URL e NOTIFICATION_CRON_SECRET em Settings > Secrets and variables > Actions.' >&2
+            exit 1
+          fi
+          if [[ "$VERCEL_NOTIFICATION_URL" != https://* ]]; then
+            echo 'ERRO: VERCEL_NOTIFICATION_URL deve usar HTTPS.' >&2
+            exit 1
+          fi
+          # Nao ecoar credenciais, endpoints privados ou resposta bruta com dados sensiveis.
+          code=$(curl --silent --show-error --location --max-time 150 --connect-timeout 15 \
+            --output "${RUNNER_TEMP}/onesignal-response.json" --write-out '%{http_code}' \
+            --request POST "$VERCEL_NOTIFICATION_URL" \
+            --header "Authorization: Bearer ${NOTIFICATION_CRON_SECRET}" \
+            --header 'Content-Type: application/json' \
+            --data '{}')
+          echo "Resposta HTTP: $code"
+          python - <<'PY'
+          import json, os
+          path=os.environ['RUNNER_TEMP']+'/onesignal-response.json'
+          try:
+              j=json.load(open(path,encoding='utf-8'))
+          except Exception:
+              print('A API nao retornou um JSON valido.')
+              raise SystemExit(1)
+          print('Resumo do envio:',{k:j.get(k) for k in ('sucesso','habilitado','janela','aparelhos','enviados','pulados','falhas','detalhe') if k in j})
+          if j.get('sucesso') is not True or int(j.get('falhas') or 0):
+              raise SystemExit('A notificacao nao foi concluida. Verifique os logs do Vercel.')
+          PY
+          if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
+            exit 1
+          fi

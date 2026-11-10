@@ -1,5 +1,6 @@
 import { lerODS } from './ods.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
+import { associarPush, ativarPush, desassociarPush } from './push.js';
 /* Registro de Validades — frontend unificado. Não armazene chaves administrativas aqui. */
 const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -111,13 +112,14 @@ function lojaParams(){return state.user?.perfil==='geral'?`loja=${encodeURICompo
 function urlWithLoja(url){return url+(url.includes('?')?'&':'?')+lojaParams();}
 function showLogin(error=''){$('#login-screen').hidden=false;$('#app-shell').hidden=true;if(error){$('#login-erro').textContent=error;$('#login-erro').hidden=false;}}
 function showApp(){
+  void associarPush(state.user,request);
   $('#login-screen').hidden=true;$('#app-shell').hidden=false;
   $('#user-name').textContent=state.user.nome;
   $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
   $('#top-open-launch').hidden=isGeral()||IS_LAUNCH_PAGE;$('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
-  const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0]));
+  const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||['dashboard','mapas','produtos','notificacoes'].includes(m[0]));
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
   const p=localStorage.getItem(PENDING_KEY);if(p){try{state.pending=JSON.parse(p);}catch{localStorage.removeItem(PENDING_KEY);}}
@@ -136,7 +138,16 @@ function showApp(){
   navigate(allowed.includes(requested)?requested:(isGeral()?'painel-geral':'dashboard'));
   if(requested==='lancamentos'&&!isGeral())queueMicrotask(abrirNovoLancamento);
 }
-function logout(call=true){void fecharScanner();if(call&&state.token)request('/logout',{method:'POST'}).catch(()=>{});localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);state.token='';state.user=null;showLogin();}
+async function logout(call=true){
+ void fecharScanner();
+ if(call&&state.token){
+   // Primeiro revoga a assinatura da sessão atual; depois encerra a sessão no banco.
+   await Promise.race([desassociarPush(request),new Promise(resolve=>setTimeout(resolve,2300))]);
+   await request('/logout',{method:'POST',timeout:7000}).catch(()=>{});
+ }
+ localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);
+ state.token='';state.user=null;showLogin();
+}
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
 function navigate(route){
  void fecharScanner();
@@ -146,7 +157,7 @@ function navigate(route){
    $('#breadcrumb-current').textContent='Lançamentos';
    renderRoute('lancamentos');return;
  }
- const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||['dashboard','mapas','produtos'].includes(m[0])).map(x=>x[0]);
+ const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||['dashboard','mapas','produtos','notificacoes'].includes(m[0])).map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
  state.route=route;location.hash=route;mobileClose();
@@ -517,8 +528,31 @@ async function controleValidade(){
  $('#ctrl-print').onclick=()=>printableTable('#ctrl-list',()=>makeTable(filtered));$('#ctrl-update').onclick=()=>renderRoute(state.route);render();
 }
 async function notificacoes(){
- $('#content').innerHTML=header('Notificações','Configuração de dispositivos e disparos OneSignal.')+
- `<section class="card card-pad"><h2>Integração pendente de homologação</h2><div class="notice warn">O cadastro de dispositivos, segmentação por funcionário e loja, envio de avisos e disparos automáticos a cada oito horas ainda não foram migrados para a API Vercel. Não enviaremos notificações sem validar os destinatários.</div><p>Os dados e a lógica do antigo Apps Script foram preservados como referência em <code>documentacao/</code>. Para ativar os envios será necessário configurar as credenciais OneSignal no Vercel e revisar as tags por loja e funcionário.</p></section>`;
+ const isManager=canManage();
+ const d=await request(urlWithLoja('/notificacoes/dispositivos'));
+ const devices=d.dispositivos||[];
+ const pending=devices.filter(x=>!x.autorizado).length;
+ $('#content').innerHTML=header('Notificações','Cadastro e autorização de aparelhos · OneSignal a cada 8 horas.')+
+ `<section class="card card-pad"><h2>Notificações no celular</h2>
+ <p class="footer-hint">Apenas aparelhos aprovados pelo administrador da loja podem receber notificações. Ative o celular próprio no cadastro do funcionário antes de cadastrar o aparelho.</p>
+ <div class="form-actions"><button class="primary" id="push-ativar" type="button">Ativar notificações neste aparelho</button><button class="btn-outline" id="push-atualizar" type="button">Atualizar lista</button></div>
+ <p class="footer-hint" id="push-status" role="status"></p></section>`+
+ (isManager?`<section class="card card-pad"><h2>Aparelhos cadastrados</h2><p class="footer-hint">${pending} aguardando aprovação · as ações são restritas à loja atual.</p>
+ <div class="table-wrap"><table><thead><tr><th>Funcionário</th><th>Dispositivo</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${devices.map(v=>`<tr><td>${H(v.funcionario)}</td><td>${H(v.nome_dispositivo||'Navegador')}</td><td>${v.autorizado?pill('Autorizado','green'):pill('Aguardando','amber')} ${!v.celular_proprio?pill('Sem celular próprio','red'):''}</td><td><button type="button" class="btn-outline" data-push-toggle="${H(v.id)}" data-active="${v.autorizado?'1':'0'}">${v.autorizado?'Revogar':'Autorizar'}</button> ${v.autorizado?`<button type="button" class="btn-outline" data-push-test="${H(v.id)}">Testar</button>`:''}</td></tr>`).join('')||'<tr><td colspan="4">Nenhum aparelho cadastrado nesta loja.</td></tr>'}</tbody></table></div></section>`:
+ `<section class="card card-pad"><h2>Meus aparelhos</h2><p class="footer-hint">${devices.length?devices.map(v=>(v.autorizado?'Autorizado':'Aguardando aprovação')+' · '+H(v.nome_dispositivo)).join('<br>'):'Nenhum aparelho cadastrado. Clique em Ativar notificações acima.'}</p></section>`);
+ $('#push-ativar').onclick=async()=>{
+   const btn=$('#push-ativar'),status=$('#push-status');btn.disabled=true;status.textContent='Solicitando permissão ao navegador…';
+   try{const r=await ativarPush(state.user,request);status.textContent=r.detalhe||'Aparelho cadastrado.';toast(status.textContent);}
+   catch(e){status.textContent=e.message;toast(e.message,true);}finally{btn.disabled=false;}
+ };
+ $('#push-atualizar').onclick=()=>renderRoute('notificacoes');
+ document.querySelectorAll('[data-push-toggle]').forEach(b=>b.onclick=async()=>{
+   const permitir=b.dataset.active!=='1';if(!confirm((permitir?'Autorizar':'Revogar')+' este aparelho?'))return;
+   b.disabled=true;try{await request('/notificacoes/dispositivos',{method:'PATCH',body:{id:b.dataset.pushToggle,autorizado:permitir,...(isGeral()?{loja:state.loja}:{})}});toast('Permissão atualizada.');await renderRoute('notificacoes');}catch(e){toast(e.message,true);b.disabled=false;}
+ });
+ document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=async()=>{
+   b.disabled=true;try{const r=await request('/notificacoes/teste',{method:'POST',body:{id:b.dataset.pushTest,...(isGeral()?{loja:state.loja}:{})}});toast(r.detalhe||'Mensagem aceita pelo OneSignal.');}catch(e){toast(e.message,true);}finally{b.disabled=false;}
+ });
 }
 
 async function generic(pathname,title){

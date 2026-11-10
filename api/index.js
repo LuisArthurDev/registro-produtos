@@ -1,4 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { tratarNotificacoes } from './notificacoes.js';
 
 const urlBase = () => String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const secret = () => process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -411,6 +412,7 @@ async function handle(req){
   const body=req.method==='GET'?{}:requestBody(req);
   if(pathname==='/health') {const configurado=!!(urlBase()&&secret());if(query.get('check')==='1'){if(!configurado)throw bad('Configuração Supabase ausente no Vercel.',503);await one('lojas',{select:'id'});return {sucesso:true,servico:'operacional',banco:'acessivel'};}return {sucesso:true,servico:'operacional',supabaseConfigurado:configurado};}
   if(pathname==='/login'&&req.method==='POST')return login(body);
+  if(pathname.startsWith('/notificacoes/'))return tratarNotificacoes(req,{pathname,body,query,db,rows,one,authenticate,admin,actorLoja,audit});
   const {actor,sessao}=await authenticate(req);
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
   if(pathname==='/logout'&&req.method==='POST'){

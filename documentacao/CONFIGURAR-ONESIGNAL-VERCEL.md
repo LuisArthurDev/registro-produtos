@@ -1,3 +1,5 @@
+> **ATUALIZAÇÃO:** a integração e o workflow foram implementados após este rascunho inicial. Para instalar a versão atual, use [INSTALAR-ONESIGNAL-8H-ACTIONS.md](INSTALAR-ONESIGNAL-8H-ACTIONS.md). As instruções abaixo são histórico técnico, não a sequência recomendada.
+
 # Configurar OneSignal no Registro de Validades (Supabase + Vercel)
 
 **Situação desta entrega:** o projeto contém o arquivo do *service worker* do OneSignal, mas **a assinatura de dispositivos, o envio automático e o agendamento de 8 horas ainda não estão ativos**. Este guia é a sequência de configuração e homologação, não um aviso de implantação concluída.

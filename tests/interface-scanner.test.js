@@ -12,7 +12,7 @@ test('Lançamentos também abre o modal ao vir do GitHub Pages por #lancamentos'
  assert.match(frontend,/if\(route==='lancamentos'\)/);
 });
 test('scanner é fechado na navegação, logout e fechamento do formulário',()=>{
- assert.match(frontend,/function logout\(call=true\)\{void fecharScanner\(\)/);
+ assert.match(frontend,/async function logout\(call=true\)\{\s*void fecharScanner\(\)/);
  assert.match(frontend,/function navigate\(route\)\{\s*void fecharScanner\(\)/);
  assert.match(frontend,/'close',\(\)=>\{void fecharScanner\(\)/);
 });
