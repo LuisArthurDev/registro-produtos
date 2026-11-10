@@ -61,7 +61,8 @@ export function iniciarPush(){
           appId:ONESIGNAL_APP_ID,
           serviceWorkerPath:'push/onesignal/OneSignalSDKWorker.js',
           serviceWorkerParam:{scope:'/push/onesignal/'},
-          notifyButton:{enable:false}
+          notifyButton:{enable:false},
+          autoResubscribe:true
         });
         finalizar(null,OneSignal);
       }catch(err){
@@ -81,10 +82,50 @@ function verificarSuporte(sdk){
   if(!window.isSecureContext||!('serviceWorker' in navigator))throw new Error('Notificações exigem HTTPS e suporte a Service Worker.');
   if(!sdk.Notifications.isPushSupported())throw new Error('Este navegador não suporta Web Push. No iPhone, adicione o sistema à Tela de Início e abra-o pelo ícone.');
 }
+/** Espera o evento oficial de criação da assinatura. O ID pode chegar depois da permissão.
+ * Polling de segurança para SDKs que já terminaram o evento antes da inscrição do listener.
+ * Nunca marca como inscrito somente porque Notification.permission === 'granted'. */
+export function aguardarAssinatura(sdk,{timeoutMs=26000,intervalMs=500}={}){
+  const subscription=sdk?.User?.PushSubscription;
+  if(!subscription) return Promise.reject(new Error('O OneSignal não disponibilizou o módulo de assinatura.'));
+  const disponivel=()=>{
+    const id=String(subscription.id||'').trim();
+    // O token confirma que o navegador estabeleceu o canal real de push.
+    const token=subscription.token;
+    return id && token && subscription.optedIn===true ? id : null;
+  };
+  const found=disponivel();if(found)return Promise.resolve(found);
+  return new Promise((resolve,reject)=>{
+    let finished=false,interval,timer;
+    const listener=()=>{
+      if(finished)return;
+      const id=disponivel();
+      if(id){finished=true;cleanup();resolve(id);}
+    };
+    const cleanup=()=>{
+      clearTimeout(timer);clearInterval(interval);
+      try{subscription.removeEventListener?.('change',listener);}catch{}
+    };
+    try{subscription.addEventListener?.('change',listener);}catch{}
+    interval=setInterval(listener,intervalMs);
+    timer=setTimeout(()=>{
+      if(finished)return;
+      finished=true;cleanup();
+      const permission=typeof Notification!=='undefined'?Notification.permission:'indisponível';
+      const descricao=permission!=='granted'
+        ?'Permissão de notificação não concedida pelo navegador.'
+        :!subscription.token
+          ?'A permissão foi concedida, mas o navegador não criou o token push. No Brave, ative “Usar serviços do Google para mensagens push” em brave://settings/privacy, reinicie e tente novamente.'
+          :!subscription.id
+            ?'O canal push foi criado, mas o OneSignal ainda não forneceu o identificador. Confirme a Site URL e veja os erros de rede no console.'
+            :'A assinatura foi criada, mas não está ativada no OneSignal. Tente novamente após recarregar a página.';
+      reject(new Error(descricao));
+    },timeoutMs);
+    listener();
+  });
+}
 async function registrar(sdk,api){
-  let id=sdk.User.PushSubscription.id;
-  for(let i=0;!id&&i<12;i++){await new Promise(resolve=>setTimeout(resolve,450));id=sdk.User.PushSubscription.id;}
-  if(!id)throw new Error('Assinatura não criada. Confira as permissões e o domínio configurado no OneSignal.');
+  const id=await aguardarAssinatura(sdk);
   return api('/notificacoes/dispositivos',{method:'POST',body:{subscription_id:id,nome_dispositivo:navigator.userAgent.slice(0,90)}});
 }
 /** Chamada por gesto do usuário. Funciona antes do login; o vínculo da conta ocorre ao autenticar. */
@@ -101,10 +142,14 @@ export async function permitirPush(user,api){
   const sdk=await iniciarPush();verificarSuporte(sdk);
   if(!sdk.Notifications.permission)await sdk.Notifications.requestPermission();
   if(!sdk.Notifications.permission)throw new Error('Permissão nativa concedida, mas o OneSignal não conseguiu registrar a assinatura. Confira o domínio e o Service Worker.');
+  if(user?.id)await sdk.login(user.id);
   if(!sdk.User.PushSubscription.optedIn)await sdk.User.PushSubscription.optIn();
+  // A preferência de receber fica salva mesmo se a criação do token demorar.
+  // A UI só exibe sucesso quando houver Subscription ID e token de verdade.
   salvarEscolhaPush('sim',user);
-  if(user?.id&&api){await sdk.login(user.id);return registrar(sdk,api);}
-  return {sucesso:true,detalhe:'Notificações permitidas. O aparelho será associado após o login.'};
+  if(user?.id&&api)return registrar(sdk,api);
+  await aguardarAssinatura(sdk);
+  return {sucesso:true,detalhe:'Notificações autorizadas; faça login para associar este aparelho.'};
 }
 export async function associarPush(user,api){
   transferirEscolhaParaConta(user);
@@ -157,11 +202,21 @@ export async function diagnosticarPush(){
  const resultado={origem:location.origin,appId:ONESIGNAL_APP_ID,https:window.isSecureContext,
   navegador:typeof Notification==='undefined'?'Sem API Notification':Notification.permission,
   sdk:window.__oneSignalLoadError?'Carregamento bloqueado':window.__oneSignalLoaded?'Script carregado':'Não confirmado',
-  worker:'Não verificado'};
+  worker:'Não verificado',assinatura:'Ainda não criada',canalPush:'Não verificado'};
  try{
   const res=await fetch('/push/onesignal/OneSignalSDKWorker.js',{cache:'no-store',signal:AbortSignal.timeout(6500)});
   if(!res.ok){resultado.worker=`HTTP ${res.status}`;return resultado;}
-  const text=await res.text();resultado.worker=text.includes('OneSignalSDK.sw.js')?'Disponível':'Conteúdo incorreto (esperado JavaScript)';
+  const text=await res.text();resultado.worker=text.includes('OneSignalSDK.sw.js')?'Arquivo disponível':'Conteúdo incorreto';
  }catch(e){resultado.worker='Falha de rede: '+String(e.name==='TimeoutError'?'tempo esgotado':e.message).slice(0,110);}
+ try{
+  const registration=await navigator.serviceWorker.getRegistration('/push/onesignal/');
+  resultado.worker+=registration?` · registro ${registration.active?'ativo':registration.installing?'instalando':registration.waiting?'aguardando':'sem worker ativo'}`:' · não registrado';
+ }catch{resultado.worker+=' · não foi possível consultar registro';}
+ if(sdkReady){
+  const sub=sdkReady.User.PushSubscription;
+  resultado.sdk='Inicializado';
+  resultado.assinatura=sub.id?'ID criado':'Sem Subscription ID';
+  resultado.canalPush=sub.token?`token criado, ${sub.optedIn?'ativo':'desativado'}`:'Token ainda não criado';
+ }else if(window.__oneSignalLoaded){resultado.assinatura='SDK não inicializado';}
  return resultado;
 }

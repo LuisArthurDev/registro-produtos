@@ -1,4 +1,5 @@
 import { lerODS } from './ods.js';
+import { renderVisualizacao } from './visualizacao.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -38,6 +39,7 @@ function navIcon(name){return `<svg class="ui-icon" viewBox="0 0 24 24" fill="no
 const SIDEBAR_KEY='rv_sidebar_recolhido';
 // O mesmo app atende ao painel e à página dedicada para lançamentos no Vercel.
 const IS_LAUNCH_PAGE=location.pathname.replace(/\/+$/, '')==='/lancamentos.html';
+const IS_VIEW_PAGE=location.pathname.replace(/\/+$/, '')==='/visualizacao.html';
 
 const state={token:localStorage.getItem(TOKEN_KEY)||sessionStorage.getItem(TOKEN_KEY)||'',user:null,route:'dashboard',loja:localStorage.getItem(STORE_KEY)||'151',mapRows:[],staff:[],pending:null};
 let toastTimeout;
@@ -49,6 +51,20 @@ function mesBrasil(timestamp){const parts=Object.fromEntries(new Intl.DateTimeFo
 const newId=()=>globalThis.crypto?.randomUUID?.()||`rv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 function statusVal(d,secao='',emQueima=false){const n=Date.parse(`${String(d).slice(0,10)}T12:00:00Z`),h=Date.parse(`${nowBrISO()}T12:00:00Z`);if(!Number.isFinite(n))return ['Sem validade',''];const dias=Math.round((n-h)/86400000);const sensivel=/ALIMENT|CONVENI|NUTRI/i.test(String(secao).normalize('NFD').replace(/[\u0300-\u036f]/g,''));const limite=sensivel?(emQueima?3:15):60;if(dias<=limite)return ['Vencido','red'];if(dias<=160)return ['A vencer','amber'];return ['Vendável','green'];}
 const pill=(text,kind='')=>`<span class="pill ${kind}">${H(text)}</span>`;
+// Mantém o estado operacional usado pelos filtros, acrescentando o prazo real
+// aos badges de A vencer sem classificar um lançamento como vencido mais cedo.
+function diasAteVencer(iso){
+ const v=Date.parse(String(iso||'').slice(0,10)+'T12:00:00Z');
+ const h=Date.parse(nowBrISO()+'T12:00:00Z');
+ return Number.isFinite(v)&&Number.isFinite(h)?Math.round((v-h)/86400000):null;
+}
+function badgeValidade(iso,secao='',emQueima=false){
+ const [situacao,classe]=statusVal(iso,secao,emQueima);
+ const dias=diasAteVencer(iso);
+ const texto=situacao==='A vencer'&&dias!==null?`A vencer · ${dias} ${dias===1?'dia':'dias'}`:situacao;
+ return pill(texto,classe);
+}
+
 function loading(label='Consultando servidor…'){return `<section class="card card-pad"><div class="notice">${H(label)} Se sua conexão estiver lenta, esta operação pode levar alguns segundos.</div></section>`;}
 function empty(label='Nenhum registro encontrado.'){return `<div class="empty"><span class="empty-icon">◎</span><strong>${H(label)}</strong><span>Altere os filtros ou consulte novamente.</span></div>`;}
 function header(title,subtitle,extra=''){return `<div class="page-head"><div><span class="eyebrow">Registro de validades</span><h1>${H(title)}</h1><p>${H(subtitle)}</p></div><div class="toolbar">${extra}</div></div>`;}
@@ -128,7 +144,7 @@ function criarPonteDeLogin(){
   sessionStorage.setItem(AUTH_BRIDGE_KEY,JSON.stringify({token:state.token,usuario:state.user,emissao:Date.now()}));
 }
 function consumirPonteDeLogin(){
-  if(!IS_LAUNCH_PAGE||!state.token)return null;
+  if(!(IS_LAUNCH_PAGE||IS_VIEW_PAGE)||!state.token)return null;
   const raw=sessionStorage.getItem(AUTH_BRIDGE_KEY);sessionStorage.removeItem(AUTH_BRIDGE_KEY);
   if(!raw)return null;
   try{
@@ -143,7 +159,7 @@ function consumirPonteDeLogin(){
 function showApp(){
   // Ao autenticar no celular, abrir diretamente a página dedicada de lançamentos.
   // O link explícito /#dashboard continua sendo a entrada do administrador no painel.
-  if(!IS_LAUNCH_PAGE && !isGeral() && window.matchMedia('(max-width: 900px)').matches && !location.hash){
+  if(!IS_LAUNCH_PAGE && !IS_VIEW_PAGE && !isGeral() && window.matchMedia('(max-width: 900px)').matches && !location.hash){
     // O servidor acabou de autenticar esta conta; não exigir uma segunda ida ao banco
     // ao abrir a página de lançamentos no mesmo navegador.
     criarPonteDeLogin();
@@ -171,6 +187,10 @@ function showApp(){
   if(IS_LAUNCH_PAGE){
     if(isGeral()){window.location.replace('/#painel-geral');return;}
     navigate('lancamentos');return;
+  }
+  if(IS_VIEW_PAGE){
+    if(isGeral()){window.location.replace('/#painel-geral');return;}
+    navigate('visualizacao');return;
   }
   const allowed=items.map(x=>x[0]),requested=(location.hash||'').replace('#','');
   navigate(allowed.includes(requested)?requested:(isGeral()?'painel-geral':'dashboard'));
@@ -206,7 +226,7 @@ function navigate(route){
 async function renderRoute(route){const content=$('#content');content.innerHTML=loading();try{
   if(isGeral()&&!['painel-geral','admins-geral','notificacoes'].includes(route))throw new Error('Use o Painel Geral para administrar as lojas.');
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
-   case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
+   case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'visualizacao':await renderVisualizacao({request,content,user:state.user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
    case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
@@ -218,26 +238,38 @@ async function dashboard(){
  const now=nowBrISO().slice(0,7),status=counts(ativos);
  const [queima,vencidos,estoque]=isAdmin()?await Promise.all([request('/queima').catch(()=>({registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
  const queue=queima.registros||[],removed=vencidos.registros||[],stock=estoque.registros||[];
- const mes=ativos.filter(x=>String(x.mes_lancamento||'').startsWith(now));
+ const mes=base.filter(x=>String(x.mes_lancamento||'').startsWith(now));
  const semMapa=stock.filter(x=>Number(x.quantidade)>0&&!ativos.some(m=>m.ean===x.ean));
  const proximos=ativos.filter(x=>statusVal(x.validade,x.secao)[0]==='A vencer');
+ const primeiroPrazo=proximos.length?Math.min(...proximos.map(x=>diasAteVencer(x.validade)).filter(n=>n!=null)):null;
+ // Relançamento de mês anterior gera novo registro: não somar o histórico relançado duas vezes.
+ const queueAtiva=queue.filter(x=>x.estado!=='relancado');
+ const queimados=queueAtiva.length;
+ const aprovados=queueAtiva.filter(x=>x.estado==='aprovado').length;
+ const naoAprovados=Math.max(0,queimados-aprovados);
+ const taxaAprovacao=queimados?Math.round(aprovados/queimados*100):0;
+ const queimaMes=queueAtiva.filter(x=>mesBrasil(x.criado_em)===now).length;
  const atencao=ativos.filter(x=>statusVal(x.validade,x.secao)[0]!=='Vendável').sort((a,b)=>String(a.validade).localeCompare(String(b.validade)));
  const countStatus={dentro:ativos.filter(x=>statusVal(x.validade,x.secao)[0]==='Vendável').length,proximos:proximos.length,vencidos:status.vencido,sem:semMapa.length},total=Object.values(countStatus).reduce((a,b)=>a+b,0)||1;
  $('#content').innerHTML=header('Painel Conferente','Indicadores calculados sobre os registros da loja. Mês de lançamento separado do vencimento.',
  `${isAdmin()?'<button id="dash-new" class="primary" type="button">Ir para Lançamentos</button>':''}<button id="dash-print" class="btn-outline" type="button">Imprimir resumo</button><button id="dash-refresh" class="btn-outline" type="button">Atualizar</button>`)+
- `<div class="stat-grid"><div class="card stat"><small>Lançamentos do mês</small><strong>${mes.length}</strong><p>${H(now)}</p></div>
- <div class="card stat"><small>Queima neste mês</small><strong>${queue.filter(x=>String(x.criado_em).startsWith(now)).length}</strong><p>Histórico completo: ${queue.length}</p></div>
- <div class="card stat warn"><small>Próximos (até 160 dias)</small><strong>${proximos.length}</strong><p>Registros que exigem atenção</p></div>
+ `<div class="stat-grid"><div class="card stat"><small>Total de lançamentos</small><strong>${base.length}</strong><p class="stat-subtitle">Lançamentos do mês: <b>${mes.length}</b></p></div>
+ <div class="card stat"><small>Total lançado na Queima</small><strong>${queimados}</strong><p class="stat-subtitle">Lançamentos do mês: <b>${queimaMes}</b></p></div>
+ <div class="card stat warn"><small>A vencer (até 160 dias)</small><strong>${proximos.length}</strong><p class="stat-subtitle">${primeiroPrazo===null?'Sem registros a vencer':`Próxima validade em ${primeiroPrazo} ${primeiroPrazo===1?'dia':'dias'}`}</p></div>
  <div class="card stat danger"><small>Vencidos (regras da loja)</small><strong>${status.vencido}</strong><p>Inclui limite de retirada antecipada</p></div></div>
+ <section class="card card-pad queima-progress"><div class="page-head"><div><h2>Queima — produtos lançados e aprovados</h2><p>Percentual de aprovação sobre os lançamentos válidos na Queima (registros, sem duplicar relançamentos históricos).</p></div></div>
+ <div class="queima-progress-layout"><div class="queima-donut" role="img" aria-label="${aprovados} de ${queimados} lançamentos aprovados; ${taxaAprovacao}% aprovados" style="--percentual-aprovado:${taxaAprovacao}%">
+ <div class="queima-donut-center"><strong>${taxaAprovacao}%</strong><small>Aprovados</small></div></div>
+ <div class="queima-donut-legend"><div><span class="queima-key aprovado"></span><span>Aprovados</span><strong>${aprovados}</strong></div><div><span class="queima-key pendente"></span><span>Não aprovados</span><strong>${naoAprovados}</strong></div><div class="queima-legend-total"><span>Total lançado na Queima</span><strong>${queimados}</strong></div><small>${queimados?'Base: todos os registros atuais de Queima, sem contar novamente os relançamentos.':'Ainda não existem lançamentos na Queima para calcular a aprovação.'}</small></div></div></section>
  <div class="split"><section class="card card-pad"><h2>Resumo de validade</h2><div class="kpi-list">
- ${[['Dentro da validade',countStatus.dentro],['A vencer',countStatus.proximos],['Vencidos',countStatus.vencidos],['Sem informação no mapa',countStatus.sem]].map(([label,n])=>`<div><span>${H(label)}</span><strong>${n} (${Math.round(n/total*100)}%)</strong></div>`).join('')}</div>
+ ${[['Dentro da validade',countStatus.dentro],['A vencer',countStatus.proximos],['Vencidos',countStatus.vencidos],['Sem informação no mapa',countStatus.sem]].map(([label,n])=>`<div><span>${H(label)}${label==='A vencer'&&primeiroPrazo!==null?`<small class="validade-minima">Próximo: ${primeiroPrazo} ${primeiroPrazo===1?'dia':'dias'}</small>`:''}</span><strong>${n} (${Math.round(n/total*100)}%)</strong></div>`).join('')}</div>
  <div class="footer-hint">Regras de corte operacional preservadas: padrão 60 dias, alimentos/nutrição/conveniência 15 dias, Queima sensível 3 dias; faixa de atenção até 160 dias.</div></section>
  <section class="card card-pad"><h2>Totais operacionais</h2><div class="kpi-list"><div><span>Produtos registrados em mapas</span><strong>${ativos.length}</strong></div><div><span>Unidades em mapas</span><strong>${status.total}</strong></div><div><span>Vencidos e retiradas</span><strong>${removed.length}</strong></div><div><span>Saldo Procfit sem mapa</span><strong>${semMapa.length}</strong></div></div></section></div>
  <section class="card card-pad secondary-card"><div class="page-head"><h2>Produtos que precisam de atenção</h2><button class="btn-outline" id="dash-control" type="button">Abrir Controle de Validade</button></div>
  <div class="filter-row"><input id="dash-search" class="wide" placeholder="Buscar produto ou lote"><select id="dash-status"><option value="">Todos</option><option>Vencido</option><option>A vencer</option></select></div><p class="footer-hint" id="dash-count"></p><div id="dash-table"></div></section>`;
  const draw=()=>{const q=$('#dash-search').value.toLowerCase(),state=$('#dash-status').value,items=atencao.filter(x=>(!state||statusVal(x.validade,x.secao)[0]===state)&&[x.descricao,x.ean,x.lote,x.codigoInterno].join(' ').toLowerCase().includes(q));
  $('#dash-count').textContent=`${items.length} registro(s) de atenção`;
- $('#dash-table').innerHTML=table(['Produto / EAN','Mapa','Lote','Validade','Quantidade','Situação'],items.slice(0,200).map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${pill(...statusVal(r.validade,r.secao))}</td></tr>`));};
+ $('#dash-table').innerHTML=table(['Produto / EAN','Mapa','Lote','Validade','Quantidade','Situação'],items.slice(0,200).map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${badgeValidade(r.validade,r.secao)}</td></tr>`));};
  $('#dash-search').oninput=draw;$('#dash-status').onchange=draw;draw();
  $('#dash-refresh').onclick=()=>renderRoute(state.route);
  $('#dash-print').onclick=()=>window.print();$('#dash-control').onclick=()=>navigate('controle-validade');$('#dash-new')?.addEventListener('click',abrirNovoLancamento);
@@ -247,7 +279,7 @@ async function staffList(){if(!isAdmin())return [];const d=await request(urlWith
 async function lancamentos(emModal=false){
  const saved=state.pending;
  const notice=saved?`<div class="notice warn">Existe uma solicitação ainda não confirmada neste dispositivo (EAN ${H(saved.ean)}). Use <strong>Retomar tentativa</strong> antes de criar outra.</div>`:'';
- const standaloneActions=IS_LAUNCH_PAGE?`${isAdmin()?'<a class="btn-outline" href="/#dashboard">← Painel Conferente</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
+ const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/visualizacao.html">◫ Visualizar meu mapa</a>${isAdmin()?'<a class="btn-outline" href="/#dashboard">← Painel Conferente</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
  const specialOptions=special.map(m=>`<option value="${H(m)}">${H(m)}</option>`).join('');
  const adminControls=isAdmin()?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa especial</option><option value="transferencia">Transferência recebida</option></select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${specialOptions}</select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
    `<div class="notice full"><strong>Mapa de destino:</strong> ${H(state.user.nome)}. O destino é definido automaticamente pelo seu login.</div>`;
@@ -396,7 +428,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  return table([...(selectable?['Selecionar']:[]),'Produto / EAN','Mapa','Lote','Validade','Qtd.','Mês lançado','Situação',...(actions?['Ação']:[])],
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span><span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
- <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${pill(...statusVal(r.validade,r.secao))}</td>
+ <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}</td>
  ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="${statusVal(r.validade,r.secao)[0]==='Vencido'?'vencidos':'queima'}">${statusVal(r.validade,r.secao)[0]==='Vencido'?'Lançar como Vencido':'Lançar na Queima'}</button>${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}</td>`:''}</tr>`));
 }
 async function mapas(forced=''){
@@ -677,7 +709,7 @@ async function controleValidade(){
  <section class="card card-pad"><h2>Controle de vencimentos</h2><div class="filter-row"><input id="ctrl-search" class="wide" placeholder="Produto, EAN, código ou lote"><select id="ctrl-status"><option value="todos">Todas as situações</option><option value="vencido">Vencidos</option><option value="a-vencer">A vencer</option><option value="vendavel">Dentro da validade</option><option value="sete">Vencem em 7 dias</option><option value="elegiveis">Elegíveis de 3 a 9 meses</option></select><select id="ctrl-page-size"><option>15</option><option>25</option><option>50</option></select><button class="btn-outline" id="ctrl-export" type="button">Exportar CSV</button><button class="btn-outline" id="ctrl-print" type="button">Imprimir</button></div><p class="footer-hint" id="ctrl-count"></p><div id="ctrl-list"></div><div class="pager"><button id="ctrl-prev" class="btn-outline">Anterior</button><span id="ctrl-pages"></span><button id="ctrl-next" class="btn-outline">Próxima</button></div></section>
  <section class="card card-pad"><div class="page-head subsection-head"><div><h2>Elegíveis a Tentativa de Venda / Prevenção</h2><p>Validade entre 3 e 9 meses de calendário a partir de hoje (inclusive).</p></div><div class="toolbar"><button class="btn-outline" id="tv-export" type="button">Exportar CSV</button><button class="btn-outline" id="tv-print" type="button">Imprimir</button></div></div><div class="filter-row"><select id="tv-owner"><option value="">Todos os funcionários / abas</option>${[...new Set(elegiveis.map(r=>r.mapa_nome))].sort().map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('')}</select><input id="tv-search" class="wide" placeholder="Buscar código, descrição, lote ou funcionário"><label>Por página <select id="tv-size"><option>15</option><option>25</option><option>50</option></select></label></div><p id="tv-count" class="footer-hint"></p><div id="tv-list"></div><div class="pager"><button id="tv-prev" type="button" class="btn-outline">Anterior</button><span id="tv-pages"></span><button id="tv-next" type="button" class="btn-outline">Próxima</button></div></section>
  <section class="card card-pad secondary-card"><h2>Saldo Procfit ainda não mapeado</h2><p>Itens com quantidade em estoque, mas sem correspondência no Mapa de Validade. Não são registros de vencimento.</p>${table(['EAN','Descrição','Código interno','Saldo Procfit'],falta.slice(0,200).map(x=>`<tr><td>${H(x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.codigo_interno)}</td><td>${H(x.quantidade)}</td></tr>`))}</section>`;
- const makeTable=data=>table(['Produto / EAN','Mapa','Lote','Validade','Dias restantes','Quantidade','Status'],data.map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(diasVencimento(r.validade)??'—')}</td><td>${H(r.quantidade)}</td><td>${pill(...statusVal(r.validade,r.secao))}</td></tr>`));
+ const makeTable=data=>table(['Produto / EAN','Mapa','Lote','Validade','Dias restantes','Quantidade','Status'],data.map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(diasVencimento(r.validade)??'—')}</td><td>${H(r.quantidade)}</td><td>${badgeValidade(r.validade,r.secao)}</td></tr>`));
  const render=()=>{const q=$('#ctrl-search').value.trim().toLowerCase(),st=$('#ctrl-status').value;
   filtered=vivos.filter(x=>(!q||[x.ean,x.descricao,x.lote,x.codigoInterno].join(' ').toLowerCase().includes(q))&&(st==='todos'||st==='vencido'&&statusVal(x.validade,x.secao)[0]==='Vencido'||st==='a-vencer'&&statusVal(x.validade,x.secao)[0]==='A vencer'||st==='vendavel'&&statusVal(x.validade,x.secao)[0]==='Vendável'||st==='sete'&&em7.includes(x)||st==='elegiveis'&&elegiveis.includes(x)));
   const sz=Number($('#ctrl-page-size').value),np=Math.max(1,Math.ceil(filtered.length/sz));page=Math.min(page,np-1);
@@ -736,7 +768,7 @@ async function notificacoes(){
  $('#push-atualizar').onclick=()=>renderRoute('notificacoes');
  $('#push-diagnosticar').onclick=async()=>{
    const btn=$('#push-diagnosticar'),status=$('#push-status');btn.disabled=true;status.textContent='Verificando Site URL e Service Worker…';
-   try{const d=await diagnosticarPush();status.textContent=`Origem: ${d.origem} · HTTPS: ${d.https?'sim':'não'} · Permissão: ${d.navegador} · SDK: ${d.sdk} · Worker: ${d.worker}. Caso falhe, confira a Site URL no OneSignal e tente sem bloqueador de conteúdo.`;}
+   try{const d=await diagnosticarPush();status.textContent=`Origem: ${d.origem} · HTTPS: ${d.https?'sim':'não'} · Permissão: ${d.navegador} · SDK: ${d.sdk} · Worker: ${d.worker} · Assinatura: ${d.assinatura} · Push: ${d.canalPush}. Se usar Brave, confira também os serviços de mensagens push nas configurações de privacidade.`;}
    catch(err){status.textContent='Diagnóstico indisponível: '+err.message;}
    finally{btn.disabled=false;}
  };

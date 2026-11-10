@@ -41,7 +41,7 @@
       if(base.username||base.password||base.search||base.hash)throw Error('URL de destino inválida');
     }catch(err){message.textContent='Redirecionamento ainda não configurado. Edite config.js com a URL do Vercel.';message.classList.add('alert');link.hidden=true;return;}
     const rotas={
-      'index.html':'','lancamento.html':'#lancamentos','visualizacao.html':'#mapas',
+      'index.html':'','lancamento.html':'lancamentos.html','visualizacao.html':'visualizacao.html',
       'painelconferente.html':'#dashboard','painelgeral.html':'#dashboard',
       'instalar.html':'','erro.html':'','404.html':''
     };

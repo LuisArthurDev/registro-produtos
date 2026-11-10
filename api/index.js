@@ -188,9 +188,15 @@ async function mapas(req,actor,pathname,body,query){
     if(registro.status==='saved')await audit(actor,'lancamento',{id:registro.id,mapa,ean});
     return {sucesso:registro.status==='saved',...registro};
   }
-  admin(actor);
   const id=norm(body.id);if(!/^[a-f0-9-]{36}$/.test(id))throw bad('Identificador inválido.');
   const existente=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'});if(!existente)throw bad('Registro não encontrado.',404);
+  if(actor.perfil==='funcionario'){
+    // Um funcionário só edita/exclui o seu próprio mapa da loja. Confia na sessão,
+    // nunca em mapa, nome, loja ou funcionário informados pelo navegador.
+    if(existente.tipo_mapa!=='funcionario'||normalizarNome(existente.mapa_nome)!==(actor.nome_normalizado||normalizarNome(actor.nome))||
+       (existente.funcionario_id&&existente.funcionario_id!==actor.id))
+      throw bad('Você só pode alterar lançamentos vinculados ao seu login.',403);
+  }else if(actor.perfil!=='admin')throw bad('Essa operação pertence ao Painel Conferente.',403);
   if(req.method==='PATCH'){
     const patch={};
     if(body.ean!==undefined){if(!eanValido(norm(body.ean)))throw bad('EAN deve ter de 8 a 14 dígitos.');patch.ean=norm(body.ean);const produto=await one('produtos',{ean:`eq.${patch.ean}`,select:'id'});patch.produto_id=produto?.id||null;}
@@ -206,6 +212,75 @@ async function mapas(req,actor,pathname,body,query){
     await audit(actor,'excluir_mapa',{id,modo:'exclusao_logica',anterior:{ean:existente.ean,lote:existente.lote,validade:existente.validade,quantidade:existente.quantidade}});return {sucesso:true};
   }
   throw bad('Método não permitido.',405);
+}
+// Visualização independente: leitura de histórico, retiradas e sinalizações.
+// Tudo filtrado no servidor, inclusive para usuários que tentem manipular a URL.
+async function visualizacao(req,actor,pathname,body,query){
+ const loja=actorLoja(actor,query.get('loja'));
+ if(actor.perfil==='geral')throw bad('O Administrador Geral utiliza o Painel Geral.',403);
+ const employee=actor.perfil==='funcionario';
+ const own=x=>x&&x.loja_id===loja&&x.tipo_mapa==='funcionario'&&
+   normalizarNome(x.mapa_nome)===(actor.nome_normalizado||normalizarNome(actor.nome))&&(!x.funcionario_id||x.funcionario_id===actor.id);
+ const ownRows=async()=>rows('mapa_lancamentos',{
+   loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id'
+ },500,20);
+ const getRecord=async id=>{
+   if(!/^[0-9a-f-]{36}$/i.test(norm(id)))throw bad('Registro inválido.',422);
+   const r=await one('mapa_lancamentos',{id:`eq.${id}`,loja_id:`eq.${loja}`});
+   if(!r)throw bad('Registro não encontrado.',404);
+   if(employee&&!own(r))throw bad('Este registro não pertence ao seu mapa.',403);
+   return r;
+ };
+ if(pathname==='/visualizacao/vencidos'&&req.method==='GET'){
+   // Retiradas legadas podem não ter lancamento_id: mapa_origem pode identificá-las.
+   // O resultado é filtrado antes de qualquer resposta ao navegador.
+   const [regs,owners]=await Promise.all([
+     rows('vencidos',{loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*',order:'criado_em.desc'},500,20),
+     employee?ownRows():Promise.resolve([])
+   ]);
+   const ids=new Set(owners.filter(own).map(x=>x.id));
+   const ownReg=employee?regs.filter(x=>ids.has(x.lancamento_id)||
+     (normalizarNome(x.mapa_origem)===(actor.nome_normalizado||normalizarNome(actor.nome))&&!x.lancamento_id)):regs;
+   return {sucesso:true,registros:await enriquecerRegistros(ownReg,'vencidos')};
+ }
+ if(pathname==='/visualizacao/sinalizacoes'&&req.method==='GET'){
+   const [regs,owners]=await Promise.all([
+     rows('sinalizacoes',{loja_id:`eq.${loja}`,select:'id,lancamento_id,ean,observacao,situacao,criado_em,atualizado_por',order:'criado_em.desc'},500,20),
+     employee?ownRows():Promise.resolve([])
+   ]);
+   const ids=new Set(owners.filter(own).map(x=>x.id));
+   return {sucesso:true,registros:employee?regs.filter(x=>ids.has(x.lancamento_id)):regs};
+ }
+ if(pathname==='/visualizacao/queima'&&req.method==='GET'){
+   const item=await getRecord(query.get('id'));
+   const lista=await rows('queima',{loja_id:`eq.${loja}`,lancamento_id:`eq.${item.id}`,
+      select:'id,criado_em,ean,lote,validade,quantidade,motivo,estado',order:'criado_em.desc'},100,5);
+   return {sucesso:true,registros:lista};
+ }
+ if(pathname==='/visualizacao/sinalizar'&&req.method==='POST'){
+   const item=await getRecord(body.id);
+   if(item.excluido_em)throw bad('O lançamento foi retirado do mapa.',409);
+   const motivo=norm(body.motivo);
+   if(!['Não Entrou na Queima','Muita Quantidade','Outras'].includes(motivo))throw bad('Escolha um motivo válido.',422);
+   const obs=norm(body.observacao);
+   if(motivo==='Outras'&&(!obs||obs.length>500))throw bad('Descreva o motivo (até 500 caracteres).',422);
+   const texto=motivo==='Outras'?`Outras: ${obs}`:motivo;
+   const created=await db('sinalizacoes',{method:'POST',body:{
+      loja_id:loja,lancamento_id:item.id,ean:item.ean,observacao:texto,
+      atualizado_por:actor.id,situacao:'aberto'
+   },prefer:'return=representation'});
+   await audit(actor,'sinalizar_lancamento',{id:item.id,sinalizacao_id:created[0]?.id,motivo:texto});
+   return {sucesso:true};
+ }
+ if(pathname==='/visualizacao/retirar'&&req.method==='POST'){
+   const item=await getRecord(body.id);
+   if(item.excluido_em)throw bad('O registro já foi excluído.',409);
+   const resultado=await db('rpc/retirar_vencido_visualizacao',{method:'POST',body:{p_loja:loja,p_usuario:actor.id,p_lancamento:item.id}});
+   await audit(actor,'encaminhar_vencidos_visualizacao',{id:item.id,quantidade:item.quantidade});
+   return {sucesso:true,resultado};
+ }
+ throw bad('Rota de visualização inválida.',404);
 }
 async function stock(req,actor,pathname,body,query){
   const loja=actorLoja(actor,body.loja||query.get('loja'));
@@ -514,6 +589,7 @@ async function handle(req){
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
   if(pathname==='/vencidos/retirar'&&req.method==='POST')return retirarDanificado(req,actor,body);
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
+  if(pathname.startsWith('/visualizacao/'))return visualizacao(req,actor,pathname,body,query);
   if(pathname.startsWith('/estoque'))return stock(req,actor,pathname,body,query);
   if(pathname.startsWith('/usuarios'))return staff(req,actor,body,query);
   if(pathname==='/pendencias')return pendencias(req,actor,body,query);

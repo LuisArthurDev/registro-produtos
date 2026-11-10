@@ -1,3 +1,7 @@
+## Atualização v14 — Visualização do próprio mapa
+
+Leia [ATUALIZAR-VISUALIZACAO-FUNCIONARIOS.md](ATUALIZAR-VISUALIZACAO-FUNCIONARIOS.md). O arquivo `public/visualizacao.html` foi restaurado como página dedicada, com acesso seguro ao próprio mapa e ao histórico de vencidos/sinalizações. Antes do deploy execute `atualizar_visualizacao` no GitHub Actions.
+
 ## Novidade — Correções de 10/11/2026
 
 Consulte [ATUALIZACAO-LOGIN-ONESIGNAL-PERDAS-TRANSFERENCIAS-2026-11-10.md](ATUALIZACAO-LOGIN-ONESIGNAL-PERDAS-TRANSFERENCIAS-2026-11-10.md). Antes de usar os botões novos, execute as migrações SQL `008` (se pendente) e `009` no GitHub Actions.
