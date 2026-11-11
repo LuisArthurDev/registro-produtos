@@ -30,7 +30,7 @@ test('produtos com saldo insuficiente são limitados e saldo não é multiplicad
 test('não existe botão de cópia no mapa normal; somente na conferência',()=>{
  assert.doesNotMatch(app,/#map-copy-procfit|copiarProcfit\(filtered\)/);
  assert.match(app,/id="compare-copy-procfit"/);
- assert.match(app,/copiarProcfit\(compareRows\)/);
+ assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
  assert.match(app,/montarListaProcfit\(registros,\{corrigido:true\}\)/);
  assert.match(html,/id="procfit-copy-dialog"/);
  assert.match(html,/id="procfit-copy-text"/);

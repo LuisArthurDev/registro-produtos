@@ -58,7 +58,7 @@ test('Fallback copia via textarea e libera o elemento temporário',async()=>{
 test('Interface só oferece cópia dos registros conciliados e filtrados, não do mapa normal',()=>{
  assert.doesNotMatch(app,/#map-copy-procfit/);
  assert.doesNotMatch(app,/copiarProcfit\(filtered\)/);
- assert.match(app,/copiarProcfit\(compareRows\)/);
+ assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
  assert.match(app,/const resultado=montarListaProcfit\(registros,\{corrigido:true\}\)/);
  assert.match(actions,/if\(has\('copiar','copy','procfit'\)\)return 'copy'/);
 });

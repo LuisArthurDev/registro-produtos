@@ -28,7 +28,7 @@ export function conciliarMapaComEstoque(mapa, estoque) {
     const item = {
       id: r.id, ean, codigoInterno: codigo || txt(stock?.codigo_interno),
       lote: txt(r.lote), validade: txt(r.validade).slice(0, 10),
-      descricao: txt(r.descricao || stock?.descricao), mapa: txt(r.mapa_nome),
+      descricao: txt(r.descricao || stock?.descricao), mapa: txt(r.mapa_nome), tipoMapa: txt(r.tipo_mapa),
       quantidadeMapa, quantidadeEstoque: stock ? numero(stock.quantidade) : 0,
       quantidadeCorrigida: stock ? null : 0, situacao: stock ? 'conferido' : 'nao_localizado',
       estoqueAtualizadoEm: stock?.atualizado_em || null, _ordem: ordem

@@ -3,6 +3,7 @@ import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { montarListaProcfit, copiarListaProcfit } from './procfit.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
+import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
 import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
@@ -530,7 +531,7 @@ async function mapas(forced=''){
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
  ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>':''}</div>
- <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
+ <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
   page=Math.min(page,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));
@@ -649,10 +650,14 @@ async function mapas(forced=''){
       }
       if(!saldos.length){notice.textContent='Não há saldos importados nesta loja. Importe o ODS em Controle de Estoque antes de realizar a conferência.';
         $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';return;}
-      const lista=filtered.filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
+      const candidatos=filtered.filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
+      // Abas especiais são excluídas ANTES de conciliar o saldo. Caso contrário,
+      // elas poderiam consumir saldo de um produto e reduzir incorretamente o mapa.
+      const lista=filtrarMapasParaConferencia(candidatos);
+      const especiaisIgnoradas=candidatos.length-lista.length;
       compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=0;
       const res=compareResult.resumo;
-      notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. A conferência é somente leitura. A cópia para Procfit considera todos os registros filtrados, independentemente da página exibida.`;
+      notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. Somente funcionários e Estoque; ${especiaisIgnoradas} registro(s) de abas não elegíveis ignorado(s). A conferência é somente leitura. A cópia para Procfit considera todos os registros filtrados, independentemente da página exibida.`;
       $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} não localizados (saldo 0)</span>`;
       desenharComparacao();
     }catch(err){notice.textContent='Não foi possível consultar o saldo importado: '+err.message;
@@ -679,7 +684,7 @@ async function mapas(forced=''){
     if(!compareResult)return toast('Faça a conferência antes de copiar os registros corrigidos.',true);
     // NUNCA usar pageRows / comparePage aqui: a lista completa já contempla
     // todas as páginas da conferência e seus filtros, inclusive 100+ páginas.
-    void copiarProcfit(compareRows);
+    void copiarProcfit(filtrarMapasParaConferencia(compareRows));
   };
   $('#compare-csv').onclick=()=>{
     if(!compareResult)return toast('Abra uma conferência antes de exportar.',true);
