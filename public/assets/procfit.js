@@ -22,7 +22,7 @@ export function dataProcfit(valor) {
 
 /**
  * @param {Array} registros Lista já filtrada pela UI (todas as páginas).
- * @param {{corrigido?: boolean}} options Usa quantidades conciliadas com ODS quando corrigido=true.
+ * @param {{corrigido?: boolean}} options A interface usa somente os saldos corrigidos na conferência.
  * @returns {{texto:string,total:number,ignorados:{zerados:number,semSaldo:number,invalidos:number}}}
  */
 export function montarListaProcfit(registros, {corrigido = false} = {}) {
@@ -66,7 +66,10 @@ export async function copiarListaProcfit(texto, {clipboard = globalThis.navigato
     campo.value = texto;
     campo.setAttribute('readonly', '');
     campo.style.position = 'fixed'; campo.style.left = '-9999px';
-    documento.body.appendChild(campo);
+    // Em dialog.showModal(), elementos fora do dialog ficam inertes.
+    // Anexe o campo temporário ao diálogo aberto para permitir focus/select/copy.
+    const destino = documento.querySelector?.('dialog[open]') || documento.body;
+    destino.appendChild(campo);
     try {
       campo.focus(); campo.select();
       if (documento.execCommand('copy')) return true;

@@ -29,8 +29,8 @@ export function conciliarMapaComEstoque(mapa, estoque) {
       id: r.id, ean, codigoInterno: codigo || txt(stock?.codigo_interno),
       lote: txt(r.lote), validade: txt(r.validade).slice(0, 10),
       descricao: txt(r.descricao || stock?.descricao), mapa: txt(r.mapa_nome),
-      quantidadeMapa, quantidadeEstoque: stock ? numero(stock.quantidade) : null,
-      quantidadeCorrigida: null, situacao: stock ? 'conferido' : 'sem_saldo',
+      quantidadeMapa, quantidadeEstoque: stock ? numero(stock.quantidade) : 0,
+      quantidadeCorrigida: stock ? null : 0, situacao: stock ? 'conferido' : 'nao_localizado',
       estoqueAtualizadoEm: stock?.atualizado_em || null, _ordem: ordem
     };
     if (stock) {
@@ -55,7 +55,7 @@ export function conciliarMapaComEstoque(mapa, estoque) {
     registros: itens.length,
     unidadesMapa: itens.reduce((s, x) => s + x.quantidadeMapa, 0),
     unidadesCorrigidas: itens.reduce((s, x) => s + (x.quantidadeCorrigida ?? 0), 0),
-    naoEncontrados: itens.filter(x => x.quantidadeCorrigida === null).length,
+    naoEncontrados: itens.filter(x => x.situacao === 'nao_localizado').length,
     registrosReduzidos: itens.filter(x => x.situacao === 'reduzido').length
   };
   return {itens, resumo};

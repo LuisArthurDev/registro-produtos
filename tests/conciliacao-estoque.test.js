@@ -13,9 +13,9 @@ test('preserva zeros iniciais do EAN e aplica saldo zero', () => {
  const d=conciliarMapaComEstoque([m('0001234567890','a','2027-01-01',5)], [s('0001234567890',0)]);
  assert.equal(d.itens[0].ean,'0001234567890');assert.equal(d.itens[0].quantidadeCorrigida,0);
 });
-test('não confunde saldo não importado com saldo zero', () => {
+test('saldo não localizado é exibido como zero, mas marcado para exclusão da cópia', () => {
  const d=conciliarMapaComEstoque([m('12345678','a','2027-01-01',5)], []);
- assert.equal(d.itens[0].quantidadeCorrigida,null);assert.equal(d.resumo.naoEncontrados,1);
+ assert.equal(d.itens[0].quantidadeCorrigida,0);assert.equal(d.itens[0].quantidadeEstoque,0);assert.equal(d.resumo.naoEncontrados,1);assert.equal(d.itens[0].situacao,'nao_localizado');
 });
 test('usa código interno quando único e compatível com o EAN', () => {
  const d=conciliarMapaComEstoque([m('12345678','a','2027-01-01',4,'00042')], [s('12345678',2,'00042')]);
@@ -23,9 +23,9 @@ test('usa código interno quando único e compatível com o EAN', () => {
 });
 test('não associa outro EAN por código interno repetido', () => {
  const d=conciliarMapaComEstoque([m('99999999','a','2027-01-01',4,'42')], [s('12345678',9,'42')]);
- assert.equal(d.itens[0].quantidadeCorrigida,null);
+ assert.equal(d.itens[0].quantidadeCorrigida,0);
 });
 test('não considera ausência de estoque como motivo para reduzir automaticamente o mapa', () => {
  const d=conciliarMapaComEstoque([m('12345678','a','2027-01-01',5)], []);
- assert.equal(d.itens[0].quantidadeMapa,5);assert.equal(d.itens[0].situacao,'sem_saldo');
+ assert.equal(d.itens[0].quantidadeMapa,5);assert.equal(d.itens[0].situacao,'nao_localizado');
 });

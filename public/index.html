@@ -83,6 +83,20 @@
 </dialog>
 <script type="module" src="/assets/app.js"></script>
 <script>if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));</script>
+<dialog id="procfit-copy-dialog" class="dialog dialog-procfit" aria-labelledby="procfit-copy-title">
+  <div class="dialog-inner">
+    <h3 id="procfit-copy-title">Copiar para Conector Procfit — v1.0</h3>
+    <p id="procfit-copy-count" class="footer-hint"></p>
+    <p id="procfit-copy-status" role="status" aria-live="polite">Preparando cópia…</p>
+    <label for="procfit-copy-text">Prévia: Código Interno · EAN · Lote · Validade · Quantidade</label>
+    <textarea id="procfit-copy-text" readonly spellcheck="false" aria-label="Dados em formato tabulado para o Conector Procfit"></textarea>
+    <div class="dialog-actions">
+      <button type="button" class="btn-outline" id="procfit-copy-select">Selecionar tudo</button>
+      <button type="button" class="primary" id="procfit-copy-repeat">Copiar novamente</button>
+      <button type="button" class="btn-outline" id="procfit-copy-close" onclick="document.getElementById('procfit-copy-dialog').close()">Fechar</button>
+    </div>
+  </div>
+</dialog>
 <dialog id="stock-descent-dialog" class="dialog"><form id="stock-descent-form" class="dialog-inner"><h3>Descer produto para o mapa</h3><p id="stock-descent-label"></p><label>Mapa de destino<select name="destino" required></select></label><label>Quantidade<input type="number" min="1" step="1" name="quantidade" required></label><div class="dialog-actions"><button type="button" class="btn-outline" id="stock-descent-cancel">Cancelar</button><button type="submit" class="primary">Confirmar movimentação</button></div></form></dialog>
 </body>
 </html>

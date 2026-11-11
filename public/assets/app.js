@@ -512,7 +512,7 @@ async function mapas(forced=''){
  const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[];
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; filtros por funcionário, mês, validade e situação.',
- `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button><button type="button" class="btn-outline" id="map-copy-procfit" title="Copiar todas as linhas filtradas para o Conector Procfit — v1.0">Copiar para Conector Procfit — v1.0</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
+ `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
  $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card"><div class="filter-row">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
@@ -523,7 +523,7 @@ async function mapas(forced=''){
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
  ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>':''}</div>
- <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar corrigidos para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
+ <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
   page=Math.min(page,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));
@@ -547,16 +547,32 @@ async function mapas(forced=''){
  $('#reload-maps').onclick=()=>renderRoute(state.route);
  $('#map-print').onclick=()=>printableTable('#maps-table',()=>mapsTable(filtered,{actions:false}));
  $('#map-csv').onclick=()=>exportCsv('mapa-'+nowBrISO()+'.csv',['Mapa','EAN','Codigo interno','Descricao','Lote','Validade','Quantidade','Mes lancamento','Situacao'],filtered.map(r=>[r.mapa_nome,r.ean,r.codigoInterno,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento).slice(0,7),statusVal(r.validade,r.secao)[0]]));
- const copiarProcfit=async(registros,corrigido=false)=>{
-  const resultado=montarListaProcfit(registros,{corrigido});
-  if(!resultado.total){toast('Nenhum registro válido com quantidade positiva para copiar. Verifique os filtros e o estoque.',true);return;}
+ const copiarProcfit=async(registros)=>{
+  const resultado=montarListaProcfit(registros,{corrigido:true});
+  const modal=$('#procfit-copy-dialog'),campo=$('#procfit-copy-text'),estado=$('#procfit-copy-status');
+  if(!resultado.total){toast('Nenhum item com saldo positivo e dados válidos para o Procfit. Verifique a conferência.',true);return;}
+  // A prévia permanece disponível caso o navegador bloqueie o Clipboard API.
+  campo.value=resultado.texto;
+  const i=resultado.ignorados;
+  $('#procfit-copy-count').textContent=`${resultado.total} registro(s) · ${i.zerados} com saldo zero ignorado(s) · ${i.invalidos} inválido(s)`;
+  estado.textContent='Preparando cópia para a área de transferência…';
+  modal.showModal();
+  const manual=()=>{campo.focus();campo.select();campo.setSelectionRange(0,campo.value.length);};
+  $('#procfit-copy-select').onclick=()=>{manual();estado.textContent='Texto selecionado. Use Ctrl+C (ou Copiar no celular) e cole no Conector Procfit.';};
+  $('#procfit-copy-repeat').onclick=async()=>{
+    try{await copiarListaProcfit(campo.value);estado.textContent='Cópia concluída. Abra o Conector Procfit e cole a lista.';}
+    catch(err){manual();estado.textContent=`O navegador bloqueou a cópia automática: ${err.message}. O texto está selecionado para Ctrl+C.`;}
+  };
   try{
-   await copiarListaProcfit(resultado.texto);
-   const i=resultado.ignorados,descartados=i.zerados+i.semSaldo+i.invalidos;
-   toast(`${resultado.total} lançamento(s) copiado(s) para o Conector Procfit v1.0 (incluindo cabeçalho).${descartados?' Ignorados: '+i.zerados+' zerados, '+i.semSaldo+' sem saldo, '+i.invalidos+' inválidos.':''}`);
-  }catch(err){toast(err.message,true);}
+    await copiarListaProcfit(resultado.texto);
+    estado.textContent='Copiado! Abra o Conector Procfit — v1.0 e cole a lista.';
+    toast(`${resultado.total} lançamento(s) corrigido(s) copiado(s). ${i.zerados} sem saldo ignorado(s).`);
+  }catch(err){
+    manual();
+    estado.textContent=`Cópia automática bloqueada pelo navegador: ${err.message}. Use Ctrl+C com o texto já selecionado.`;
+    toast('Permissão para copiar bloqueada: use Ctrl+C na janela aberta.',true);
+  }
  };
- $('#map-copy-procfit')?.addEventListener('click',()=>copiarProcfit(filtered));
  $('#map-novo')?.addEventListener('click',abrirNovoLancamento);
  $('#maps-table').onclick=async e=>{
    const cb=e.target.closest('[data-check-map]');if(cb){if(cb.checked)selected.add(cb.dataset.checkMap);else selected.delete(cb.dataset.checkMap);draw();return;}
@@ -606,8 +622,8 @@ async function mapas(forced=''){
     $('#compare-table').innerHTML=table(['Código interno','EAN (se sem código)','Lote','Validade','Qtd corrigida / mapa','Qtd estoque'],pageRows.map(r=>`<tr>
       <td><strong>${H(r.codigoInterno||'—')}</strong><span class="compare-product-desc">${H(r.descricao||'Sem descrição')}</span></td>
       <td>${r.codigoInterno?'—':H(r.ean)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td>
-      <td class="compare-quantity"><strong class="${r.situacao==='reduzido'?'danger-text':''}">${r.quantidadeCorrigida===null?'Sem saldo':H(r.quantidadeCorrigida)}</strong><small>Mapa: ${H(r.quantidadeMapa)}</small></td>
-      <td>${r.quantidadeEstoque===null?pill('Não localizado','amber'):H(r.quantidadeEstoque)}${r.estoqueAtualizadoEm?`<span class="second">${dtBR(r.estoqueAtualizadoEm)}</span>`:''}</td></tr>`));
+      <td class="compare-quantity"><strong class="${r.situacao==='reduzido'?'danger-text':''}">${H(r.quantidadeCorrigida)}</strong><small>Mapa: ${H(r.quantidadeMapa)}</small></td>
+      <td>${r.situacao==='nao_localizado'?`${H(r.quantidadeEstoque)} <span class="second">Não localizado</span>`:H(r.quantidadeEstoque)}${r.estoqueAtualizadoEm?`<span class="second">${dtBR(r.estoqueAtualizadoEm)}</span>`:''}</td></tr>`));
     $('#compare-page').textContent=`Página ${comparePage+1} de ${Math.max(1,Math.ceil(total/tam))} · ${total} registro(s)`;
     $('#compare-prev').disabled=comparePage===0;
     $('#compare-next').disabled=(comparePage+1)*tam>=total;
@@ -629,14 +645,13 @@ async function mapas(forced=''){
       compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=0;
       const res=compareResult.resumo;
       notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. A conferência é somente leitura; nenhum lançamento foi modificado.`;
-      $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} sem saldo importado</span>`;
+      $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} não localizados (saldo 0)</span>`;
       desenharComparacao();
     }catch(err){notice.textContent='Não foi possível consultar o saldo importado: '+err.message;
       $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';toast(err.message,true);}
   };
   const mudarAba=async(paraComparacao)=>{
     compareActive=paraComparacao;base.hidden=paraComparacao;pane.hidden=!paraComparacao;
-    $('#map-copy-procfit').hidden=paraComparacao;
     $('#map-tab-list').setAttribute('aria-selected',String(!paraComparacao));
     $('#map-tab-compare').setAttribute('aria-selected',String(paraComparacao));
     if(paraComparacao){
@@ -655,7 +670,7 @@ async function mapas(forced=''){
   $('#compare-copy-procfit').onclick=()=>{
     if(!compareResult)return toast('Faça a conferência antes de copiar os registros corrigidos.',true);
     // Apenas dados da conferência ativa; não usar a quantidade original do mapa.
-    void copiarProcfit(compareRows,true);
+    void copiarProcfit(compareRows);
   };
   $('#compare-csv').onclick=()=>{
     if(!compareResult)return toast('Abra uma conferência antes de exportar.',true);

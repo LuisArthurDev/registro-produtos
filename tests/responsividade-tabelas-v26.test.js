@@ -33,18 +33,18 @@ test('chamada repetida preserva os títulos sem duplicar conteúdo',()=>{
  assert.equal(c.getAttribute('data-label'),'Quantidade corrigida');
  assert.equal(c.atributos.size,1);
 });
-test('V27: tabelas permanecem em linhas, sem cards e sem rolagem horizontal',()=>{
- assert.match(css,/V27 — sem rolagem horizontal no sistema inteiro/);
+test('V28: linhas compactas preservadas, sem scroll horizontal',()=>{
+ assert.match(css,/V28 — tabelas em LINHAS legíveis/);
  assert.match(css,/\.table-wrap table,#compare-table table\s*\{[^}]*min-width:0!important/s);
- assert.match(css,/@media screen and \(max-width:1499px\)/);
+ assert.match(css,/@media screen and \(max-width:1139px\)/);
  assert.match(css,/content:attr\(data-label\)/);
- assert.match(css,/\.table-wrap tbody>tr\s*\{[^}]*display:grid/s);
- assert.match(css,/border-radius:0;box-shadow:none/);
+ assert.match(css,/\.table-wrap tbody>tr\s*\{[^}]*display:flex/s);
+ assert.match(css,/border-radius:0!important;box-shadow:none!important/);
  assert.doesNotMatch(css,/\.table-wrap tbody>tr\s*\{\s*display:block/);
- assert.match(css,/\.org-board\{grid-template-columns:minmax\(0,1fr\)\}/);
+ assert.match(css,/\.org-board\{grid-template-columns:1fr/);
 });
 
 test('PWA inclui o novo módulo e usa cache atualizado',()=>{
  assert.match(sw,/tabelas-responsivas\.js/);
- assert.match(sw,/registro-validades-v27-linhas-grupos-salvar/);
+ assert.match(sw,/registro-validades-v28-procfit-conferencia-linhas/);
 });

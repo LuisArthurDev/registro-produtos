@@ -55,11 +55,10 @@ test('Fallback copia via textarea e libera o elemento temporário',async()=>{
  await copiarListaProcfit('1\t2',{clipboard:{writeText: async()=>{throw Error('Negado');}},documento:doc});
  assert.equal(texto,'1\t2');assert.ok(removed);
 });
-test('Interface usa todos os registros filtrados, não apenas os paginados',()=>{
- assert.match(app,/#map-copy-procfit/);
- assert.match(app,/copiarProcfit\(filtered\)/);
- assert.doesNotMatch(app,/copiarProcfit\(paged\(\)\)/);
- assert.match(app,/copiarProcfit\(compareRows,true\)/);
- assert.match(app,/\$\('#map-copy-procfit'\)\.hidden=paraComparacao/);
+test('Interface só oferece cópia dos registros conciliados e filtrados, não do mapa normal',()=>{
+ assert.doesNotMatch(app,/#map-copy-procfit/);
+ assert.doesNotMatch(app,/copiarProcfit\(filtered\)/);
+ assert.match(app,/copiarProcfit\(compareRows\)/);
+ assert.match(app,/const resultado=montarListaProcfit\(registros,\{corrigido:true\}\)/);
  assert.match(actions,/if\(has\('copiar','copy','procfit'\)\)return 'copy'/);
 });

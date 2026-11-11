@@ -70,9 +70,9 @@ test('a interface só solicita gravação no clique Salvar; a mudança no quadro
  assert.match(ui,/function mover\(chave,target\)/);assert.match(ui,/atrib\.set\(chave,target\);render\(\)/);
  assert.match(ui,/function salvarOrganizacao/);assert.match(ui,/method:'POST',body:\{alteracoes:itens\}/);
  assert.match(ui,/Grupo mais frequente:/);
- assert.match(css,/V27: registros sempre em LINHAS/);assert.match(css,/\.table-wrap tbody>tr\{border-bottom/);
+ assert.match(css,/V28 — tabelas em LINHAS legíveis/);assert.match(css,/\.table-wrap tbody>tr\{border-bottom/);
  assert.doesNotMatch(css,/\.table-wrap tbody>tr\s*\{\s*display:block/);
- assert.match(css,/border-radius:0;box-shadow:none/);
+ assert.match(css,/border-radius:0!important;box-shadow:none!important/);
  assert.match(icons,/\.page-subnav,\.compare-tabs,\.view-tabs/);
  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.salvar_organizacao_grupos/);
  assert.match(sql,/ON CONFLICT \(loja_id,grupo_chave\) DO UPDATE/);
