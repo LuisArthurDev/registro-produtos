@@ -12,6 +12,19 @@ export function recomendacaoSecao(chave,estatisticas=[],funcionarios=[]){
   const ranking=[...porId.values()].sort((a,b)=>b.registros-a.registros||b.unidades-a.unidades||a.funcionario_id.localeCompare(b.funcionario_id));
   return {ranking,principal:ranking[0]||null,empate:ranking.length>1&&ranking[0].registros===ranking[1].registros,total:ranking.reduce((s,r)=>s+r.registros,0)};
 }
+// Um grupo novo ainda não tem linha gravada no banco. Mesmo na coluna
+// "Sem responsável", precisa ser considerado pendente até o primeiro salvamento.
+// Mudanças em grupos já persistidos continuam sendo comparadas normalmente.
+export function gruposPendentes(secoes,atuais,originais,visibilidade=new Map()){
+ return secoes.filter(sec=>{
+  const chave=secaoChave(sec.chave);
+  const atual=atuais.get(chave)||'';
+  const anterior=originais.get(chave)||'';
+  if(atual!==anterior)return true;
+  const estado=visibilidade.get(chave);
+  return !originais.has(chave)&&!estado?.oculta&&!estado?.excluida;
+ });
+}
 export async function renderOrganizacaoSecoes({request,content,header,toast}){
  const data=await request('/organizacao-secoes');
  const funcionarios=data.funcionarios||[],secoes=data.secaoDisponiveis||[],stats=data.estatisticas||[];
@@ -20,7 +33,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  const visibilidade=new Map((data.atribuicoes||[]).map(x=>[secaoChave(x.secao_chave),{oculta:!!x.oculta_no_quadro,excluida:!!x.excluida_das_listas}]));
  const ativos=funcionarios.map(x=>x.id);
  const original=new Map(atrib);
- const mudancas=()=>secoes.filter(sec=>(atrib.get(secaoChave(sec.chave))||'')!==(original.get(secaoChave(sec.chave))||''));
+ const mudancas=()=>gruposPendentes(secoes,atrib,original,visibilidade);
  const options='<option value="">Sem responsável</option>'+funcionarios.map(x=>`<option value="${html(x.id)}">${html(x.nome)}</option>`).join('');
  const resumos=new Map(secoes.map(x=>[secaoChave(x.chave),recomendacaoSecao(x.chave,stats,funcionarios)]));
  const geral={registros:stats.reduce((s,x)=>s+(Number(x.registros)||0),0),unidades:stats.reduce((s,x)=>s+(Number(x.unidades)||0),0)};
@@ -31,7 +44,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  <div class="card stat"><small>Funcionários ativos</small><strong>${funcionarios.length}</strong></div>
  <div class="card stat"><small>Registros analisados</small><strong>${geral.registros}</strong><p>${geral.unidades} unidades ativas</p></div>
  <div class="card stat"><small>Sem dono definido</small><strong id="org-unassigned">0</strong><p>Apenas no quadro de organização</p></div></div>
- <div class="notice org-explanation">Este é um <strong>quadro organizacional</strong>, não um mapa de estoque. Arraste os cartões ou use o seletor de responsável e clique em <strong>Salvar organização</strong> ao terminar. As mudanças de responsável não são gravadas antes disso. <strong>Nada é transferido, editado ou excluído dos lançamentos.</strong> Ocultar afeta apenas o quadro; excluir um grupo a remove das listagens operacionais da loja, mas preserva os dados.</div>
+ <div class="notice org-explanation">Este é um <strong>quadro organizacional</strong>, não um mapa de estoque. Arraste os cartões ou use o seletor de responsável e clique em <strong>Salvar organização</strong> ao terminar. Você pode deixar quantos grupos quiser em <strong>Sem responsável</strong> e salvar assim mesmo. As mudanças de responsável não são gravadas antes disso. <strong>Nada é transferido, editado ou excluído dos lançamentos.</strong> Ocultar afeta apenas o quadro; excluir um grupo a remove das listagens operacionais da loja, mas preserva os dados.</div>
  ${Number(data.semSecao)>0?`<p class="org-note">${Number(data.semSecao)} registro(s) sem grupo definido no catálogo não entram nas recomendações. Cadastre o grupo em Produtos EAN.</p>`:''}
  ${Number(data.semFuncionario)>0?`<p class="org-note">${Number(data.semFuncionario)} registro(s) não têm funcionário identificável e não são atribuídos a alguém automaticamente.</p>`:''}
  <div class="filter-row"><label class="org-search"><span>Buscar grupo</span><input id="org-filter" type="search" placeholder="Ex.: ALIMENTICIO, HIGIENE, BELEZA"></label>
@@ -48,7 +61,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
    const salvar=content.querySelector('#org-save'),desfazer=content.querySelector('#org-reset');
    if(salvar){salvar.disabled=busy||!n;salvar.textContent=n?`Salvar organização (${n})`:'Salvar organização';}
    if(desfazer)desfazer.disabled=busy||!n;
-   status.textContent=n?`${n} alteração(ões) pendente(s) · clique em Salvar organização`:'Organização salva · nenhuma alteração pendente';
+   status.textContent=n?`${n} grupo(s) aguardando salvamento (incluindo grupos sem responsável)`: 'Organização salva · nenhuma alteração pendente';
  };
  const render=()=>{
    const scrolls=new Map([...board.querySelectorAll('.org-column')].map(x=>[x.dataset.orgColumn,x.querySelector('.org-column-cards')?.scrollTop||0]));
@@ -126,7 +139,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
      const itens=alterados.map(sec=>({grupo:sec.nome,responsavel_id:atrib.get(secaoChave(sec.chave))||null}));
      await request('/organizacao-secoes',{method:'POST',body:{alteracoes:itens}});
      for(const sec of alterados){const chave=secaoChave(sec.chave);original.set(chave,atrib.get(chave)||'');}
-     toast(`${itens.length} grupo(s) salvo(s) de uma vez. Os lançamentos não foram movidos.`);
+     toast(`${itens.length} grupo(s) salvo(s), inclusive os sem responsável. Nenhum lançamento foi movido.`);
    }catch(err){toast(`Nada foi salvo. ${err.message}`,true);}
    finally{busy=false;atualizarPendencias();}
  }

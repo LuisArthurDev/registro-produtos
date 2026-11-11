@@ -26,6 +26,6 @@ test('página suporta 320 a 800 pixels, entrada por câmera e áreas de toque',(
  assert.match(css,/\.launch-route #form-launch input/);
  assert.match(css,/min-height:48px/);
  assert.match(css,/safe-area-inset-bottom/);
- assert.match(sw,/registro-validades-v28-procfit-conferencia-linhas/);
+ assert.match(sw,/registro-validades-v30-procfit-todas-paginas/);
  assert.match(sw,/lancamentos\.html/);
 });

@@ -29,7 +29,7 @@ test('cada card tem altura controlada e rolagem vertical propria',()=>{
 test('rolagem interna e acessivel por teclado e grid adapta-se ao celular',()=>{
  assert.match(ui,/role="region" tabindex="0" aria-label="Grupos de/);
  assert.match(css,/@media\(max-width:580px\)\{\s*\.org-board\{grid-template-columns:1fr/);
- assert.match(sw,/registro-validades-v28-procfit-conferencia-linhas/);
+ assert.match(sw,/registro-validades-v30-procfit-todas-paginas/);
  assert.match(ui,/dragstart/);
  assert.match(ui,/data-org-select/);
 });

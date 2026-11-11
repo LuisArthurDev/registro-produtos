@@ -79,3 +79,53 @@ test('a interface só solicita gravação no clique Salvar; a mudança no quadro
  assert.match(sql,/REVOKE ALL ON FUNCTION public\.salvar_organizacao_grupos/);
  assert.match(workflow,/salvar_organizacao_grupos/);
 });
+
+test('V29: salvar grupos mesmo com destino sem responsável (null), junto com outros atribuídos',async()=>{
+ const e=ambiente();try{
+  const itens=[{grupo:'BELEZA',responsavel_id:null},{grupo:'INFANTIL',responsavel_id:c}];
+  const r=await e.call('POST',{alteracoes:itens});
+  assert.equal(r.statusCode,200);
+  const trans=e.chamadas.filter(call=>call.table==='rpc/salvar_organizacao_grupos');
+  assert.equal(trans.length,1);
+  assert.deepEqual(trans[0].body.p_itens,itens);
+  assert.ok(!e.chamadas.some(call=>call.table==='mapa_lancamentos'&&call.method!=='GET'));
+ }finally{e.close();}
+});
+
+test('V29: salvar lote composto inteiramente de grupos sem responsável',async()=>{
+ const e=ambiente();try{
+  const itens=[{grupo:'BELEZA',responsavel_id:null},{grupo:'INFANTIL',responsavel_id:null}];
+  const r=await e.call('POST',{alteracoes:itens});
+  assert.equal(r.statusCode,200);
+  assert.equal(r.data.alterados,2);
+  assert.deepEqual(e.chamadas.find(call=>call.table==='rpc/salvar_organizacao_grupos').body.p_itens,itens);
+ }finally{e.close();}
+});
+
+test('V29: grupos novos sem responsável são pendentes até primeiro salvamento; grupos já salvos não',async()=>{
+ const {gruposPendentes}=await import('../public/assets/organizacao-secoes.js');
+ const grupos=[{chave:'beleza',nome:'BELEZA'},{chave:'infantil',nome:'INFANTIL'}];
+ const atuais=new Map([['beleza',null],['infantil',null]]);
+ const originais=new Map();
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais).map(g=>g.nome),['BELEZA','INFANTIL']);
+ originais.set('beleza',null);originais.set('infantil',null);
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais),[]);
+ atuais.set('beleza',b);
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais).map(g=>g.nome),['BELEZA']);
+ originais.set('beleza',b);
+ atuais.set('beleza',null);
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais).map(g=>g.nome),['BELEZA']);
+});
+
+test('V29: grupos novos escondidos/excluídos não forçam salvamento, mas alterações neles continuam pendentes',async()=>{
+ const {gruposPendentes}=await import('../public/assets/organizacao-secoes.js');
+ const grupos=[{chave:'beleza',nome:'BELEZA'},{chave:'infantil',nome:'INFANTIL'}];
+ const atuais=new Map([['beleza',null],['infantil',null]]);
+ const originais=new Map([['beleza',b]]);
+ const visibilidade=new Map([['beleza',{oculta:true}],['infantil',{excluida:true}]]);
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais,visibilidade).map(g=>g.nome),['BELEZA']);
+ originais.set('beleza',null);
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais,visibilidade),[]);
+ visibilidade.set('infantil',{oculta:false,excluida:false});
+ assert.deepEqual(gruposPendentes(grupos,atuais,originais,visibilidade).map(g=>g.nome),['INFANTIL']);
+});

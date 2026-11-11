@@ -3,6 +3,7 @@ import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { montarListaProcfit, copiarListaProcfit } from './procfit.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
+import { carregarTodasPaginas } from './paginacao-completa.js';
 import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js';
@@ -83,7 +84,7 @@ function table(headers,rows){if(!rows.length)return empty();return `<div class="
 function paginarTabelasSimples(){
  const content=$('#content');if(!content)return;
  for(const wrap of content.querySelectorAll('.table-wrap')){
-   if(wrap.dataset.paginado||wrap.closest('#maps-table,#ctrl-list,#gen-list,#tv-list,#transfer-list,#view-table'))continue;
+   if(wrap.dataset.paginado||wrap.closest('#maps-table,#compare-table,#ctrl-list,#gen-list,#tv-list,#transfer-list,#view-table'))continue;
    const trs=[...wrap.querySelectorAll('tbody > tr')];if(!trs.length)continue;
    wrap.dataset.paginado='1';let page=0;
    const foot=document.createElement('div');foot.className='pager pager-auto';
@@ -305,7 +306,13 @@ async function renderRoute(route){
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!isAdmin())throw new Error('Seções: acesso reservado ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
  }catch(e){content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
-async function getMaps(mapa=''){const p=new URLSearchParams();if(lojaParams())p.set('loja',state.loja);if(mapa)p.set('mapa',mapa);const d=await request('/mapas?'+p.toString());state.mapRows=d.registros||[];return state.mapRows;}
+async function getMaps(mapa=''){
+ const p=new URLSearchParams();if(lojaParams())p.set('loja',state.loja);if(mapa)p.set('mapa',mapa);
+ // Não limitar a 15/25/50 linhas nem aos 16.000 registros da consulta legada.
+ // Só atualiza o estado quando TODOS os lotes tiverem sido carregados.
+ const registros=await carregarTodasPaginas(request,'/mapas?'+p.toString());
+ state.mapRows=registros;return state.mapRows;
+}
 function counts(rows){const d={total:0,vencido:0,proximo:0,ok:0};for(const r of rows){d.total+=Number(r.quantidade)||0;const s=statusVal(r.validade,r.secao)[0];if(s==='Vencido')d.vencido++;else if(s==='A vencer')d.proximo++;else d.ok++;}return d;}
 async function dashboard(){
  const base=await getMaps(),ativos=base.filter(x=>Number(x.quantidade)>0);
@@ -554,7 +561,8 @@ async function mapas(forced=''){
   // A prévia permanece disponível caso o navegador bloqueie o Clipboard API.
   campo.value=resultado.texto;
   const i=resultado.ignorados;
-  $('#procfit-copy-count').textContent=`${resultado.total} registro(s) · ${i.zerados} com saldo zero ignorado(s) · ${i.invalidos} inválido(s)`;
+  const paginas=Math.max(1,Math.ceil(registros.length/(Number($('#compare-size')?.value)||25)));
+  $('#procfit-copy-count').textContent=`Conferência completa: ${registros.length} registro(s) em ${paginas} página(s) · ${resultado.total} copiado(s) · ${i.zerados} com saldo zero ignorado(s) · ${i.invalidos} inválido(s)`;
   estado.textContent='Preparando cópia para a área de transferência…';
   modal.showModal();
   const manual=()=>{campo.focus();campo.select();campo.setSelectionRange(0,campo.value.length);};
@@ -636,15 +644,15 @@ async function mapas(forced=''){
     const notice=$('#compare-notice');notice.textContent='Comparando mapa com os saldos importados…';
     try{
       if(!saldos||atualizarSaldo){
-        const resp=await request(urlWithLoja('/estoque'),{timeout:60000});
-        saldos=resp.registros||[];
+        // Carrega TODOS os saldos importados, inclusive além da paginação da API.
+        saldos=await carregarTodasPaginas(request,urlWithLoja('/estoque'));
       }
       if(!saldos.length){notice.textContent='Não há saldos importados nesta loja. Importe o ODS em Controle de Estoque antes de realizar a conferência.';
         $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';return;}
       const lista=filtered.filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
       compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=0;
       const res=compareResult.resumo;
-      notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. A conferência é somente leitura; nenhum lançamento foi modificado.`;
+      notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. A conferência é somente leitura. A cópia para Procfit considera todos os registros filtrados, independentemente da página exibida.`;
       $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} não localizados (saldo 0)</span>`;
       desenharComparacao();
     }catch(err){notice.textContent='Não foi possível consultar o saldo importado: '+err.message;
@@ -669,7 +677,8 @@ async function mapas(forced=''){
   $('#compare-next').onclick=()=>{if((comparePage+1)*Number($('#compare-size').value)<compareRows.length){comparePage++;desenharComparacao();}};
   $('#compare-copy-procfit').onclick=()=>{
     if(!compareResult)return toast('Faça a conferência antes de copiar os registros corrigidos.',true);
-    // Apenas dados da conferência ativa; não usar a quantidade original do mapa.
+    // NUNCA usar pageRows / comparePage aqui: a lista completa já contempla
+    // todas as páginas da conferência e seus filtros, inclusive 100+ páginas.
     void copiarProcfit(compareRows);
   };
   $('#compare-csv').onclick=()=>{

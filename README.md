@@ -1,3 +1,5 @@
+> **Atualização v30:** cópia de todos os itens filtrados da conferência com estoque, inclusive após 100+ páginas; carregamento completo e seguro de mapas e saldos via API paginada. Consulte [ATUALIZAR-V30-PROCFIT-TODAS-PAGINAS.md](ATUALIZAR-V30-PROCFIT-TODAS-PAGINAS.md). Não exige nova migração SQL.
+
 > **Atualização v28:** saldo não localizado = 0 na conferência; cópia para Procfit somente pela conferência, com prévia e fallback; tabelas mais compactas sem scroll horizontal. Ver [guia v28](ATUALIZAR-V28-PROCFIT-CONFERENCIA-TABELAS.md).
 
 > **v27 — Tabelas em linhas, abas internas por nome e salvamento em lote da organização por Grupo.** Veja [ATUALIZAR-V27-LINHAS-ABAS-SALVAR-ORGANIZACAO.md](ATUALIZAR-V27-LINHAS-ABAS-SALVAR-ORGANIZACAO.md). Requer aplicar SQL 018 após SQL 017.
@@ -183,3 +185,9 @@ celulares e a execução do cron devem ser homologados no seu domínio Vercel.
 ## V24 — Conferência do ODS importado e pendências de EAN
 
 Consulte `ATUALIZAR-V24-ODS-PENDENCIAS-AVISOS.md` para aplicar primeiro a migração SQL 016 e publicar as correções. A conferência compara mapas com o estoque **já salvo** no Supabase, sem exigir novo upload ou modificar dados automaticamente.
+
+## V29 — Organização de Grupos com responsáveis opcionais
+
+Na aba **Seções**, agora é possível clicar em **Salvar organização** quando há grupos novos em **Sem responsável**, inclusive quando todos estão sem dono. O histórico e os lançamentos permanecem intactos; o campo de responsável da organização é salvo como `NULL`.
+
+Consulte `ATUALIZAR-V29-SALVAR-SEM-RESPONSAVEL.md`. Não há nova migração SQL; a SQL 018 precisa estar aplicada.

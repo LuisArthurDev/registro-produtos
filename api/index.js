@@ -50,6 +50,16 @@ async function rows(table,params={},size=1000,maxPages=25) {
   throw bad('Muitos registros para esta consulta. Utilize filtros.',413);
 }
 async function one(table,params={}) {const d=await db(table,{params:{...params,limit:1}});return d?.[0]||null;}
+// Paginação explícita da leitura completa. Não interfere nas consultas legadas.
+// O offset avança pelo lote bruto, inclusive quando a loja oculta seções/grupos.
+function parametrosPaginacaoCompleta(query){
+  if(!query.has('offset')&&!query.has('limit'))return null;
+  const offset=Number(query.get('offset')),limit=Number(query.get('limit'));
+  if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>1000)
+    throw bad('Parâmetros de paginação inválidos.',422);
+  return {offset,limit};
+}
+
 // Seções fixas ignoradas em toda a aplicação e seções excluídas pelo gestor da própria loja.
 async function secoesExcluidas(loja){
  const removidas=new Set();
@@ -258,8 +268,16 @@ async function mapas(req,actor,pathname,body,query){
     const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao,grupo)',order:'validade.asc'};
     if(actor.perfil==='funcionario')params.mapa_nome=`eq.${actor.nome}`;
     else if(nome)params.mapa_nome=`eq.${nome}`;
-    const registros=await filtrarRegistrosSecao(await rows('mapa_lancamentos',params,800,20),loja);
-    return {sucesso:true,registros:registros.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||''}))};
+    // Ordenação estável evita empates de validade produzirem saltos entre lotes.
+    params.order='validade.asc,id.asc';
+    const pagina=parametrosPaginacaoCompleta(query);
+    const bruto=pagina?await db('mapa_lancamentos',{params:{...params,limit:pagina.limit,offset:pagina.offset}})
+      :await rows('mapa_lancamentos',params,800,20);
+    if(!Array.isArray(bruto))throw bad('Consulta inválida de mapas.',502);
+    const registros=await filtrarRegistrosSecao(bruto,loja);
+    return {sucesso:true,...(pagina?{paginado:true,
+      proximoOffset:bruto.length===pagina.limit?pagina.offset+pagina.limit:null}:{}),
+      registros:registros.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||''}))};
   }
   if(pathname==='/mapas/retirar-loja'){
     if(req.method!=='POST')throw bad('Método não permitido.',405);
@@ -424,7 +442,16 @@ async function visualizacao(req,actor,pathname,body,query){
 async function stock(req,actor,pathname,body,query){
   const loja=actorLoja(actor,body.loja||query.get('loja'));
   if(req.method==='GET'){
-    const r=await rows('estoque_saldos',{loja_id:`eq.${loja}`,select:'quantidade,atualizado_em,produtos(ean,codigo_interno,descricao,secao,grupo)',order:'atualizado_em.desc'},800,20);
+    const params={loja_id:`eq.${loja}`,select:'quantidade,atualizado_em,produto_id,produtos(ean,codigo_interno,descricao,secao,grupo)',order:'atualizado_em.desc,produto_id.asc'};
+    const pagina=parametrosPaginacaoCompleta(query);
+    if(pagina){
+      const r=await db('estoque_saldos',{params:{...params,limit:pagina.limit,offset:pagina.offset}});
+      if(!Array.isArray(r))throw bad('Consulta inválida de estoque.',502);
+      return {sucesso:true,paginado:true,
+        proximoOffset:r.length===pagina.limit?pagina.offset+pagina.limit:null,
+        registros:await filtrarRegistrosSecao(r.map(x=>({...x,...x.produtos,produtos:undefined})),loja)};
+    }
+    const r=await rows('estoque_saldos',params,800,20);
     return {sucesso:true,registros:await filtrarRegistrosSecao(r.map(x=>({...x,...x.produtos,produtos:undefined})),loja)};
   }
   admin(actor);
