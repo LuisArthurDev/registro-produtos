@@ -50,6 +50,8 @@ jobs:
               print('A API nao retornou um JSON valido.')
               raise SystemExit(1)
           print('Resumo do envio:',{k:j.get(k) for k in ('sucesso','habilitado','janela','aparelhos','enviados','pulados','falhas','detalhe') if k in j})
+          for falha in j.get('falhasDetalhadas',[])[:15]:
+              print('Falha no envio:', {k:falha.get(k) for k in ('aparelho','etapa','motivo')})
           if j.get('sucesso') is not True or int(j.get('falhas') or 0):
               raise SystemExit('A notificacao nao foi concluida. Verifique os logs do Vercel.')
           PY

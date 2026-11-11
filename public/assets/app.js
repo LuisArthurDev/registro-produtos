@@ -1,4 +1,5 @@
 import { lerODS } from './ods.js';
+import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js';
@@ -457,7 +458,7 @@ async function submitLaunch(data, form) {
    if (r.status === 'saved' || (data.tipoRegistro === 'transferencia' && r.sucesso === true)) {
      state.pending = null;
      localStorage.removeItem(PENDING_KEY);
-     $('#launch-result').innerHTML = `<div class="result-tip">✔ ${data.tipoRegistro === 'transferencia' ? 'Transferência registrada' : 'Produto registrado'} com sucesso. ${r.idempotente ? '(Resposta recuperada após reenvio)' : ''}</div>`;
+     $('#launch-result').innerHTML = `<div class="result-tip">✔ ${data.tipoRegistro === 'transferencia' ? 'Transferência registrada' : 'Produto registrado'} com sucesso. ${r.idempotente ? '(Resposta recuperada após reenvio)' : ''}${r.pendenciaEan?' · EAN não cadastrado: pendência aberta para revisão.':''}</div>`;
      toast(data.tipoRegistro === 'transferencia' ? 'Transferência registrada com sucesso.' : 'Produto registrado com sucesso.');
      tocarConfirmacao();
      form.reset();
@@ -508,7 +509,7 @@ async function mapas(forced=''){
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; filtros por funcionário, mês, validade e situação.',
  `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
- $('#content').innerHTML=head+`<section class="card card-pad"><div class="filter-row">
+ $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card"><div class="filter-row">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
  ${!isStock&&able?`<select id="map-owner"><option value="">Todos os mapas</option>${tipo.map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('')}</select>`:''}
@@ -518,7 +519,7 @@ async function mapas(forced=''){
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
  ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>':''}</div>
- <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`;
+ <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
   page=Math.min(page,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));
@@ -581,6 +582,67 @@ async function mapas(forced=''){
   };
  }
  apply();
+ if(!isStock){
+  let compareActive=false, saldos=null, compareRows=[],comparePage=0,compareResult=null;
+  const base=$('#map-main-card'),pane=$('#map-compare-section');
+  const desenharComparacao=()=>{
+    const tam=Number($('#compare-size').value)||25,total=compareRows.length;
+    comparePage=Math.min(comparePage,Math.max(0,Math.ceil(total/tam)-1));
+    const pageRows=compareRows.slice(comparePage*tam,(comparePage+1)*tam);
+    $('#compare-table').innerHTML=table(['Código interno','EAN (se sem código)','Lote','Validade','Qtd corrigida / mapa','Qtd estoque'],pageRows.map(r=>`<tr>
+      <td><strong>${H(r.codigoInterno||'—')}</strong><span class="compare-product-desc">${H(r.descricao||'Sem descrição')}</span></td>
+      <td>${r.codigoInterno?'—':H(r.ean)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td>
+      <td class="compare-quantity"><strong class="${r.situacao==='reduzido'?'danger-text':''}">${r.quantidadeCorrigida===null?'Sem saldo':H(r.quantidadeCorrigida)}</strong><small>Mapa: ${H(r.quantidadeMapa)}</small></td>
+      <td>${r.quantidadeEstoque===null?pill('Não localizado','amber'):H(r.quantidadeEstoque)}${r.estoqueAtualizadoEm?`<span class="second">${dtBR(r.estoqueAtualizadoEm)}</span>`:''}</td></tr>`));
+    $('#compare-page').textContent=`Página ${comparePage+1} de ${Math.max(1,Math.ceil(total/tam))} · ${total} registro(s)`;
+    $('#compare-prev').disabled=comparePage===0;
+    $('#compare-next').disabled=(comparePage+1)*tam>=total;
+  };
+  const atualizarComparacao=async(atualizarSaldo=false)=>{
+    if(!compareActive)return;
+    const mes=$('#compare-month').value;
+    if(!mes){$('#compare-notice').textContent='Escolha o mês do lançamento para conferir.';return;}
+    const notice=$('#compare-notice');notice.textContent='Comparando mapa com os saldos importados…';
+    try{
+      if(!saldos||atualizarSaldo){
+        const resp=await request(urlWithLoja('/estoque'),{timeout:60000});
+        saldos=resp.registros||[];
+      }
+      if(!saldos.length){notice.textContent='Não há saldos importados nesta loja. Importe o ODS em Controle de Estoque antes de realizar a conferência.';
+        $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';return;}
+      const lista=filtered.filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
+      compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=0;
+      const res=compareResult.resumo;
+      notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. A conferência é somente leitura; nenhum lançamento foi modificado.`;
+      $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} sem saldo importado</span>`;
+      desenharComparacao();
+    }catch(err){notice.textContent='Não foi possível consultar o saldo importado: '+err.message;
+      $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';toast(err.message,true);}
+  };
+  const mudarAba=async(paraComparacao)=>{
+    compareActive=paraComparacao;base.hidden=paraComparacao;pane.hidden=!paraComparacao;
+    $('#map-tab-list').setAttribute('aria-selected',String(!paraComparacao));
+    $('#map-tab-compare').setAttribute('aria-selected',String(paraComparacao));
+    if(paraComparacao){
+      if(!$('#map-month').value){$('#map-month').value=nowBrISO().slice(0,7);apply();}
+      $('#compare-month').value=$('#map-month').value;
+      await atualizarComparacao();
+    }
+  };
+  $('#map-tab-list').onclick=()=>mudarAba(false);
+  $('#map-tab-compare').onclick=()=>mudarAba(true);
+  $('#compare-month').onchange=e=>{$('#map-month').value=e.target.value;apply();atualizarComparacao();};
+  $('#compare-refresh').onclick=()=>atualizarComparacao(true);
+  $('#compare-size').onchange=()=>{comparePage=0;desenharComparacao();};
+  $('#compare-prev').onclick=()=>{if(comparePage){comparePage--;desenharComparacao();}};
+  $('#compare-next').onclick=()=>{if((comparePage+1)*Number($('#compare-size').value)<compareRows.length){comparePage++;desenharComparacao();}};
+  $('#compare-csv').onclick=()=>{
+    if(!compareResult)return toast('Abra uma conferência antes de exportar.',true);
+    exportCsv('conferencia-mapa-'+$('#compare-month').value+'.csv',
+      ['Codigo interno','EAN','Lote','Validade','Quantidade corrigida','Quantidade estoque','Quantidade mapa','Descricao','Mapa','Situacao'],
+      compareRows.map(r=>[r.codigoInterno,r.codigoInterno?'':r.ean,r.lote,r.validade,r.quantidadeCorrigida??'',r.quantidadeEstoque??'',r.quantidadeMapa,r.descricao,r.mapa,r.situacao]));
+  };
+ }
  if(isStock){$('#stock-all').onclick=()=>{$('#map-status').value='';$('#stock-all').setAttribute('aria-pressed','true');$('#stock-expired').setAttribute('aria-pressed','false');apply();};$('#stock-expired').onclick=()=>{$('#map-status').value='Vencido';$('#stock-all').setAttribute('aria-pressed','false');$('#stock-expired').setAttribute('aria-pressed','true');apply();};}
  if(isStock&&able){
   $('#content').insertAdjacentHTML('beforeend',`<section class="card card-pad secondary-card"><h2>Descer para o mapa</h2><form id="move-form" class="form-grid"><label>Registro em estoque<select name="id">${rows.filter(r=>Number(r.quantidade)>0).map(r=>`<option value="${H(r.id)}">${H(r.descricao||r.ean)} · ${H(r.lote)} · ${H(r.quantidade)} un.</option>`).join('')}</select></label><label>Mapa de destino<select name="destino"></select></label><label>Quantidade<input name="quantidade" type="number" min="1" step="1" required></label><div class="form-actions"><button class="primary" type="submit">Descer para mapa</button></div></form></section>`);
@@ -627,11 +689,14 @@ function openMapEdit(registro){
 
 async function pendencias(){
  const data=await request('/pendencias',{timeout:55000});
- const catalogo=data.catalogo||[], migracao=data.migracao||[];
- const all=[...migracao.map(v=>({...v,_tipo:'migracao',_id:v.origem_migracao})),...catalogo.map(v=>({...v,_tipo:'catalogo',_id:v.codigo_original}))];
- $('#content').innerHTML=header('Pendências de migração','Corrija registros históricos sem excluir ou sobrescrever os dados originais.')+
- `<section class="card card-pad"><div class="stat-grid" style="margin-bottom:20px"><div class="stat card"><small>Catálogo para revisão</small><strong>${catalogo.length}</strong><p>Produtos com código de barras incompleto ou irregular</p></div><div class="stat card"><small>Registros operacionais</small><strong>${migracao.length}</strong><p>Mapas, vencidos e Queima</p></div></div>
- <div class="filter-row"><input id="pending-search" class="wide" placeholder="Pesquisar EAN, lote, mapa ou motivo" aria-label="Pesquisar pendências"><select id="pending-kind"><option value="">Todas</option><option value="catalogo">Produtos EAN</option><option value="migracao">Mapas e operações</option></select></div>
+ const catalogo=data.catalogo||[], migracao=data.migracao||[], lacunas=data.lancamentos||[];
+ const all=[...lacunas.map(v=>({...v,_tipo:'lancamento',_id:v.id,tabela_origem:'mapa_lancamentos',
+   motivo:'EAN não encontrado no catálogo',dados:{...v.mapa_lancamentos,loja_id:v.loja_id,ean:v.ean,lancamento_id:v.lancamento_id}})),
+   ...migracao.map(v=>({...v,_tipo:'migracao',_id:v.origem_migracao})),
+   ...catalogo.map(v=>({...v,_tipo:'catalogo',_id:v.codigo_original}))];
+ $('#content').innerHTML=header('Pendências','Revise EANs desconhecidos e registros históricos. Ignorar não apaga lançamentos.')+
+ `<section class="card card-pad"><div class="stat-grid" style="margin-bottom:20px"><div class="stat card"><small>EANs não encontrados nos lançamentos</small><strong>${lacunas.length}</strong><p>Produtos lançados sem cadastro no catálogo</p></div><div class="stat card"><small>Catálogo para revisão</small><strong>${catalogo.length}</strong><p>Produtos com código de barras incompleto ou irregular</p></div><div class="stat card"><small>Registros operacionais</small><strong>${migracao.length}</strong><p>Mapas, vencidos e Queima</p></div></div>
+ <div class="filter-row"><input id="pending-search" class="wide" placeholder="Pesquisar EAN, lote, mapa ou motivo" aria-label="Pesquisar pendências"><select id="pending-kind"><option value="">Todas</option><option value="lancamento">EAN não encontrado</option><option value="catalogo">Produtos EAN legados</option><option value="migracao">Migração de mapas</option></select></div>
  <p id="pending-count" class="footer-hint"></p><div id="pending-table"></div></section>`;
  const area=$('#pending-table');
  const render=()=>{
@@ -641,7 +706,7 @@ async function pendencias(){
   area.innerHTML=table(['Origem','Identificação','Motivo','Ação'],selected.slice(0,500).map(r=>{
     const d=r.dados||{};const title=r._tipo==='catalogo'?`Código original: ${r.codigo_original}`:`${r.tabela_origem} · ${d.mapa_nome||d.mapa_origem||d.loja_id||'sem loja'}`;
     const sub=r._tipo==='catalogo'?r.descricao||'Sem descrição':`${d.ean||d.codigo_interno||'Sem EAN'} · ${d.lote||'Sem lote'}`;
-    return `<tr><td>${pill(r._tipo==='catalogo'?'Produto EAN':'Registro','amber')}</td><td><strong>${H(title)}</strong><span class="second">${H(sub)}</span></td><td>${H(r.motivo)}</td><td><button class="action-link" type="button" data-pending-id="${H(r._id)}" data-pending-type="${H(r._tipo)}">Ações</button></td></tr>`;
+    return `<tr><td>${pill(r._tipo==='lancamento'?'EAN desconhecido':r._tipo==='catalogo'?'Produto EAN':'Registro','amber')}</td><td><strong>${H(title)}</strong><span class="second">${H(sub)}</span></td><td>${H(r.motivo)}</td><td><button class="action-link" type="button" data-pending-id="${H(r._id)}" data-pending-type="${H(r._tipo)}">Ações</button></td></tr>`;
   }));
   if(selected.length>500)area.insertAdjacentHTML('beforeend','<p class="footer-hint">Exibindo até 500 registros. Use a busca para encontrar os demais.</p>');
  };
@@ -655,11 +720,18 @@ function openPendingActions(registro){
  title.textContent=isCatalog?'Ações — Produto EAN':'Ações — Pendência de '+(registro.tabela_origem||'mapa');
  info.textContent=isCatalog?'Revise o código EAN e o cadastro antes de aplicar a correção.':'Confirme lote, validade e quantidade antes de regularizar o registro histórico.';
  details.hidden=true;details.textContent='';
- $('#pending-action-edit').textContent=isCatalog?'Corrigir EAN e cadastro':'Corrigir registro do mapa';
+ $('#pending-action-edit').textContent=registro._tipo==='lancamento'?'Corrigir / cadastrar EAN':isCatalog?'Corrigir EAN e cadastro':'Corrigir registro do mapa';
  $('#pending-action-edit').onclick=()=>{dlg.close();openPendingEdit(registro);};
  $('#pending-action-original').onclick=()=>{details.hidden=!details.hidden;details.textContent=JSON.stringify(isCatalog?{
    codigo_original:registro.codigo_original,codigo_interno:registro.codigo_interno,descricao:registro.descricao,secao:registro.secao,motivo:registro.motivo
  }:{origem:registro.tabela_origem,motivo:registro.motivo,dados:d},null,2);};
+ $('#pending-action-ignore').onclick=async()=>{
+   if(!await confirmDialog('Ignorar pendência',`Ignorar ${registro._tipo==='lancamento'?'o EAN '+registro.ean:'esta pendência'}? O registro original será preservado.`))return;
+   const botao=$('#pending-action-ignore');botao.disabled=true;
+   try{await request('/pendencias',{method:'POST',body:{acao:'ignorar',tipo:registro._tipo,id:registro._id}});
+     dlg.close();toast('Pendência ignorada. O registro original foi mantido.');await renderRoute(state.route);
+   }catch(err){toast(err.message,true);}finally{botao.disabled=false;}
+ };
  $('#pending-action-cancel').onclick=()=>dlg.close();
  dlg.showModal();
 }
@@ -669,7 +741,11 @@ function openPendingEdit(r){
  $('#pending-title').textContent=catalog?'Corrigir cadastro Produtos EAN':'Corrigir '+(r.tabela_origem||'registro');
  $('#pending-description').textContent=catalog?`Código original: ${r.codigo_original}. ${r.motivo||''}`:`${r.motivo}. Mapa: ${d.mapa_nome||d.mapa_origem||'—'} · Mês: ${d.mes_lancamento||'—'}`;
  const make=(name,label,value,opts={})=>`<label>${H(label)}<input name="${name}" ${opts.type?'type="'+opts.type+'"':''} ${opts.inputmode?'inputmode="'+opts.inputmode+'"':''} ${opts.pattern?'pattern="'+opts.pattern+'"':''} ${opts.max?'maxlength="'+opts.max+'"':''} ${opts.min?'min="'+opts.min+'"':''} ${opts.step?'step="'+opts.step+'"':''} ${opts.required?'required':''}></label>`;
- if(catalog){
+ if(r._tipo==='lancamento'){
+  fields.innerHTML=make('ean','EAN correto',d.ean||'',{inputmode:'numeric',pattern:'[0-9]{8,14}',max:14,required:true})+
+   make('descricao','Descrição (se ainda não cadastrado)','')+make('secao','Seção (se ainda não cadastrado)','');
+  form.elements.ean.value=d.ean||'';
+ }else if(catalog){
   fields.innerHTML=make('ean','EAN correto','',{inputmode:'numeric',pattern:'[0-9]{8,14}',max:14,required:true})+make('codigo_interno','Código interno',r.codigo_interno||'')+make('descricao','Descrição',r.descricao||'',{required:true})+make('secao','Seção',r.secao||'');
   for(const k of ['codigo_interno','descricao','secao'])form.elements[k].value=r[k]||'';
  }else{
@@ -681,14 +757,14 @@ function openPendingEdit(r){
  error.hidden=true;$('#pending-cancel').onclick=()=>dialog.close();
  form.onsubmit=async e=>{
   e.preventDefault();const btn=form.querySelector('[type="submit"]');btn.disabled=true;error.hidden=true;
-  const correcao=Object.fromEntries(new FormData(form));if(!catalog)correcao.quantidade=Number(correcao.quantidade);
+  const correcao=Object.fromEntries(new FormData(form));if(!catalog&&r._tipo!=='lancamento')correcao.quantidade=Number(correcao.quantidade);
   try{await request('/pendencias',{method:'PATCH',body:{tipo:r._tipo,id:r._id,correcao},timeout:55000});dialog.close();toast('Pendência corrigida e registrada na auditoria.');await renderRoute(state.route);}
   catch(x){error.textContent=x.message;error.hidden=false;}finally{btn.disabled=false;}
  };
  dialog.showModal();
 }
 
-async function saldo(){const r=await request(urlWithLoja('/estoque'));const rows=r.registros||[];$('#content').innerHTML=header('Saldo importado do Procfit','Saldo total por produto na loja. Independente das quantidades dos mapas de validade.')+`<section class="card card-pad"><div class="filter-row"><input id="saldo-search" class="wide" placeholder="Pesquisar EAN, código ou descrição"></div><div id="saldo-table"></div></section><section class="card card-pad" style="margin-top:18px"><h2>Importar saldo por CSV ou ODS</h2><p>Colunas: <code>codigo_interno,ean,descricao,secao,quantidade</code>. ODS e CSV são lidos no próprio navegador. XLSX pode ser convertido para CSV.</p><input type="file" accept=".ods,.csv,text/csv,application/vnd.oasis.opendocument.spreadsheet" id="import-csv"><div class="form-actions"><button class="primary" id="start-import" type="button">Importar CSV</button></div><div id="import-progress" role="status"></div></section>`;const render=q=>$('#saldo-table').innerHTML=table(['EAN','Código interno','Descrição','Seção','Saldo Procfit','Atualização'],rows.filter(x=>[x.ean,x.codigo_interno,x.descricao,x.secao].join(' ').toLowerCase().includes(q)).slice(0,500).map(x=>`<tr><td>${H(x.ean)}</td><td>${H(x.codigo_interno)}</td><td>${H(x.descricao)}</td><td>${H(x.secao)}</td><td>${H(x.quantidade)}</td><td>${dtBR(x.atualizado_em)}</td></tr>`));render('');$('#saldo-search').oninput=e=>render(e.target.value.toLowerCase());$('#start-import').onclick=async()=>{const file=$('#import-csv').files[0];if(!file)return toast('Selecione um arquivo ODS ou CSV.',true);const lines=file.name.toLowerCase().endsWith('.ods')?await lerODS(file):parseCSV(await file.text());if(lines.length<2)return toast('Arquivo vazio.',true);const headers=lines[0].map(x=>String(x).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_'));const index=n=>headers.indexOf(n);const aliases={ean:['ean','codigo_ean','codigo_de_barras'],codigo_interno:['codigo_interno','codigo','cod_interno','produto'],descricao:['descricao','nome','produto_descricao'],secao:['secao','departamento'],quantidade:['quantidade','saldo','saldo_total','estoque']};const findIndex=n=>(aliases[n]||[n]).map(index).find(x=>x>=0)??-1;if(findIndex('ean')<0||findIndex('quantidade')<0)return toast('O arquivo deve conter EAN e Quantidade (ou Saldo).',true);const get=(row,name)=>findIndex(name)>=0?String(row[findIndex(name)]||''):'';const data=lines.slice(1).filter(r=>r.some(v=>v.trim())).map(row=>({ean:get(row,'ean').trim(),codigo_interno:get(row,'codigo_interno'),descricao:get(row,'descricao'),secao:get(row,'secao'),quantidade:Number(get(row,'quantidade').replace(',','.'))}));if(data.some(x=>!/^\d{8,14}$/.test(x.ean)||!Number.isFinite(x.quantidade)||x.quantidade<0))return toast('Há EAN ou quantidade inválidos. Confira o CSV.',true);if(!await confirmDialog('Importar estoque',`Atualizar ${data.length} saldos do Procfit? Somente produtos presentes no arquivo serão alterados.`))return;const btn=$('#start-import');btn.disabled=true;try{for(let i=0;i<data.length;i+=250){$('#import-progress').textContent=`Enviando ${Math.min(i+250,data.length)} de ${data.length}…`;await request('/estoque',{method:'POST',body:{itens:data.slice(i,i+250),...(state.user.perfil==='geral'?{loja:state.loja}:{})},timeout:60000});}toast('Importação concluída.');renderRoute(state.route);}catch(e){toast('Importação interrompida: '+e.message,true);}finally{btn.disabled=false;}};}
+async function saldo(){const r=await request(urlWithLoja('/estoque'));const rows=r.registros||[];$('#content').innerHTML=header('Saldo importado do Procfit','Saldo total por produto na loja. Independente das quantidades dos mapas de validade.')+`<section class="card card-pad"><div class="filter-row"><input id="saldo-search" class="wide" placeholder="Pesquisar EAN, código ou descrição"></div><div id="saldo-table"></div></section><section class="card card-pad" style="margin-top:18px"><h2>Importar saldo por CSV ou ODS</h2><p>Colunas: <code>codigo_interno,ean,descricao,secao,quantidade</code>. ODS e CSV são lidos no próprio navegador. XLSX pode ser convertido para CSV.</p><input type="file" accept=".ods,.csv,text/csv,application/vnd.oasis.opendocument.spreadsheet" id="import-csv"><div class="form-actions"><button class="primary" id="start-import" type="button">Importar ODS / CSV</button></div><div id="import-progress" role="status"></div></section>`;const render=q=>$('#saldo-table').innerHTML=table(['EAN','Código interno','Descrição','Seção','Saldo Procfit','Atualização'],rows.filter(x=>[x.ean,x.codigo_interno,x.descricao,x.secao].join(' ').toLowerCase().includes(q)).slice(0,500).map(x=>`<tr><td>${H(x.ean)}</td><td>${H(x.codigo_interno)}</td><td>${H(x.descricao)}</td><td>${H(x.secao)}</td><td>${H(x.quantidade)}</td><td>${dtBR(x.atualizado_em)}</td></tr>`));render('');$('#saldo-search').oninput=e=>render(e.target.value.toLowerCase());$('#start-import').onclick=async()=>{const file=$('#import-csv').files[0];if(!file)return toast('Selecione um arquivo ODS ou CSV.',true);const lines=file.name.toLowerCase().endsWith('.ods')?await lerODS(file):parseCSV(await file.text());if(lines.length<2)return toast('Arquivo vazio.',true);const headers=lines[0].map(x=>String(x).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_'));const index=n=>headers.indexOf(n);const aliases={ean:['ean','codigo_ean','codigo_de_barras'],codigo_interno:['codigo_interno','codigo','cod_interno','produto'],descricao:['descricao','nome','produto_descricao'],secao:['secao','departamento'],quantidade:['quantidade','saldo','saldo_total','estoque']};const findIndex=n=>(aliases[n]||[n]).map(index).find(x=>x>=0)??-1;if(findIndex('ean')<0||findIndex('quantidade')<0)return toast('O arquivo deve conter EAN e Quantidade (ou Saldo).',true);const get=(row,name)=>findIndex(name)>=0?String(row[findIndex(name)]||''):'';const data=lines.slice(1).filter(r=>r.some(v=>v.trim())).map(row=>({ean:get(row,'ean').trim(),codigo_interno:get(row,'codigo_interno'),descricao:get(row,'descricao'),secao:get(row,'secao'),quantidade:Number(get(row,'quantidade').replace(',','.'))}));if(data.some(x=>!/^\d{8,14}$/.test(x.ean)||!Number.isFinite(x.quantidade)||x.quantidade<0))return toast('Há EAN ou quantidade inválidos. Confira o CSV.',true);if(!await confirmDialog('Importar estoque',`Atualizar ${data.length} saldos do Procfit? Somente produtos presentes no arquivo serão alterados.`))return;const btn=$('#start-import');btn.disabled=true;try{for(let i=0;i<data.length;i+=250){$('#import-progress').textContent=`Enviando ${Math.min(i+250,data.length)} de ${data.length}…`;await request('/estoque',{method:'POST',body:{itens:data.slice(i,i+250),...(state.user.perfil==='geral'?{loja:state.loja}:{})},timeout:60000});}toast('Importação concluída.');renderRoute(state.route);}catch(e){toast('Importação interrompida: '+e.message,true);}finally{btn.disabled=false;}};}
 function parseCSV(txt){const first=(txt.split(/\r?\n/)[0]||''),sep=first.includes(';')?';':',';const out=[];let row=[],cell='',inQuotes=false;for(let i=0;i<txt.length;i++){const c=txt[i];if(c==='"'){if(inQuotes&&txt[i+1]==='"'){cell+='"';i++;}else inQuotes=!inQuotes;}else if(!inQuotes&&c===sep){row.push(cell);cell='';}else if(!inQuotes&&(c==='\n'||c==='\r')){if(c==='\r'&&txt[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.length))out.push(row);row=[];cell='';}else cell+=c;}row.push(cell);if(row.some(x=>x.length))out.push(row);if(out[0]?.[0])out[0][0]=out[0][0].replace(/^\uFEFF/,'');return out;}
 async function painelGeral(){
  const r=await request('/geral',{timeout:55000});const lojas=r.lojas||[],admins=r.administradores||[];

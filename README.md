@@ -169,3 +169,7 @@ OneSignal, execute `configurar_notificacoes` (SQL 005) antes da 006.
 Veja `documentacao/NOTIFICACOES-TODOS-E-PIN-GERAL.md`. A implementação foi testada
 localmente com simuladores; o recebimento real de Web Push, a inscrição dos
 celulares e a execução do cron devem ser homologados no seu domínio Vercel.
+
+## V24 — Conferência do ODS importado e pendências de EAN
+
+Consulte `ATUALIZAR-V24-ODS-PENDENCIAS-AVISOS.md` para aplicar primeiro a migração SQL 016 e publicar as correções. A conferência compara mapas com o estoque **já salvo** no Supabase, sem exigir novo upload ou modificar dados automaticamente.

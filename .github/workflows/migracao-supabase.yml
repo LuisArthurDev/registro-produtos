@@ -37,6 +37,7 @@ on:
           - organizar_secoes
           - mes_opcional_transferencias
           - visibilidade_secoes
+          - pendencias_ean_lancamentos
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -235,6 +236,13 @@ jobs:
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/012_exclusividade_geral_funcionarios.sql
           echo 'Titular exclusivo e gestão de lançamentos atualizados.'
+      - name: Pendências de EAN não encontrado nos lançamentos (SQL 016)
+        if: inputs.etapa == 'pendencias_ean_lancamentos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/016_pendencias_ean_lancamentos.sql
+          echo 'Pendências de EAN ativadas; lançamentos preservados.'
       - name: Habilitar acesso duplo Luis Arthur Loja 151 (SQL 011)
         if: inputs.etapa == 'habilitar_duplo_perfil'
         shell: bash

@@ -262,7 +262,13 @@ async function mapas(req,actor,pathname,body,query){
     if(actor.perfil==='admin' && tipo==='funcionario')throw bad('Administradores só podem lançar nas abas especiais. O mapa de funcionário pertence ao próprio login.',403);
     if(actor.perfil==='geral')throw bad('Administrador Geral não realiza lançamentos no Painel Conferente.',403);
     const registro=await db('rpc/gravar_lancamento',{method:'POST',body:{p_request_id:norm(body.requestId),p_usuario_id:actor.id,p_loja_id:loja,p_mapa_nome:mapa,p_tipo_mapa:tipo,p_ean:ean,p_lote:lote,p_validade:validade,p_quantidade:quantidade,p_confirmar_duplicado:body.confirmarDuplicado===true}});
-    if(registro.status==='saved')await audit(actor,'lancamento',{id:registro.id,mapa,ean});
+    if(registro.status==='saved'){
+      await audit(actor,'lancamento',{id:registro.id,mapa,ean});
+      // A trigger SQL 016 abre a pendência atomicamente com o lançamento.
+      // Consulta após o RPC para avisar o operador sem exigir outra ação.
+      const pendencia=await one('lancamento_pendencias',{lancamento_id:`eq.${registro.id}`,status:'eq.pendente',select:'id'});
+      registro.pendenciaEan=!!pendencia;
+    }
     return {sucesso:registro.status==='saved',...registro};
   }
   const id=norm(body.id);if(!/^[a-f0-9-]{36}$/.test(id))throw bad('Identificador inválido.');
@@ -625,19 +631,68 @@ function pendingVisible(actor,item){
 async function pendencias(req,actor,body,query){
   admin(actor);
   if(req.method==='GET'){
-    const [catalogo,migracao]=await Promise.all([
+    const [catalogo,migracao,lancamentos]=await Promise.all([
       rows('catalogo_pendencias',{status:'eq.pendente',select:'codigo_original,codigo_interno,descricao,secao,motivo,status',order:'importado_em.asc'},500,5),
-      rows('migracao_pendencias',{status:'eq.pendente',select:'origem_migracao,tabela_origem,motivo,dados,status',order:'importado_em.asc'},500,5)
+      rows('migracao_pendencias',{status:'eq.pendente',select:'origem_migracao,tabela_origem,motivo,dados,status',order:'importado_em.asc'},500,5),
+      rows('lancamento_pendencias',{status:'eq.pendente',...(actor.perfil==='geral'?{}:{loja_id:`eq.${actor.loja_id}`}),
+        select:'id,lancamento_id,loja_id,ean,status,criado_em,mapa_lancamentos(mapa_nome,lote,validade,quantidade,mes_lancamento,excluido_em)',order:'criado_em.desc'},500,12)
     ]);
     const visiveis=migracao.filter(x=>pendingVisible(actor,x));
     const excluidas=await secoesExcluidas(actor.loja_id);
     const catalogoVisivel=catalogo.filter(x=>!secaoNaoVisivel(x.secao,excluidas));
     const migracaoVisivel=visiveis.filter(x=>!secaoNaoVisivel(x.dados?.secao,excluidas));
-    return {sucesso:true,catalogo:catalogoVisivel,migracao:migracaoVisivel,totais:{catalogo:catalogoVisivel.length,migracao:migracaoVisivel.length}};
+    const pendenciasLancamento=lancamentos.filter(x=>!x.mapa_lancamentos?.excluido_em);
+    return {sucesso:true,catalogo:catalogoVisivel,migracao:migracaoVisivel,lancamentos:pendenciasLancamento,
+      totais:{catalogo:catalogoVisivel.length,migracao:migracaoVisivel.length,lancamentos:pendenciasLancamento.length}};
+  }
+  if(req.method==='POST'&&body.acao==='ignorar'){
+    const tipo=norm(body.tipo),id=norm(body.id);
+    if(!['catalogo','migracao','lancamento'].includes(tipo)||!id)throw bad('Pendência inválida.',422);
+    if(tipo==='lancamento'){
+      const item=await one('lancamento_pendencias',{id:`eq.${id}`,status:'eq.pendente',select:'*'});
+      if(!item)throw bad('Pendência não encontrada ou já resolvida.',409);
+      if(actor.perfil!=='geral'&&String(item.loja_id)!==String(actor.loja_id))throw bad('Pendência de outra loja.',403);
+      await db('lancamento_pendencias',{method:'PATCH',params:{id:`eq.${id}`,status:'eq.pendente'},
+        body:{status:'ignorada',ignorado_em:new Date().toISOString(),ignorado_por:actor.id,atualizado_em:new Date().toISOString()},prefer:'return=minimal'});
+      await audit(actor,'ignorar_pendencia_ean',{id,lancamento_id:item.lancamento_id,ean:item.ean});
+    }else{
+      const table=tipo==='catalogo'?'catalogo_pendencias':'migracao_pendencias';
+      const chave=tipo==='catalogo'?'codigo_original':'origem_migracao';
+      const item=await one(table,{[chave]:`eq.${id}`,status:'eq.pendente',select:'*'});
+      if(!item)throw bad('Pendência não encontrada ou já resolvida.',409);
+      if(tipo==='migracao'&&!pendingVisible(actor,item))throw bad('Pendência de outra loja.',403);
+      await db(table,{method:'PATCH',params:{[chave]:`eq.${id}`,status:'eq.pendente'},
+        body:{status:'ignorado',corrigido_em:new Date().toISOString(),corrigido_por:actor.id,
+          resultado:{acao:'ignorar',observacao:'Registro preservado para auditoria.'}},prefer:'return=minimal'});
+      await audit(actor,'ignorar_pendencia',{tipo,id});
+    }
+    return {sucesso:true,detalhe:'Pendência ignorada. O lançamento não foi excluído.'};
   }
   if(req.method!=='PATCH')throw bad('Método não permitido.',405);
   const tipo=norm(body.tipo),id=norm(body.id),entrada=body.correcao;
-  if(!['catalogo','migracao'].includes(tipo)||!id||!entrada||typeof entrada!=='object'||Array.isArray(entrada))throw bad('Dados de correção inválidos.');
+  if(!['catalogo','migracao','lancamento'].includes(tipo)||!id||!entrada||typeof entrada!=='object'||Array.isArray(entrada))throw bad('Dados de correção inválidos.');
+  if(tipo==='lancamento'){
+    const pend=await one('lancamento_pendencias',{id:`eq.${id}`,status:'eq.pendente',select:'*'});
+    if(!pend)throw bad('Pendência não encontrada ou já resolvida.',409);
+    if(actor.perfil!=='geral'&&String(pend.loja_id)!==String(actor.loja_id))throw bad('Pendência de outra loja.',403);
+    const ean=norm(entrada.ean),descricao=norm(entrada.descricao),secao=norm(entrada.secao);
+    if(!eanValido(ean))throw bad('Informe um EAN válido.',422);
+    let prod=await one('produtos',{ean:`eq.${ean}`,select:'id,ean'});
+    if(!prod){
+      if(!descricao||!secao)throw bad('Produto não cadastrado: informe descrição e seção.',422);
+      await db('produtos',{method:'POST',body:{ean,descricao,secao,atualizado_em:new Date().toISOString()},
+        params:{on_conflict:'ean'},prefer:'resolution=ignore-duplicates,return=minimal'});
+      prod=await one('produtos',{ean:`eq.${ean}`,select:'id,ean'});
+      if(!prod)throw bad('Não foi possível cadastrar o EAN.',409);
+    }
+    await db('mapa_lancamentos',{method:'PATCH',params:{id:`eq.${pend.lancamento_id}`,loja_id:`eq.${pend.loja_id}`,
+      excluido_em:'is.null'},body:{ean,produto_id:prod.id,atualizado_em:new Date().toISOString()},prefer:'return=minimal'});
+    // O gatilho do mapa resolve a pendência do lançamento sem apagar seu histórico.
+    await db('lancamento_pendencias',{method:'PATCH',params:{id:`eq.${id}`,status:'eq.pendente'},
+      body:{status:'resolvida',atualizado_em:new Date().toISOString()},prefer:'return=minimal'});
+    await audit(actor,'resolver_pendencia_ean',{pendencia:id,lancamento_id:pend.lancamento_id,ean});
+    return {sucesso:true,resultado:{ean,produto_id:prod.id}};
+  }
   const table=tipo==='catalogo'?'catalogo_pendencias':'migracao_pendencias';
   const key=tipo==='catalogo'?'codigo_original':'origem_migracao';
   const pend=await one(table,{[key]:`eq.${id}`,status:'eq.pendente',select:'*'});

@@ -45,8 +45,13 @@ async function enviarOneSignal(payload){
     body:JSON.stringify({app_id:app,target_channel:'push',...payload})
   });
   const raw=await res.text();let body={};try{body=JSON.parse(raw)}catch{}
-  if(!res.ok)throw falha(`OneSignal recusou o envio (HTTP ${res.status}).`,502);
-  if(!body.id)throw falha('OneSignal não encontrou uma assinatura apta para receber a mensagem.',422);
+  if(!res.ok){
+    const orientacao=res.status===401||res.status===403?'Verifique a REST API Key no Vercel.':
+      res.status===400||res.status===422?'Verifique a assinatura push deste aparelho.':
+      res.status===429?'Limite de envios atingido, tente novamente mais tarde.':'Consulte o status do serviço OneSignal.';
+    throw falha(`OneSignal HTTP ${res.status}. ${orientacao}`,res.status===429?503:502);
+  }
+  if(!body.id||body.recipients===0)throw falha('Assinatura sem destinatário ativo no OneSignal. O aparelho deve reativar as notificações.',422);
   return body.id;
 }
 
@@ -99,32 +104,55 @@ export async function tratarNotificacoes(req,{pathname,body,query,db,rows,one,au
       geralTotal++;
     }
     let enviados=0,pulados=0,falhas=0;
-    // Limite por execução: evita timeout e mensagens incontroláveis com muitas lojas.
+    const falhasDetalhadas=[];
+    const registrarFalha=(indice,etapa,err)=>{
+      falhas++;
+      const motivo=String(err?.message||'Falha não identificada').slice(0,160);
+      if(falhasDetalhadas.length<15)falhasDetalhadas.push({aparelho:indice,etapa,motivo});
+      // Índice ordinal somente; não imprimir usuário, assinatura, token ou chave.
+      console.error(`[Aviso 8h] aparelho #${indice}, ${etapa}: ${motivo}`);
+    };
     if(approved.length>60)throw falha('Mais de 60 aparelhos inscritos. Configure envio em lotes antes de aumentar a equipe.',413);
-    const processar=async dev=>{
+    const processar=async(dev,indice)=>{
       const user=byUser.get(dev.usuario_id);
       const total=user?.perfil==='geral'?geralTotal:(totalPorLoja.get(String(user.loja_id))||0);
       if(!total){pulados++;return;}
+      let reservation;
       try{
-        const reservation=await db('rpc/reservar_notificacao_push',{method:'POST',body:{p_janela:janela,p_tipo:'vencimentos',p_dispositivo:dev.id,p_quantidade:total}});
+        reservation=await db('rpc/reservar_notificacao_push',{method:'POST',
+          body:{p_janela:janela,p_tipo:'vencimentos',p_dispositivo:dev.id,p_quantidade:total}});
         if(!reservation){pulados++;return;}
-        const titulo='Validades — atenção';
-        const mensagem=user.perfil==='geral'
-          ?`Existem ${total} registro(s) que exigem atenção nas lojas. Acesse o Painel Geral.`
-          :`A loja ${user.loja_id} tem ${total} registro(s) próximos do vencimento ou vencidos. Consulte o sistema.`;
+      }catch(err){registrarFalha(indice,'reservar_envio',err);return;}
+      const titulo='Validades — atenção';
+      const mensagem=user.perfil==='geral'
+        ?`Existem ${total} registro(s) que exigem atenção nas lojas. Acesse o Painel Geral.`
+        :`A loja ${user.loja_id} tem ${total} registro(s) próximos do vencimento ou vencidos. Consulte o sistema.`;
+      let messageId;
+      try{
+        messageId=await enviarOneSignal({include_subscription_ids:[dev.subscription_id],
+          headings:{pt:titulo,en:titulo},contents:{pt:mensagem,en:mensagem}});
+        enviados++;
+      }catch(err){
+        registrarFalha(indice,'onesignal',err);
+        try{await db('notificacao_envios',{method:'PATCH',params:{id:`eq.${reservation}`},
+          body:{situacao:'falhou',erro_resumo:String(err?.message||'Falha de envio').slice(0,200),atualizado_em:new Date().toISOString()}});}
+        catch(erroDb){console.error('[Aviso 8h] não foi possível registrar falha:',String(erroDb?.message).slice(0,140));}
+        return;
+      }
+      // Envio já aceito pelo OneSignal. Persistir antes de considerar a execução íntegra.
+      // A reserva por janela bloqueia envio duplicado, mesmo quando esta atualização falha.
+      let gravado=false;
+      for(let tentativa=0;tentativa<2;tentativa++){
         try{
-          const messageId=await enviarOneSignal({include_subscription_ids:[dev.subscription_id],headings:{pt:titulo,en:titulo},contents:{pt:mensagem,en:mensagem}});
-          await db('notificacao_envios',{method:'PATCH',params:{id:`eq.${reservation}`},body:{situacao:'enviado',onesignal_message_id:messageId,atualizado_em:new Date().toISOString()}});
-          enviados++;
-        }catch(e){
-          falhas++;
-          await db('notificacao_envios',{method:'PATCH',params:{id:`eq.${reservation}`},body:{situacao:'falhou',erro_resumo:String(e.message).slice(0,200),atualizado_em:new Date().toISOString()}});
-        }
-      }catch(e){falhas++;console.error('Reserva de notificacao falhou:',String(e.message).slice(0,180));}
+          await db('notificacao_envios',{method:'PATCH',params:{id:`eq.${reservation}`},
+            body:{situacao:'enviado',onesignal_message_id:messageId,erro_resumo:null,atualizado_em:new Date().toISOString()}});
+          gravado=true;break;
+        }catch(err){if(tentativa===1)registrarFalha(indice,'registrar_confirmacao_no_banco',err);}
+      }
+      if(!gravado)console.error(`[Aviso 8h] aparelho #${indice}: OneSignal aceitou o envio, mas o histórico de envio não pôde ser confirmado.`);
     };
-    // Até 5 chamadas em paralelo para evitar atingir o timeout da função Vercel.
-    for(let i=0;i<approved.length;i+=5)await Promise.all(approved.slice(i,i+5).map(processar));
-    return {sucesso:falhas===0,janela,aparelhos:approved.length,enviados,pulados,falhas};
+    for(let i=0;i<approved.length;i+=5)await Promise.all(approved.slice(i,i+5).map((dev,j)=>processar(dev,i+j+1)));
+    return {sucesso:falhas===0,janela,aparelhos:approved.length,enviados,pulados,falhas,falhasDetalhadas};
   }
 
   const {actor,sessao}=await authenticate(req);
