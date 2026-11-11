@@ -1,3 +1,5 @@
+> **v27 — Tabelas em linhas, abas internas por nome e salvamento em lote da organização por Grupo.** Veja [ATUALIZAR-V27-LINHAS-ABAS-SALVAR-ORGANIZACAO.md](ATUALIZAR-V27-LINHAS-ABAS-SALVAR-ORGANIZACAO.md). Requer aplicar SQL 018 após SQL 017.
+
 # Atualização v26.1 — 11/11/2026
 
 Catálogo com **Grupo** importado por ODS (par EAN + Código Interno), organização por Grupo, importação tolerante de Estoque ODS/CSV, cópia TSV para **Conector Procfit — v1.0** e tabelas responsivas sem scroll horizontal.

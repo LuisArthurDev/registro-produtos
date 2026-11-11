@@ -881,6 +881,33 @@ async function organizarSecoes(req,actor,body){
   return {sucesso:true,loja,criterio:'grupo',secaoDisponiveis:resumo?.grupos||[],estatisticas:resumo?.estatisticas||[],semSecao:Number(resumo?.sem_grupo||0),semFuncionario:Number(resumo?.sem_funcionario||0),
    atribuicoes:atribuicoes.map(x=>({...x,secao_chave:x.grupo_chave,secao:x.grupo})),funcionarios};
  }
+ if(req.method==='POST'){
+   const alteracoes=body.alteracoes;
+   if(!Array.isArray(alteracoes)||alteracoes.length<1||alteracoes.length>500)
+     throw bad('Selecione de 1 a 500 grupos para salvar.',422);
+   const resumo=await carregar(),validos=new Map((resumo?.grupos||[]).map(x=>[chaveSecao(x.chave),x]));
+   const vistos=new Set(),ids=new Set(),itens=[];
+   for(const item of alteracoes){
+     const chave=chaveSecao(item?.grupo);
+     if(!chave||vistos.has(chave)||!validos.has(chave)||secaoPadraoIgnorada(item?.grupo))
+       throw bad('Grupo desconhecido, protegido ou repetido na organização.',422);
+     vistos.add(chave);
+     const id=item.responsavel_id==null||item.responsavel_id===''?null:norm(item.responsavel_id);
+     if(id&&!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id))throw bad('Responsável inválido.',422);
+     if(id)ids.add(id);
+     itens.push({grupo:validos.get(chave).nome,responsavel_id:id});
+   }
+   // Validação de TODOS os responsáveis antes de enviar uma única transação SQL.
+   if(ids.size){
+     const pessoas=await rows('usuarios',{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',excluido_em:'is.null',select:'id'},250,10);
+     const permitidos=new Set(pessoas.map(x=>x.id));
+     if([...ids].some(id=>!permitidos.has(id)))throw bad('Um responsável não pertence à loja ou está inativo.',403);
+   }
+   const resultado=await db('rpc/salvar_organizacao_grupos',{method:'POST',body:{p_loja:loja,p_usuario:actor.id,p_itens:itens}});
+   try{await audit(actor,'salvar_organizacao_grupos',{quantidade:itens.length,grupos:itens.map(x=>x.grupo),sem_movimentar_lancamentos:true});}
+   catch(error){console.error('Registro de auditoria da organização indisponível:',error.message);}
+   return {sucesso:true,alterados:Number(resultado?.alterados??itens.length)};
+ }
  const grupo=norm(body.grupo||body.secao).replace(/\s+/g,' '),chave=grupo.toLocaleLowerCase('pt-BR');
  if(!grupo||grupo.length>120||secaoPadraoIgnorada(grupo))throw bad('Grupo protegido ou inválido.',422);
  const resumo=await carregar(),encontrado=(resumo?.grupos||[]).find(x=>chaveSecao(x.chave)===chaveSecao(grupo));

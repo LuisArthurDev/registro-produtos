@@ -39,6 +39,7 @@ on:
           - visibilidade_secoes
           - pendencias_ean_lancamentos
           - grupos_produtos
+          - salvar_organizacao_grupos
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -126,7 +127,7 @@ jobs:
           if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
             echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
           fi
-          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' || "$ETAPA" == 'proteger_geral_e_funcionarios' || "$ETAPA" == 'organizar_secoes' || "$ETAPA" == 'mes_opcional_transferencias' || "$ETAPA" == 'visibilidade_secoes' || "$ETAPA" == 'pendencias_ean_lancamentos' || "$ETAPA" == 'grupos_produtos' ]]; then
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' || "$ETAPA" == 'proteger_geral_e_funcionarios' || "$ETAPA" == 'organizar_secoes' || "$ETAPA" == 'mes_opcional_transferencias' || "$ETAPA" == 'visibilidade_secoes' || "$ETAPA" == 'pendencias_ean_lancamentos' || "$ETAPA" == 'grupos_produtos' || "$ETAPA" == 'salvar_organizacao_grupos' ]]; then
             if [[ -z "$SUPABASE_DB_URL" ]]; then
               echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
             fi
@@ -142,7 +143,7 @@ jobs:
             fi
           fi
       - name: Verificar URL IPv4 do Supabase antes do SQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos'
         shell: bash
         run: |
           set -euo pipefail
@@ -170,18 +171,25 @@ jobs:
           print('URL do Session pooler validada (IPv4, 5432).')
           PYCODE
       - name: Preparar cliente PostgreSQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
       - name: Testar conexão PostgreSQL sem alterar dados
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos'
         shell: bash
         run: |
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -qAt -c 'SELECT 1' | grep -qx '1'
           echo 'Conexão PostgreSQL confirmada.'
+      - name: Salvar organizacao por grupo em lote atomico (SQL 018)
+        if: inputs.etapa == 'salvar_organizacao_grupos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/018_salvar_organizacao_grupos.sql
+          echo 'Funcao transacional de salvamento por lote habilitada.'
       - name: Criar tabelas, políticas e funções SQL
         if: inputs.etapa == 'estrutura'
         shell: bash

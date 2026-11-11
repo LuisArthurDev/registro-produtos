@@ -547,10 +547,10 @@ button.icon-action--labeled:disabled{opacity:.54!important}
 /* V26: relatório de importação do ODS preserva quebras de linha sem extrapolar o cartão. */
 .import-report{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow-y:auto;padding:12px;border-radius:9px;background:var(--panel,#142235);color:var(--text,#e7f2fa)}
 
-/* V26.1 — sem rolagem horizontal no sistema inteiro.
-   Desktop: cabeçalhos e células quebram linhas, sem largura mínima fixa.
-   Telas estreitas: cada registro vira card rotulado (os rótulos são injetados
-   a partir do próprio THEAD, mantendo os filtros e as ações funcionando). */
+/* V27 — sem rolagem horizontal no sistema inteiro.
+   Desktop amplo: tabelas tradicionais. Larguras menores: linhas compactas,
+   com duas colunas internas e rótulos derivados do THEAD. Cards somente no
+   quadro de organização de Grupos. */
 html,body{max-width:100%;overflow-x:clip}
 .shell,.page-wrap,.page-content,#content,.card,.card-pad,.split,
 .stat-grid,.page-head,.toolbar,.filter-row,.pager,.panel-actions,
@@ -587,42 +587,39 @@ html,body{max-width:100%;overflow-x:clip}
 }
 .table-wrap td.row-actions{white-space:normal}
 .table-wrap .icon-action:not(.icon-action--labeled){flex-shrink:0}
+/* V27: registros sempre em LINHAS, nunca em cards. Desktop compacto e sem min-width.
+   Abaixo de 760 px, cada TR vira uma faixa contínua de duas colunas,
+   com rótulos curtos e separador inferior; não tem borda de card nem scroll lateral. */
+.table-wrap tbody>tr{border-bottom:1px solid var(--line,#33465d)}
+.table-wrap tbody>tr[hidden]{display:none!important}
 @media screen and (max-width:1499px){
- .table-wrap table,#compare-table table{display:block;min-width:0!important;width:100%;}
- .table-wrap thead{
-   position:absolute!important;clip-path:inset(50%);
-   width:1px;height:1px;overflow:hidden;white-space:nowrap;
- }
- .table-wrap tbody{
-   display:grid;
-   width:100%;min-width:0;
-   grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));
-   align-items:start;gap:12px;
- }
+ .table-wrap table,#compare-table table{display:block;width:100%;min-width:0!important;table-layout:auto}
+ .table-wrap thead{position:absolute!important;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}
+ .table-wrap tbody{display:block;width:100%;min-width:0}
  .table-wrap tbody>tr{
-   display:block;min-width:0;max-width:100%;height:100%;
-   background:var(--panel2,#1b2b3e);
-   border:1px solid var(--line,#35465c);
-   border-radius:12px;padding:10px 12px;
-   box-shadow:0 2px 8px #00000015;
+   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+   gap:0 12px;padding:7px 3px;margin:0;min-width:0;
+   background:transparent;border:0;border-bottom:1px solid var(--line,#33465d);
+   border-radius:0;box-shadow:none;
  }
- .table-wrap tbody>tr[hidden]{display:none!important}
- .table-wrap td{
-   display:block;width:100%;max-width:100%;min-width:0;
-   padding:9px 0;border-bottom:1px solid var(--line,#33465d);
-   white-space:normal!important;overflow-wrap:anywhere;
+ .table-wrap tbody>tr:nth-child(even){background:rgba(255,255,255,.025)}
+ .table-wrap tbody>tr>td{
+   display:block;min-width:0;width:100%;max-width:100%;
+   padding:6px 2px;border:0;overflow-wrap:anywhere;
+   font-size:12px;line-height:1.4;
  }
- .table-wrap tbody>tr>td:last-child{border-bottom:0}
  .table-wrap td[data-label]:not([data-label=""])::before{
-   content:attr(data-label);
-   display:block;margin-bottom:5px;font-size:10px;
-   text-transform:uppercase;letter-spacing:.06em;
-   font-weight:750;color:var(--muted,#a5b9cc);
+   content:attr(data-label);display:block;margin-bottom:2px;
+   font-size:10px;color:var(--muted,#a5b9cc);font-weight:700;
  }
+ .table-wrap tbody>tr>td.row-actions,.table-wrap tbody>tr>td:last-child:has(.row-actions),.table-wrap tbody>tr>td[colspan]{grid-column:1/-1}
+ .table-wrap td .row-actions{min-width:0;max-width:100%;gap:3px}
  .table-wrap td .second{white-space:normal;overflow-wrap:anywhere}
- .table-wrap td.row-actions button{margin:2px 3px 2px 0}
  .table-wrap td input[type="checkbox"]{width:19px;min-height:19px;height:19px}
- .table-wrap tr:hover{background:#20354b}
+ .table-wrap tbody>tr:hover{background:rgba(83,219,210,.045)}
+}
+@media (min-width:768px) and (max-width:1499px){
+ .table-wrap tbody>tr{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media(max-width:580px){
  .page-content{padding-inline:12px}
@@ -637,7 +634,7 @@ html,body{max-width:100%;overflow-x:clip}
  .filter-row>label,.filter-row>*{width:100%;max-width:100%}
  .filter-row>input.wide{grid-column:1/-1}
  .filter-row button{grid-column:auto;white-space:normal}
- .table-wrap tbody{grid-template-columns:minmax(0,1fr)}
+ .table-wrap tbody>tr{grid-template-columns:repeat(2,minmax(0,1fr))}
  .org-board{grid-template-columns:minmax(0,1fr)}
  .pager{justify-content:center}
  .pager button,.pager select{max-width:100%;min-width:0}

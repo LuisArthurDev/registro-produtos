@@ -19,17 +19,19 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  const atrib=new Map((data.atribuicoes||[]).map(x=>[secaoChave(x.secao_chave),x.responsavel_id]));
  const visibilidade=new Map((data.atribuicoes||[]).map(x=>[secaoChave(x.secao_chave),{oculta:!!x.oculta_no_quadro,excluida:!!x.excluida_das_listas}]));
  const ativos=funcionarios.map(x=>x.id);
+ const original=new Map(atrib);
+ const mudancas=()=>secoes.filter(sec=>(atrib.get(secaoChave(sec.chave))||'')!==(original.get(secaoChave(sec.chave))||''));
  const options='<option value="">Sem responsável</option>'+funcionarios.map(x=>`<option value="${html(x.id)}">${html(x.nome)}</option>`).join('');
  const resumos=new Map(secoes.map(x=>[secaoChave(x.chave),recomendacaoSecao(x.chave,stats,funcionarios)]));
  const geral={registros:stats.reduce((s,x)=>s+(Number(x.registros)||0),0),unidades:stats.reduce((s,x)=>s+(Number(x.unidades)||0),0)};
  content.innerHTML=header('Seções por Grupo','Organize responsáveis, oculte cartões ou exclua grupos das listagens sem apagar o histórico.',
- '<button type="button" class="btn-outline" id="org-refresh">Atualizar análise</button>')+`
+ '<button type="button" class="primary" id="org-save" disabled>Salvar organização</button><button type="button" class="btn-outline" id="org-reset" disabled>Desfazer alterações</button><button type="button" class="btn-outline" id="org-refresh">Atualizar análise</button>')+`
  <section class="card card-pad org-intro"><div class="stat-grid">
  <div class="card stat"><small>Grupos cadastrados</small><strong>${secoes.length}</strong></div>
  <div class="card stat"><small>Funcionários ativos</small><strong>${funcionarios.length}</strong></div>
  <div class="card stat"><small>Registros analisados</small><strong>${geral.registros}</strong><p>${geral.unidades} unidades ativas</p></div>
  <div class="card stat"><small>Sem dono definido</small><strong id="org-unassigned">0</strong><p>Apenas no quadro de organização</p></div></div>
- <div class="notice org-explanation">Este é um <strong>quadro organizacional</strong>, não um mapa de estoque. Arraste os cartões ou use o seletor de responsável. <strong>Nada é transferido, editado ou excluído dos lançamentos.</strong> Ocultar afeta apenas o quadro; excluir um grupo a remove das listagens operacionais da loja, mas preserva os dados.</div>
+ <div class="notice org-explanation">Este é um <strong>quadro organizacional</strong>, não um mapa de estoque. Arraste os cartões ou use o seletor de responsável e clique em <strong>Salvar organização</strong> ao terminar. As mudanças de responsável não são gravadas antes disso. <strong>Nada é transferido, editado ou excluído dos lançamentos.</strong> Ocultar afeta apenas o quadro; excluir um grupo a remove das listagens operacionais da loja, mas preserva os dados.</div>
  ${Number(data.semSecao)>0?`<p class="org-note">${Number(data.semSecao)} registro(s) sem grupo definido no catálogo não entram nas recomendações. Cadastre o grupo em Produtos EAN.</p>`:''}
  ${Number(data.semFuncionario)>0?`<p class="org-note">${Number(data.semFuncionario)} registro(s) não têm funcionário identificável e não são atribuídos a alguém automaticamente.</p>`:''}
  <div class="filter-row"><label class="org-search"><span>Buscar grupo</span><input id="org-filter" type="search" placeholder="Ex.: ALIMENTICIO, HIGIENE, BELEZA"></label>
@@ -41,7 +43,15 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  <div class="org-board" id="org-board" aria-label="Quadro de responsáveis por grupo"></div></section>`;
  const board=content.querySelector('#org-board'),status=content.querySelector('#org-status');
  let busy=false;
+ const atualizarPendencias=()=>{
+   const n=mudancas().length;
+   const salvar=content.querySelector('#org-save'),desfazer=content.querySelector('#org-reset');
+   if(salvar){salvar.disabled=busy||!n;salvar.textContent=n?`Salvar organização (${n})`:'Salvar organização';}
+   if(desfazer)desfazer.disabled=busy||!n;
+   status.textContent=n?`${n} alteração(ões) pendente(s) · clique em Salvar organização`:'Organização salva · nenhuma alteração pendente';
+ };
  const render=()=>{
+   const scrolls=new Map([...board.querySelectorAll('.org-column')].map(x=>[x.dataset.orgColumn,x.querySelector('.org-column-cards')?.scrollTop||0]));
    const query=content.querySelector('#org-filter').value.toLocaleLowerCase('pt-BR').trim(),mode=content.querySelector('#org-view').value;
    let avisos=0,semDono=0;
    const columns=[{id:'',nome:'Sem responsável'},...funcionarios.map(x=>({id:x.id,nome:x.nome}))];
@@ -85,30 +95,46 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
      const sectionName=tops.length?secoes.find(s=>secaoChave(s.chave)===secaoChave(tops[0].chave))?.nome:null;
      return `<section class="org-column" data-org-column="${html(col.id)}" aria-label="${html(col.nome)}">
        <div class="org-column-head"><strong>${html(col.nome)}</strong><span class="org-count">${cards.length}</span></div>
-       <p class="org-column-meta">${col.id?`${registros} registro(s) no mapa${sectionName?` · Mais frequente: ${html(sectionName)}`:''}`:'Grupos aguardando definição'}</p>
+       <p class="org-column-meta">${col.id?`${registros} registro(s) no mapa${sectionName?` · Grupo mais frequente: ${html(sectionName)}`:''}`:'Grupos aguardando definição'}</p>
        <div class="org-column-cards" role="region" tabindex="0" aria-label="Grupos de ${html(col.nome)}; use as setas para rolar a lista">${cards.join('')||'<p class="org-column-empty">Solte um grupo aqui ou escolha esta opção no seletor.</p>'}</div>
      </section>`;
    }).join('');
    for(const select of board.querySelectorAll('[data-org-select]'))select.value=funcionariosMap.has(atrib.get(select.dataset.orgSelect))?atrib.get(select.dataset.orgSelect):'';
+   for(const col of board.querySelectorAll('.org-column')){
+     const list=col.querySelector('.org-column-cards');if(list)list.scrollTop=scrolls.get(col.dataset.orgColumn)||0;
+   }
    const arquivadas=lista.filter(sec=>{const f=visibilidade.get(secaoChave(sec.chave));return f?.oculta||f?.excluida;});
    content.querySelector('#org-inactive-count').textContent=`(${arquivadas.length})`;
    content.querySelector('#org-manage-list').innerHTML=arquivadas.length?arquivadas.map(sec=>{
      const f=visibilidade.get(secaoChave(sec.chave));return `<div class="org-managed-item"><span><strong>${html(sec.nome)}</strong><small>${f.excluida?'Excluída das listagens da loja':'Oculta somente deste quadro'}</small></span><button type="button" class="btn-outline" data-org-action="restaurar" data-org-key="${html(secaoChave(sec.chave))}" title="Restaurar grupo ${html(sec.nome)}">Restaurar</button></div>`;
    }).join(''):'<p class="footer-hint">Nenhum grupo oculta ou excluída.</p>';
-   status.textContent=`${secoes.length-arquivadas.length} grupos visíveis · ${avisos} sugestão(ões)`;
+   atualizarPendencias();
  };
- async function save(chave,target){
+ function mover(chave,target){
    if(busy)return;
    if(!secoes.some(x=>secaoChave(x.chave)===chave))return;
    if(target&&!ativos.includes(target)){toast('Escolha um funcionário ativo da mesma loja.',true);return;}
    if((atrib.get(chave)||'')===target)return;
-   const secao=secoes.find(x=>secaoChave(x.chave)===chave);
-   const old=atrib.get(chave)||'';busy=true;status.textContent='Salvando organização…';
-   try{await request('/organizacao-secoes',{method:'PUT',body:{secao:secao.nome,responsavel_id:target||null}});
-     atrib.set(chave,target);render();toast(`Grupo ${secao.nome}: ${funcionariosMap.get(target)?.nome||'sem responsável'}. Organização salva, mapas inalterados.`);
-   }catch(err){atrib.set(chave,old);render();toast(err.message,true);}finally{busy=false;}
+   atrib.set(chave,target);render();
  }
- board.addEventListener('change',e=>{const sel=e.target.closest('[data-org-select]');if(sel)void save(sel.dataset.orgSelect,sel.value);});
+ board.addEventListener('change',e=>{const sel=e.target.closest('[data-org-select]');if(sel)mover(sel.dataset.orgSelect,sel.value);});
+ async function salvarOrganizacao(){
+   if(busy)return;
+   const alterados=mudancas();if(!alterados.length)return;
+   busy=true;atualizarPendencias();
+   try{
+     const itens=alterados.map(sec=>({grupo:sec.nome,responsavel_id:atrib.get(secaoChave(sec.chave))||null}));
+     await request('/organizacao-secoes',{method:'POST',body:{alteracoes:itens}});
+     for(const sec of alterados){const chave=secaoChave(sec.chave);original.set(chave,atrib.get(chave)||'');}
+     toast(`${itens.length} grupo(s) salvo(s) de uma vez. Os lançamentos não foram movidos.`);
+   }catch(err){toast(`Nada foi salvo. ${err.message}`,true);}
+   finally{busy=false;atualizarPendencias();}
+ }
+ content.querySelector('#org-save').onclick=()=>void salvarOrganizacao();
+ content.querySelector('#org-reset').onclick=()=>{
+   if(!mudancas().length||!confirm('Desfazer todas as alterações de responsáveis ainda não salvas?'))return;
+   atrib.clear();for(const [k,v] of original)atrib.set(k,v);render();
+ };
  async function mudarVisibilidade(chave,acao){
    const secao=secoes.find(x=>secaoChave(x.chave)===chave);if(!secao||busy)return;
    if(acao==='excluir'&&!confirm(`Excluir o grupo "${secao.nome}" das listagens desta loja? Produtos e lançamentos serão preservados no banco. Você poderá restaurar depois.`))return;
@@ -116,12 +142,13 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
    try{
      await request('/organizacao-secoes',{method:'PATCH',body:{secao:secao.nome,acao}});
      toast(acao==='ocultar'?`Grupo ${secao.nome} oculto do quadro.`:acao==='excluir'?`Grupo ${secao.nome} excluído das listagens da loja.`:`Grupo ${secao.nome} restaurado.`);
-     await renderOrganizacaoSecoes({request,content,header,toast});
+     visibilidade.set(chave,{oculta:acao==='ocultar',excluida:acao==='excluir'});
+     render();
    }catch(err){toast(err.message,true);render();}finally{busy=false;}
  }
  function tratarAcao(e){
    const acao=e.target.closest('[data-org-action]');if(acao){void mudarVisibilidade(acao.dataset.orgKey,acao.dataset.orgAction);return;}
-   const sugestao=e.target.closest('[data-org-suggest]');if(sugestao)void save(sugestao.dataset.orgSuggest,sugestao.dataset.orgTarget);
+   const sugestao=e.target.closest('[data-org-suggest]');if(sugestao)mover(sugestao.dataset.orgSuggest,sugestao.dataset.orgTarget);
  }
  board.addEventListener('click',tratarAcao);
  content.querySelector('#org-manage-list').addEventListener('click',tratarAcao);
@@ -133,9 +160,17 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  board.addEventListener('dragend',e=>{e.target.closest('.org-section-card')?.classList.remove('org-dragging');board.querySelectorAll('.org-drop-target').forEach(x=>x.classList.remove('org-drop-target'));});
  board.addEventListener('dragover',e=>{const col=e.target.closest('[data-org-column]');if(col){e.preventDefault();e.dataTransfer.dropEffect='move';col.classList.add('org-drop-target');}});
  board.addEventListener('dragleave',e=>{const col=e.target.closest('[data-org-column]');if(col&&!col.contains(e.relatedTarget))col.classList.remove('org-drop-target');});
- board.addEventListener('drop',e=>{const col=e.target.closest('[data-org-column]');if(!col)return;e.preventDefault();const key=e.dataTransfer.getData('text/plain');col.classList.remove('org-drop-target');void save(key,col.dataset.orgColumn);});
+ board.addEventListener('drop',e=>{const col=e.target.closest('[data-org-column]');if(!col)return;e.preventDefault();const key=e.dataTransfer.getData('text/plain');col.classList.remove('org-drop-target');mover(key,col.dataset.orgColumn);});
  content.querySelector('#org-filter').oninput=render;
  content.querySelector('#org-view').onchange=render;
- content.querySelector('#org-refresh').onclick=()=>renderOrganizacaoSecoes({request,content,header,toast}).catch(err=>toast(err.message,true));
+ content.querySelector('#org-refresh').onclick=()=>{
+   if(mudancas().length&&!confirm('Existem alterações não salvas. Descartá-las e atualizar análise?'))return;
+   renderOrganizacaoSecoes({request,content,header,toast}).catch(err=>toast(err.message,true));
+ };
+ if(typeof window!=='undefined'){
+   if(window.__orgUnloadGuard)window.removeEventListener('beforeunload',window.__orgUnloadGuard);
+   window.__orgUnloadGuard=event=>{if(board.isConnected&&mudancas().length){event.preventDefault();event.returnValue='';}};
+   window.addEventListener('beforeunload',window.__orgUnloadGuard);
+ }
  render();
 }

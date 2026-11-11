@@ -84,7 +84,7 @@ export function classeDaAcao(label,button){
  return 'neutral';
 }
 function decorate(button){
- if(button.closest('#login-screen,#menu,.sidebar,.side-bottom')||button.matches('[data-no-action-icon],#btn-login,#btn-revalidar-sessao'))return;
+ if(button.closest('#login-screen,#menu,.sidebar,.side-bottom,.page-subnav,.compare-tabs,.view-tabs,.view-month-modes,.mode-selector,.tab-list,[role=tablist]')||button.matches('[data-no-action-icon],[role=tab],[data-view-tab],[data-loss-tab],#btn-login,#btn-revalidar-sessao'))return;
  if(button.dataset.iconAction==='1'&&button.querySelector('svg[data-action-svg]'))return;
  const original=button.dataset.iconAction==='1' ? (button.innerText||button.textContent||button.getAttribute('aria-label')||'') : (button.getAttribute('aria-label')||button.getAttribute('title')||button.innerText||button.textContent||'');
  const label=String(original).replace(/\s+/g,' ').trim();

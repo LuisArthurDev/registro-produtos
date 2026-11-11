@@ -1,4 +1,4 @@
-/* Tabelas responsivas: usa os cabeçalhos originais como rótulos dos cards.
+/* Tabelas responsivas: usa os cabeçalhos originais como rótulos das células em linhas compactas.
  * Funciona também com tabelas criadas dinamicamente por filtros/paginação,
  * sem reescrever a estrutura dos registros ou seus botões de ação. */
 export function rotularTabela(tabela) {
