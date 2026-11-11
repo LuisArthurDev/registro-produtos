@@ -92,6 +92,6 @@ test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia
   assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
   assert.match(app,/compareRows\.map\(r=>\[r\.codigoInterno/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
-  assert.match(sw,/registro-validades-v31-procfit-estoque-unica-especial/);
+  assert.match(sw,/registro-validades-v32-destino-fixo-descida-lote/);
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });

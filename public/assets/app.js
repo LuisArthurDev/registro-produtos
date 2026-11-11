@@ -18,6 +18,8 @@ iniciarTabelasResponsivas();
 const $=s=>document.querySelector(s);
 const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
+// A escolha é exclusiva de cada administrador/loja; não reutilizar entre logins.
+const chaveMapaDestino=(usuario)=>`rv_mapa_destino_v32_${usuario?.id||''}_${usuario?.loja||''}`;
 // Transferência efêmera de um login já confirmado no servidor para a página móvel.
 const AUTH_BRIDGE_KEY='rv_login_validado_para_lancamentos_v1';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
@@ -381,6 +383,14 @@ async function lancamentos(emModal=false){
  <div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite o EAN e consulte. Você ainda pode registrar o produto se o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">O nome encontrado também aparece sobre o EAN. Códigos são sempre tratados como texto, inclusive os que começam com zero.</div></div></div>`;
  if(emModal){$('#launch-body').innerHTML=launchMarkup;$('#launch-dialog').showModal();}else{$('#content').innerHTML=launchMarkup;}
  const f=$('#form-launch'),ident=$('#product-identity');
+ if(isAdmin()&&f.elements.mapa){
+   const key=chaveMapaDestino(state.user);
+   const guardado=localStorage.getItem(key);
+   if(special.includes(guardado))f.elements.mapa.value=guardado;
+   f.elements.mapa.addEventListener('change',()=>{
+     if(special.includes(f.elements.mapa.value))localStorage.setItem(key,f.elements.mapa.value);
+   });
+ }
  if(IS_LAUNCH_PAGE){const exit=$('#launch-logout-standalone');if(exit)exit.onclick=()=>logout();}
  if(!IS_LAUNCH_PAGE||window.matchMedia('(min-width:768px)').matches)f.elements.ean.focus();
  const mode=f.elements.tipoRegistro;
@@ -473,7 +483,16 @@ async function submitLaunch(data, form) {
      $('#launch-result').innerHTML = `<div class="result-tip">✔ ${data.tipoRegistro === 'transferencia' ? 'Transferência registrada' : 'Produto registrado'} com sucesso. ${r.idempotente ? '(Resposta recuperada após reenvio)' : ''}${r.pendenciaEan?' · EAN não cadastrado: pendência aberta para revisão.':''}</div>`;
      toast(data.tipoRegistro === 'transferencia' ? 'Transferência registrada com sucesso.' : 'Produto registrado com sucesso.');
      tocarConfirmacao();
+     // Limpa apenas o produto; mantém o mapa escolhido (inclusive depois de salvar
+     // transferências) e o tipo de lançamento. O select deixa de voltar a Estoque.
+     const destinoAnterior=form.elements.mapa?.value||'';
+     const tipoAnterior=form.elements.tipoRegistro?.value||'mapa';
      form.reset();
+     if(form.elements.mapa&&special.includes(destinoAnterior)){
+       form.elements.mapa.value=destinoAnterior;
+       if(isAdmin())localStorage.setItem(chaveMapaDestino(state.user),destinoAnterior);
+     }
+     if(form.elements.tipoRegistro)form.elements.tipoRegistro.value=tipoAnterior;
      form.elements.quantidade.value = 1;
      form.querySelector('#launch-kind')?.dispatchEvent(new Event('change'));
      form.querySelector('#product-identity').innerHTML='<strong>Produto não consultado</strong><span>Leia o próximo EAN.</span>';
@@ -530,7 +549,7 @@ async function mapas(forced=''){
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
- ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>':''}</div>
+ ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':''):''}</div>
  <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
@@ -541,6 +560,10 @@ async function mapas(forced=''){
   if($('#map-select-all')){$('#map-select-all').checked=paged().length>0&&paged().every(x=>selected.has(x.id));$('#map-select-all').indeterminate=paged().some(x=>selected.has(x.id))&&!$('#map-select-all').checked;}
   $('#map-page-label').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil(filtered.length/Number($('#map-size').value)))}`;
   $('#map-counter').textContent=`${filtered.length} registro(s) · ${filtered.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · ${selected.size} selecionado(s)`;
+  const descida=$('#stock-descend-selected');
+  if(descida){const validos=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0&&r.tipo_mapa==='Estoque'));
+    descida.disabled=!validos.length;descida.textContent=validos.length?`Descer ${validos.length} selecionado(s) para mapa`:'Descer selecionados para o mapa';}
+
  };
  const apply=()=>{const q=$('#map-search').value.toLowerCase().trim(),l=$('#map-lot').value.toLowerCase().trim(),st=$('#map-status').value,owner=$('#map-owner')?.value||forced,
  m=$('#map-month').value,v1=$('#map-valid-from').value,v2=$('#map-valid-to').value;
@@ -613,6 +636,46 @@ async function mapas(forced=''){
  if(able){
   $('#map-select-all').onchange=e=>{for(const r of paged()){if(e.target.checked)selected.add(r.id);else selected.delete(r.id);}draw();};
   $('#map-unselect').onclick=()=>{selected.clear();$('#map-select-all').checked=false;draw();};
+  if(isStock){
+   $('#stock-select-filtered').onclick=()=>{for(const r of filtered)if(r.tipo_mapa==='Estoque'&&Number(r.quantidade)>0)selected.add(r.id);draw();};
+   $('#stock-descend-selected').onclick=async()=>{
+     const aptos=[...selected].map(id=>rows.find(r=>r.id===id)).filter(r=>r&&r.tipo_mapa==='Estoque'&&Number(r.quantidade)>0);
+     if(!aptos.length)return toast('Selecione produtos do Estoque com quantidade positiva.',true);
+     if(aptos.length>500)return toast('Para movimentações seguras, selecione até 500 registros por operação.',true);
+     try{
+       const colaboradores=await staffList();
+       const destinos=[...new Set([...colaboradores.filter(x=>x.perfil==='funcionario'&&x.ativo).map(x=>x.nome),...special.filter(x=>x!=='Estoque')])];
+       if(!destinos.length)return toast('Não há mapas de destino disponíveis.',true);
+       const dlg=$('#stock-bulk-dialog'),form=$('#stock-bulk-form');
+       dlg.oncancel=e=>{if(form.querySelector('[type=submit]')?.disabled)e.preventDefault();};
+       form.elements.destino.innerHTML=destinos.map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('');
+       const quantidadeTotal=aptos.reduce((n,r)=>n+Number(r.quantidade),0);
+       $('#stock-bulk-count').textContent=`${aptos.length} registro(s) · ${quantidadeTotal} unidade(s) selecionadas, incluindo outras páginas.`;
+       $('#stock-bulk-feedback').textContent='Todas as unidades disponíveis desses registros serão transferidas para o mesmo mapa de destino. O lote é transacional: se um item falhar, nada será movimentado.';
+       const requestId=newId(),ids=aptos.map(x=>x.id);
+       form.onsubmit=async event=>{
+         event.preventDefault();
+         const destino=form.elements.destino.value;
+         if(!destino||destino==='Estoque')return toast('Selecione o mapa de destino.',true);
+         if(!await confirmDialog('Confirmar descida em lote',`Mover ${ids.length} registros (${quantidadeTotal} unidades, conforme a última consulta) para ${destino}? Esta operação movimenta o Estoque e será auditada.`))return;
+         const botao=form.querySelector('[type=submit]'),cancelar=$('#stock-bulk-cancel');botao.disabled=true;cancelar.disabled=true;
+         $('#stock-bulk-feedback').textContent='Movimentando lote no Supabase. Não feche a página até receber a confirmação…';
+         try{
+           const resultado=await request('/mapas/descer-lote',{method:'POST',body:{ids,destino,requestId},timeout:120000,retries:0});
+           if(!resultado.sucesso)throw new Error('O Supabase não confirmou a transação. Verifique o estoque antes de tentar novamente.');
+           dlg.close();
+           toast(`${resultado.movimentados||ids.length} registro(s) encaminhado(s) para ${destino}.`);
+           await renderRoute(state.route);
+         }catch(err){
+           $('#stock-bulk-feedback').textContent=`A movimentação não foi confirmada: ${err.message}. Confira o Estoque antes de repetir; a tentativa mantém o mesmo identificador.`;
+           toast(err.message,true);
+         }finally{botao.disabled=false;cancelar.disabled=false;}
+       };
+       dlg.showModal();
+     }catch(err){toast(err.message,true);}
+   };
+  }
+
   for(const destino of ['queima','vencidos'])$('#map-to-'+destino).onclick=async()=>{
    const ids=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0));
    if(!ids.length)return toast('Selecione ao menos um lançamento.',true);

@@ -1,3 +1,5 @@
+> **Versão v32** — Mapa de Destino permanece selecionado após cada lançamento. A aba **Estoque** oferece **Selecionar todos filtrados** e **Descer selecionados para o mapa** com confirmação e transação no banco (SQL 019). Veja [instruções da v32](ATUALIZAR-V32-DESTINO-FIXO-DESCIDA-ESTOQUE-EM-LOTE.md).
+
 > **Versão v31 — Conferência do mapa com estoque importado:** inclui mapas dos funcionários e a aba especial **Estoque**, excluindo Termolabil, Psicotropicos e Antibioticos da conferência e da cópia para o Conector Procfit. Veja [ATUALIZAR-V31-CONFERENCIA-SEM-ABAS-ESPECIAIS.md](ATUALIZAR-V31-CONFERENCIA-SEM-ABAS-ESPECIAIS.md). Não requer nova migração SQL.
 
 > **Atualização v30:** cópia de todos os itens filtrados da conferência com estoque, inclusive após 100+ páginas; carregamento completo e seguro de mapas e saldos via API paginada. Consulte [ATUALIZAR-V30-PROCFIT-TODAS-PAGINAS.md](ATUALIZAR-V30-PROCFIT-TODAS-PAGINAS.md). Não exige nova migração SQL.

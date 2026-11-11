@@ -291,6 +291,23 @@ async function mapas(req,actor,pathname,body,query){
     await audit(actor,'retirar_da_loja_tentativa_venda',{id,ean:item.ean,lote:item.lote,validade:item.validade,quantidade:item.quantidade,mapa:item.mapa_nome});
     return {sucesso:true};
   }
+  if(pathname==='/mapas/descer-lote'){
+    if(req.method!=='POST')throw bad('Método não permitido.',405);
+    if(actor.perfil!=='admin')throw bad('Somente o Administrador de Loja pode descer itens do Estoque.',403);
+    const ids=body.ids, destino=norm(body.destino),requestId=norm(body.requestId);
+    if(!Array.isArray(ids)||ids.length<1||ids.length>500||ids.some(id=>!/^[-a-f0-9]{36}$/i.test(norm(id)))||new Set(ids).size!==ids.length)
+      throw bad('Selecione de 1 a 500 registros diferentes para descer.',422);
+    if(!requestId||requestId.length<16||requestId.length>100)throw bad('Identificador da movimentação inválido.',422);
+    if(!destino||destino==='Estoque'||destino==='Transferencias')throw bad('Mapa de destino inválido.',422);
+    if(!specials.includes(destino)){
+      const pessoa=await one('usuarios',{loja_id:`eq.${loja}`,nome_normalizado:`eq.${normalizarNome(destino)}`,ativo:'eq.true',perfil:'eq.funcionario',excluido_em:'is.null',select:'id'});
+      if(!pessoa)throw bad('O funcionário de destino deve estar ativo e pertencer à loja.',403);
+    }
+    const resultado=await db('rpc/descer_estoque_lote',{method:'POST',body:{p_request_id:requestId,p_origem_ids:ids,p_destino:destino,p_usuario_id:actor.id,p_loja_id:loja}});
+    if(resultado?.sucesso!==true)throw bad('O Supabase não confirmou a movimentação.',502);
+    await audit(actor,'descer_estoque_lote',{loja,destino,registros:ids.length,movimentados:resultado.movimentados,unidades:resultado.unidades_novas});
+    return resultado;
+  }
   if(pathname.endsWith('/descer')){
     admin(actor);const destino=norm(body.destino);if(!destino||destino==='Estoque')throw bad('Destino inválido.');
     const origem=await one('mapa_lancamentos',{id:`eq.${body.id}`,loja_id:`eq.${loja}`,tipo_mapa:'eq.Estoque',excluido_em:'is.null'});

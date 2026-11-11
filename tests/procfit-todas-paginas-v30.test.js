@@ -57,7 +57,7 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v31-procfit-estoque-unica-especial/);
+ assert.match(sw,/registro-validades-v32-destino-fixo-descida-lote/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 

@@ -97,6 +97,15 @@
     </div>
   </div>
 </dialog>
+<dialog id="stock-bulk-dialog" class="dialog" aria-labelledby="stock-bulk-title">
+ <form id="stock-bulk-form" class="dialog-inner">
+  <h3 id="stock-bulk-title">Descer itens selecionados para o mapa</h3>
+  <p id="stock-bulk-count" class="footer-hint"></p>
+  <label>Mapa de destino<select name="destino" required></select></label>
+  <p id="stock-bulk-feedback" role="status" aria-live="polite"></p>
+  <div class="dialog-actions"><button id="stock-bulk-cancel" class="btn-outline" type="button" onclick="document.getElementById('stock-bulk-dialog').close()">Cancelar</button><button type="submit" class="primary">Confirmar descida dos selecionados</button></div>
+ </form>
+</dialog>
 <dialog id="stock-descent-dialog" class="dialog"><form id="stock-descent-form" class="dialog-inner"><h3>Descer produto para o mapa</h3><p id="stock-descent-label"></p><label>Mapa de destino<select name="destino" required></select></label><label>Quantidade<input type="number" min="1" step="1" name="quantidade" required></label><div class="dialog-actions"><button type="button" class="btn-outline" id="stock-descent-cancel">Cancelar</button><button type="submit" class="primary">Confirmar movimentação</button></div></form></dialog>
 </body>
 </html>
