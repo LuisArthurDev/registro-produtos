@@ -1,3 +1,7 @@
+# Versão v22 — Seções, ocultação e exclusões das listagens
+
+Leia [ATUALIZAR-V22-SECOES-VISIBILIDADE.md](ATUALIZAR-V22-SECOES-VISIBILIDADE.md) **antes** de publicar. É necessário executar a etapa de migração `visibilidade_secoes` (SQL 015) **antes de fazer o deploy do código atualizado**. O quadro agora aparece como **Seções** no menu.
+
 # Versão v21 — Ícones, Organização de Seções e mês opcional
 
 Leia [ATUALIZAR-V21-ICONES-SECOES-MES-OPCIONAL.md](ATUALIZAR-V21-ICONES-SECOES-MES-OPCIONAL.md) antes de publicar.

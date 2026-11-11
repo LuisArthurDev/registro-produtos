@@ -13,8 +13,8 @@ test('ícones SVG locais atendem ações sem depender de CDN',()=>{
  assert.match(app,/instalarIconesDeAcao\(\)/);assert.match(css,/\.icon-action:focus-visible/);
  assert.match(sw,/icones-acoes\.js/);
 });
-test('menu mantém Organização de Seções imediatamente após Funcionários',()=>{
- assert.match(app,/\['usuarios','users','Funcionários'\],\['organizacao-secoes','board','Organização de Seções'\]/);
+test('menu mantém Seções imediatamente após Funcionários',()=>{
+ assert.match(app,/\['usuarios','users','Funcionários'\],\['organizacao-secoes','board','Seções'\]/);
  assert.match(app,/case 'organizacao-secoes':if\(!isAdmin\(\)\)/);
 });
 test('organização recomenda quem possui mais registros na seção',()=>{

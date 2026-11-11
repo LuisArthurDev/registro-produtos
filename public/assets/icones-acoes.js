@@ -19,6 +19,7 @@ const paths={
  next:'<path d="m9 5 7 7-7 7"/>',
  previous:'<path d="m15 5-7 7 7 7"/>',
  eye:'<path d="M2 12c3-5 6-7 10-7s7 2 10 7c-3 5-6 7-10 7s-7-2-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+ 'eye-off':'<path d="M3 3 21 21M10.6 5.2A11 11 0 0 1 12 5c4 0 7 2 10 7a18 18 0 0 1-3.2 3.8M6.2 6.2C4.7 7.3 3.3 9.3 2 12c3 5 6 7 10 7 1.3 0 2.5-.2 3.6-.6"/><path d="M9.5 9.5a3.5 3.5 0 0 0 5 5"/>',
  flag:'<path d="M5 21V4m0 1c6-3 8 3 15 0v11c-7 3-9-3-15 0"/>',
  warn:'<path d="m12 3 10 18H2L12 3Zm0 7v4m0 4h.01"/>',
  unlock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M9 11V7a4 4 0 0 1 8 0"/>',
@@ -40,6 +41,9 @@ const clean=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toL
 export function detectarAcao(label,button){
  const t=clean(label);const attrs=clean(button?.getAttribute?.('class')||'')+' '+clean(button?.getAttribute?.('id')||'')+' '+Array.from(button?.attributes||[]).filter(a=>a.name.startsWith('data-')).map(a=>a.name+' '+a.value).join(' ');
  const has=(...words)=>words.some(w=>t.includes(w)||attrs.includes(w));
+ if(has('ocultar','esconder','hide'))return 'eye-off';
+ if(has('restaurar','reexibir','mostrar secao','mostrar seção'))return 'repeat';
+ if(has('gerenciar'))return 'board';
  if(has('excluir','exclusao','delet','remover','remove','apagar','delete','inativar'))return 'delete';
  if(has('editar','edit','corrigir','alterar nome','rename'))return 'edit';
  if(has('aprovar','aprovado','confirmar','concluir','resolver','permitir','ativar','aceitar'))return 'approve';
@@ -49,7 +53,7 @@ export function detectarAcao(label,button){
  if(has('transfer','mover','descer','destino','redirecion'))return 'transfer';
  if(has('sinaliz','flag','negar','marcar'))return 'flag';
  if(has('cadastrar','adicionar','novo','nova','criar','incluir'))return 'plus';
- if(has('redefinir pin','senha','alterar pin','key'))return 'key';
+ if(has('redefinir pin','senha','alterar pin'))return 'key';
  if(has('bloquear','travar'))return 'lock';
  if(has('desbloquear'))return 'unlock';
  if(has('atualizar','refresh','recarregar','retry','retomar','consultar novamente','reenviar'))return 'refresh';
