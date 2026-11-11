@@ -1,5 +1,7 @@
 import { lerODS } from './ods.js';
 import { renderVisualizacao } from './visualizacao.js';
+import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
+import { instalarIconesDeAcao } from './icones-acoes.js';
 import { resumoQueima } from './queima-grafico.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
@@ -12,7 +14,7 @@ const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loj
 // Transferência efêmera de um login já confirmado no servidor para a página móvel.
 const AUTH_BRIDGE_KEY='rv_login_validado_para_lancamentos_v1';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
-const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
+const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['organizacao-secoes','board','Organização de Seções'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
 const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja'],['notificacoes','bell','Notificações']];
 // Ícones SVG locais: tamanhos e traços uniformes, sem dependência de CDN.
 const menuIconPaths={
@@ -27,6 +29,7 @@ const menuIconPaths={
  arrows:'<path d="M3 7h18m-5-4 5 4-5 4M21 17H3m5-4-5 4 5 4"/>',
  flag:'<path d="M5 21V4m0 1c6-3 8 3 15 0v11c-7 3-9-3-15 0"/>',
  users:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5"/>',
+ board:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M6 8h1m4 4h2m5-5h1"/>',
  history:'<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6M12 7v5l3 2"/>',
  alert:'<path d="m12 3 10 18H2L12 3Zm0 7v4m0 4h.01"/>',
  bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 10h18c0-2-3-3-3-10ZM10 21h4"/>',
@@ -294,7 +297,7 @@ async function renderRoute(route){
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
    case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'visualizacao':await renderVisualizacao({request,content,user:state.user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
    case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
-   case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
+   case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!isAdmin())throw new Error('Organização reservada ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
  }catch(e){content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
 async function getMaps(mapa=''){const p=new URLSearchParams();if(lojaParams())p.set('loja',state.loja);if(mapa)p.set('mapa',mapa);const d=await request('/mapas?'+p.toString());state.mapRows=d.registros||[];return state.mapRows;}
@@ -784,7 +787,7 @@ async function usuarios(){
  const quantidadeUsuario=u=>(counts.get(u.id)||0)+(counts.get(`nome:${u.nome.toLowerCase()}`)||0);
  const semResponsavel=mapasAtivos.filter(x=>x.tipo_mapa==='funcionario'&&!x.funcionario_id&&x.mapa_nome==='Sem responsável').length;
  const opUsuario=u=>`<option value="${H(u.id)}">${H(u.nome)}${u.ativo?'':' (inativo)'}</option>`;
- $('#content').innerHTML=header('Funcionários','Edite os nomes, transfira lançamentos por mês e seção ou exclua contas preservando todos os mapas.',
+ $('#content').innerHTML=header('Funcionários','Edite nomes, transfira lançamentos de qualquer mês e organize as seções sem alterar mapas operacionais.',
  '<button class="primary" id="staff-move-open" type="button">Transferir lançamentos</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="staff-search" class="wide" placeholder="Buscar funcionário"><select id="staff-filter"><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option></select><button class="btn-outline" id="staff-print" type="button">Imprimir</button></div>
  <p id="staff-total" class="footer-hint"></p><div class="notice" style="margin-bottom:14px"><strong>Lançamentos sem responsável:</strong> ${semResponsavel}. Utilize <strong>Transferir lançamentos</strong> para atribuí-los a um novo funcionário.</div><div id="staff-list"></div></section>
@@ -794,13 +797,13 @@ async function usuarios(){
  <label>O que fazer com os lançamentos?<select name="modo" id="staff-delete-mode"><option value="flutuar">Deixar sem responsável (flutuando)</option><option value="transferir">Transferir todos para outro funcionário</option></select></label>
  <label id="staff-delete-destination-wrap" hidden>Funcionário de destino<select name="destino_id" id="staff-delete-destination"><option value="">Escolha um funcionário</option></select></label>
  <p id="staff-delete-error" role="alert" class="error-note" hidden></p><div class="dialog-actions"><button type="button" class="btn-outline" data-close-staff>Cancelar</button><button type="submit" class="btn-outline danger">Confirmar exclusão</button></div></form></dialog>
- <dialog id="staff-move-dialog" class="dialog operational-dialog staff-move-dialog"><div class="dialog-inner"><h2>Transferir lançamentos</h2><p class="footer-hint">Filtre pelo mês em que o produto foi lançado e pela seção. Escolha o novo dono do mapa ou deixe os itens sem responsável para atribuição futura.</p>
+ <dialog id="staff-move-dialog" class="dialog operational-dialog staff-move-dialog"><div class="dialog-inner"><h2>Transferir lançamentos</h2><p class="footer-hint">O mês é opcional: deixe em branco para selecionar lançamentos de todos os meses. A seção e a escolha dos itens continuam disponíveis. Escolha um destino ou deixe sem responsável.</p>
  <div class="form-grid"><label>Origem<select id="staff-move-source"><option value="">Escolha um responsável</option>${usuarios.map(opUsuario).join('')}<option value="flutuando">Sem responsável (flutuando)</option></select></label>
  <label>Destino<select id="staff-move-target"><option value="">Escolha um destino</option>${ativos.map(opUsuario).join('')}<option value="flutuando">Sem responsável (flutuando)</option></select></label>
- <label>Mês do lançamento<input type="month" id="staff-move-month" value="${nowBrISO().slice(0,7)}" required></label>
+ <label>Mês do lançamento (opcional)<input type="month" id="staff-move-month" aria-describedby="staff-move-month-hint"><small id="staff-move-month-hint">Deixe vazio para considerar todos os meses.</small></label>
  <label>Seção<select id="staff-move-section"><option value="">Todas as seções</option></select></label></div>
  <div class="filter-row" style="margin-top:12px"><button class="btn-outline" id="staff-move-reload" type="button">Consultar lançamentos</button></div>
- <p id="staff-move-summary" class="footer-hint" role="status">Selecione origem e mês para consultar os itens.</p>
+ <p id="staff-move-summary" class="footer-hint" role="status">Selecione a origem; o mês é opcional.</p>
  <label class="checkbox-label"><input id="staff-move-all" type="checkbox">Transferir <strong>todos</strong> os lançamentos filtrados por mês/seção (mesmo os que não aparecem na prévia)</label>
  <div class="staff-move-items" id="staff-move-items"></div>
  <p id="staff-move-error" role="alert" class="error-note" hidden></p>
@@ -835,12 +838,12 @@ async function usuarios(){
  };
  let todosOsItens=[];let selecionados=new Set();let cacheOrigem='';let cacheMes='';
  const moveDlg=$('#staff-move-dialog'),selectOrigem=$('#staff-move-source'),selectDestino=$('#staff-move-target'),selectMes=$('#staff-move-month'),selectSecao=$('#staff-move-section');
- function abrirMover(usuario=null){selectOrigem.value=usuario?.id||'';selectDestino.value='';selectMes.value=nowBrISO().slice(0,7);selectSecao.innerHTML='<option value="">Todas as seções</option>';
-  $('#staff-move-all').checked=false;$('#staff-move-error').hidden=true;$('#staff-move-summary').textContent='Escolha o mês e a origem e consulte.';$('#staff-move-items').innerHTML='';todosOsItens=[];selecionados.clear();cacheOrigem='';cacheMes='';moveDlg.showModal();if(usuario)void consultarItens();}
+ function abrirMover(usuario=null){selectOrigem.value=usuario?.id||'';selectDestino.value='';selectMes.value='';selectSecao.innerHTML='<option value="">Todas as seções</option>';
+  $('#staff-move-all').checked=false;$('#staff-move-error').hidden=true;$('#staff-move-summary').textContent='Escolha a origem. Se desejar, filtre por mês ou seção.';$('#staff-move-items').innerHTML='';todosOsItens=[];selecionados.clear();cacheOrigem='';cacheMes='';moveDlg.showModal();if(usuario)void consultarItens();}
  async function consultarItens(){const origem=selectOrigem.value,mes=selectMes.value;
-  if(!origem||!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)){$('#staff-move-summary').textContent='Selecione um funcionário e um mês válido.';return;}
+  if(!origem||(mes&&!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes))){$('#staff-move-summary').textContent='Selecione uma origem e, se informado, um mês válido.';return;}
   const btn=$('#staff-move-reload');btn.disabled=true;$('#staff-move-summary').textContent='Consultando lançamentos…';$('#staff-move-error').hidden=true;
-  try{const r=await request('/usuarios/lancamentos?origem='+encodeURIComponent(origem)+'&mes='+encodeURIComponent(mes));
+  try{const r=await request('/usuarios/lancamentos?origem='+encodeURIComponent(origem)+(mes?'&mes='+encodeURIComponent(mes):''));
    todosOsItens=r.registros||[];selecionados.clear();cacheOrigem=origem;cacheMes=mes;
    const anterior=selectSecao.value;selectSecao.innerHTML='<option value="">Todas as seções</option>'+(r.secoes||[]).map(sec=>`<option value="${H(sec)}">${H(sec)}</option>`).join('');
    if([...selectSecao.options].some(o=>o.value===anterior))selectSecao.value=anterior;$('#staff-move-all').checked=false;desenharItens();
@@ -849,8 +852,8 @@ async function usuarios(){
  }
  function itensFiltrados(){return todosOsItens.filter(x=>!selectSecao.value||x.secao.toLowerCase().trim()===selectSecao.value.toLowerCase().trim());}
  function desenharItens(){const filtrados=itensFiltrados(),todos=$('#staff-move-all').checked;
-  $('#staff-move-summary').textContent=`${filtrados.length} lançamento(s) · ${selecionados.size} selecionado(s) · mês ${cacheMes||'—'}. ${filtrados.length>150?'Mostrando os primeiros 150; use “todos os filtrados” para incluir os demais.':''}`;
-  $('#staff-move-items').innerHTML=filtrados.length?filtrados.slice(0,150).map(x=>`<label class="staff-move-item"><input type="checkbox" data-transfer-item="${H(x.id)}" ${selecionados.has(x.id)?'checked':''} ${todos?'disabled':''}><span><strong>${H(x.descricao||x.ean)}</strong><small>${H(x.secao||'Sem seção')} · EAN ${H(x.ean)} · Lote ${H(x.lote)} · Val. ${dataBR(x.validade)} · ${H(x.quantidade)} un.</small></span></label>`).join(''):empty('Nenhum lançamento encontrado para o mês e a seção.');
+  $('#staff-move-summary').textContent=`${filtrados.length} lançamento(s) · ${selecionados.size} selecionado(s) · ${cacheMes?'mês '+cacheMes:'todos os meses'}. ${filtrados.length>150?'Mostrando os primeiros 150; use “todos os filtrados” para incluir os demais.':''}`;
+  $('#staff-move-items').innerHTML=filtrados.length?filtrados.slice(0,150).map(x=>`<label class="staff-move-item"><input type="checkbox" data-transfer-item="${H(x.id)}" ${selecionados.has(x.id)?'checked':''} ${todos?'disabled':''}><span><strong>${H(x.descricao||x.ean)}</strong><small>${H(x.secao||'Sem seção')} · EAN ${H(x.ean)} · Lote ${H(x.lote)} · Val. ${dataBR(x.validade)} · ${H(x.quantidade)} un.</small></span></label>`).join(''):empty('Nenhum lançamento encontrado para os filtros escolhidos.');
   $('#staff-move-confirm').textContent=todos?`Transferir todos (${filtrados.length})`:`Transferir selecionados (${selecionados.size})`;
  }
  $('#staff-move-items').onchange=e=>{const box=e.target.closest('[data-transfer-item]');if(!box)return;if(box.checked)selecionados.add(box.dataset.transferItem);else selecionados.delete(box.dataset.transferItem);desenharItens();};
@@ -867,7 +870,7 @@ async function usuarios(){
   if(!(todos?filtrados.length:ids.length)){$('#staff-move-error').textContent='Selecione pelo menos um produto ou todos os filtrados.';$('#staff-move-error').hidden=false;return;}
   const descricaoDestino=destino==='flutuando'?'Sem responsável':usuarios.find(u=>u.id===destino)?.nome;
   const total=todos?filtrados.length:ids.length;
-  if(!await confirmDialog('Transferir lançamentos',`Transferir ${total} lançamento(s) do mês ${mes}, seção ${secao||'todas'}, para ${descricaoDestino}?`))return;
+  if(!await confirmDialog('Transferir lançamentos',`Transferir ${total} lançamento(s) de ${mes?'mês '+mes:'todos os meses'}, seção ${secao||'todas'}, para ${descricaoDestino}?`))return;
   const btn=$('#staff-move-confirm');btn.disabled=true;$('#staff-move-error').hidden=true;
   try{const r=await request('/usuarios/transferir',{method:'POST',body:{origem,destino,mes,secao,todos,ids:todos?[]:ids}});
    moveDlg.close();toast(`${r.quantidade??0} lançamento(s) transferido(s).`);await renderRoute('usuarios');
@@ -1171,4 +1174,4 @@ $('#push-consent-no').onclick=async()=>{
 $('#btn-revalidar-sessao').onclick=()=>restoreSession();
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp(true);}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
-$('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
+$('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();instalarIconesDeAcao();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

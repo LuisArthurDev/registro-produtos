@@ -29,5 +29,5 @@ test('Visualização não apresenta gráfico de Queima, reservado ao Dashboard',
   assert.match(visual,/Todas as abas especiais/);
 });
 test('cache da PWA é atualizado',()=>{
-  assert.match(serviceWorker,/registro-validades-v20-equipe-titularidade/);
+  assert.match(serviceWorker,/registro-validades-v21-organizacao-mes-opcional/);
 });

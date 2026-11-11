@@ -12,8 +12,8 @@ test('menu oculta barras mas permite rolagem vertical quando necessária',()=>{
  assert.match(css,/touch-action:pan-y/);
  assert.match(css,/\.sidebar \.nav-item:focus-visible/);
 });
-test('14 ícones SVG vetoriais locais substituem símbolos do menu',()=>{
- assert.equal((app.match(/const menus=\[(.*?)\];/s)?.[1].match(/\['/g)||[]).length,14);
+test('15 ícones SVG vetoriais locais substituem símbolos do menu',()=>{
+ assert.equal((app.match(/const menus=\[(.*?)\];/s)?.[1].match(/\['/g)||[]).length,15);
  assert.match(app,/function navIcon\(name\)/);
  assert.match(app,/\$\{navIcon\(icon\)\}/);
  assert.match(html,/id="sidebar-collapse" class="brand-icon brand-toggle"/);

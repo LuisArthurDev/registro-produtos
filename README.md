@@ -1,3 +1,7 @@
+# Versão v21 — Ícones, Organização de Seções e mês opcional
+
+Leia [ATUALIZAR-V21-ICONES-SECOES-MES-OPCIONAL.md](ATUALIZAR-V21-ICONES-SECOES-MES-OPCIONAL.md) antes de publicar.
+
 # Atualização v20 — equipes, titularidade e Painel Geral
 
 Leia [ATUALIZAR-V20-FUNCIONARIOS-E-PAINEL-GERAL.md](ATUALIZAR-V20-FUNCIONARIOS-E-PAINEL-GERAL.md) antes de publicar. A migração SQL 012 é obrigatória **antes** de liberar esta versão em produção.

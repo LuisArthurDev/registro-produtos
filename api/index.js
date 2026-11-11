@@ -413,12 +413,12 @@ async function staff(req,actor,body,query){
   }
   throw bad('Método não permitido.',405);
 }
-function validarMesTitularidade(mes){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(norm(mes)))throw bad('Informe o mês no formato AAAA-MM.',422);return mes+'-01';}
+function validarMesTitularidade(mes){const valor=norm(mes);if(!valor)return null;if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(valor))throw bad('Mês inválido: informe AAAA-MM ou deixe em branco para todos os meses.',422);return valor+'-01';}
 async function listarLancamentosTitularidade(actor,query){
   if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode transferir lançamentos.',403);
   const origem=norm(query.get('origem')),mes=validarMesTitularidade(query.get('mes'));
   if(!origem)throw bad('Escolha um funcionário ou itens sem responsável.',422);
-  const base={loja_id:`eq.${actor.loja_id}`,tipo_mapa:'eq.funcionario',excluido_em:'is.null',mes_lancamento:`eq.${mes}`,select:'id,funcionario_id,mapa_nome,ean,lote,validade,quantidade,mes_lancamento,produtos(descricao,secao)',order:'validade.asc'};
+  const base={loja_id:`eq.${actor.loja_id}`,tipo_mapa:'eq.funcionario',excluido_em:'is.null',...(mes?{mes_lancamento:`eq.${mes}`} : {}),select:'id,funcionario_id,mapa_nome,ean,lote,validade,quantidade,mes_lancamento,produtos(descricao,secao)',order:'validade.asc'};
   let lista=[];
   if(origem==='flutuando')lista=await rows('mapa_lancamentos',{...base,funcionario_id:'is.null',mapa_nome:'eq.Sem responsável'},500,10);
   else {
@@ -701,13 +701,46 @@ async function retirarDanificado(req,actor,body){
   await audit(actor,'retirar_danificado',{id:registro.id});return {sucesso:true};
 }
 
+// Organização visual das seções: nenhuma operação nesta rota altera registros de mapas.
+async function organizarSecoes(req,actor,body){
+  // Somente o Administrador de Loja pode organizar seções; no modo Geral não existe loja fixa.
+  if(actor.perfil!=='admin'||!actor.loja_id)throw bad('Organização de seções exclusiva do administrador da própria loja.',403);
+  const loja=actor.loja_id;
+  if(req.method==='GET'){
+    const [resumo,atribuicoes,funcionarios]=await Promise.all([
+      db('rpc/resumo_organizacao_secoes',{method:'POST',body:{p_loja:loja}}),
+      rows('organizacao_secoes',{loja_id:`eq.${loja}`,select:'secao_chave,secao,responsavel_id,atualizado_em',order:'secao.asc'},250,4),
+      rows('usuarios',{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',excluido_em:'is.null',select:'id,nome',order:'nome.asc'},250,4)
+    ]);
+    return {sucesso:true,loja,secaoDisponiveis:resumo?.secoes||[],estatisticas:resumo?.estatisticas||[],semSecao:Number(resumo?.sem_secao||0),semFuncionario:Number(resumo?.sem_funcionario||0),atribuicoes,funcionarios};
+  }
+  if(req.method==='PUT'){
+    const secao=norm(body.secao).replace(/\s+/g,' '),chave=secao.toLocaleLowerCase('pt-BR');
+    if(secao.length<1||secao.length>120||chave.length>120)throw bad('Seção inválida.',422);
+    const responsavelId=body.responsavel_id===null||body.responsavel_id===''||body.responsavel_id===undefined?null:norm(body.responsavel_id);
+    if(responsavelId!==null){
+      if(!/^[a-f0-9-]{36}$/i.test(responsavelId))throw bad('Responsável inválido.',422);
+      const pessoa=await one('usuarios',{id:`eq.${responsavelId}`,loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',excluido_em:'is.null',select:'id'});
+      if(!pessoa)throw bad('Responsável não pertence à sua loja ou está inativo.',403);
+    }
+    const secoes=await db('rpc/resumo_organizacao_secoes',{method:'POST',body:{p_loja:loja}});
+    const secaoReconhecida=(secoes?.secoes||[]).find(x=>norm(x.chave)===chave);
+    if(!secaoReconhecida)throw bad('Seção não localizada no catálogo da empresa.',404);
+    const anterior=await one('organizacao_secoes',{loja_id:`eq.${loja}`,secao_chave:`eq.${chave}`,select:'responsavel_id'});
+    await db('organizacao_secoes',{method:'POST',params:{on_conflict:'loja_id,secao_chave'},body:{loja_id:loja,secao_chave:chave,secao:secaoReconhecida.nome||secao,responsavel_id:responsavelId,atualizado_por:actor.id,atualizado_em:new Date().toISOString()},prefer:'resolution=merge-duplicates,return=minimal'});
+    await audit(actor,'organizar_secao',{secao:secaoReconhecida.nome,anterior:anterior?.responsavel_id||null,responsavel_id:responsavelId,sem_movimentar_lancamentos:true});
+    return {sucesso:true,secao:secaoReconhecida.nome,responsavel_id:responsavelId};
+  }
+  throw bad('Método não permitido.',405);
+}
+
 async function handle(req){
   const origin=req.headers.origin,host=req.headers.host;
   if(origin){let same=false;try{same=new URL(origin).host===host;}catch{}if(!same)throw bad('Origem não autorizada.',403);}
   const url=new URL(req.url,`https://${host||'localhost'}`);
   const query=url.searchParams;
   const candidate=norm(query.get('route'));
-  const pathname=candidate && /^[a-z/]+$/i.test(candidate)?'/'+candidate:url.pathname.replace(/^\/api(?:\/index\.js)?/,'')||'/';
+  const pathname=candidate && /^[a-z/-]+$/i.test(candidate)?'/'+candidate:url.pathname.replace(/^\/api(?:\/index\.js)?/,'')||'/';
   if(req.method==='OPTIONS')return {sucesso:true};
   if(req.method!=='GET'&&Number(req.headers['content-length']||0)>2_000_000)throw bad('Solicitação muito grande.',413);
   const body=req.method==='GET'?{}:requestBody(req);
@@ -721,6 +754,7 @@ async function handle(req){
   if(pathname==='/logout'&&req.method==='POST'){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};
   }
+  if(pathname==='/organizacao-secoes')return organizarSecoes(req,actor,body);
   if(pathname.startsWith('/produtos'))return produtos(req,actor,pathname,body,query);
   if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
   if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);

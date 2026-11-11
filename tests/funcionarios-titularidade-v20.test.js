@@ -34,6 +34,8 @@ function testEnv({perfil='admin',titular=false,targetStore='151',forceTarget=nul
     if(table==='rpc/renomear_funcionario_v12')result={sucesso:true,quantidade:3};
     if(table==='rpc/excluir_funcionario_v12')result={sucesso:true,quantidade:3,modo:body.p_modo};
     if(table==='rpc/transferir_lancamentos_v12')result={sucesso:true,quantidade:1};
+    if(table==='rpc/resumo_organizacao_secoes')result={secoes:[{chave:'perfumaria',nome:'Perfumaria'}],estatisticas:[{chave:'perfumaria',funcionario_id:isabelaId,registros:8,unidades:18}],sem_secao:0,sem_funcionario:0};
+    if(table==='organizacao_secoes')result=method==='POST'?null:[];
     return new Response(JSON.stringify(result),{status:200,headers:{'content-type':'application/json'}});
   };
   return {calls,users,async request(path,method='GET',body={}){
@@ -101,4 +103,29 @@ test('SQL 012 preserva auditoria, restringe titular e faz movimentação dentro 
  assert.match(sql,/BEGIN;/);assert.match(sql,/COMMIT;/);
  assert.match(sql,/REVOKE ALL ON FUNCTION public\.transferir_lancamentos_v12/);
  assert.match(flow,/proteger_geral_e_funcionarios/);
+});
+
+// V21: opção de mês em branco = todas as competências sem remover filtros nem isolamento por loja.
+test('V21 — consulta de todos os meses não envia filtro mes_lancamento',async()=>{
+ const env=testEnv();try{const r=await env.request('/usuarios/lancamentos?origem='+isabelaId);
+ assert.equal(r.statusCode,200);assert.equal(r.data.quantidade,1);
+ for(const c of env.calls.filter(x=>x.table==='mapa_lancamentos')){assert.equal(c.params.get('loja_id'),'eq.151');assert.equal(c.params.has('mes_lancamento'),false);}
+ }finally{env.restore();}
+});
+test('V21 — transferência sem mês envia p_mes=null à função SQL',async()=>{
+ const env=testEnv();try{const r=await env.request('/usuarios/transferir','POST',{origem:isabelaId,destino:mariaId,mes:'',secao:'PERFUMARIA',todos:false,ids:[itemId]});
+ assert.equal(r.statusCode,200);const c=env.calls.find(x=>x.table==='rpc/transferir_lancamentos_v12');assert.ok(c);assert.equal(c.body.p_mes,null);assert.equal(c.body.p_secao,'PERFUMARIA');
+ }finally{env.restore();}
+});
+test('V21 — organização de seções exige administrador da própria loja',async()=>{
+ const env=testEnv({perfil:'funcionario'});try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,403);assert.equal(env.calls.some(x=>x.table==='rpc/resumo_organizacao_secoes'),false);}finally{env.restore();}
+});
+test('V21 — administrador consulta sugestões sem mudar os mapas',async()=>{
+ const env=testEnv();try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,200);assert.equal(r.data.secaoDisponiveis[0].nome,'Perfumaria');assert.equal(env.calls.some(x=>x.table==='mapa_lancamentos'&&x.method!=='GET'),false);}finally{env.restore();}
+});
+test('V21 — administrador atribui seção sem alterar funcionário_id dos mapas',async()=>{
+ const env=testEnv();try{const r=await env.request('/organizacao-secoes','PUT',{secao:'Perfumaria',responsavel_id:isabelaId});assert.equal(r.statusCode,200);
+ const write=env.calls.find(x=>x.table==='organizacao_secoes'&&x.method==='POST');assert.ok(write);assert.equal(write.body.responsavel_id,isabelaId);assert.equal(write.body.loja_id,'151');
+ assert.ok(!env.calls.some(x=>x.table==='mapa_lancamentos'&&x.method!=='GET'));
+ }finally{env.restore();}
 });
