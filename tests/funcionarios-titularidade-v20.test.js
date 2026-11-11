@@ -34,8 +34,8 @@ function testEnv({perfil='admin',titular=false,targetStore='151',forceTarget=nul
     if(table==='rpc/renomear_funcionario_v12')result={sucesso:true,quantidade:3};
     if(table==='rpc/excluir_funcionario_v12')result={sucesso:true,quantidade:3,modo:body.p_modo};
     if(table==='rpc/transferir_lancamentos_v12')result={sucesso:true,quantidade:1};
-    if(table==='rpc/resumo_organizacao_secoes')result={secoes:[{chave:'perfumaria',nome:'Perfumaria'}],estatisticas:[{chave:'perfumaria',funcionario_id:isabelaId,registros:8,unidades:18}],sem_secao:0,sem_funcionario:0};
-    if(table==='organizacao_secoes')result=method==='POST'?null:[];
+    if(table==='rpc/resumo_organizacao_grupos')result={grupos:[{chave:'beleza',nome:'BELEZA'}],estatisticas:[{chave:'beleza',funcionario_id:isabelaId,registros:8,unidades:18}],sem_grupo:0,sem_funcionario:0};
+    if(table==='organizacao_grupos'||table==='organizacao_secoes')result=method==='POST'?null:[];
     return new Response(JSON.stringify(result),{status:200,headers:{'content-type':'application/json'}});
   };
   return {calls,users,async request(path,method='GET',body={}){
@@ -118,14 +118,14 @@ test('V21 — transferência sem mês envia p_mes=null à função SQL',async()=
  }finally{env.restore();}
 });
 test('V21 — organização de seções exige administrador da própria loja',async()=>{
- const env=testEnv({perfil:'funcionario'});try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,403);assert.equal(env.calls.some(x=>x.table==='rpc/resumo_organizacao_secoes'),false);}finally{env.restore();}
+ const env=testEnv({perfil:'funcionario'});try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,403);assert.equal(env.calls.some(x=>x.table==='rpc/resumo_organizacao_grupos'),false);}finally{env.restore();}
 });
 test('V21 — administrador consulta sugestões sem mudar os mapas',async()=>{
- const env=testEnv();try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,200);assert.equal(r.data.secaoDisponiveis[0].nome,'Perfumaria');assert.equal(env.calls.some(x=>x.table==='mapa_lancamentos'&&x.method!=='GET'),false);}finally{env.restore();}
+ const env=testEnv();try{const r=await env.request('/organizacao-secoes');assert.equal(r.statusCode,200);assert.equal(r.data.secaoDisponiveis[0].nome,'BELEZA');assert.equal(env.calls.some(x=>x.table==='mapa_lancamentos'&&x.method!=='GET'),false);}finally{env.restore();}
 });
 test('V21 — administrador atribui seção sem alterar funcionário_id dos mapas',async()=>{
- const env=testEnv();try{const r=await env.request('/organizacao-secoes','PUT',{secao:'Perfumaria',responsavel_id:isabelaId});assert.equal(r.statusCode,200);
- const write=env.calls.find(x=>x.table==='organizacao_secoes'&&x.method==='POST');assert.ok(write);assert.equal(write.body.responsavel_id,isabelaId);assert.equal(write.body.loja_id,'151');
+ const env=testEnv();try{const r=await env.request('/organizacao-secoes','PUT',{grupo:'BELEZA',responsavel_id:isabelaId});assert.equal(r.statusCode,200);
+ const write=env.calls.find(x=>x.table==='organizacao_grupos'&&x.method==='POST');assert.ok(write);assert.equal(write.body.responsavel_id,isabelaId);assert.equal(write.body.loja_id,'151');
  assert.ok(!env.calls.some(x=>x.table==='mapa_lancamentos'&&x.method!=='GET'));
  }finally{env.restore();}
 });

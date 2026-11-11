@@ -7,7 +7,4 @@ private_data/
 *.log
 
 # Evitar publicar exportações e backups de produção por engano
-*.xlsx
-*.ods
-*.db
-*.csv
+

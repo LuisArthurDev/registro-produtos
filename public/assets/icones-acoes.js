@@ -1,6 +1,7 @@
 /* Ações SVG acessíveis para as páginas do Vercel. Não depende de CDN.
    Mantém os atributos de dados e eventos originais: altera apenas a apresentação. */
 const paths={
+ copy:'<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/>',
  edit:'<path d="M12 20h9M16 3a2.12 2.12 0 0 1 3 3L9 16l-5 1 1-5L16 3Z"/>',
  delete:'<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m5 4v7m4-7v7"/>',
  fire:'<path d="M12 22c5 0 8-4 8-8 0-4-3-7-4-8-.4 4-3 5-4 6 1-5-1-8-4-10 0 5-4 8-4 12s3 8 8 8Z"/><path d="M12 22c2.5 0 4-2 4-4 0-2-2-4-4-5-1 2-4 3-4 5 0 2 1.5 4 4 4Z"/>',
@@ -41,6 +42,7 @@ const clean=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toL
 export function detectarAcao(label,button){
  const t=clean(label);const attrs=clean(button?.getAttribute?.('class')||'')+' '+clean(button?.getAttribute?.('id')||'')+' '+Array.from(button?.attributes||[]).filter(a=>a.name.startsWith('data-')).map(a=>a.name+' '+a.value).join(' ');
  const has=(...words)=>words.some(w=>t.includes(w)||attrs.includes(w));
+ if(has('copiar','copy','procfit'))return 'copy';
  if(has('ocultar','esconder','hide'))return 'eye-off';
  if(has('restaurar','reexibir','mostrar secao','mostrar seção'))return 'repeat';
  if(has('gerenciar'))return 'board';

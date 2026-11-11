@@ -1,0 +1,47 @@
+name: Atualizar Grupos de Produtos pelo ODS
+on:
+  push:
+    branches: [main]
+    paths: ['atualizacao-produtos.ods']
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: 'Aplicar grupos ao catálogo? (caso contrário, apenas valida o ODS)'
+        type: boolean
+        default: false
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: atualizacao-grupos-produtos
+  cancel-in-progress: false
+jobs:
+  verificar-e-atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirmar presença do ODS
+        run: test -f atualizacao-produtos.ods || { echo 'Coloque atualizacao-produtos.ods na raiz do repositório'; exit 1; }
+      - name: Validar pares EAN/Código Interno e atualizar somente o Grupo
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          APLICAR: ${{ github.event_name == 'push' || inputs.aplicar == true }}
+        run: |
+          set -euo pipefail
+          if [[ "$APLICAR" == 'true' ]]; then
+            python scripts/atualizar_grupos_ods.py --arquivo atualizacao-produtos.ods --aplicar --relatorio relatorio-atualizacao-grupos.json
+          else
+            python scripts/atualizar_grupos_ods.py --arquivo atualizacao-produtos.ods --relatorio relatorio-atualizacao-grupos.json
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-atualizacao-grupos
+          path: relatorio-atualizacao-grupos.json
+          if-no-files-found: ignore
+          retention-days: 14

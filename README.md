@@ -1,3 +1,9 @@
+# Atualização v26.1 — 11/11/2026
+
+Catálogo com **Grupo** importado por ODS (par EAN + Código Interno), organização por Grupo, importação tolerante de Estoque ODS/CSV, cópia TSV para **Conector Procfit — v1.0** e tabelas responsivas sem scroll horizontal.
+
+**Leia primeiro:** [ATUALIZAR-V26-GRUPOS-ESTOQUE-PROCFIT-RESPONSIVO.md](ATUALIZAR-V26-GRUPOS-ESTOQUE-PROCFIT-RESPONSIVO.md). Execute as migrações 016 e 017 pelo Action `grupos_produtos` antes de publicar o frontend.
+
 ## Atualização v23 — Seções em grade (10/11/2026)
 
 Na aba **Seções**, os cards de funcionários agora são organizados em grid responsivo, sem rolagem horizontal, com rolagem vertical interna nas listas de seções. As regras de organização, atribuição, recomendações e visibilidade da v22 foram preservadas. Para detalhes, consulte `ATUALIZAR-V23-GRID-FUNCIONARIOS.md`. Não requer migração do Supabase.
