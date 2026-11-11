@@ -1,3 +1,9 @@
+## Atualização v23 — Seções em grade (10/11/2026)
+
+Na aba **Seções**, os cards de funcionários agora são organizados em grid responsivo, sem rolagem horizontal, com rolagem vertical interna nas listas de seções. As regras de organização, atribuição, recomendações e visibilidade da v22 foram preservadas. Para detalhes, consulte `ATUALIZAR-V23-GRID-FUNCIONARIOS.md`. Não requer migração do Supabase.
+
+---
+
 # Versão v22 — Seções, ocultação e exclusões das listagens
 
 Leia [ATUALIZAR-V22-SECOES-VISIBILIDADE.md](ATUALIZAR-V22-SECOES-VISIBILIDADE.md) **antes** de publicar. É necessário executar a etapa de migração `visibilidade_secoes` (SQL 015) **antes de fazer o deploy do código atualizado**. O quadro agora aparece como **Seções** no menu.

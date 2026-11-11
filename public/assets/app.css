@@ -445,17 +445,38 @@ body:has(#login-screen:not([hidden])) .login-panel{height:100%;max-height:100%;m
 .org-search{display:flex;align-items:flex-start;flex-direction:column;min-width:200px;flex:1}
 .org-search input{width:100%}
 .org-alerts{margin:14px 0}
-.org-board{display:flex;gap:14px;align-items:stretch;overflow-x:auto;overflow-y:hidden;max-width:100%;
- padding:8px 3px 20px;scroll-snap-type:x proximity;scrollbar-width:thin}
-.org-column{flex:0 0 clamp(252px,26vw,310px);max-width:310px;min-width:0;min-height:240px;
- border:1px solid #335165;border-radius:14px;background:linear-gradient(180deg,#14283c,#101f30);padding:12px;
- scroll-snap-align:start;transition:border-color .15s,background .15s}
+/* V23: todos os funcionarios em grade, sem carrossel horizontal. Cada coluna rola as suas secoes. */
+.org-board{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,205px),1fr));
+ gap:12px;align-items:stretch;width:100%;max-width:100%;min-width:0;
+ padding:8px 0 18px;overflow-x:hidden;overflow-y:visible;
+}
+.org-column{
+ display:flex;flex-direction:column;
+ width:100%;max-width:none;min-width:0;
+ height:clamp(300px,46vh,440px);min-height:0;
+ border:1px solid #335165;border-radius:14px;
+ background:linear-gradient(180deg,#14283c,#101f30);padding:10px;
+ overflow:hidden;transition:border-color .15s,background .15s;
+}
 .org-column.org-drop-target{border-color:#64e8cf;background:#183e40;box-shadow:inset 0 0 0 1px #64e8cf}
-.org-column-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 3px}
-.org-column-head strong{font-size:13px;overflow-wrap:anywhere}
+.org-column-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 3px;flex:0 0 auto;min-width:0}
+.org-column-head strong{font-size:13px;line-height:1.3;min-width:0;overflow-wrap:anywhere}
 .org-count{padding:4px 9px;border-radius:14px;background:#24455a;font-weight:700;font-size:12px;color:#c6f5e9}
-.org-column-meta{min-height:35px;margin:5px 3px 12px;font-size:11px;color:#a0bed0;line-height:1.45}
-.org-column-cards{display:flex;flex-direction:column;gap:10px;min-height:60px}
+.org-column-meta{min-height:35px;max-height:48px;overflow:hidden;margin:5px 3px 9px;font-size:11px;color:#a0bed0;line-height:1.45;flex:0 0 auto}
+.org-column-cards{
+ display:flex;flex-direction:column;gap:10px;
+ flex:1 1 auto;min-height:0;min-width:0;
+ overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;
+ padding:3px 3px 8px 1px;
+ scrollbar-width:thin;scrollbar-color:#527b8e transparent;
+ -webkit-overflow-scrolling:touch;
+}
+.org-column-cards:focus-visible{outline:2px solid var(--accent,#53dbd2);outline-offset:-2px;border-radius:7px}
+.org-column-cards::-webkit-scrollbar{width:7px}
+.org-column-cards::-webkit-scrollbar-thumb{background:#527b8e;border-radius:7px}
+.org-column-cards::-webkit-scrollbar-track{background:transparent}
 .org-section-card{border:1px solid #315367;border-radius:12px;padding:12px;background:#1d3247;
  box-shadow:0 4px 10px rgba(0,0,0,.1);cursor:grab;overflow-wrap:anywhere}
 .org-section-card.org-dragging{opacity:.48;cursor:grabbing}
@@ -472,7 +493,10 @@ body:has(#login-screen:not([hidden])) .login-panel{height:100%;max-height:100%;m
 .org-owner-select{display:flex;flex-direction:column;gap:6px;margin-top:11px;font-size:11px;color:#bed6d9}
 .org-owner-select select{min-width:0;max-width:100%;width:100%;min-height:38px;padding:7px 9px;background:#101f30;color:#e1f5f4;border:1px solid #527080;border-radius:9px;font-size:12px}
 .org-column-empty{margin:15px 6px;color:#8ba8b3;font-size:12px;line-height:1.5}
-@media(max-width:750px){.org-column{flex-basis:min(84vw,300px);max-width:min(84vw,300px)}.org-board{scroll-padding-left:5px}}
+@media(max-width:580px){
+ .org-board{grid-template-columns:1fr;gap:10px}
+ .org-column{height:clamp(285px,46vh,410px)}
+}
 
 /* V22: gerenciamento de visibilidade das seções. */
 .org-manage-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0}

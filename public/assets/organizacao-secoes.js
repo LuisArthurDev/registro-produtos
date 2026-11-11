@@ -86,7 +86,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
      return `<section class="org-column" data-org-column="${html(col.id)}" aria-label="${html(col.nome)}">
        <div class="org-column-head"><strong>${html(col.nome)}</strong><span class="org-count">${cards.length}</span></div>
        <p class="org-column-meta">${col.id?`${registros} registro(s) no mapa${sectionName?` · Mais frequente: ${html(sectionName)}`:''}`:'Seções aguardando definição'}</p>
-       <div class="org-column-cards">${cards.join('')||'<p class="org-column-empty">Solte uma seção aqui ou escolha esta opção no seletor.</p>'}</div>
+       <div class="org-column-cards" role="region" tabindex="0" aria-label="Seções de ${html(col.nome)}; use as setas para rolar a lista">${cards.join('')||'<p class="org-column-empty">Solte uma seção aqui ou escolha esta opção no seletor.</p>'}</div>
      </section>`;
    }).join('');
    for(const select of board.querySelectorAll('[data-org-select]'))select.value=funcionariosMap.has(atrib.get(select.dataset.orgSelect))?atrib.get(select.dataset.orgSelect):'';
