@@ -46,5 +46,5 @@ test('V28: linhas compactas preservadas, sem scroll horizontal',()=>{
 
 test('PWA inclui o novo módulo e usa cache atualizado',()=>{
  assert.match(sw,/tabelas-responsivas\.js/);
- assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+ assert.match(sw,/registro-validades-v35-filtros-formulas-lote/);
 });

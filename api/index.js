@@ -276,6 +276,19 @@ async function produtos(req,actor,pathname,body,query){
    return {sucesso:true,produtos:encontrados.slice(0,limite)};
  }
  admin(actor);
+ if(pathname==='/produtos/formulas-lote'){
+   if(req.method!=='POST')throw bad('Método não permitido.',405);
+   const eans=body.eans,ativo=validarFlagFormula(body.formula_especial);
+   if(!Array.isArray(eans)||eans.length<1||eans.length>500)throw bad('Selecione de 1 a 500 produtos.',422);
+   if(eans.some(x=>typeof x!=='string'||!eanValido(x))||new Set(eans).size!==eans.length)
+     throw bad('A seleção contém EAN inválido ou repetido.',422);
+   // A função PostgreSQL valida todos os produtos e grava em UMA transação;
+   // nenhuma alteração parcial é permitida quando houver EAN inexistente.
+   const resultado=await db('rpc/marcar_formulas_especiais_lote',{method:'POST',body:{p_usuario:actor.id,p_loja:actor.loja_id,p_eans:eans,p_ativo:ativo}});
+   try{await audit(actor,'marcar_formulas_especiais_lote',{quantidade:eans.length,alterados:resultado?.alterados,ativo});}
+   catch(e){console.error('Falha ao auditar a classificação em lote:',e.message);}
+   return {sucesso:true,selecionados:eans.length,alterados:Number(resultado?.alterados||0),formula_especial:ativo};
+ }
  if(pathname==='/produtos/formula-especial'){
    if(req.method!=='POST')throw bad('Método não permitido.',405);
    const ean=norm(body.ean),valor=validarFlagFormula(body.formula_especial);

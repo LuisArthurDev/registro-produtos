@@ -1,6 +1,7 @@
 import { lerODS } from './ods.js';
 import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
+import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
 import { montarListaProcfit, copiarListaProcfit } from './procfit.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
@@ -94,6 +95,7 @@ function paginarTabelasSimples(){
    foot.innerHTML='<label>Itens por página <select aria-label="Itens por página"><option>15</option><option>25</option><option>50</option></select></label><button type="button" class="btn-outline" data-prev>Anterior</button><span class="page-info"></span><button type="button" class="btn-outline" data-next>Próxima</button>';
    wrap.after(foot);
    const select=foot.querySelector('select'),prev=foot.querySelector('[data-prev]'),next=foot.querySelector('[data-next]'),info=foot.querySelector('.page-info');
+   select.id='auto-page-size-'+[...content.querySelectorAll('.table-wrap')].indexOf(wrap);
    const draw=()=>{
      const n=Number(select.value),total=Math.max(1,Math.ceil(trs.length/n));page=Math.max(0,Math.min(page,total-1));
      trs.forEach((tr,i)=>{tr.hidden=i<page*n||i>=(page+1)*n;});
@@ -122,6 +124,7 @@ const observerAcessoLancamentos=new MutationObserver(garantirAcessoUnicoAoLancam
 observerAcessoLancamentos.observe($('#sidebar'),{childList:true,subtree:true});
 garantirAcessoUnicoAoLancamento();
 
+iniciarPersistenciaFiltros($('#content'),()=>({user:state.user?.id,loja:state.user?.loja||state.loja,route:state.route}));
 const observerTabelas=new MutationObserver(paginarTabelasSimples);
 observerTabelas.observe($('#content'),{subtree:true,childList:true});
 
@@ -297,7 +300,12 @@ function navigate(route){
  renderRoute(route);
 }
 async function renderRoute(route){
- const content=$('#content');content.innerHTML=loading();try{
+ const content=$('#content'),id=state.user?.id,loja=state.user?.loja||state.loja;
+ // Antes de qualquer atualização, capturar os filtros da rota ANTERIOR;
+ // a aba nova tem estado separado, mesmo ao trocar de loja/usuário.
+ if(id&&content.dataset.filtrosRota&&content.dataset.restaurandoFiltros!=='1')
+   capturarFiltros(content,{storage:localStorage,key:chaveFiltros(id,loja,content.dataset.filtrosRota)});
+ content.dataset.filtrosRota='';content.dataset.restaurandoFiltros='1';content.innerHTML=loading();try{
   if(state.user?.perfil==='funcionario'&&!['lancamentos','visualizacao'].includes(route)){
     // Guarda adicional contra chamadas diretas ou hash alterado por funcionário.
     window.location.replace(window.matchMedia('(max-width:900px)').matches?'/lancamentos.html':'/visualizacao.html');return;
@@ -308,7 +316,13 @@ async function renderRoute(route){
    case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!isAdmin())throw new Error('Seções: acesso reservado ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
- }catch(e){content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
+  content.dataset.filtrosRota=route;
+  if(id){
+    try{await restaurarFiltros(content,{storage:localStorage,key:chaveFiltros(id,loja,route)});}
+    catch(err){console.warn('Não foi possível restaurar todos os filtros:',err.message);}
+    finally{delete content.dataset.restaurandoFiltros;}
+  }else delete content.dataset.restaurandoFiltros;
+ }catch(e){delete content.dataset.restaurandoFiltros;content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
 async function getMaps(mapa=''){
  const p=new URLSearchParams();if(lojaParams())p.set('loja',state.loja);if(mapa)p.set('mapa',mapa);
  // Não limitar a 15/25/50 linhas nem aos 16.000 registros da consulta legada.
@@ -579,7 +593,7 @@ async function mapas(forced=''){
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
- ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':''):''}</div>
+ ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button>'):''}</div>
  <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
@@ -590,6 +604,7 @@ async function mapas(forced=''){
   if($('#map-select-all')){$('#map-select-all').checked=paged().length>0&&paged().every(x=>selected.has(x.id));$('#map-select-all').indeterminate=paged().some(x=>selected.has(x.id))&&!$('#map-select-all').checked;}
   $('#map-page-label').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil(filtered.length/Number($('#map-size').value)))}`;
   $('#map-counter').textContent=`${filtered.length} registro(s) · ${filtered.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · ${selected.size} selecionado(s)`;
+  for(const id of ['map-formula-on','map-formula-off'])if($('#'+id))$('#'+id).disabled=!selected.size;
   const descida=$('#stock-descend-selected');
   if(descida){const validos=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0&&r.tipo_mapa==='Estoque'));
     descida.disabled=!validos.length;descida.textContent=validos.length?`Descer ${validos.length} selecionado(s) para mapa`:'Descer selecionados para o mapa';}
@@ -605,6 +620,7 @@ async function mapas(forced=''){
  $('#map-size').onchange=()=>{page=0;draw();};
  $('#map-clear').onclick=()=>{for(const id of ['map-search','map-lot','map-status','map-owner','map-month','map-valid-from','map-valid-to']){const el=$('#'+id);if(el)el.value='';}selected.clear();apply();};
  $('#map-prev').onclick=()=>{if(page){page--;draw();}};$('#map-next').onclick=()=>{if((page+1)*Number($('#map-size').value)<filtered.length){page++;draw();}};
+ $('#map-main-card').addEventListener('rv:filtros-restaurados',e=>{const p=Number(e.detail?.paginas?.['map-page-label']);if(p>0){page=Math.min(p-1,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));draw();}} ,{once:true});
  $('#reload-maps').onclick=()=>renderRoute(state.route);
  $('#map-print').onclick=()=>printableTable('#maps-table',()=>mapsTable(filtered,{actions:false}));
  $('#map-csv').onclick=()=>exportCsv('mapa-'+nowBrISO()+'.csv',['Mapa','EAN','Codigo interno','Descricao','Lote','Validade','Quantidade','Mes lancamento','Situacao'],filtered.map(r=>[r.mapa_nome,r.ean,r.codigoInterno,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento).slice(0,7),statusVal(r.validade,r.secao)[0]]));
@@ -684,6 +700,22 @@ async function mapas(forced=''){
  if(able){
   $('#map-select-all').onchange=e=>{for(const r of paged()){if(e.target.checked)selected.add(r.id);else selected.delete(r.id);}draw();};
   $('#map-unselect').onclick=()=>{selected.clear();$('#map-select-all').checked=false;draw();};
+  if($('#map-select-filtered'))$('#map-select-filtered').onclick=()=>{for(const item of filtered)selected.add(item.id);draw();};
+  async function salvarFormulasSelecionadas(ativo){
+    // Seleção é de lançamentos; marcação é DO PRODUTO, uma vez por EAN.
+    const eans=[...new Set([...selected].map(id=>rows.find(r=>r.id===id)?.ean).filter(Boolean))];
+    if(!eans.length)return toast('Selecione pelo menos um produto no mapa.',true);
+    if(eans.length>500)return toast('Selecione até 500 EANs por operação de Fórmulas Especiais.',true);
+    if(!await confirmDialog('Fórmulas Especiais em lote',`${ativo?'Marcar':'Desmarcar'} ${eans.length} EAN(s)? A regra será aplicada a todos os lançamentos desses produtos e bloqueará Queima/Procfit quando ativada.`))return;
+    const b=$('#map-formula-'+(ativo?'on':'off'));b.disabled=true;
+    try{
+      const resultado=await request('/produtos/formulas-lote',{method:'POST',body:{eans,formula_especial:ativo}});
+      toast(`${resultado.selecionados} EAN(s) processados; ${resultado.alterados} alteração(ões) realizadas.`);
+      await renderRoute(state.route);
+    }catch(err){toast('Nenhuma classificação foi aplicada: '+err.message,true);draw();}
+  }
+  $('#map-formula-on').onclick=()=>void salvarFormulasSelecionadas(true);
+  $('#map-formula-off').onclick=()=>void salvarFormulasSelecionadas(false);
   if(isStock){
    $('#stock-select-filtered').onclick=()=>{for(const r of filtered)if(r.tipo_mapa==='Estoque'&&Number(r.quantidade)>0)selected.add(r.id);draw();};
    $('#stock-descend-selected').onclick=async()=>{
@@ -737,6 +769,7 @@ async function mapas(forced=''){
  apply();
  if(!isStock){
   let compareActive=false, saldos=null, compareRows=[],comparePage=0,compareResult=null;
+  let restaurarPaginaConferencia=null;
   const base=$('#map-main-card'),pane=$('#map-compare-section');
   const desenharComparacao=()=>{
     const tam=Number($('#compare-size').value)||25,total=compareRows.length;
@@ -769,7 +802,7 @@ async function mapas(forced=''){
       // elas poderiam consumir saldo de um produto e reduzir incorretamente o mapa.
       const lista=filtrarMapasParaConferencia(candidatos);
       const especiaisIgnoradas=candidatos.length-lista.length;
-      compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=0;
+      compareResult=conciliarMapaComEstoque(lista,saldos);compareRows=compareResult.itens;comparePage=restaurarPaginaConferencia??0;restaurarPaginaConferencia=null;
       const res=compareResult.resumo;
       notice.textContent=`Base: ${saldos.length} saldo(s) importado(s) para a loja. Mês ${mes}. Somente funcionários e Estoque; ${especiaisIgnoradas} registro(s) de abas não elegíveis ignorado(s). A conferência é somente leitura. A cópia para Procfit considera todos os registros filtrados, independentemente da página exibida.`;
       $('#compare-summary').innerHTML=`<span>${res.registros} registros</span><span>${res.unidadesMapa} un. no mapa</span><span>${res.unidadesCorrigidas} un. corrigidas (localizadas)</span><span>${res.registrosReduzidos} reduzidos</span><span>${res.naoEncontrados} não localizados (saldo 0)</span>`;
@@ -792,6 +825,7 @@ async function mapas(forced=''){
   $('#compare-month').onchange=e=>{$('#map-month').value=e.target.value;apply();atualizarComparacao();};
   $('#compare-refresh').onclick=()=>atualizarComparacao(true);
   $('#compare-size').onchange=()=>{comparePage=0;desenharComparacao();};
+  $('#map-compare-section').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['compare-page']);if(n>0){restaurarPaginaConferencia=n-1;if(compareRows.length){comparePage=n-1;desenharComparacao();}}},{once:true});
   $('#compare-prev').onclick=()=>{if(comparePage){comparePage--;desenharComparacao();}};
   $('#compare-next').onclick=()=>{if((comparePage+1)*Number($('#compare-size').value)<compareRows.length){comparePage++;desenharComparacao();}};
   $('#compare-copy-procfit').onclick=()=>{
@@ -815,11 +849,27 @@ async function mapas(forced=''){
  }
 }
 async function produtos(){
- const d=await request('/produtos?limite=50');
+ const d=await request('/produtos?limite=200');
+ const selecionados=new Set();let apresentados=[];
  $('#content').innerHTML=header('Produtos EAN','Catálogo com EAN, Código Interno, Descrição, Seção e Grupo do relatório ODS.',isAdmin()?'<button class="primary" id="add-product" type="button">Adicionar produto</button>':'')+
- `<section class="card card-pad"><div class="filter-row"><input id="product-search" class="wide" placeholder="EAN, código, descrição ou grupo"><button id="product-go" class="primary" type="button">Pesquisar</button></div><div id="product-list"></div></section>`;
+ `<section class="card card-pad"><div class="filter-row"><input id="product-search" class="wide" placeholder="EAN, código, descrição ou grupo"><button id="product-go" class="primary" type="button">Pesquisar</button></div>
+ ${isAdmin()?'<div class="panel-actions formula-bulk-controls"><label class="toolbar-checkbox"><input id="product-select-page" type="checkbox"> Selecionar resultados desta busca</label><button type="button" class="btn-outline" id="product-formula-on" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button type="button" class="btn-outline" id="product-formula-off" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button><button type="button" class="btn-outline" id="product-unselect" disabled>Limpar seleção</button><span id="product-selected-count" role="status" aria-live="polite">0 selecionado(s)</span></div>':''}<div id="product-list"></div></section>`;
+ const atualizarSelecao=()=>{
+  if(!isAdmin())return;
+  const cb=$('#product-select-page');if(!cb)return;
+  cb.checked=apresentados.length>0&&apresentados.every(x=>selecionados.has(x.ean));
+  cb.indeterminate=apresentados.some(x=>selecionados.has(x.ean))&&!cb.checked;
+  for(const id of ['product-formula-on','product-formula-off','product-unselect'])$('#'+id).disabled=!selecionados.size;
+  $('#product-selected-count').textContent=`${selecionados.size} EAN(s) selecionado(s)`;
+ };
  const render=a=>{
-  $('#product-list').innerHTML=table(['EAN','Cód. interno','Descrição','Seção','Grupo','Fórmulas Especiais',...(isAdmin()?['Ações']:[])],a.map(r=>`<tr><td>${H(r.ean)}</td><td>${H(r.codigo_interno||'—')}</td><td>${H(r.descricao)}</td><td>${H(r.secao||'—')}</td><td>${H(r.grupo||'—')}</td><td>${r.formula_especial?'<span class="pill amber">Sim · Queima/Procfit bloqueados</span>':'Não'}</td>${isAdmin()?`<td><button class="action-link" type="button" title="Editar produto ${H(r.ean)}" aria-label="Editar produto ${H(r.ean)}" data-edit-product="${H(r.id)}">Editar</button><button class="action-link" type="button" data-product-formula="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Desativar Fórmula Especial':'Ativar Fórmula Especial'}</button></td>`:''}</tr>`));
+  apresentados=a;
+  $('#product-list').innerHTML=table([...(isAdmin()?['Selecionar']:[]),'EAN','Cód. interno','Descrição','Seção','Grupo','Fórmulas Especiais',...(isAdmin()?['Ações']:[])],a.map(r=>`<tr>${isAdmin()?`<td><input type="checkbox" class="row-select" data-select-product="${H(r.ean)}" ${selecionados.has(r.ean)?'checked':''} aria-label="Selecionar EAN ${H(r.ean)}"></td>`:''}<td>${H(r.ean)}</td><td>${H(r.codigo_interno||'—')}</td><td>${H(r.descricao)}</td><td>${H(r.secao||'—')}</td><td>${H(r.grupo||'—')}</td><td>${r.formula_especial?'<span class="pill amber">Sim · Queima/Procfit bloqueados</span>':'Não'}</td>${isAdmin()?`<td><button class="action-link" type="button" title="Editar produto ${H(r.ean)}" aria-label="Editar produto ${H(r.ean)}" data-edit-product="${H(r.id)}">Editar</button><button class="action-link" type="button" data-product-formula="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Desativar Fórmula Especial':'Ativar Fórmula Especial'}</button></td>`:''}</tr>`));
+  atualizarSelecao();
+  $('#product-list').querySelectorAll('[data-select-product]').forEach(cb=>cb.addEventListener('change',()=>{
+    if(cb.checked)selecionados.add(cb.dataset.selectProduct);else selecionados.delete(cb.dataset.selectProduct);
+    atualizarSelecao();
+  }));
   $('#product-list').querySelectorAll('[data-edit-product]').forEach(btn=>btn.addEventListener('click',()=>abrirProduto(a.find(x=>x.id===btn.dataset.editProduct))));
   $('#product-list').querySelectorAll('[data-product-formula]').forEach(btn=>btn.addEventListener('click',async()=>{
     const valor=btn.dataset.formulaValue==='true',ean=btn.dataset.productFormula;
@@ -831,6 +881,22 @@ async function produtos(){
  const search=async()=>{try{const q=$('#product-search').value.trim(),r=await request('/produtos?q='+encodeURIComponent(q)+'&limite=100');render(r.produtos||[]);}catch(e){toast(e.message,true);}};
  $('#product-go').onclick=search;$('#product-search').onkeydown=e=>{if(e.key==='Enter')search();};
  if(!isAdmin())return;
+ $('#product-select-page').onchange=e=>{for(const p of apresentados){if(e.target.checked)selecionados.add(p.ean);else selecionados.delete(p.ean);}render(apresentados);};
+ $('#product-unselect').onclick=()=>{selecionados.clear();render(apresentados);};
+ async function aplicarLote(ativo){
+   const eans=[...selecionados];
+   if(!eans.length)return toast('Selecione os produtos primeiro.',true);
+   if(eans.length>500)return toast('Selecione até 500 EANs em uma operação.',true);
+   if(!await confirmDialog('Fórmulas Especiais em lote',`${ativo?'Marcar':'Desmarcar'} ${eans.length} produto(s)? A regra vale para todos os mapas desses EANs.`))return;
+   const btn=$('#product-formula-'+(ativo?'on':'off'));btn.disabled=true;
+   try{
+     const resultado=await request('/produtos/formulas-lote',{method:'POST',body:{eans,formula_especial:ativo}});
+     selecionados.clear();toast(`${resultado.selecionados} produto(s) processado(s); ${resultado.alterados} alterado(s).`);
+     await search();
+   }catch(err){toast('Nenhum produto foi atualizado: '+err.message,true);atualizarSelecao();}
+ }
+ $('#product-formula-on').onclick=()=>void aplicarLote(true);
+ $('#product-formula-off').onclick=()=>void aplicarLote(false);
  const dialog=$('#product-dialog'),form=$('#product-modal-form');
  async function carregarSecoes(secaoAtual=''){
   const dados=await request('/produtos/secoes');
@@ -1235,6 +1301,8 @@ async function controleValidade(){
  };
  $('#tv-search').oninput=$('#tv-owner').onchange=$('#tv-size').onchange=()=>{tvPagina=0;tvRender();};
  $('#tv-prev').onclick=()=>{tvPagina--;tvRender();};$('#tv-next').onclick=()=>{tvPagina++;tvRender();};
+ $('#ctrl-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['ctrl-pages']);if(n>0){page=n-1;render();}},{once:true});
+ $('#tv-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['tv-pages']);if(n>0){tvPagina=n-1;tvRender();}},{once:true});
  $('#tv-export').onclick=()=>exportCsv('tentativa-de-venda-'+nowBrISO()+'.csv',eligibleHeader.slice(0,7),tvFiltrados.map(r=>[r.codigoInterno||r.ean,r.descricao,r.lote,r.validade,diasVencimento(r.validade),r.quantidade,r.mapa_nome]));
  $('#tv-print').onclick=()=>printableTable('#tv-list',()=>tvTable(tvFiltrados));
  $('#tv-list').onclick=async e=>{
@@ -1318,6 +1386,7 @@ async function generic(pathname,title){
   page=0;draw();};
  const draw=()=>{const sz=Number($('#gen-size').value),np=Math.max(1,Math.ceil(filtered.length/sz));page=Math.max(0,Math.min(np-1,page));$('#gen-list').innerHTML=renderTable(filtered.slice(page*sz,(page+1)*sz));$('#gen-counter').textContent=`${filtered.length} registro(s)`;$('#gen-pages').textContent=`Página ${page+1} de ${np}`;$('#gen-prev').disabled=page===0;$('#gen-next').disabled=page>=np-1;};
  for(const id of ['gen-search','gen-status','gen-since'])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
+ $('#gen-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['gen-pages']);if(n>0){page=n-1;draw();}},{once:true});
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
   const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
@@ -1363,6 +1432,7 @@ async function transferenciasPainel(){
   dlg.showModal();form.elements.ean.focus();};
  $('#transfer-new').onclick=()=>abrir(null);$('#transfer-cancel').onclick=()=>dlg.close();$('#transfer-refresh').onclick=()=>renderRoute(state.route);
  $('#transfer-search').oninput=apply;$('#transfer-size').onchange=apply;$('#transfer-prev').onclick=()=>{page--;draw();};$('#transfer-next').onclick=()=>{page++;draw();};
+ $('#transfer-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['transfer-pages']);if(n>0){page=n-1;draw();}},{once:true});
  $('#transfer-print').onclick=()=>printableTable('#transfer-list',()=>renderRows(filtered));
  $('#transfer-csv').onclick=()=>exportCsv('transferencias-'+nowBrISO()+'.csv',['Data','EAN','Descrição','Lote','Validade','Quantidade','Origem','Destino','Romaneio'],filtered.map(r=>[r.criado_em,r.ean,r.descricao,r.lote,r.validade,r.quantidade,r.loja_origem,r.loja_destino,r.romaneio]));
  $('#transfer-list').onclick=async e=>{

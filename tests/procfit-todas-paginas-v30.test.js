@@ -57,7 +57,7 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+ assert.match(sw,/registro-validades-v35-filtros-formulas-lote/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 
