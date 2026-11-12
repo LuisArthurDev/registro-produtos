@@ -22,8 +22,36 @@ export function validarPin(pin,hash) {
 }
 const sha=s=>createHash('sha256').update(s).digest('hex');
 const encoder=v=>encodeURIComponent(v);
-const cleanProduct=p=>({ean:norm(p.ean),codigo_interno:norm(p.codigo_interno)||null,descricao:norm(p.descricao),secao:norm(p.secao),...('grupo' in p?{grupo:norm(p.grupo)}:{}),atualizado_em:new Date().toISOString()});
+const cleanProduct=p=>({ean:norm(p.ean),codigo_interno:norm(p.codigo_interno)||null,descricao:norm(p.descricao),secao:norm(p.secao),...('grupo' in p?{grupo:norm(p.grupo)}:{}),...('formula_especial' in p?{formula_especial:p.formula_especial}:{}),atualizado_em:new Date().toISOString()});
 const specials=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
+const queimaMapasProibidos=new Set(specials.filter(x=>x!=='Estoque'));
+const formulaFlag=x=>x===true||x==='true';
+const validarFlagFormula=(val)=>{if(typeof val!=='boolean')throw bad('Fórmula Especial deve ser verdadeiro ou falso.',422);return val;};
+async function produtoFormulaEspecial(ean){return (await one('produtos',{ean:`eq.${ean}`,select:'formula_especial'}))?.formula_especial===true;}
+async function validarLiberacaoQueima({ean,lancamento_id,origem_mapa},loja){
+ if(queimaMapasProibidos.has(origem_mapa))throw bad('Abas especiais (exceto Estoque) não podem lançar na Queima.',409);
+ if(lancamento_id){
+  const item=await one('mapa_lancamentos',{id:`eq.${norm(lancamento_id)}`,loja_id:`eq.${loja}`,select:'id,ean,tipo_mapa,mapa_nome'});
+  if(!item)throw bad('Registro de origem não encontrado nesta loja.',404);
+  if(item.ean!==ean||queimaMapasProibidos.has(item.tipo_mapa)||queimaMapasProibidos.has(item.mapa_nome))throw bad('Este mapa não pode lançar produtos na Queima.',409);
+ }
+ if(await produtoFormulaEspecial(ean))throw bad('Fórmula Especial: produto bloqueado para Queima.',409);
+ // Queima manual sem origem: se o EAN só aparece em mapas especiais
+ // protegidos, não permitir contornar o bloqueio omitindo origem_mapa.
+ if(!lancamento_id&&!origem_mapa){
+  const mapas=await rows('mapa_lancamentos',{loja_id:`eq.${loja}`,ean:`eq.${ean}`,excluido_em:'is.null',select:'tipo_mapa,mapa_nome'},250,20);
+  const interditos=mapas.filter(m=>queimaMapasProibidos.has(m.tipo_mapa)||queimaMapasProibidos.has(m.mapa_nome));
+  const permitidos=mapas.filter(m=>!queimaMapasProibidos.has(m.tipo_mapa)&&!queimaMapasProibidos.has(m.mapa_nome));
+  if(interditos.length&&!permitidos.length)throw bad('Este EAN só aparece em mapas especiais, que não podem entrar na Queima.',409);
+ }
+}
+function validarDadosGondola(body){
+ const validade=norm(body.validade_gondola),precoTexto=norm(body.preco_gondola).replace(',','.');
+ const preco=Number(precoTexto);
+ if(!dataValida(validade)||!precoTexto||!Number.isFinite(preco)||preco<0||preco>9999999999.99||Math.abs(Math.round(preco*100)-preco*100)>1e-7)
+  throw bad('Informe Validade da Gôndola e Preço da Gôndola válido (até duas casas decimais).',422);
+ return {validade_gondola:validade,preco_gondola:preco};
+}
 const getTipo=nome=>specials.includes(nome)?nome:'funcionario';
 const json=(res,status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.end(JSON.stringify(data));};
 function queryString(obj={}) {let p=new URLSearchParams(); for(const [k,v] of Object.entries(obj)) if(v!==undefined&&v!==null)p.set(k,String(v));return p.toString();}
@@ -100,6 +128,16 @@ async function filtrarRegistrosSecao(registros,loja){
   for(const p of achados)mapa.set(p.ean,p);
  }
  return registros.filter(r=>!produtoOculto({secao:r.secao||r.produtos?.secao||r.catalogo?.secao||mapa.get(r.ean)?.secao,grupo:r.grupo||r.produtos?.grupo||r.catalogo?.grupo||mapa.get(r.ean)?.grupo},excluidas));
+}
+// Lançamentos históricos sem produto_id ainda precisam respeitar Fórmulas Especiais.
+async function formulasSemVinculo(registros){
+ const faltantes=[...new Set(registros.filter(r=>!r.produtos&&eanValido(r.ean)).map(r=>r.ean))];
+ const m=new Map();
+ for(let i=0;i<faltantes.length;i+=70){
+  const encontrados=await rows('produtos',{ean:`in.(${faltantes.slice(i,i+70).join(',')})`,select:'ean,formula_especial'},100,2);
+  for(const r of encontrados)m.set(r.ean,r.formula_especial===true);
+ }
+ return r=>r.produtos?.formula_especial===true||m.get(r.ean)===true;
 }
 const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.titular_painel_geral===true&&(u.perfil==='geral'||u.acesso_geral===true),administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
 function requestBody(req){if(req.body&&typeof req.body==='object')return req.body;try{return JSON.parse(req.body||'{}');}catch{throw bad('Corpo JSON inválido.');}}
@@ -211,6 +249,12 @@ async function alterarMeuPinGeral(actor,sessao,body){
   return {sucesso:true,mensagem:'Seu PIN foi atualizado e as demais sessões foram encerradas.'};
 }
 async function produtos(req,actor,pathname,body,query){
+ if(req.method==='GET'&&pathname==='/produtos/formulas'){
+   admin(actor);
+   // Reconsulta o banco antes da cópia para não depender de marcações em cache.
+   const produtos=await rows('produtos',{formula_especial:'eq.true',select:'ean',order:'ean.asc'},500,100);
+   return {sucesso:true,eans:produtos.map(p=>p.ean)};
+ }
  if(req.method==='GET'&&pathname==='/produtos/secoes'){
    const sec=await db('rpc/listar_secoes_catalogo',{method:'POST',body:{}});
    const {secoes}=await exclusoesDaLoja(actor.loja_id);
@@ -218,7 +262,7 @@ async function produtos(req,actor,pathname,body,query){
  }
  if(req.method==='GET'){
    const filtro=norm(query.get('q'));if(filtro.length>100)throw bad('Pesquisa muito longa.');
-   let params={select:'id,ean,codigo_interno,descricao,secao,grupo',order:'descricao.asc'};
+   let params={select:'id,ean,codigo_interno,descricao,secao,grupo,formula_especial',order:'descricao.asc'};
    if(filtro)params.or=`(ean.eq.${filtro.replace(/[^\d]/g,'')||'000'},codigo_interno.eq.${filtro.replace(/[^\d]/g,'')||'000'},descricao.ilike.*${filtro.replace(/[%,()]/g,'')}*,grupo.ilike.*${filtro.replace(/[%,()]/g,'')}*)`;
    const exclusoes=await exclusoesDaLoja(actor.loja_id);
    const limite=Math.max(1,Math.min(Number(query.get('limite'))||80,200));
@@ -232,14 +276,26 @@ async function produtos(req,actor,pathname,body,query){
    return {sucesso:true,produtos:encontrados.slice(0,limite)};
  }
  admin(actor);
+ if(pathname==='/produtos/formula-especial'){
+   if(req.method!=='POST')throw bad('Método não permitido.',405);
+   const ean=norm(body.ean),valor=validarFlagFormula(body.formula_especial);
+   if(!eanValido(ean))throw bad('EAN inválido.',422);
+   const anterior=await one('produtos',{ean:`eq.${ean}`,select:'id,formula_especial'});
+   if(!anterior)throw bad('Cadastre o produto em Produtos EAN para marcar Fórmula Especial.',404);
+   await db('produtos',{method:'PATCH',params:{id:`eq.${anterior.id}`},body:{formula_especial:valor,atualizado_em:new Date().toISOString()},prefer:'return=minimal'});
+   await audit(actor,'alterar_formula_especial',{ean,ativo:valor});
+   return {sucesso:true,ean,formula_especial:valor};
+ }
  if(pathname==='/produtos/importar'){
    if(!Array.isArray(body.produtos)||body.produtos.length>500)throw bad('Envie um lote de até 500 produtos.');
    const lista=body.produtos.map(cleanProduct);
+   if(lista.some(x=>'formula_especial' in x&&typeof x.formula_especial!=='boolean'))throw bad('Fórmula Especial deve ser verdadeiro ou falso.',422);
    if(lista.some(x=>!eanValido(x.ean)))throw bad('Há EANs inválidos no lote.');
    await db('produtos',{method:'POST',body:lista,params:{on_conflict:'ean'},prefer:'resolution=merge-duplicates,return=minimal'});
    await audit(actor,'importar_produtos',{quantidade:lista.length});return {sucesso:true,importados:lista.length};
  }
  const p=cleanProduct(body);
+ if('formula_especial' in p)validarFlagFormula(p.formula_especial);
  if(!eanValido(p.ean)||!p.descricao||p.descricao.length>350||p.secao.length>120||(p.grupo&&p.grupo.length>120))throw bad('Confira EAN, descrição, seção e Grupo.',422);
  if(req.method==='POST'&&pathname==='/produtos'){
    if(await one('produtos',{ean:`eq.${p.ean}`,select:'id'}))throw bad('EAN já cadastrado. Use Editar produto.',409);
@@ -248,13 +304,14 @@ async function produtos(req,actor,pathname,body,query){
  }
  if(req.method==='PATCH'&&pathname==='/produtos'){
    const id=norm(body.id);if(!/^[a-f\d-]{36}$/i.test(id))throw bad('Identificador inválido.',422);
-   const anterior=await one('produtos',{id:`eq.${id}`,select:'id,ean,codigo_interno,descricao,secao,grupo'});
+   const anterior=await one('produtos',{id:`eq.${id}`,select:'id,ean,codigo_interno,descricao,secao,grupo,formula_especial'});
    if(!anterior)throw bad('Produto não encontrado.',404);
    const similar=await one('produtos',{ean:`eq.${p.ean}`,select:'id'});
    if(similar&&similar.id!==id)throw bad('Esse EAN pertence a outro produto.',409);
    const patch={ean:p.ean,codigo_interno:p.codigo_interno,descricao:p.descricao,secao:p.secao,atualizado_em:p.atualizado_em};
    // Grupo só é alterado em edição manual explícita ou pela atualização segura do ODS.
    if('grupo' in p)patch.grupo=p.grupo;
+   if('formula_especial' in p)patch.formula_especial=p.formula_especial;
    await db('produtos',{method:'PATCH',params:{id:`eq.${id}`},body:patch,prefer:'return=minimal'});
    await audit(actor,'editar_produto',{id,ean_anterior:anterior.ean,ean_novo:p.ean});return {sucesso:true,produto:{...anterior,...patch}};
  }
@@ -265,7 +322,7 @@ async function mapas(req,actor,pathname,body,query){
   if(req.method==='GET'){
     const nome=norm(query.get('mapa'));
     if(nome)podeMapa(actor,nome);
-    const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao,grupo)',order:'validade.asc'};
+    const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao,grupo,formula_especial)',order:'validade.asc'};
     if(actor.perfil==='funcionario')params.mapa_nome=`eq.${actor.nome}`;
     else if(nome)params.mapa_nome=`eq.${nome}`;
     // Ordenação estável evita empates de validade produzirem saltos entre lotes.
@@ -275,9 +332,10 @@ async function mapas(req,actor,pathname,body,query){
       :await rows('mapa_lancamentos',params,800,20);
     if(!Array.isArray(bruto))throw bad('Consulta inválida de mapas.',502);
     const registros=await filtrarRegistrosSecao(bruto,loja);
+    const formulaDoRegistro=await formulasSemVinculo(registros);
     return {sucesso:true,...(pagina?{paginado:true,
       proximoOffset:bruto.length===pagina.limit?pagina.offset+pagina.limit:null}:{}),
-      registros:registros.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||''}))};
+      registros:registros.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||'',formula_especial:formulaDoRegistro(r)}))};
   }
   if(pathname==='/mapas/retirar-loja'){
     if(req.method!=='POST')throw bad('Método não permitido.',405);
@@ -379,10 +437,10 @@ async function visualizacao(req,actor,pathname,body,query){
    specials.includes(x.tipo_mapa)&&x.mapa_nome===x.tipo_mapa);
  const allowedRows=async()=>rows('mapa_lancamentos',employee?{
    loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,tipo_mapa:'eq.funcionario',
-   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo)'
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo,formula_especial)'
   }:{
    loja_id:`eq.${loja}`,tipo_mapa:`in.(${specials.join(',')})`,
-   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo)'
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo,formula_especial)'
   },500,20);
  const getRecord=async id=>{
    if(!/^[0-9a-f-]{36}$/i.test(norm(id)))throw bad('Registro inválido.',422);
@@ -397,11 +455,12 @@ async function visualizacao(req,actor,pathname,body,query){
    const mapa=norm(query.get('mapa'));
    if(mapa&&(employee?normalizarNome(mapa)!==(actor.nome_normalizado||normalizarNome(actor.nome)):!specials.includes(mapa)))
      throw bad('Mapa não autorizado para esta conta.',403);
-   const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao,grupo)',order:'validade.asc'};
+   const params={loja_id:`eq.${loja}`,excluido_em:'is.null',select:'*,produtos(codigo_interno,descricao,secao,grupo,formula_especial)',order:'validade.asc'};
    if(employee){params.tipo_mapa='eq.funcionario';params.mapa_nome=`eq.${actor.nome}`;}
    else{params.tipo_mapa=`in.(${specials.join(',')})`;if(mapa)params.mapa_nome=`eq.${mapa}`;}
    const lista=(await filtrarRegistrosSecao(await rows('mapa_lancamentos',params,800,20),loja)).filter(allowed);
-   return {sucesso:true,registros:lista.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||''})),
+   const formulaDoRegistro=await formulasSemVinculo(lista);
+   return {sucesso:true,registros:lista.map(r=>({...r,codigoInterno:r.produtos?.codigo_interno||'',descricao:r.produtos?.descricao||'',secao:r.produtos?.secao||'',grupo:r.produtos?.grupo||'',formula_especial:formulaDoRegistro(r)})),
      abasPermitidas:employee?[actor.nome]:specials};
  }
  if(pathname==='/visualizacao/vencidos'&&req.method==='GET'){
@@ -428,9 +487,18 @@ async function visualizacao(req,actor,pathname,body,query){
  }
  if(pathname==='/visualizacao/queima'&&req.method==='GET'){
    const item=await getRecord(query.get('id'));
-   const lista=await rows('queima',{loja_id:`eq.${loja}`,lancamento_id:`eq.${item.id}`,
-      select:'id,criado_em,atualizado_em,ean,lote,validade,quantidade,motivo,estado,origem_mapa',order:'criado_em.desc'},100,5);
-   return {sucesso:true,registros:lista};
+   const selecao='id,criado_em,atualizado_em,ean,lote,validade,quantidade,motivo,estado,origem_mapa,validade_gondola,preco_gondola';
+   const linked=await rows('queima',{loja_id:`eq.${loja}`,lancamento_id:`eq.${item.id}`,select:selecao,order:'criado_em.desc,id.desc'},500,100);
+   // Historial do PRODUTO inteiro: inclui outros lotes, repetições e aprovados.
+   // Funcionário só consulta Queimas oriundas do próprio mapa; administrador de
+   // loja pode consultar todos os lotes do EAN dentro da sua própria loja.
+   const byProduct=item.ean?await rows('queima',{
+      loja_id:`eq.${loja}`,ean:`eq.${item.ean}`,
+      ...(employee?{origem_mapa:`eq.${actor.nome}`}:{ }),
+      select:selecao,order:'criado_em.desc,id.desc'},500,100):[];
+   const registros=[...new Map([...linked,...byProduct].map(x=>[x.id,x])).values()]
+      .sort((a,b)=>String(b.criado_em).localeCompare(String(a.criado_em))||String(b.id).localeCompare(String(a.id)));
+   return {sucesso:true,registros};
  }
  if(pathname==='/visualizacao/sinalizar'&&req.method==='POST'){
    const item=await getRecord(body.id);
@@ -643,14 +711,18 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
   admin(actor);
   if(req.method==='POST'){
     const payload={...body};delete payload.loja;delete payload.sessao;
-    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa','codigo_interno','descricao_original','mapa_origem'];
+    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa','codigo_interno','descricao_original','mapa_origem','validade_gondola','preco_gondola'];
     const data=Object.fromEntries(Object.entries(payload).filter(([k])=>allowed.includes(k)));
     data[extras.lojaCol||'loja_id']=loja;
     if(extras.usuarioCol!==false)data[extras.usuarioCol||'usuario_id']=actor.id;
     if(data.ean&&!eanValido(data.ean))throw bad('EAN inválido.');
     if(table==='queima'&&!eanValido(data.ean))throw bad('EAN obrigatório na Queima.');
     if(table==='vencidos'&&!data.ean&&!data.codigo_interno)throw bad('Informe EAN ou código interno para a retirada.');
-    if(table==='queima')data.motivo='4';
+    if(table==='queima'){
+      Object.assign(data,validarDadosGondola(body));
+      await validarLiberacaoQueima({ean:norm(data.ean),lancamento_id:data.lancamento_id,origem_mapa:data.origem_mapa},loja);
+      data.motivo='4';
+    }
     if(table==='transferencias'){
       if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode registrar transferências.',403);
       if(!/^\d{1,12}$/.test(norm(data.loja_origem)))throw bad('Informe a loja de origem numérica.',422);
@@ -890,8 +962,33 @@ async function encaminharMapa(req,actor,body){
   const ids=body.ids;
   if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>!/^[0-9a-f-]{36}$/i.test(norm(id))))throw bad('Selecione de 1 a 100 registros válidos.');
   if(!['queima','vencidos'].includes(body.destino))throw bad('Destino inválido.');
-  const resultado=await db('rpc/encaminhar_mapa',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_destino:body.destino}});
-  await audit(actor,'encaminhar_mapa',{ids,destino:body.destino});
+  if(new Set(ids).size!==ids.length)throw bad('Não repita o mesmo registro na seleção.',422);
+  let dadosGondola=[];
+  if(body.destino==='queima'){
+    if(!Array.isArray(body.itens)||body.itens.length!==ids.length)throw bad('Informe Validade e Preço da Gôndola de cada produto selecionado.',422);
+    const idsDeItens=new Set();
+    dadosGondola=body.itens.map(item=>{
+      const id=norm(item.id);
+      if(!ids.includes(id)||idsDeItens.has(id))throw bad('A lista de informações da Gôndola não corresponde à seleção.',422);
+      idsDeItens.add(id);return {id,...validarDadosGondola(item)};
+    });
+    const itens=await rows('mapa_lancamentos',{
+      loja_id:`eq.${loja}`,id:`in.(${ids.join(',')})`,select:'id,ean,tipo_mapa,mapa_nome'},250,2);
+    if(itens.length!==ids.length)throw bad('Algum registro não foi localizado para a Queima.',404);
+    if(itens.some(r=>queimaMapasProibidos.has(r.tipo_mapa)||queimaMapasProibidos.has(r.mapa_nome)))
+      throw bad('Abas especiais (exceto Estoque) não podem lançar na Queima.',409);
+    const eans=[...new Set(itens.map(x=>x.ean).filter(eanValido))];
+    for(let i=0;i<eans.length;i+=70){
+      const especiais=await rows('produtos',{ean:`in.(${eans.slice(i,i+70).join(',')})`,formula_especial:'eq.true',select:'ean'},100,2);
+      if(especiais.length)throw bad('Fórmula Especial: a seleção contém produto bloqueado para Queima.',409);
+    }
+  }
+  const rpc=body.destino==='queima'?'rpc/encaminhar_mapa_queima_itens_v34':'rpc/encaminhar_mapa';
+  const payload=body.destino==='queima'?{
+    p_loja_id:loja,p_usuario_id:actor.id,p_itens:dadosGondola
+  }:{p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_destino:body.destino};
+  const resultado=await db(rpc,{method:'POST',body:payload});
+  await audit(actor,'encaminhar_mapa',{ids,destino:body.destino,...(body.destino==='queima'?{quantidade_itens_gondola:dadosGondola.length}:{})});
   return {sucesso:true,resultado};
 }
 async function relancarQueima(req,actor,body){

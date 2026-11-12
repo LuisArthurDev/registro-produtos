@@ -649,3 +649,19 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
  .table-wrap tbody>tr>td{display:table-cell!important}
  .table-wrap td[data-label]::before{display:none!important;content:none!important}
 }
+
+/* V34 — olho no início de cada produto na Visualização. */
+.view-product-first{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.view-product-first>div{min-width:0;overflow-wrap:anywhere}
+.view-eye-queima{display:inline-flex;align-items:center;justify-content:center;flex:none;
+ width:34px;height:34px;border-radius:8px;border:1px solid var(--line,#4a5568);
+ background:transparent;color:var(--accent,#5ac8ee);cursor:pointer}
+.view-eye-queima:hover,.view-eye-queima:focus-visible{background:rgba(61,172,218,.14);outline:2px solid transparent;border-color:currentColor}
+.formula-especial-field{display:flex!important;align-items:flex-start;gap:10px;flex-wrap:nowrap;line-height:1.5}
+.formula-especial-field input{width:18px!important;height:18px!important;min-width:18px;margin-top:2px;accent-color:#e7a73f}
+.formula-especial-field span{flex:1;min-width:0}
+
+.gondola-items{display:grid;gap:10px;max-height:min(54vh,580px);overflow-y:auto;min-width:0;padding:3px}
+.gondola-item{min-width:0;border:1px solid var(--line,#47556c);padding:12px;border-radius:10px}
+.gondola-item legend{font-size:12px;font-weight:650;overflow-wrap:anywhere;padding:0 4px;max-width:100%}
+.gondola-item .form-grid{align-items:end}

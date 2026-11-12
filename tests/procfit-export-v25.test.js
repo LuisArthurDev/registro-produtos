@@ -30,13 +30,13 @@ test('Quantidade corrigida é preferida em conferência; não substitui saldo au
   map({ean:'07890000000002',quantidadeCorrigida:null}),
  ],{corrigido:true});
  assert.equal(r.total,1);assert.match(r.texto,/ABC123\t30\/11\/2026\t3/);
- assert.deepEqual(r.ignorados,{zerados:1,semSaldo:1,invalidos:0});
+ assert.deepEqual(r.ignorados,{zerados:1,semSaldo:1,invalidos:0,formulasEspeciais:0});
 });
 test('Registros com quantidade zero, inválida ou dados obrigatórios ausentes não são copiados',()=>{
  const r=montarListaProcfit([
   map({quantidade:0}),map({quantidade:-1}),map({lote:''}),map({validade:'2026-02-31'}),map({ean:'',codigoInterno:''}),map({quantidade:'1.5'}),map({quantidade:2})
  ]);
- assert.equal(r.total,1);assert.deepEqual(r.ignorados,{zerados:1,semSaldo:0,invalidos:5});
+ assert.equal(r.total,1);assert.deepEqual(r.ignorados,{zerados:1,semSaldo:0,invalidos:5,formulasEspeciais:0});
 });
 test('Sanitiza tabulações e quebras de linha nos dados sem desalinhar o formato do Procfit',()=>{
  const r=montarListaProcfit([map({lote:'LOTE\tX\nY'})]);
@@ -59,6 +59,6 @@ test('Interface só oferece cópia dos registros conciliados e filtrados, não d
  assert.doesNotMatch(app,/#map-copy-procfit/);
  assert.doesNotMatch(app,/copiarProcfit\(filtered\)/);
  assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
- assert.match(app,/const resultado=montarListaProcfit\(registros,\{corrigido:true\}\)/);
+ assert.match(app,/const resultado=montarListaProcfit\(listaAtual,\{corrigido:true\}\)/);
  assert.match(actions,/if\(has\('copiar','copy','procfit'\)\)return 'copy'/);
 });

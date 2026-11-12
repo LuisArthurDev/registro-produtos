@@ -1,3 +1,7 @@
+> **Versão v34 — Fórmulas Especiais, histórico completo pelo olho na Visualização, Queima com Validade e Preço da Gôndola.** [Guia de instalação](ATUALIZAR-V34-FORMULAS-ESPECIAIS-GONDOLA-HISTORICO.md) — executar **SQL 020** antes do deploy.
+
+> **v33:** campo Validade dos lançamentos com segunda barra automática ao digitar o ano. Veja [ATUALIZAR-V33-VALIDADE-ANO-AUTOMATICO.md](ATUALIZAR-V33-VALIDADE-ANO-AUTOMATICO.md). Nenhuma migração SQL é necessária.
+
 > **Versão v32** — Mapa de Destino permanece selecionado após cada lançamento. A aba **Estoque** oferece **Selecionar todos filtrados** e **Descer selecionados para o mapa** com confirmação e transação no banco (SQL 019). Veja [instruções da v32](ATUALIZAR-V32-DESTINO-FIXO-DESCIDA-ESTOQUE-EM-LOTE.md).
 
 > **Versão v31 — Conferência do mapa com estoque importado:** inclui mapas dos funcionários e a aba especial **Estoque**, excluindo Termolabil, Psicotropicos e Antibioticos da conferência e da cópia para o Conector Procfit. Veja [ATUALIZAR-V31-CONFERENCIA-SEM-ABAS-ESPECIAIS.md](ATUALIZAR-V31-CONFERENCIA-SEM-ABAS-ESPECIAIS.md). Não requer nova migração SQL.

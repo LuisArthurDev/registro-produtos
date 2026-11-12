@@ -26,8 +26,9 @@ export function dataProcfit(valor) {
  * @returns {{texto:string,total:number,ignorados:{zerados:number,semSaldo:number,invalidos:number}}}
  */
 export function montarListaProcfit(registros, {corrigido = false} = {}) {
-  const linhas = [], ignorados = {zerados: 0, semSaldo: 0, invalidos: 0};
+  const linhas = [], ignorados = {zerados: 0, semSaldo: 0, invalidos: 0, formulasEspeciais: 0};
   for (const r of registros || []) {
+    if (r.formulaEspecial === true || r.formula_especial === true) { ignorados.formulasEspeciais++; continue; }
     const codigo = textoCelula(r.codigoInterno ?? r.codigo_interno);
     const ean = textoCelula(r.ean);  // Nunca converter EAN para Number.
     const lote = textoCelula(r.lote);

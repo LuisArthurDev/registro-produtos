@@ -26,6 +26,6 @@ test('página suporta 320 a 800 pixels, entrada por câmera e áreas de toque',(
  assert.match(css,/\.launch-route #form-launch input/);
  assert.match(css,/min-height:48px/);
  assert.match(css,/safe-area-inset-bottom/);
- assert.match(sw,/registro-validades-v32-destino-fixo-descida-lote/);
+ assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
  assert.match(sw,/lancamentos\.html/);
 });

@@ -375,7 +375,7 @@ async function lancamentos(emModal=false){
  <div class="full product-identity" id="product-identity" aria-live="polite"><strong>Produto não consultado</strong><span>Leia ou digite um EAN para identificar o produto.</span></div>
  <div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" maxlength="14" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div>
  <label>Lote<input name="lote" required maxlength="100" placeholder="Lote da embalagem"></label>
- <label>Validade (DD/MM/AA ou MM/AA)<input id="launch-validade" name="validade_digitada" required type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ex.: 31/01/26 ou 01/26"><small>Quando informar só mês e ano, será considerado o último dia do mês.</small></label>
+ <label>Validade (DD/MM/AAAA ou MM/AA)<input id="launch-validade" name="validade_digitada" required type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ex.: 31/01/2026 ou 01/26"><small>Digite os números em sequência: 31122026 → 31/12/2026. Somente mês e ano usa o último dia do mês.</small></label>
  <label>Quantidade<input name="quantidade" required type="number" min="1" max="999999" step="1" value="1"></label></div>
  <div class="notice">A gravação registra o mês automaticamente e mantém o identificador da tentativa caso a conexão caia.</div>
  <div class="form-actions"><button class="btn-outline" type="button" id="lookup-product">Consultar EAN</button>${saved?'<button class="btn-outline" type="button" id="retry-launch">Retomar tentativa pendente</button>':''}<button class="primary" type="submit" id="save-launch">Registrar produto</button></div>
@@ -527,12 +527,42 @@ function printableTable(target,makeAll){
  window.addEventListener('afterprint',done,{once:true});
  window.print();setTimeout(done,12000);
 }
+async function solicitarDadosGondola(registros){
+ const dlg=$('#queima-gondola-dialog'),form=$('#queima-gondola-form'),lista=$('#queima-gondola-items');
+ if(!dlg||!form||!lista){toast('Formulário de Gôndola indisponível. Atualize a página.',true);return null;}
+ if(!Array.isArray(registros)||!registros.length)return null;
+ form.reset();
+ lista.innerHTML=registros.map((r,i)=>`<fieldset class="gondola-item" data-registro-id="${H(r.id)}">
+   <legend>${i+1}. ${H(r.descricao||r.ean)} · EAN ${H(r.ean)} · Lote ${H(r.lote)} · ${H(r.quantidade)} un.</legend>
+   <div class="form-grid"><label>Validade da Gôndola<input type="date" name="validade_gondola" required></label>
+   <label>Preço da Gôndola (R$)<input type="number" name="preco_gondola" min="0" max="9999999999.99" step="0.01" required></label></div></fieldset>`).join('');
+ $('#queima-gondola-count').textContent=`${registros.length} produto(s). Informe a Validade e o Preço da Gôndola de cada item.`;
+ return new Promise(resolve=>{
+   let encerrado=false;
+   const finalizar=valor=>{if(encerrado)return;encerrado=true;dlg.close();resolve(valor);};
+   form.onsubmit=event=>{
+     event.preventDefault();
+     const itens=[...lista.querySelectorAll('.gondola-item')].map(item=>({
+       id:item.dataset.registroId,
+       validade_gondola:item.querySelector('[name="validade_gondola"]').value,
+       preco_gondola:Number(item.querySelector('[name="preco_gondola"]').value)
+     }));
+     if(itens.some(item=>!/^\d{4}-\d{2}-\d{2}$/.test(item.validade_gondola)||!Number.isFinite(item.preco_gondola)||item.preco_gondola<0)){
+       toast('Confira a validade e o preço da gôndola de cada produto.',true);return;
+     }
+     finalizar({itens});
+   };
+   dlg.oncancel=e=>{e.preventDefault();finalizar(null);};
+   $('#queima-gondola-cancel').onclick=()=>finalizar(null);
+   dlg.showModal();lista.querySelector('input')?.focus();
+ });
+}
 function mapsTable(rows,{actions=false,selectable=false}={}){
  return table([...(selectable?['Selecionar']:[]),'Produto / EAN','Mapa','Lote','Validade','Qtd.','Mês lançado','Situação',...(actions?['Ação']:[])],
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
- <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span><span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
+ <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span>${r.formula_especial?'<span class="pill amber" title="Não pode ser lançado na Queima nem copiado para o Procfit">Fórmula Especial</span>':''}<span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}</td>
- ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="${statusVal(r.validade,r.secao)[0]==='Vencido'?'vencidos':'queima'}">${statusVal(r.validade,r.secao)[0]==='Vencido'?'Lançar como Vencido':'Lançar na Queima'}</button>${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}</td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${statusVal(r.validade,r.secao)[0]==='Vencido'?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
@@ -579,14 +609,24 @@ async function mapas(forced=''){
  $('#map-print').onclick=()=>printableTable('#maps-table',()=>mapsTable(filtered,{actions:false}));
  $('#map-csv').onclick=()=>exportCsv('mapa-'+nowBrISO()+'.csv',['Mapa','EAN','Codigo interno','Descricao','Lote','Validade','Quantidade','Mes lancamento','Situacao'],filtered.map(r=>[r.mapa_nome,r.ean,r.codigoInterno,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento).slice(0,7),statusVal(r.validade,r.secao)[0]]));
  const copiarProcfit=async(registros)=>{
-  const resultado=montarListaProcfit(registros,{corrigido:true});
+  let bloqueados;
+  try{
+    // Revalidar antes de copiar. Se outro administrador acabou de marcar
+    // Fórmula Especial, nenhuma linha com o EAN pode escapar via cache.
+    const atual=await request('/produtos/formulas',{retries:0,timeout:60000});
+    bloqueados=new Set(atual.eans||[]);
+  }catch(err){
+    toast('Não foi possível confirmar as Fórmulas Especiais no catálogo. Cópia bloqueada por segurança: '+err.message,true);return;
+  }
+  const listaAtual=registros.map(r=>({...r,formulaEspecial:r.formulaEspecial===true||bloqueados.has(String(r.ean))}));
+  const resultado=montarListaProcfit(listaAtual,{corrigido:true});
   const modal=$('#procfit-copy-dialog'),campo=$('#procfit-copy-text'),estado=$('#procfit-copy-status');
   if(!resultado.total){toast('Nenhum item com saldo positivo e dados válidos para o Procfit. Verifique a conferência.',true);return;}
   // A prévia permanece disponível caso o navegador bloqueie o Clipboard API.
   campo.value=resultado.texto;
   const i=resultado.ignorados;
   const paginas=Math.max(1,Math.ceil(registros.length/(Number($('#compare-size')?.value)||25)));
-  $('#procfit-copy-count').textContent=`Conferência completa: ${registros.length} registro(s) em ${paginas} página(s) · ${resultado.total} copiado(s) · ${i.zerados} com saldo zero ignorado(s) · ${i.invalidos} inválido(s)`;
+  $('#procfit-copy-count').textContent=`Conferência completa: ${registros.length} registro(s) em ${paginas} página(s) · ${resultado.total} copiado(s) · ${i.zerados} com saldo zero ignorado(s) · ${i.formulasEspeciais||0} Fórmula(s) Especial(is) ignorada(s) · ${i.invalidos} inválido(s)`;
   estado.textContent='Preparando cópia para a área de transferência…';
   modal.showModal();
   const manual=()=>{campo.focus();campo.select();campo.setSelectionRange(0,campo.value.length);};
@@ -628,9 +668,17 @@ async function mapas(forced=''){
        };dlg.showModal();
      }catch(err){toast(err.message,true);}return;
    }
+   const marcar=e.target.closest('[data-formula-map]');if(marcar){
+     const ativo=marcar.dataset.formulaValue==='true',ean=marcar.dataset.formulaMap;
+     if(!await confirmDialog('Fórmulas Especiais',`${ativo?'Marcar':'Retirar marcação de'} o EAN ${ean} como Fórmula Especial? Produtos marcados não entram na Queima nem na cópia para Procfit.`))return;
+     try{await request('/produtos/formula-especial',{method:'POST',body:{ean,formula_especial:ativo}});toast(`Fórmula Especial ${ativo?'ativada':'desativada'} para ${ean}.`);await renderRoute(state.route);}catch(err){toast(err.message,true);}
+     return;
+   }
    const send=e.target.closest('[data-send-map]');if(send){const destino=send.dataset.sendTo,reg=rows.find(x=>x.id===send.dataset.sendMap);if(!reg)return;
+     if(destino==='queima'&&(reg.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(reg.tipo_mapa)))return toast('Este produto não pode entrar na Queima.',true);
+     const gondola=destino==='queima'?await solicitarDadosGondola([reg]):{};if(destino==='queima'&&!gondola)return;
      if(!await confirmDialog(destino==='vencidos'?'Lançar como Vencido':'Lançar na Queima',`Encaminhar ${reg.quantidade} unidade(s) do EAN ${reg.ean} (${reg.mapa_nome})?`))return;
-     try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
+     try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino,...gondola}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
    }
  };
  if(able){
@@ -679,8 +727,11 @@ async function mapas(forced=''){
   for(const destino of ['queima','vencidos'])$('#map-to-'+destino).onclick=async()=>{
    const ids=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0));
    if(!ids.length)return toast('Selecione ao menos um lançamento.',true);
+   if(destino==='queima'&&ids.some(id=>rows.some(r=>r.id===id&&(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome)))))return toast('Sua seleção contém Fórmulas Especiais ou abas especiais que não podem entrar na Queima.',true);
+   const selecionados=ids.map(id=>rows.find(r=>r.id===id)).filter(Boolean);
+   const gondola=destino==='queima'?await solicitarDadosGondola(selecionados):{};if(destino==='queima'&&!gondola)return;
    if(!await confirmDialog('Encaminhar '+ids.length+' produto(s)',destino==='queima'?'O lançamento original será preservado e incluído na Queima com motivo 4.':'A quantidade do mapa será zerada e o registro será preservado para auditoria.'))return;
-   try{await request('/mapas/encaminhar',{method:'POST',body:{ids,destino}});toast('Encaminhamento concluído.');renderRoute(state.route);}catch(err){toast(err.message,true);}
+   try{await request('/mapas/encaminhar',{method:'POST',body:{ids,destino,...gondola}});toast('Encaminhamento concluído.');renderRoute(state.route);}catch(err){toast(err.message,true);}
   };
  }
  apply();
@@ -768,8 +819,13 @@ async function produtos(){
  $('#content').innerHTML=header('Produtos EAN','Catálogo com EAN, Código Interno, Descrição, Seção e Grupo do relatório ODS.',isAdmin()?'<button class="primary" id="add-product" type="button">Adicionar produto</button>':'')+
  `<section class="card card-pad"><div class="filter-row"><input id="product-search" class="wide" placeholder="EAN, código, descrição ou grupo"><button id="product-go" class="primary" type="button">Pesquisar</button></div><div id="product-list"></div></section>`;
  const render=a=>{
-  $('#product-list').innerHTML=table(['EAN','Cód. interno','Descrição','Seção','Grupo',...(isAdmin()?['Ações']:[])],a.map(r=>`<tr><td>${H(r.ean)}</td><td>${H(r.codigo_interno||'—')}</td><td>${H(r.descricao)}</td><td>${H(r.secao||'—')}</td><td>${H(r.grupo||'—')}</td>${isAdmin()?`<td><button class="action-link" type="button" title="Editar produto ${H(r.ean)}" aria-label="Editar produto ${H(r.ean)}" data-edit-product="${H(r.id)}">Editar</button></td>`:''}</tr>`));
+  $('#product-list').innerHTML=table(['EAN','Cód. interno','Descrição','Seção','Grupo','Fórmulas Especiais',...(isAdmin()?['Ações']:[])],a.map(r=>`<tr><td>${H(r.ean)}</td><td>${H(r.codigo_interno||'—')}</td><td>${H(r.descricao)}</td><td>${H(r.secao||'—')}</td><td>${H(r.grupo||'—')}</td><td>${r.formula_especial?'<span class="pill amber">Sim · Queima/Procfit bloqueados</span>':'Não'}</td>${isAdmin()?`<td><button class="action-link" type="button" title="Editar produto ${H(r.ean)}" aria-label="Editar produto ${H(r.ean)}" data-edit-product="${H(r.id)}">Editar</button><button class="action-link" type="button" data-product-formula="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Desativar Fórmula Especial':'Ativar Fórmula Especial'}</button></td>`:''}</tr>`));
   $('#product-list').querySelectorAll('[data-edit-product]').forEach(btn=>btn.addEventListener('click',()=>abrirProduto(a.find(x=>x.id===btn.dataset.editProduct))));
+  $('#product-list').querySelectorAll('[data-product-formula]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const valor=btn.dataset.formulaValue==='true',ean=btn.dataset.productFormula;
+    if(!await confirmDialog('Fórmulas Especiais',`${valor?'Ativar':'Desativar'} Fórmula Especial para o EAN ${ean}?`))return;
+    try{await request('/produtos/formula-especial',{method:'POST',body:{ean,formula_especial:valor}});toast('Fórmula Especial atualizada.');await search();}catch(err){toast(err.message,true);}
+  }));
  };
  render(d.produtos||[]);
  const search=async()=>{try{const q=$('#product-search').value.trim(),r=await request('/produtos?q='+encodeURIComponent(q)+'&limite=100');render(r.produtos||[]);}catch(e){toast(e.message,true);}};
@@ -789,8 +845,9 @@ async function produtos(){
    const titulo=dialog.querySelector('h3');if(titulo)titulo.textContent=produto?'Editar produto EAN':'Adicionar produto EAN';
    try{await carregarSecoes(produto?.secao||'');}catch(e){toast('Não foi possível consultar todas as seções: '+e.message,true);form.elements.secao.innerHTML='<option value="">Selecione uma seção</option>';}
    for(const key of ['ean','codigo_interno','descricao','grupo'])if(form.elements[key])form.elements[key].value=produto?.[key]||'';
+   if(form.elements.formula_especial)form.elements.formula_especial.checked=produto?.formula_especial===true;
    $('#product-modal-cancel').onclick=()=>dialog.close();
-   form.onsubmit=async e=>{e.preventDefault();const body=Object.fromEntries(new FormData(form)),btn=form.querySelector('[type="submit"]');btn.disabled=true;
+   form.onsubmit=async e=>{e.preventDefault();const body=Object.fromEntries(new FormData(form)),btn=form.querySelector('[type="submit"]');body.formula_especial=form.elements.formula_especial.checked;btn.disabled=true;
      try{
        if(!form.dataset.editId){
          const encontrado=await request('/produtos?q='+encodeURIComponent(body.ean)+'&limite=3');
@@ -1236,9 +1293,10 @@ async function generic(pathname,title){
  ${isVenc?'<label>Código interno (opcional)<input name="codigo_interno"></label><label class="full">Descrição original<input name="descricao_original"></label>':''}
  ${isSinal?'<label class="full">Motivo / observação<input name="observacao" required maxlength="600"></label>':`<label>Lote<input name="lote" maxlength="100"></label><label>Validade<input type="date" name="validade"></label><label>Quantidade<input type="number" min="1" value="1" name="quantidade" required></label>`}
  ${isTrans?`<label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" required></label><label>Romaneio<input name="romaneio" maxlength="100" required></label><div class="notice full">Loja destino: ${H(state.user.loja)} (automática, não editável).</div>`:''}
+ ${isQueima?'<label>Validade da Gôndola<input name="validade_gondola" type="date" required></label><label>Preço da Gôndola (R$)<input name="preco_gondola" type="number" min="0" step="0.01" required></label>':''}
  ${isVenc?'<label>Motivo<select name="motivo"><option value="vencido">Vencido</option><option value="danificado">Danificado</option></select></label>':''}
  <div class="form-actions"><button class="primary">Registrar</button></div></form></section>`:'');
- const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
+ const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','EAN','Descrição','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
   const ean=r.ean_resolvido||r.ean||'Não informado',desc=r.descricao||r.descricao_original||'Sem descrição cadastrada';
@@ -1249,7 +1307,7 @@ async function generic(pathname,title){
     const lastMonth=mesBrasil(r.criado_em)!==nowBrISO().slice(0,7),pendente=r.estado==='pendente';
     const primary=pendente?(lastMonth?`<button class="action-link" data-relaunch="${H(r.id)}">Relançar</button>`:`<button class="action-link" data-approve="${H(r.id)}">Aprovar</button>`):`<button type="button" class="action-link" disabled title="Registro não pode ser aprovado novamente">${r.estado==='aprovado'?'Aprovado':'Relançado'}</button>`;
     const apagar=pendente?` <button class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`:'';
-    return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
+    return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
   }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
@@ -1262,7 +1320,7 @@ async function generic(pathname,title){
  for(const id of ['gen-search','gen-status','gen-since'])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
-  const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
+  const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
  })));
  $('#gen-list').onclick=async e=>{
   const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]');if(!appr&&!rel&&!sin&&!del)return;

@@ -41,6 +41,7 @@ on:
           - grupos_produtos
           - salvar_organizacao_grupos
           - descer_estoque_lote
+          - formulas_especiais_queima_gondola
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -253,6 +254,13 @@ jobs:
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/012_exclusividade_geral_funcionarios.sql
           echo 'Titular exclusivo e gestão de lançamentos atualizados.'
+      - name: Fórmulas Especiais e dados da Gôndola na Queima (SQL 020)
+        if: inputs.etapa == 'formulas_especiais_queima_gondola'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/020_formulas_especiais_queima_gondola.sql
+          echo 'Fórmulas Especiais, proteção da Queima e dados de gôndola ativados.'
       - name: Ativar Grupos no catálogo e reiniciar organização (SQL 017)
         if: inputs.etapa == 'grupos_produtos'
         shell: bash
