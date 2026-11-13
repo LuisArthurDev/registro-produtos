@@ -89,9 +89,9 @@ test('100 páginas mistas: inclui todos os funcionários e Estoque, ignora todas
 test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia e CSV',()=>{
   assert.match(app,/const lista=filtrarMapasParaConferencia\(candidatos\)/);
   assert.match(app,/conciliarMapaComEstoque\(lista,saldos\)/);
-  assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
+  assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
   assert.match(app,/compareRows\.map\(r=>\[r\.codigoInterno/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
-  assert.match(sw,/registro-validades-v35-filtros-formulas-lote/);
+  assert.match(sw,/registro-validades-v37-tdb-binario-experimental/);
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });

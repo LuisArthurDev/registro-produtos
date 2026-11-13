@@ -51,13 +51,13 @@ test('falha, paginação incompleta ou cursor repetido não autorizam cópia par
 
 test('o botão só aparece na Conferência; copiar não utiliza a página exibida',()=>{
  assert.match(app,/const pageRows=compareRows\.slice\(comparePage\*tam,\(comparePage\+1\)\*tam\)/);
- assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
- assert.doesNotMatch(app,/copiarProcfit\(pageRows\)/);
- assert.doesNotMatch(app,/copiarProcfit\(paged\(\)\)/);
+ assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
+ assert.doesNotMatch(app,/prepararArquivoProcfit\(pageRows\)/);
+ assert.doesNotMatch(app,/prepararArquivoProcfit\(paged\(\)\)/);
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v35-filtros-formulas-lote/);
+ assert.match(sw,/registro-validades-v37-tdb-binario-experimental/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 

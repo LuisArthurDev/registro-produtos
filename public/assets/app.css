@@ -634,12 +634,12 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 }
 .dialog-procfit{width:min(780px,calc(100vw - 24px));max-width:780px}
 .dialog-procfit .dialog-inner{padding:20px}
-.dialog-procfit #procfit-copy-text{
+.dialog-procfit #procfit-export-preview{
   width:100%;min-height:170px;max-height:45vh;resize:vertical;
   white-space:pre;overflow:auto;font:12px/1.55 ui-monospace,Consolas,monospace;
   user-select:text;-webkit-user-select:text;
 }
-.dialog-procfit #procfit-copy-status{font-size:12px;line-height:1.5;color:#b5f3e4}
+.dialog-procfit #procfit-export-status{font-size:12px;line-height:1.5;color:#b5f3e4}
 @media print{
  html,body{overflow:visible!important}
  .table-wrap,.table-wrap table{display:table!important;overflow:visible!important}

@@ -29,12 +29,12 @@ test('produtos com saldo insuficiente são limitados e saldo não é multiplicad
 });
 test('não existe botão de cópia no mapa normal; somente na conferência',()=>{
  assert.doesNotMatch(app,/#map-copy-procfit|copiarProcfit\(filtered\)/);
- assert.match(app,/id="compare-copy-procfit"/);
- assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
- assert.match(app,/montarListaProcfit\(listaAtual,\{corrigido:true\}\)/);
- assert.match(html,/id="procfit-copy-dialog"/);
- assert.match(html,/id="procfit-copy-text"/);
- assert.match(html,/id="procfit-copy-repeat"/);
+ assert.match(app,/id="compare-export-procfit"/);
+ assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
+ assert.match(app,/prepararDadosProcfitTdb\(listaAtual/);
+ assert.match(html,/id="procfit-export-dialog"/);
+ assert.match(html,/id="procfit-export-preview"/);
+ assert.match(html,/id="procfit-export-download"/);
 });
 test('Clipboard API indisponível oferece fallback nativo testável',async()=>{
  let v='';const campo={value:'',style:{},setAttribute(){},focus(){},select(){},remove(){}};

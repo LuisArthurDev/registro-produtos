@@ -1,0 +1,203 @@
+{
+  "arquivo": "Teste2(1).TDB",
+  "bytes": 90492,
+  "sha256": "36014b23ca335746f4906503b0581934725c85b8635b16b7a3f3217d85b005f1",
+  "assinatura": "ABS0LUTEDATABASEL",
+  "marcador": "ABSP",
+  "tamanho_pagina_observado": 4096,
+  "prefixo_em_bytes": 380,
+  "paginas_declaradas_pelo_tamanho": 22,
+  "tabelas": [
+    {
+      "nome": "QUEIMA_ESTOQUE",
+      "pagina_esquema": 7,
+      "quantidade_campos": 8,
+      "campos": [
+        {
+          "nome": "QUEIMA_ESTOQUE",
+          "id_interno_observado": 2,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "FORMULARIO_ORIGEM",
+          "id_interno_observado": 3,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "TAB_MASTER_ORIGEM",
+          "id_interno_observado": 4,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "REG_MASTER_ORIGEM",
+          "id_interno_observado": 5,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "REG_LOG_INCLUSAO",
+          "id_interno_observado": 6,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "USUARIO_LOGADO",
+          "id_interno_observado": 7,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "DATA_HORA",
+          "id_interno_observado": 8,
+          "marcadores_tipo_hex_observados": "111b"
+        },
+        {
+          "nome": "EMPRESA",
+          "id_interno_observado": 9,
+          "marcadores_tipo_hex_observados": "0d15"
+        }
+      ]
+    },
+    {
+      "nome": "QUEIMA_ESTOQUE_ITEM",
+      "pagina_esquema": 13,
+      "quantidade_campos": 26,
+      "campos": [
+        {
+          "nome": "QUEIMA_ESTOQUE_ITEM",
+          "id_interno_observado": 15,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "FORMULARIO_ORIGEM",
+          "id_interno_observado": 16,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "TAB_MASTER_ORIGEM",
+          "id_interno_observado": 17,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "REG_MASTER_ORIGEM",
+          "id_interno_observado": 18,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "REG_LOG_INCLUSAO",
+          "id_interno_observado": 19,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "QUEIMA_ESTOQUE",
+          "id_interno_observado": 20,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "EAN",
+          "id_interno_observado": 21,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 13
+        },
+        {
+          "nome": "PRODUTO",
+          "id_interno_observado": 22,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "LOTE",
+          "id_interno_observado": 23,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 15
+        },
+        {
+          "nome": "VALIDADE",
+          "id_interno_observado": 24,
+          "marcadores_tipo_hex_observados": "111b"
+        },
+        {
+          "nome": "QUANTIDADE",
+          "id_interno_observado": 25,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "CURVA",
+          "id_interno_observado": 26,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 1
+        },
+        {
+          "nome": "PRECO_VENDA",
+          "id_interno_observado": 27,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "APROVADO",
+          "id_interno_observado": 28,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 1
+        },
+        {
+          "nome": "DEMANDA_DIA_PONDERADA",
+          "id_interno_observado": 29,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "ESTOQUE",
+          "id_interno_observado": 30,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "QUEIMA_ESTOQUE_MOTIVO",
+          "id_interno_observado": 31,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "USUARIO_APROVACAO",
+          "id_interno_observado": 32,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "DATA_HORA_APROVACAO",
+          "id_interno_observado": 33,
+          "marcadores_tipo_hex_observados": "111b"
+        },
+        {
+          "nome": "QUEIMA_ESTOQUE_PRECO_ITEM",
+          "id_interno_observado": 34,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "GRUPO_PRODUTO",
+          "id_interno_observado": 35,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "CATEGORIA_PRODUTO",
+          "id_interno_observado": 36,
+          "marcadores_tipo_hex_observados": "0d15"
+        },
+        {
+          "nome": "DATA_INCLUSAO",
+          "id_interno_observado": 37,
+          "marcadores_tipo_hex_observados": "111b"
+        },
+        {
+          "nome": "DATA_PRIMEIRA_COMPRA",
+          "id_interno_observado": 38,
+          "marcadores_tipo_hex_observados": "111b"
+        },
+        {
+          "nome": "PROMOCAO_VIGENTE",
+          "id_interno_observado": 39,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 1
+        },
+        {
+          "nome": "DESCRICAO_PROMOCAO",
+          "id_interno_observado": 40,
+          "marcadores_tipo_hex_observados": "0302",
+          "comprimento_textual_aparente": 50
+        }
+      ]
+    }
+  ],
+  "observacao": "Nomes extraídos de metadados comprimidos; informações de tipo, chaves, defaults, constraints e vínculos exigem validação nativa. ESTE DIAGNÓSTICO NÃO GERA TDB IMPORTÁVEL."
+}
