@@ -105,6 +105,7 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
   $('#view-all-months').checked=true;if(loggedAdmin)$('#view-owner').value='';draw();};
  $('#view-refresh').onclick=()=>renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});
  $('#view-prev').onclick=()=>{prefs.page--;draw();};$('#view-next').onclick=()=>{prefs.page++;draw();};
+ $('#view-results').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['view-page-label']);if(n>0){prefs.page=n-1;draw();}},{once:true});
  $('#view-print').onclick=()=>{
   const originalPage=prefs.page,originalSize=prefs.size;
   prefs.page=0;prefs.size=Math.max(15,showing.length);draw();

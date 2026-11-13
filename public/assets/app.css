@@ -634,12 +634,12 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 }
 .dialog-procfit{width:min(780px,calc(100vw - 24px));max-width:780px}
 .dialog-procfit .dialog-inner{padding:20px}
-.dialog-procfit #procfit-export-preview{
+.dialog-procfit #procfit-copy-text{
   width:100%;min-height:170px;max-height:45vh;resize:vertical;
   white-space:pre;overflow:auto;font:12px/1.55 ui-monospace,Consolas,monospace;
   user-select:text;-webkit-user-select:text;
 }
-.dialog-procfit #procfit-export-status{font-size:12px;line-height:1.5;color:#b5f3e4}
+.dialog-procfit #procfit-copy-status{font-size:12px;line-height:1.5;color:#b5f3e4}
 @media print{
  html,body{overflow:visible!important}
  .table-wrap,.table-wrap table{display:table!important;overflow:visible!important}
@@ -665,3 +665,16 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 .gondola-item{min-width:0;border:1px solid var(--line,#47556c);padding:12px;border-radius:10px}
 .gondola-item legend{font-size:12px;font-weight:650;overflow-wrap:anywhere;padding:0 4px;max-width:100%}
 .gondola-item .form-grid{align-items:end}
+
+/* v35: seleção múltipla de Fórmulas Especiais em listas compactas, sem scroll lateral. */
+.formula-bulk-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:12px 0 14px;min-width:0;max-width:100%}
+.formula-bulk-controls .toolbar-checkbox{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:100%;white-space:normal;font-size:12px}
+.formula-bulk-controls #product-selected-count{margin-left:auto;font-size:12px;color:var(--muted);white-space:normal}
+.formula-bulk-controls button,.panel-actions [id^="map-formula-"]{white-space:normal;max-width:100%;overflow-wrap:anywhere;text-align:center}
+.formula-bulk-controls input[type="checkbox"],.table-wrap input[data-select-product]{width:18px;height:18px;min-height:18px;flex-shrink:0;accent-color:var(--primary)}
+@media (max-width:580px){
+ .formula-bulk-controls{align-items:stretch;gap:8px}
+ .formula-bulk-controls .toolbar-checkbox{flex:1 1 100%}
+ .formula-bulk-controls button{flex:1 1 min(100%,145px);min-width:0;padding:9px 7px;font-size:11px}
+ .formula-bulk-controls #product-selected-count{flex:1 1 100%;margin-left:0;text-align:right}
+}

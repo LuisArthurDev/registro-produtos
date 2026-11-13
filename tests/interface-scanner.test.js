@@ -24,14 +24,6 @@ test('menu e pendências mantêm ações e paginação de 15, 25 ou 50',()=>{
  assert.match(css,/\.pager-auto/);
 });
 test('Service Worker atualiza scanner.js no cache do PWA',()=>{
-<<<<<<< HEAD
-<<<<<<< HEAD
- assert.match(sw,/v36-procfit-seis-campos-json/);
-=======
- assert.match(sw,/v34-formulas-queima-gondola-historico/);
->>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
-=======
- assert.match(sw,/v34-formulas-queima-gondola-historico/);
->>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
+ assert.match(sw,/v36-copiar-procfit-restaurado/);
  assert.match(sw,/assets\/scanner\.js/);
 });

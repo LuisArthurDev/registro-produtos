@@ -1,3 +1,5 @@
+> **Atualização v35:** filtros mantidos após recarregar e marcação em lote de Fórmulas Especiais. Leia [o guia da v35](ATUALIZAR-V35-FILTROS-FORMULAS-LOTE.md). Requer SQL 021 no Supabase após SQL 020.
+
 > **Versão v34 — Fórmulas Especiais, histórico completo pelo olho na Visualização, Queima com Validade e Preço da Gôndola.** [Guia de instalação](ATUALIZAR-V34-FORMULAS-ESPECIAIS-GONDOLA-HISTORICO.md) — executar **SQL 020** antes do deploy.
 
 > **v33:** campo Validade dos lançamentos com segunda barra automática ao digitar o ano. Veja [ATUALIZAR-V33-VALIDADE-ANO-AUTOMATICO.md](ATUALIZAR-V33-VALIDADE-ANO-AUTOMATICO.md). Nenhuma migração SQL é necessária.
@@ -199,3 +201,8 @@ Consulte `ATUALIZAR-V24-ODS-PENDENCIAS-AVISOS.md` para aplicar primeiro a migra�
 Na aba **Seções**, agora é possível clicar em **Salvar organização** quando há grupos novos em **Sem responsável**, inclusive quando todos estão sem dono. O histórico e os lançamentos permanecem intactos; o campo de responsável da organização é salvo como `NULL`.
 
 Consulte `ATUALIZAR-V29-SALVAR-SEM-RESPONSAVEL.md`. Não há nova migração SQL; a SQL 018 precisa estar aplicada.
+
+
+## Correção da v36 — Copiar dados para Procfit
+
+O botão da conferência foi restaurado para **Copiar para Conector Procfit — v1.0**, com prévia e fallback Ctrl+C. Consulte `ATUALIZAR-V36-COPIA-DADOS-PROCFIT.md`. A preparação JSON da v36 anterior não é mais o botão ativo.

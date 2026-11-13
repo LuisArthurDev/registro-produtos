@@ -42,6 +42,7 @@ on:
           - salvar_organizacao_grupos
           - descer_estoque_lote
           - formulas_especiais_queima_gondola
+          - formulas_especiais_lote
       escopo:
         description: 'Parte a importar (usuarios primeiro; operacionais depois, sem reenviar produtos)'
         required: true
@@ -129,7 +130,7 @@ jobs:
           if [[ "$ETAPA" == 'importar' && "$CONFIRMAR" != 'true' ]]; then
             echo 'Importação bloqueada: marque confirmar_gravacao.'; exit 1
           fi
-          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' || "$ETAPA" == 'proteger_geral_e_funcionarios' || "$ETAPA" == 'organizar_secoes' || "$ETAPA" == 'mes_opcional_transferencias' || "$ETAPA" == 'visibilidade_secoes' || "$ETAPA" == 'pendencias_ean_lancamentos' || "$ETAPA" == 'grupos_produtos' || "$ETAPA" == 'salvar_organizacao_grupos' || "$ETAPA" == 'descer_estoque_lote' ]]; then
+          if [[ "$ETAPA" == 'estrutura' || "$ETAPA" == 'finalizar' || "$ETAPA" == 'ajustar_pendencias' || "$ETAPA" == 'atualizar_painel' || "$ETAPA" == 'configurar_notificacoes' || "$ETAPA" == 'notificacoes_para_todos' || "$ETAPA" == 'pin_administrador_geral' || "$ETAPA" == 'atualizar_operacoes' || "$ETAPA" == 'atualizar_perdas_transferencias' || "$ETAPA" == 'atualizar_visualizacao' || "$ETAPA" == 'habilitar_duplo_perfil' || "$ETAPA" == 'proteger_geral_e_funcionarios' || "$ETAPA" == 'organizar_secoes' || "$ETAPA" == 'mes_opcional_transferencias' || "$ETAPA" == 'visibilidade_secoes' || "$ETAPA" == 'pendencias_ean_lancamentos' || "$ETAPA" == 'grupos_produtos' || "$ETAPA" == 'salvar_organizacao_grupos' || "$ETAPA" == 'descer_estoque_lote' || "$ETAPA" == 'formulas_especiais_queima_gondola' || "$ETAPA" == 'formulas_especiais_lote' ]]; then
             if [[ -z "$SUPABASE_DB_URL" ]]; then
               echo 'Defina SUPABASE_DB_URL em Settings > Secrets and variables > Actions.'; exit 1
             fi
@@ -145,7 +146,7 @@ jobs:
             fi
           fi
       - name: Verificar URL IPv4 do Supabase antes do SQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote' || inputs.etapa == 'formulas_especiais_queima_gondola' || inputs.etapa == 'formulas_especiais_lote'
         shell: bash
         run: |
           set -euo pipefail
@@ -173,13 +174,13 @@ jobs:
           print('URL do Session pooler validada (IPv4, 5432).')
           PYCODE
       - name: Preparar cliente PostgreSQL
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote' || inputs.etapa == 'formulas_especiais_queima_gondola' || inputs.etapa == 'formulas_especiais_lote'
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           fi
       - name: Testar conexão PostgreSQL sem alterar dados
-        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote'
+        if: inputs.etapa == 'estrutura' || inputs.etapa == 'finalizar' || inputs.etapa == 'ajustar_pendencias' || inputs.etapa == 'atualizar_painel' || inputs.etapa == 'configurar_notificacoes' || inputs.etapa == 'notificacoes_para_todos' || inputs.etapa == 'pin_administrador_geral' || inputs.etapa == 'atualizar_operacoes' || inputs.etapa == 'atualizar_perdas_transferencias' || inputs.etapa == 'atualizar_visualizacao' || inputs.etapa == 'habilitar_duplo_perfil' || inputs.etapa == 'proteger_geral_e_funcionarios' || inputs.etapa == 'organizar_secoes' || inputs.etapa == 'mes_opcional_transferencias' || inputs.etapa == 'visibilidade_secoes' || inputs.etapa == 'pendencias_ean_lancamentos' || inputs.etapa == 'grupos_produtos' || inputs.etapa == 'salvar_organizacao_grupos' || inputs.etapa == 'descer_estoque_lote' || inputs.etapa == 'formulas_especiais_queima_gondola' || inputs.etapa == 'formulas_especiais_lote'
         shell: bash
         run: |
           set -euo pipefail
@@ -254,6 +255,13 @@ jobs:
           set -euo pipefail
           psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/012_exclusividade_geral_funcionarios.sql
           echo 'Titular exclusivo e gestão de lançamentos atualizados.'
+      - name: Marcar Fórmulas Especiais em lote sem alterações parciais (SQL 021)
+        if: inputs.etapa == 'formulas_especiais_lote'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f supabase/021_formulas_especiais_lote.sql
+          echo 'Marcação em lote habilitada com validação atômica de EANs.'
       - name: Fórmulas Especiais e dados da Gôndola na Queima (SQL 020)
         if: inputs.etapa == 'formulas_especiais_queima_gondola'
         shell: bash
