@@ -31,7 +31,7 @@ test('não existe botão de cópia no mapa normal; somente na conferência',()=>
  assert.doesNotMatch(app,/#map-copy-procfit|copiarProcfit\(filtered\)/);
  assert.match(app,/id="compare-export-procfit"/);
  assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
- assert.match(app,/prepararDadosProcfitTdb\(listaAtual/);
+ assert.match(app,/montarListaProcfit\(listaAtual,\{corrigido:true\}\)/);
  assert.match(html,/id="procfit-export-dialog"/);
  assert.match(html,/id="procfit-export-preview"/);
  assert.match(html,/id="procfit-export-download"/);

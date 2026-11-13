@@ -1,5 +1,3 @@
-> **v37: Gerador binário `.TDB` experimental para teste supervisionado de importação no Procfit.** Veja [ATUALIZAR-V37-GERADOR-TDB-TESTE.md](ATUALIZAR-V37-GERADOR-TDB-TESTE.md). **Não homologado para produção.**
-
 > **Atualização v35:** filtros mantidos após recarregar e marcação em lote de Fórmulas Especiais. Leia [o guia da v35](ATUALIZAR-V35-FILTROS-FORMULAS-LOTE.md). Requer SQL 021 no Supabase após SQL 020.
 
 > **Versão v34 — Fórmulas Especiais, histórico completo pelo olho na Visualização, Queima com Validade e Preço da Gôndola.** [Guia de instalação](ATUALIZAR-V34-FORMULAS-ESPECIAIS-GONDOLA-HISTORICO.md) — executar **SQL 020** antes do deploy.

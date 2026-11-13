@@ -3,7 +3,6 @@ import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
 import { prepararDadosProcfitTdb, baixarPreparacaoProcfit } from './procfit-preparacao-tdb.js';
-import { gerarTdbExperimental, obterModeloTdb, baixarTdbExperimental } from './procfit-gerador-tdb.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
@@ -595,7 +594,7 @@ async function mapas(forced=''){
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
  ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button>'):''}</div>
- <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-export-procfit" data-icon-keep-label type="button" title="Gerar .TDB binário experimental com os itens conferidos e quantidades corrigidas. Use apenas para teste supervisionado.">Gerar arquivo .TDB (teste)</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
+ <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-csv" type="button">Exportar conferência CSV</button><button class="btn-outline" id="compare-export-procfit" data-icon-keep-label type="button" title="Preparar arquivo de Queima com quantidades corrigidas. O .TDB binário ainda não foi homologado.">Preparar arquivo Procfit (JSON)</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
   page=Math.min(page,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));
@@ -641,30 +640,15 @@ async function mapas(forced=''){
   const dlg=$('#procfit-export-dialog'),status=$('#procfit-export-status');
   const ignorados=resultado.ignorados;
   $('#procfit-export-count').textContent=`${listaAtual.length} conferido(s) em todas as páginas · ${resultado.total} elegível(is) · ${ignorados.zerados} saldo zero · ${ignorados.formulasEspeciais} Fórmula(s) Especial(is) ignorada(s) · ${ignorados.invalidos} inválido(s).`;
-  status.textContent='Modelo binário de teste disponível. O arquivo preserva os seis campos, cria IDs próprios e mantém aprovação em branco. A importação por Ctrl+Alt+I ainda NÃO foi homologada: teste primeiro com um item, em ambiente controlado.';
+  status.textContent='O gerador .TDB binário está BLOQUEADO até a homologação dos campos e relacionamentos. É possível baixar a preparação JSON para alimentar o futuro conversor nativo.';
   $('#procfit-export-preview').value=JSON.stringify({
     status:resultado.documento.status,
     campos_preenchidos:resultado.documento.campos_preenchidos,
     total_itens:resultado.total,
     amostra_itens:resultado.documento.tabelas.QUEIMA_ESTOQUE_ITEM.slice(0,5)
   },null,2);
-  $('#procfit-export-download').onclick=async()=>{
-    const gerar=$('#procfit-export-download');gerar.disabled=true;
-    try{
-      const usuarioProcfit=$('#procfit-export-user').value.trim();
-      if(!/^\d+$/.test(usuarioProcfit)||!Number.isSafeInteger(Number(usuarioProcfit))||Number(usuarioProcfit)<=0)
-        throw new Error('Informe um ID de usuário Procfit válido. No TDB de referência foi observado 5584.');
-      status.textContent='Gerando TDB binário experimental e verificando a estrutura…';
-      const modelo=await obterModeloTdb();
-      const tdb=await gerarTdbExperimental(resultado,{modeloBytes:modelo,empresa:state.loja,usuarioProcfit:Number(usuarioProcfit)});
-      const nome=baixarTdbExperimental(tdb);
-      status.textContent=`${nome} gerado (${tdb.items} itens, ${tdb.paginas} página(s) de dados, solicitação de teste ${tdb.solicitacaoTeste}). TESTE CONTROLADO: não confirme nem aprove a Queima no Procfit.`;
-      toast(`TDB de teste gerado com ${tdb.items} item(ns). Verifique a importação antes de usar em produção.`);
-    }catch(err){status.textContent=`Não foi possível gerar: ${err.message}`;toast(err.message,true);}
-    finally{gerar.disabled=false;}
-  };
-  $('#procfit-export-json').onclick=()=>{
-    try{const nome=baixarPreparacaoProcfit(resultado);status.textContent=`${nome} baixado como JSON auxiliar — não é o arquivo .TDB.`;}
+  $('#procfit-export-download').onclick=()=>{
+    try{const nome=baixarPreparacaoProcfit(resultado);status.textContent=`${nome} baixado. NÃO importar no Ctrl+Alt+I: o formato definitivo .TDB depende de validação.`;toast(`Arquivo preparatório gerado com ${resultado.total} item(ns).`);}
     catch(err){status.textContent=err.message;toast(err.message,true);}
   };
   dlg.showModal();
@@ -839,7 +823,7 @@ async function mapas(forced=''){
   $('#compare-export-procfit').onclick=()=>{
     if(!compareResult)return toast('Faça a conferência antes de preparar o arquivo.',true);
     // NUNCA usar pageRows / comparePage: inclui todos os registros da conferência,
-    // mesmo quando o painel possui 100+ páginas. TDB gerado em modo experimental.
+    // mesmo quando o painel possui 100+ páginas. Não gera .TDB sem homologação.
     void prepararArquivoProcfit(filtrarMapasParaConferencia(compareRows));
   };
   $('#compare-csv').onclick=()=>{

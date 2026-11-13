@@ -1,0 +1,12 @@
+REVERSÃO v37 -> v36 (SEM gerador .TDB binário)
+
+OPÇÃO RECOMENDADA: extraia o ZIP completo da v36 em uma pasta LIMPA, substituindo a versão do repositório. Não misture arquivos de v36 e v37.
+
+OPÇÃO ATUALIZAÇÃO PARCIAL: extraia os arquivos deste ZIP SOBRE a pasta do projeto v37, substituindo os existentes; em seguida, abra um PowerShell NA PASTA do projeto e execute:
+    .\REVERTER_V37_PARA_V36.ps1
+
+Remova os dois arquivos da reversão (script e este LEIA-ME) do repositório depois da execução.
+Depois publique os arquivos restaurados no GitHub/Vercel e recarregue a PWA (cache do Service Worker).
+NÃO é necessário reverter ou excluir dados/migrações do Supabase. Esta reversão é apenas do código.
+
+Na v36, a conferência prepara um arquivo JSON intermediário, NÃO gera .TDB binário importável.

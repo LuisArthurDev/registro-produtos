@@ -92,6 +92,6 @@ test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia
   assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
   assert.match(app,/compareRows\.map\(r=>\[r\.codigoInterno/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
-  assert.match(sw,/registro-validades-v37-tdb-binario-experimental/);
+  assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });

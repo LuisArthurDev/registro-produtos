@@ -26,6 +26,6 @@ test('página suporta 320 a 800 pixels, entrada por câmera e áreas de toque',(
  assert.match(css,/\.launch-route #form-launch input/);
  assert.match(css,/min-height:48px/);
  assert.match(css,/safe-area-inset-bottom/);
- assert.match(sw,/registro-validades-v37-tdb-binario-experimental/);
+ assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
  assert.match(sw,/lancamentos\.html/);
 });

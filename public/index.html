@@ -92,18 +92,15 @@
 <script>if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));</script>
 <dialog id="procfit-export-dialog" class="dialog dialog-procfit" aria-labelledby="procfit-export-title">
  <div class="dialog-inner">
-  <h3 id="procfit-export-title">Gerar arquivo TDB — teste de importação Procfit</h3>
-  <p class="notice" role="alert"><strong>Atenção:</strong> arquivo <code>.TDB</code> BINÁRIO experimental, montado a partir de modelo sanitizado do seu arquivo. Compatibilidade com <kbd>Ctrl + Alt + I</kbd> ainda não foi confirmada. <strong>Teste primeiro com um produto em ambiente controlado. Não aprove nem confirme a Queima.</strong></p>
+  <h3 id="procfit-export-title">Preparar arquivo Procfit — formato intermediário</h3>
+  <p class="notice" role="alert"><strong>Atenção:</strong> ainda não é um arquivo <code>.TDB</code>. Não use no Ctrl + Alt + I do Procfit. A estrutura binária e os vínculos precisam ser homologados.</p>
   <p id="procfit-export-count" class="footer-hint"></p>
-  <label for="procfit-export-user">ID do usuário no Procfit (metadado de origem)</label>
-  <input type="number" min="1" step="1" id="procfit-export-user" value="5584" aria-describedby="procfit-export-user-help">
-  <p id="procfit-export-user-help" class="footer-hint">Na amostra Teste2, o usuário é 5584. Se a exportação foi feita com outro usuário, informe o número correto.</p>
   <p id="procfit-export-status" role="status" aria-live="polite"></p>
-  <label for="procfit-export-preview">Prévia dos itens elegíveis (somente leitura)</label>
-  <textarea id="procfit-export-preview" readonly spellcheck="false" aria-label="Prévia da geração TDB"></textarea>
+  <label for="procfit-export-preview">Prévia dos dados e 5 primeiros produtos (somente leitura)</label>
+  <textarea id="procfit-export-preview" readonly spellcheck="false" aria-label="Prévia estruturada da preparação Procfit"></textarea>
   <div class="dialog-actions">
-   <button type="button" class="primary" id="procfit-export-download" data-icon-keep-label>Gerar e baixar .TDB de teste</button>
-   <button type="button" class="btn-outline" id="procfit-export-json" data-icon-keep-label>Baixar JSON auxiliar</button>
+   <button type="button" class="primary" id="procfit-export-download" data-icon-keep-label>Baixar preparação JSON</button>
+   <button type="button" class="btn-outline" disabled title="Disponível apenas após homologação com o Procfit">Gerar .TDB (aguardando validação)</button>
    <button type="button" class="btn-outline" onclick="document.getElementById('procfit-export-dialog').close()">Fechar</button>
   </div>
  </div>
