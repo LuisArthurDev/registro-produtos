@@ -57,7 +57,7 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v36-copiar-procfit-restaurado/);
+ assert.match(sw,/registro-validades-v38-exportar-xls-conferencia/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 

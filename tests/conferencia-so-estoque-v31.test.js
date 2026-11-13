@@ -86,12 +86,12 @@ test('100 páginas mistas: inclui todos os funcionários e Estoque, ignora todas
   assert.doesNotMatch(exportacao.texto,/LOTE9999/);
 });
 
-test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia e CSV',()=>{
+test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia e XLS',()=>{
   assert.match(app,/const lista=filtrarMapasParaConferencia\(candidatos\)/);
   assert.match(app,/conciliarMapaComEstoque\(lista,saldos\)/);
   assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
-  assert.match(app,/compareRows\.map\(r=>\[r\.codigoInterno/);
+  assert.match(app,/gerarConferenciaXls\(elegiveis\)/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
-  assert.match(sw,/registro-validades-v36-copiar-procfit-restaurado/);
+  assert.match(sw,/registro-validades-v38-exportar-xls-conferencia/);
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });

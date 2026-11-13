@@ -206,3 +206,7 @@ Consulte `ATUALIZAR-V29-SALVAR-SEM-RESPONSAVEL.md`. Não há nova migração SQL
 ## Correção da v36 — Copiar dados para Procfit
 
 O botão da conferência foi restaurado para **Copiar para Conector Procfit — v1.0**, com prévia e fallback Ctrl+C. Consulte `ATUALIZAR-V36-COPIA-DADOS-PROCFIT.md`. A preparação JSON da v36 anterior não é mais o botão ativo.
+
+## V38 — Exportar XLS da Conferência
+
+O botão **Exportar XLS** gera seis colunas (`Motivo`, `Codigo`, `Ean`, `Lote`, `Validade`, `Quantidade`) com o Código Interno como identificador preferencial; somente na ausência dele usa EAN. Quantidades são corrigidas pelo saldo, com filtros e regras de exclusão. Consulte [ATUALIZAR-V38-EXPORTAR-CONFERENCIA-XLS.md](ATUALIZAR-V38-EXPORTAR-CONFERENCIA-XLS.md).
