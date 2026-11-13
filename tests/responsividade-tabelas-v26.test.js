@@ -46,5 +46,9 @@ test('V28: linhas compactas preservadas, sem scroll horizontal',()=>{
 
 test('PWA inclui o novo módulo e usa cache atualizado',()=>{
  assert.match(sw,/tabelas-responsivas\.js/);
+<<<<<<< HEAD
  assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+ assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
 });

@@ -57,7 +57,11 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
+<<<<<<< HEAD
  assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+ assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
  assert.match(sw,/paginacao-completa\.js/);
 });
 

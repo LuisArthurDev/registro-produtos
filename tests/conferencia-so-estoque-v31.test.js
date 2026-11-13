@@ -92,6 +92,10 @@ test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia
   assert.match(app,/prepararArquivoProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
   assert.match(app,/compareRows\.map\(r=>\[r\.codigoInterno/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
+<<<<<<< HEAD
   assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+  assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });
