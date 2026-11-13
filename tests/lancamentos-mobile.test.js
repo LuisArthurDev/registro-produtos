@@ -27,7 +27,11 @@ test('página suporta 320 a 800 pixels, entrada por câmera e áreas de toque',(
  assert.match(css,/min-height:48px/);
  assert.match(css,/safe-area-inset-bottom/);
 <<<<<<< HEAD
+<<<<<<< HEAD
  assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+ assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
 =======
  assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
 >>>>>>> parent of 8b698d9 (Formulas Especiais Lote)

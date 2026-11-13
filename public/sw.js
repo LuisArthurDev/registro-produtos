@@ -1,7 +1,12 @@
 // Service worker conservador: recursos estáticos ficam disponíveis offline; API nunca é cacheada.
 <<<<<<< HEAD
+<<<<<<< HEAD
 const NAME='registro-validades-v36-procfit-seis-campos-json';
 const STATIC=['/','/index.html','/lancamentos.html','/visualizacao.html','/assets/visualizacao.js','/assets/queima-grafico.js','/assets/app.css','/assets/app.js','/assets/filtros-persistentes.js','/assets/tabelas-responsivas.js','/assets/conciliacao-estoque.js','/assets/filtro-conferencia-procfit.js','/assets/paginacao-completa.js','/assets/procfit.js','/assets/procfit-preparacao-tdb.js','/assets/icones-acoes.js','/assets/organizacao-secoes.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/estoque-importacao.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];
+=======
+const NAME='registro-validades-v34-formulas-queima-gondola-historico';
+const STATIC=['/','/index.html','/lancamentos.html','/visualizacao.html','/assets/visualizacao.js','/assets/queima-grafico.js','/assets/app.css','/assets/app.js','/assets/tabelas-responsivas.js','/assets/conciliacao-estoque.js','/assets/filtro-conferencia-procfit.js','/assets/paginacao-completa.js','/assets/procfit.js','/assets/icones-acoes.js','/assets/organizacao-secoes.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/estoque-importacao.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
 =======
 const NAME='registro-validades-v34-formulas-queima-gondola-historico';
 const STATIC=['/','/index.html','/lancamentos.html','/visualizacao.html','/assets/visualizacao.js','/assets/queima-grafico.js','/assets/app.css','/assets/app.js','/assets/tabelas-responsivas.js','/assets/conciliacao-estoque.js','/assets/filtro-conferencia-procfit.js','/assets/paginacao-completa.js','/assets/procfit.js','/assets/icones-acoes.js','/assets/organizacao-secoes.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/estoque-importacao.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];

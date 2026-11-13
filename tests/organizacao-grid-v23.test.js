@@ -30,7 +30,11 @@ test('rolagem interna e acessivel por teclado e grid adapta-se ao celular',()=>{
  assert.match(ui,/role="region" tabindex="0" aria-label="Grupos de/);
  assert.match(css,/@media\(max-width:580px\)\{\s*\.org-board\{grid-template-columns:1fr/);
 <<<<<<< HEAD
+<<<<<<< HEAD
  assert.match(sw,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+ assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
 =======
  assert.match(sw,/registro-validades-v34-formulas-queima-gondola-historico/);
 >>>>>>> parent of 8b698d9 (Formulas Especiais Lote)

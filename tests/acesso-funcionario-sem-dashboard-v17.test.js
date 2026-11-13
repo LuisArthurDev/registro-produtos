@@ -30,7 +30,11 @@ test('Visualização não apresenta gráfico de Queima, reservado ao Dashboard',
 });
 test('cache da PWA é atualizado',()=>{
 <<<<<<< HEAD
+<<<<<<< HEAD
   assert.match(serviceWorker,/registro-validades-v36-procfit-seis-campos-json/);
+=======
+  assert.match(serviceWorker,/registro-validades-v34-formulas-queima-gondola-historico/);
+>>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
 =======
   assert.match(serviceWorker,/registro-validades-v34-formulas-queima-gondola-historico/);
 >>>>>>> parent of 8b698d9 (Formulas Especiais Lote)
