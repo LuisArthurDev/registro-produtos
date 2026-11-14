@@ -125,9 +125,9 @@ test('migration 025 protege Fórmulas Especiais, exige 7 dias para novas entrada
 test('botões da interface importam apenas novos e edição dos aprovados é manual',()=>{
  const app=read('public/assets/app.js'),worker=read('public/sw.js'),workflow=read('.github/workflows/migracao-supabase.yml');
  assert.match(app,/id="queima-relatorio-open"/);
- assert.doesNotMatch(app,/id="queima-relatorio-primeira"/);
+ assert.match(app,/id="queima-relatorio-primeira"/);
  assert.doesNotMatch(app,/id="queima-relatorio-corrigir"/);
- assert.match(app,/primeira_carga:true,corrigir_aprovados:false/);
+ assert.match(app,/primeira_carga:primeira.checked,corrigir_aprovados:false/);
  assert.match(app,/id="queima-editar-form"/);
  assert.match(app,/data-edit-burn/);assert.match(app,/data-delete-burn/);
  assert.match(app,/lerRelatorioQueimaXlsx/);assert.match(app,/queima\/conciliar-relatorio/);

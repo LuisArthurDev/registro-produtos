@@ -1370,7 +1370,7 @@ async function generic(pathname,title){
  const isQueima=pathname==='queima',isVenc=pathname==='vencidos',isAudit=pathname==='auditoria',isSinal=pathname==='sinalizacoes',isTrans=pathname==='transferencias';
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
  ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
@@ -1391,7 +1391,8 @@ async function generic(pathname,title){
   <dialog id="queima-relatorio-dialog" class="dialog dialog-wide" aria-labelledby="queima-relatorio-title"><div class="dialog-inner">
    <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
    <p class="footer-hint">Colunas: B Produto · H Validade · I Aprovado (S) · J Unidade · L Preço. Itens com N são ignorados.</p>
-   <p class="notice" role="note"><strong>Importar somente produtos novos:</strong> o relatório cadastra e aprova produtos com S que ainda não estejam na Queima, somente com preço válido, catálogo válido e pelo menos 7 dias até o vencimento. Produtos já cadastrados (pendentes ou aprovados) são ignorados. <strong>Quantidade, preço e validade da gôndola existentes só podem ser corrigidos manualmente.</strong> Itens N são ignorados, e o sistema não inventa lote nem Registro.</p>
+   <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-primeira"> <span><strong>Primeira importação:</strong> usar este relatório para cadastrar e aprovar todos os produtos elegíveis com S ainda ausentes da Queima. É possível marcar novamente para recuperar itens não importados anteriormente; os que já existem nunca são alterados.</span></label>
+   <p class="notice" role="note"><strong>Primeira importação ou uso posterior:</strong> somente produtos novos serão cadastrados e aprovados, exigindo preço válido, catálogo válido e pelo menos 7 dias de validade. Produtos já cadastrados (pendentes ou aprovados) serão ignorados. <strong>Quantidade, preço e validade da gôndola existentes só podem ser corrigidos manualmente.</strong> Itens N são ignorados. O relatório não informa lote nem Registro; nenhum deles será inventado.</p>
    <p class="footer-hint">A conferência é feita em lotes pequenos para evitar o tempo limite do Supabase. Reimportar o relatório não duplica produtos nem altera aprovados existentes.</p>
    <p id="queima-relatorio-resumo" role="status" aria-live="polite"></p>
    <div id="queima-relatorio-previa" class="queima-import-preview"></div>
@@ -1591,17 +1592,19 @@ async function generic(pathname,title){
  };
  if(isQueima){
    const input=$('#queima-relatorio-file'),dlg=$('#queima-relatorio-dialog'),confirm=$('#queima-relatorio-confirmar');
+   const primeira=$('#queima-relatorio-primeira');
    const resumo=$('#queima-relatorio-resumo'),previa=$('#queima-relatorio-previa');
    let relatorio=null,versao=0;
-   $('#queima-relatorio-open').onclick=()=>input.click();
+   $('#queima-relatorio-primeira-open').onclick=()=>{primeira.checked=true;input.click();};
+   $('#queima-relatorio-open').onclick=()=>{primeira.checked=false;input.click();};
    $('#queima-relatorio-cancelar').onclick=()=>dlg.close();
-   const opcoes=()=>({primeira_carga:true,corrigir_aprovados:false});
-   const enviarLote=(itens,simular)=>request('/queima/conciliar-relatorio',{
-    method:'POST',body:{itens,...opcoes(),simular},timeout:65000,retries:0});
+   const opcoes=()=>({primeira_carga:primeira.checked,corrigir_aprovados:false});
+   const enviarLote=(itens,simular,modo=opcoes())=>request('/queima/conciliar-relatorio',{
+    method:'POST',body:{itens,...modo,simular},timeout:65000,retries:0});
    let previaConfirmada=false,emExecucao=false;
    const mostrarResumo=(dados)=>{
     const c=dados.contagem||{};
-    resumo.textContent=`Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} aprovadas S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Ignorados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já cadastrados, ${c.ja_excluido||0} excluídos anteriormente, ${c.repetido_no_relatorio||0} repetidos no XLSX, ${c.sem_preco||0} sem preço, ${c.sem_catalogo||0} sem catálogo, ${c.prazo_insuficiente||0} com menos de 7 dias, ${c.formula_especial||0} Fórmulas Especiais, ${c.aba_especial||0} abas especiais, ${c.invalido||0} inválidos. Nada existente será corrigido.`;
+    resumo.textContent=`${primeira.checked?'Primeira importação':'Importação de novos'} · Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} aprovadas S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Ignorados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já cadastrados, ${c.ja_excluido||0} excluídos anteriormente, ${c.repetido_no_relatorio||0} repetidos no XLSX, ${c.sem_preco||0} sem preço, ${c.sem_catalogo||0} sem catálogo, ${c.prazo_insuficiente||0} com menos de 7 dias, ${c.formula_especial||0} Fórmulas Especiais, ${c.aba_especial||0} abas especiais, ${c.invalido||0} inválidos. Nada existente será corrigido.`;
     previa.innerHTML=`<p>${c.cadastrar_e_aprovar||0} produto(s) novo(s) apto(s), sujeitos à conferência final no banco. Até 100 exemplos:</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(String(x.acao||'').replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
    };
    const conferir=async()=>{
@@ -1625,6 +1628,7 @@ async function generic(pathname,title){
       toast('Conferência não concluída. Confira o erro informado no modal.',true);
      }
    };
+   primeira.onchange=()=>{if(relatorio&&!emExecucao&&dlg.open)void conferir();};
    input.onchange=async()=>{const file=input.files?.[0];input.value='';if(!file)return;
      confirm.disabled=true;previaConfirmada=false;resumo.textContent='Lendo relatório XLSX…';
      try{relatorio=await lerRelatorioQueimaXlsx(file,{loja:state.loja});
@@ -1646,10 +1650,11 @@ async function generic(pathname,title){
       `Confirmar os produtos NOVOS aprovados (S) deste relatório? Os que já estão na Queima não serão alterados. A operação será feita em lotes e pode ser retomada reimportando o arquivo.`)){
        confirm.disabled=false;return;
     }
-    emExecucao=true;
+    emExecucao=true;primeira.disabled=true;
+    const modoConfirmado=opcoes();
     try{
       const dados=await executarQueimaEmLotes(relatorio.itens,
-       lote=>enviarLote(lote,false),{
+       lote=>enviarLote(lote,false,modoConfirmado),{
        simular:false,progresso:({indice,total,executado})=>{
         resumo.textContent=`Cadastrando somente novos: ${executado?'Concluído':'Executando'} lote ${indice} de ${total}. Não feche a página.`;
        }});
@@ -1661,7 +1666,7 @@ async function generic(pathname,title){
       previaConfirmada=false;
       resumo.textContent=`A importação parou no lote ${(error.lotesConcluidos||0)+1} de ${error.totalLotes||'?'}. ${error.message} ${error.lotesConcluidos?'Os lotes anteriores foram confirmados. ':''}Reimporte o mesmo relatório para continuar sem duplicar; nenhum aprovado existente terá preço ou quantidade modificados.`;
       toast('Importação interrompida. Confira a situação no modal.',true);
-    }finally{emExecucao=false;confirm.disabled=true;}
+    }finally{emExecucao=false;primeira.disabled=false;confirm.disabled=true;}
    };
  }
  if(isQueima){

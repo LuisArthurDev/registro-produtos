@@ -57,7 +57,7 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v48-queima-so-novos-otimizada/);
+ assert.match(sw,/registro-validades-v49-primeira-importacao-restaurada/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 

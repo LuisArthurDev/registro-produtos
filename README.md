@@ -1,3 +1,5 @@
+> **v49:** Botão **Primeira importação XLSX** restaurado na aba Queima, com caixa de seleção no modal. As importações posteriores continuam cadastrando apenas novos; não corrigem registros já aprovados. **Sem SQL nova.** Veja [o guia v49](ATUALIZAR-V49-PRIMEIRA-IMPORTACAO-XLSX.md).
+
 > **V48 — Queima via relatório XLSX: somente produtos novos.** A aprovação importada não corrige mais produtos existentes. A SQL 028 otimiza o processamento e a interface envia lotes de 40. Consulte [ATUALIZAR-V48-QUEIMA-SOMENTE-NOVOS-SEM-TIMEOUT.md](ATUALIZAR-V48-QUEIMA-SOMENTE-NOVOS-SEM-TIMEOUT.md) e execute a SQL 028 antes do deploy.
 
 > **v47 — Diagnóstico de falhas na conferência XLSX da Queima.** Veja [ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md](ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md). Não requer migração SQL; atualize a API no Vercel para ver o erro PostgreSQL real.

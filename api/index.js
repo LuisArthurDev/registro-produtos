@@ -1166,7 +1166,7 @@ async function conciliarRelatorioQueima(req,actor,body){
  // V48: relatórios S servem exclusivamente para ADICIONAR NOVOS produtos.
  // Nunca corrigir nem aprovar entradas anteriores (pendentes ou aprovadas).
  if(body.corrigir_aprovados===true)throw bad('Correção via relatório não permitida. Edite o item manualmente na Queima.',422);
- const primeiro=true,corrigir=false,simular=body.simular!==false;
+ const primeiro=body.primeira_carga===true,corrigir=false,simular=body.simular!==false;
  for(const item of itens){
    if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4||!/^\d{1,20}$/.test(norm(item.codigo_interno))
      ||!dataValida(item.validade)||!dataValida(item.data_lancamento)
@@ -1185,7 +1185,7 @@ async function conciliarRelatorioQueima(req,actor,body){
     ocorrencia:x.ocorrencia,aprovado:true})),p_primeira_carga:primeiro,p_corrigir_aprovados:corrigir,p_simular:simular}});
  if(!simular)await audit(actor,'conciliar_queima_relatorio_v43',{total:itens.length,primeira_carga:primeiro,
    corrigir_aprovados:corrigir,contagem:result?.contagem});
- return {sucesso:true,resultado:result};
+ return {sucesso:true,resultado:{...result,primeira_carga:primeiro}};
 }
 async function relancarQueima(req,actor,body){
   admin(actor); const loja=actorLoja(actor,body.loja);

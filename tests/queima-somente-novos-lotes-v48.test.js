@@ -68,15 +68,49 @@ test('A API desativa correções automáticas mesmo que cliente antigo solicite 
  }finally{env.restore();}
 });
 
-test('API aceita novas importações sem checkbox primeira_carga, sempre com flags seguros',async()=>{
+test('API mantém importações posteriores distintas da primeira sem habilitar correções',async()=>{
  const env=mockAPI();try{
   const r=await env.call({itens:[item],primeira_carga:false,corrigir_aprovados:false,simular:false});
   assert.equal(r.statusCode,200,JSON.stringify(r.data));
   const rpc=env.calls.find(x=>x.table==='rpc/conciliar_queima_relatorio_v43');
-  assert.equal(rpc.body.p_primeira_carga,true);assert.equal(rpc.body.p_corrigir_aprovados,false);assert.equal(rpc.body.p_simular,false);
+  assert.equal(rpc.body.p_primeira_carga,false);assert.equal(rpc.body.p_corrigir_aprovados,false);assert.equal(rpc.body.p_simular,false);
  }finally{env.restore();}
 });
 
+test('API da primeira importação preserva flag true, sem autorizar atualização de aprovados',async()=>{
+ const env=mockAPI();try{
+  const r=await env.call({itens:[item],primeira_carga:true,corrigir_aprovados:false,simular:false});
+  assert.equal(r.statusCode,200,JSON.stringify(r.data));
+  const rpc=env.calls.find(x=>x.table==='rpc/conciliar_queima_relatorio_v43');
+  assert.equal(rpc.body.p_primeira_carga,true);
+  assert.equal(rpc.body.p_corrigir_aprovados,false);
+  assert.equal(r.data.resultado.primeira_carga,true);
+ }finally{env.restore();}
+});
+test('API de importação posterior preserva false e impede alterações automáticas',async()=>{
+ const env=mockAPI();try{
+  const r=await env.call({itens:[item],primeira_carga:false,corrigir_aprovados:false,simular:true});
+  assert.equal(r.statusCode,200,JSON.stringify(r.data));
+  assert.equal(r.data.resultado.primeira_carga,false);
+  const rpc=env.calls.find(x=>x.table==='rpc/conciliar_queima_relatorio_v43');
+  assert.equal(rpc.body.p_primeira_carga,false);
+  assert.equal(rpc.body.p_corrigir_aprovados,false);
+  assert.equal(rpc.body.p_simular,true);
+ }finally{env.restore();}
+});
+test('Dois caminhos de entrada e caixa de primeira importação acionam o mesmo fluxo seguro de novos produtos',()=>{
+ assert.match(app,/id="queima-relatorio-primeira-open"/);
+ assert.match(app,/id="queima-relatorio-open"/);
+ assert.match(app,/id="queima-relatorio-primeira"/);
+ assert.match(app,/\$\('#queima-relatorio-primeira-open'\)\.onclick=\(\)=>\{primeira\.checked=true;input\.click\(\);\}/);
+ assert.match(app,/\$\('#queima-relatorio-open'\)\.onclick=\(\)=>\{primeira\.checked=false;input\.click\(\);\}/);
+ assert.match(app,/primeira_carga:primeira\.checked,corrigir_aprovados:false/);
+ assert.match(app,/lote=>enviarLote\(lote,false,modoConfirmado\)/);
+ assert.match(app,/primeira\.disabled=true/);
+ assert.doesNotMatch(app,/id="queima-relatorio-corrigir"/);
+ assert.match(sql,/IF p_corrigir_aprovados IS TRUE THEN/);
+ assert.doesNotMatch(sql,/UPDATE public\.queima SET quantidade=/);
+});
 test('API limita a 40 itens para evitar statement timeout',async()=>{
  const env=mockAPI();try{
   const lista=Array.from({length:41},(_,i)=>({...item,linha:i+4}));
@@ -107,8 +141,9 @@ test('SQL 028 é em lote: só cria e aprova IDs NOVOS, sem corrigir um já aprov
 });
 
 test('Frontend usa só cadastro de novos, mantém edição manual de quantidade/preço/validade',()=>{
- assert.doesNotMatch(app,/id="queima-relatorio-corrigir"|id="queima-relatorio-primeira"/);
- assert.match(app,/primeira_carga:true,corrigir_aprovados:false/);
+ assert.match(app,/id="queima-relatorio-primeira"/);assert.match(app,/id="queima-relatorio-primeira-open"/);
+ assert.doesNotMatch(app,/id="queima-relatorio-corrigir"/);
+ assert.match(app,/primeira_carga:primeira.checked,corrigir_aprovados:false/);
  assert.match(app,/executarQueimaEmLotes\(relatorio\.itens/);
  assert.match(app,/simular:true/);
  assert.match(app,/simular:false/);
@@ -123,6 +158,6 @@ test('Workflow oferece SQL 028, cache PWA inclui o módulo de lotes',()=>{
  const wf=read('.github/workflows/migracao-supabase.yml'),sw=read('public/sw.js');
  assert.match(wf,/queima_so_novos_lotes_v48/);
  assert.match(wf,/supabase\/028_queima_relatorio_somente_novos_em_lotes\.sql/);
- assert.match(sw,/registro-validades-v48-queima-so-novos-otimizada/);
+ assert.match(sw,/registro-validades-v49-primeira-importacao-restaurada/);
  assert.match(sw,/\/assets\/queima-conciliacao-lotes\.js/);
 });
