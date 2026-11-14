@@ -379,7 +379,24 @@ async function dashboard(){
  $('#dash-print').onclick=()=>window.print();$('#dash-control').onclick=()=>navigate('controle-validade');$('#dash-new')?.addEventListener('click',abrirNovoLancamento);
 }
 
-async function staffList(){if(!isAdmin())return [];const d=await request(urlWithLoja('/usuarios'));state.staff=d.usuarios||[];return state.staff;}
+async function staffList(){
+ if(!isAdmin())return [];
+ // Sempre consulta novamente o cadastro: reativações não podem ficar presas em listas antigas.
+ const d=await request(urlWithLoja('/usuarios'));
+ state.staff=d.usuarios||[];
+ return state.staff;
+}
+async function nomesMapasComFuncionariosAtivos(registros=[]){
+ // Filtros devem listar contas ativas mesmo sem lançamentos no período filtrado.
+ // Preserva nomes de mapas que já têm registros (inclusive históricos e abas especiais).
+ let ativos=[];
+ if(isAdmin()){
+  try{ativos=(await staffList()).filter(u=>u.perfil==='funcionario'&&u.ativo===true).map(u=>u.nome);}
+  catch(error){console.warn('Falha ao atualizar os funcionários ativos nos filtros:',error.message);}
+ }
+ return [...new Set([...ativos,...registros.map(r=>r.mapa_nome)].filter(Boolean))]
+   .sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
 async function lancamentos(emModal=false){
  const saved=state.pending;
  const notice=saved?`<div class="notice warn">Existe uma solicitação ainda não confirmada neste dispositivo (EAN ${H(saved.ean)}). Use <strong>Retomar tentativa</strong> antes de criar outra.</div>`:'';
@@ -627,7 +644,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:prazoInsuficienteParaQueima(r.validade,nowBrISO())?`<span class="second" title="Queima exige validade de pelo menos 7 dias">Queima bloqueada · menos de 7 dias</span>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
- const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
+ const rows=await getMaps(forced),tipo=forced==='Estoque'?[]:await nomesMapasComFuncionariosAtivos(rows);
  const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[];
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; filtros por funcionário, mês, validade e situação.',
@@ -1346,13 +1363,25 @@ async function usuarios(){
   const pin=e.target.closest('[data-pin]');if(pin){const u=usuarios.find(x=>x.id===pin.dataset.pin);if(u)openPinReset(u);return;}
   const b=e.target.closest('[data-user]');if(!b)return;const u=usuarios.find(x=>x.id===b.dataset.user);if(!u)return;const flag=b.dataset.flag;
   if(!await confirmDialog('Alterar funcionário',`Confirmar alteração de ${flag==='ativo'?'situação':'autorização de celular'} de ${u.nome}?`))return;
-  try{await request('/usuarios',{method:'PATCH',body:{id:u.id,[flag]:!u[flag]}});toast('Funcionário atualizado.');renderRoute(state.route);}catch(err){toast(err.message,true);}
+  try{
+   await request('/usuarios',{method:'PATCH',body:{id:u.id,[flag]:!u[flag]}});
+   // Invalidar o cadastro local; o próximo seletor obterá a lista atualizada do servidor.
+   state.staff=[];
+   toast(flag==='ativo'?(u.ativo?'Funcionário inativado.':'Funcionário ativado e disponível nas listas.'):'Funcionário atualizado.');
+   await renderRoute(state.route);
+   if(flag==='ativo'&&!u.ativo){
+     // O filtro 'Inativos' restaurado automaticamente escondia a conta recém-ativada.
+     const filtro=$('#staff-filter');
+     if(filtro){filtro.value='';filtro.dispatchEvent(new Event('change',{bubbles:true}));}
+   }
+  }catch(err){toast(err.message,true);}
  };
  $('#user-form').onsubmit=async e=>{e.preventDefault();const f=e.target;try{await request('/usuarios',{method:'POST',body:{...Object.fromEntries(new FormData(f)),perfil:'funcionario'}});toast('Funcionário cadastrado.');renderRoute(state.route);}catch(err){toast(err.message,true);}};
 }
 function diasVencimento(iso){const v=Date.parse(String(iso||'').slice(0,10)+'T12:00:00Z'),h=Date.parse(nowBrISO()+'T12:00:00Z');return Number.isFinite(v)?Math.round((v-h)/86400000):null;}
 async function controleValidade(){
  const [rows,stock]=await Promise.all([getMaps(),request('/estoque').catch(()=>({registros:[]}))]);
+ const nomesAtivosControle=await nomesMapasComFuncionariosAtivos(rows);
  const vivos=rows.filter(x=>Number(x.quantidade)>0),saldos=(stock.registros||[]).filter(x=>Number(x.quantidade)>0),emap=new Set(vivos.map(x=>x.ean));
  const falta=saldos.filter(x=>x.ean&&!emap.has(x.ean));
  const vencidos=vivos.filter(x=>statusVal(x.validade,x.secao)[0]==='Vencido');
@@ -1363,7 +1392,7 @@ async function controleValidade(){
  '<button class="btn-outline" id="ctrl-update" type="button">Atualizar controle</button>')+
  `<div class="stat-grid"><div class="card stat"><small>Dentro da validade</small><strong>${vivos.length-vencidos.length}</strong></div><div class="card stat warn"><small>Vencem em 7 dias</small><strong>${em7.length}</strong></div><div class="card stat danger"><small>Vencidos</small><strong>${vencidos.length}</strong></div><div class="card stat"><small>Saldo sem mapa</small><strong>${falta.length}</strong></div><div class="card stat"><small>Tentativa de Venda (3–9 meses)</small><strong>${elegiveis.length}</strong></div></div>
  <section class="card card-pad"><h2>Controle de vencimentos</h2><div class="filter-row"><input id="ctrl-search" class="wide" placeholder="Produto, EAN, código ou lote"><select id="ctrl-status"><option value="todos">Todas as situações</option><option value="vencido">Vencidos</option><option value="a-vencer">A vencer</option><option value="vendavel">Dentro da validade</option><option value="sete">Vencem em 7 dias</option><option value="elegiveis">Elegíveis de 3 a 9 meses</option></select><select id="ctrl-page-size"><option>15</option><option>25</option><option>50</option></select><button class="btn-outline" id="ctrl-export" type="button">Exportar CSV</button><button class="btn-outline" id="ctrl-print" type="button">Imprimir</button></div><p class="footer-hint" id="ctrl-count"></p><div id="ctrl-list"></div><div class="pager"><button id="ctrl-prev" class="btn-outline">Anterior</button><span id="ctrl-pages"></span><button id="ctrl-next" class="btn-outline">Próxima</button></div></section>
- <section class="card card-pad"><div class="page-head subsection-head"><div><h2>Elegíveis a Tentativa de Venda / Prevenção</h2><p>Validade entre 3 e 9 meses de calendário a partir de hoje (inclusive).</p></div><div class="toolbar"><button class="btn-outline" id="tv-export" type="button">Exportar CSV</button><button class="btn-outline" id="tv-print" type="button">Imprimir</button></div></div><div class="filter-row"><select id="tv-owner"><option value="">Todos os funcionários / abas</option>${[...new Set(elegiveis.map(r=>r.mapa_nome))].sort().map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('')}</select><input id="tv-search" class="wide" placeholder="Buscar código, descrição, lote ou funcionário"><label>Por página <select id="tv-size"><option>15</option><option>25</option><option>50</option></select></label></div><p id="tv-count" class="footer-hint"></p><div id="tv-list"></div><div class="pager"><button id="tv-prev" type="button" class="btn-outline">Anterior</button><span id="tv-pages"></span><button id="tv-next" type="button" class="btn-outline">Próxima</button></div></section>
+ <section class="card card-pad"><div class="page-head subsection-head"><div><h2>Elegíveis a Tentativa de Venda / Prevenção</h2><p>Validade entre 3 e 9 meses de calendário a partir de hoje (inclusive).</p></div><div class="toolbar"><button class="btn-outline" id="tv-export" type="button">Exportar CSV</button><button class="btn-outline" id="tv-print" type="button">Imprimir</button></div></div><div class="filter-row"><select id="tv-owner"><option value="">Todos os funcionários / abas</option>${nomesAtivosControle.map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('')}</select><input id="tv-search" class="wide" placeholder="Buscar código, descrição, lote ou funcionário"><label>Por página <select id="tv-size"><option>15</option><option>25</option><option>50</option></select></label></div><p id="tv-count" class="footer-hint"></p><div id="tv-list"></div><div class="pager"><button id="tv-prev" type="button" class="btn-outline">Anterior</button><span id="tv-pages"></span><button id="tv-next" type="button" class="btn-outline">Próxima</button></div></section>
  <section class="card card-pad secondary-card"><h2>Saldo Procfit ainda não mapeado</h2><p>Itens com quantidade em estoque, mas sem correspondência no Mapa de Validade. Não são registros de vencimento.</p>${table(['EAN','Descrição','Código interno','Saldo Procfit'],falta.slice(0,200).map(x=>`<tr><td>${H(x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.codigo_interno)}</td><td>${H(x.quantidade)}</td></tr>`))}</section>`;
  const makeTable=data=>table(['Produto / EAN','Mapa','Lote','Validade','Dias restantes','Quantidade','Status'],data.map(r=>`<tr><td><strong>${H(r.descricao||r.ean)}</strong><span class="second">${H(r.ean)}</span></td><td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(diasVencimento(r.validade)??'—')}</td><td>${H(r.quantidade)}</td><td>${badgeValidade(r.validade,r.secao)}</td></tr>`));
  const render=()=>{const q=$('#ctrl-search').value.trim().toLowerCase(),st=$('#ctrl-status').value;
