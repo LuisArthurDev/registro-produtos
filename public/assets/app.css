@@ -686,3 +686,10 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 .queima-import-preview th,.queima-import-preview td{white-space:normal;word-break:break-word;overflow-wrap:anywhere;font-size:11px;padding:7px 5px}
 #queima-import-dialog .dialog-inner{width:min(95vw,1000px);max-width:100%}
 #queima-import-summary{font-size:13px;line-height:1.6}
+
+/* v44: conferência de aprovações importadas — status e filtro responsivos. */
+.queima-import-filter{flex:1 1 250px;min-width:0;max-width:100%;display:grid;gap:5px}
+.queima-import-filter select{width:100%;min-width:0;max-width:100%}
+#gen-list td .pill.amber[title*="relatório Procfit"]{white-space:normal;max-width:100%;line-height:1.35;margin:3px 0 0;overflow-wrap:anywhere}
+#gen-list td.row-actions [data-verify-burn]{font-weight:750;white-space:normal}
+@media(max-width:600px){.queima-import-filter{flex-basis:100%}}

@@ -46,7 +46,8 @@ test('funcionário tem mapa definido pelo login mesmo se enviar mapa especial',a
  const r=await apiRequest('/mapas','POST',{mapa:'Psicotropicos',ean:'7891234567890',lote:'A',validade:'2026-12-31',quantidade:1,requestId:'abcdef0123456789'});
  assert.equal(r.statusCode,200);const rpc=db.calls.find(x=>x.table==='gravar_lancamento');assert.equal(rpc.body.p_mapa_nome,'Isabela');
 }finally{db.restore();}});
-test('não permite excluir Queima aprovada',async()=>{const db=fakeDb({perfil:'admin'},{queimaEstado:'aprovado'});try{
+test('permite exclusão lógica de Queima aprovada e registra auditoria',async()=>{const db=fakeDb({perfil:'admin'},{queimaEstado:'aprovado'});try{
  const r=await apiRequest('/queima','DELETE',{id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'});
- assert.equal(r.statusCode,409);assert.equal(db.calls.filter(x=>x.table==='queima'&&x.method==='DELETE').length,0);
+ assert.equal(r.statusCode,200);assert.equal(db.calls.filter(x=>x.table==='queima'&&x.method==='DELETE').length,0);
+ const patch=db.calls.find(x=>x.table==='queima'&&x.method==='PATCH');assert.ok(patch);assert.ok(patch.body.excluido_em);assert.equal(patch.body.excluido_por,actorid);
 }finally{db.restore();}});

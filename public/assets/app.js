@@ -12,6 +12,7 @@ import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js';
 import { resumoQueima } from './queima-grafico.js';
 import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
+import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -1364,12 +1365,13 @@ async function solicitarAprovacaoQueima(registro){
 }
 async function generic(pathname,title){
  const d=await request(urlWithLoja('/'+pathname)),rows=d.registros||[];
+ if(pathname==='queima'){try{await staffList();}catch(error){console.warn('Nomes dos responsáveis indisponíveis:',error.message);}}
  const isQueima=pathname==='queima',isVenc=pathname==='vencidos',isAudit=pathname==='auditoria',isSinal=pathname==='sinalizacoes',isTrans=pathname==='transferencias';
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
- ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select><label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
+ ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
  <form id="generic-form" class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" ${isVenc?'':'required'}></label>
  ${isVenc?'<label>Código interno (opcional)<input name="codigo_interno"></label><label class="full">Descrição original<input name="descricao_original"></label>':''}
@@ -1384,6 +1386,29 @@ async function generic(pathname,title){
    <p id="queima-import-summary" role="status"></p><div id="queima-import-preview" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" id="queima-import-cancel" class="btn-outline">Cancelar</button>
    <button type="button" id="queima-import-confirm" class="primary">Registrar produtos válidos</button></div></div></dialog>
+  <input type="file" id="queima-relatorio-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+  <dialog id="queima-relatorio-dialog" class="dialog dialog-wide" aria-labelledby="queima-relatorio-title"><div class="dialog-inner">
+   <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
+   <p class="footer-hint">Colunas: B Produto · H Validade · I Aprovado (S) · J Unidade · L Preço. Itens com N são ignorados.</p>
+   <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-primeira"> <span><strong>Primeira importação:</strong> cadastrar e aprovar produtos com S que ainda não existirem no sistema, somente quando houver preço, catálogo válido e pelo menos 7 dias até o vencimento. O relatório não informa lote nem Registro; estes ficam sem informação.</span></label>
+   <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-corrigir"> <span><strong>Correções futuras:</strong> atualizar quantidade, preço e validade da gôndola dos registros já aprovados quando a correspondência for única.</span></label>
+   <p class="notice" role="note">O sistema não inventa preços, lotes ou Registros. Não altera aprovações com correspondência ambígua. Itens com S sem preço na coluna L são sinalizados para revisão.</p>
+   <p id="queima-relatorio-resumo" role="status" aria-live="polite"></p>
+   <div id="queima-relatorio-previa" class="queima-import-preview"></div>
+   <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-relatorio-cancelar">Fechar</button>
+   <button type="button" class="primary" id="queima-relatorio-confirmar" disabled>Aplicar conciliação</button></div></div></dialog>
+  <dialog id="queima-atribuir-dialog" class="dialog" aria-labelledby="queima-atribuir-title"><form id="queima-atribuir-form" class="dialog-inner">
+   <h2 id="queima-atribuir-title">Atribuir responsável da Queima</h2><p id="queima-atribuir-item" class="footer-hint"></p>
+   <p class="notice">A atribuição identifica o funcionário responsável pela conferência. O relatório não contém Lote; por isso nenhum lançamento de mapa será fabricado.</p>
+   <label>Responsável<select name="responsavel_id" id="queima-atribuir-select"><option value="">Carregando funcionários…</option></select></label>
+   <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-atribuir-cancelar">Cancelar</button><button type="submit" class="primary">Salvar responsável</button></div></form></dialog>
+  <dialog id="queima-editar-dialog" class="dialog" aria-labelledby="queima-editar-title"><form id="queima-editar-form" class="dialog-inner">
+   <h2 id="queima-editar-title">Editar Queima aprovada</h2><p id="queima-editar-item"></p>
+   <div class="form-grid"><label>Quantidade<input name="quantidade" type="number" min="1" max="999999" step="1" required></label>
+   <label>Validade da Gôndola<input name="validade_gondola" type="date" required></label>
+   <label>Preço da Gôndola (R$)<input name="preco_gondola" type="number" min="0" max="9999999999.99" step="0.01" required></label></div>
+   <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-editar-cancelar">Cancelar</button>
+   <button type="submit" class="primary">Salvar correção</button></div></form></dialog>
   <dialog id="queima-aprovar-dialog" class="dialog"><form id="queima-aprovar-form" class="dialog-inner">
    <h2>Aprovar produto na Queima</h2><p id="queima-aprovar-item"></p>
    <div class="form-grid"><label>Validade da Gôndola<input type="date" name="validade_gondola" required></label>
@@ -1391,7 +1416,7 @@ async function generic(pathname,title){
    <div class="dialog-actions"><button id="queima-aprovar-cancel" type="button" class="btn-outline">Cancelar</button>
    <button type="submit" class="primary">Aprovar com dados da Gôndola</button></div></form></dialog>`);
  }
- const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Registro','Data','EAN','Descrição','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
+ const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Registro','Data','EAN','Descrição','Responsável','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
   const ean=r.ean_resolvido||r.ean||'Não informado',desc=r.descricao||r.descricao_original||'Sem descrição cadastrada';
@@ -1401,28 +1426,84 @@ async function generic(pathname,title){
   if(isQueima){
     const lastMonth=mesBrasil(r.criado_em)!==nowBrISO().slice(0,7),pendente=r.estado==='pendente';
     const primary=pendente?(lastMonth?`<button class="action-link" data-relaunch="${H(r.id)}">Relançar</button>`:`<button class="action-link" data-approve="${H(r.id)}">Aprovar</button>`):`<button type="button" class="action-link" disabled title="Registro não pode ser aprovado novamente">${r.estado==='aprovado'?'Aprovado':'Relançado'}</button>`;
-    const apagar=pendente?` <button class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`:'';
-    return `<tr>${td(r.registro_queima)}<td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
+    const editar=r.estado==='aprovado'?` <button type="button" class="action-link" data-edit-burn="${H(r.id)}">Editar</button>`:'';
+    const importado=r.aprovado_via_importacao===true;
+    const aguardaVerificacao=importado&&r.importacao_verificada_em==null&&r.estado==='aprovado';
+    const marcador=aguardaVerificacao?' <span class="pill amber" title="Aprovado pelo relatório Procfit; aguardando conferência manual">Aprovado via importação</span>':'';
+    const verificar=aguardaVerificacao?` <button type="button" class="action-link" data-verify-burn="${H(r.id)}" title="Marcar aprovação importada como conferida sem desfazer a aprovação">Verificado</button>`:'';
+    const semResponsavel=r.aprovado_via_importacao===true&&r.estado==='aprovado'&&r.sem_responsavel_importacao===true;
+    const nomeResponsavel=r.responsavel_importacao_id?(state.staff.find(u=>u.id===r.responsavel_importacao_id)?.nome||'Funcionário atribuído'):(semResponsavel?'Sem responsável':(r.origem_mapa||'—'));
+    const badgeResponsavel=semResponsavel?'<span class="pill amber">Sem responsável</span>':H(nomeResponsavel);
+    const atribuir=importado&&r.estado==='aprovado'?` <button type="button" class="action-link" data-assign-burn="${H(r.id)}">${semResponsavel?'Atribuir responsável':'Alterar responsável'}</button>`:'';
+    const apagar=` <button type="button" class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`;
+    return `<tr>${td(r.registro_queima)}<td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}<td>${badgeResponsavel}</td>${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}${marcador}</td><td class="row-actions">${primary}${verificar}${atribuir}${editar}${apagar}</td></tr>`;
   }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
   return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.observacao)}<td>${pill(r.situacao||'aberto',r.situacao==='resolvido'?'green':r.situacao==='negado'?'red':'amber')}</td><td>${!r.situacao||r.situacao==='aberto'?`<button class="action-link" data-sinal="${H(r.id)}" data-status="resolvido">Resolver</button> <button class="action-link" data-sinal="${H(r.id)}" data-status="negado">Negar</button>`:'—'}</td></tr>`;
  }));
- const apply=()=>{const q=$('#gen-search').value.toLowerCase(),status=$('#gen-status').value,from=$('#gen-since').value;
-  filtered=rows.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote,x.acao,x.observacao,JSON.stringify(x.dados||{}),x.romaneio].join(' ').toLowerCase().includes(q)&&(!status||String(x.estado||x.situacao)==status)&&(!from||String(x.criado_em||'').slice(0,10)>=from));
+ const apply=()=>{const q=$('#gen-search').value.toLowerCase(),status=$('#gen-status').value,from=$('#gen-since').value,importFiltro=isQueima?$('#gen-import-filter').value:'',filtroResponsavel=isQueima?$('#gen-owner-filter').value:'';
+  filtered=rows.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote,x.acao,x.observacao,JSON.stringify(x.dados||{}),x.romaneio].join(' ').toLowerCase().includes(q)&&(!status||String(x.estado||x.situacao)==status)&&(!from||String(x.criado_em||'').slice(0,10)>=from)&&(!importFiltro||(importFiltro==='todos_importados'?x.estado==='aprovado'&&x.aprovado_via_importacao===true:importFiltro==='pendentes'?x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em:x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!!x.importacao_verificada_em))&&(!filtroResponsavel||(filtroResponsavel==='sem'?x.aprovado_via_importacao===true&&x.sem_responsavel_importacao===true:x.aprovado_via_importacao===true&&!!x.responsavel_importacao_id)));
   page=0;draw();};
- const draw=()=>{const sz=Number($('#gen-size').value),np=Math.max(1,Math.ceil(filtered.length/sz));page=Math.max(0,Math.min(np-1,page));$('#gen-list').innerHTML=renderTable(filtered.slice(page*sz,(page+1)*sz));$('#gen-counter').textContent=`${filtered.length} registro(s)`;$('#gen-pages').textContent=`Página ${page+1} de ${np}`;$('#gen-prev').disabled=page===0;$('#gen-next').disabled=page>=np-1;};
- for(const id of ['gen-search','gen-status','gen-since'])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
+ const draw=()=>{const sz=Number($('#gen-size').value),np=Math.max(1,Math.ceil(filtered.length/sz));page=Math.max(0,Math.min(np-1,page));$('#gen-list').innerHTML=renderTable(filtered.slice(page*sz,(page+1)*sz));$('#gen-counter').textContent=`${filtered.length} registro(s)`+(isQueima?` · ${rows.filter(x=>x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em).length} aprovação(ões) importada(s) aguardando verificação · ${rows.filter(x=>x.estado==='aprovado'&&x.aprovado_via_importacao===true&&x.sem_responsavel_importacao===true).length} sem responsável`:``);$('#gen-pages').textContent=`Página ${page+1} de ${np}`;$('#gen-prev').disabled=page===0;$('#gen-next').disabled=page>=np-1;};
+ for(const id of ['gen-search','gen-status','gen-since',...(isQueima?['gen-import-filter','gen-owner-filter']:[])])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
  $('#gen-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['gen-pages']);if(n>0){page=n-1;draw();}},{once:true});
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
-  const match={'Registro':x.registro_queima,'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
+  const match={'Registro':x.registro_queima,'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'Responsável':x.sem_responsavel_importacao?'Sem responsável':(state.staff.find(u=>u.id===x.responsavel_importacao_id)?.nome||x.origem_mapa||''),'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
  })));
  $('#gen-list').onclick=async e=>{
-  const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]');if(!appr&&!rel&&!sin&&!del)return;
-  const id=appr?.dataset.approve||rel?.dataset.relaunch||sin?.dataset.sinal||del?.dataset.deleteBurn,old=rows.find(x=>x.id===id);if(!old)return;
+  const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]'),edit=e.target.closest('[data-edit-burn]'),verify=e.target.closest('[data-verify-burn]'),assign=e.target.closest('[data-assign-burn]');
+  if(!appr&&!rel&&!sin&&!del&&!edit&&!verify&&!assign)return;
+  const id=appr?.dataset.approve||rel?.dataset.relaunch||sin?.dataset.sinal||del?.dataset.deleteBurn||edit?.dataset.editBurn||verify?.dataset.verifyBurn||assign?.dataset.assignBurn,old=rows.find(x=>x.id===id);if(!old)return;
+  if(assign){
+    if(old.estado!=='aprovado'||old.aprovado_via_importacao!==true)
+      return toast('Esta ação só está disponível para aprovações via importação.',true);
+    const dlg=$('#queima-atribuir-dialog'),form=$('#queima-atribuir-form'),sel=$('#queima-atribuir-select');
+    let pessoas;
+    try{pessoas=(await staffList()).filter(u=>u.perfil==='funcionario'&&u.ativo===true&&!u.excluido_em)
+      .sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));}
+    catch(err){return toast('Não foi possível carregar funcionários: '+err.message,true);}
+    sel.innerHTML='<option value="">Sem responsável</option>'+pessoas.map(u=>`<option value="${H(u.id)}">${H(u.nome)}</option>`).join('');
+    sel.value=old.responsavel_importacao_id||'';
+    $('#queima-atribuir-item').textContent=`${old.descricao||old.ean} · Validade ${dataBR(old.validade)} · Registro ${old.registro_queima||'não informado'}`;
+    $('#queima-atribuir-cancelar').onclick=()=>dlg.close();
+    form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;
+      const responsavel_id=sel.value,btn=form.querySelector('[type="submit"]');btn.disabled=true;
+      try{await request('/queima',{method:'PATCH',body:{id,acao:'atribuir_importacao',responsavel_id}});
+        dlg.close();toast(responsavel_id?'Responsável atribuído à Queima.':'Item mantido Sem responsável.');await renderRoute(state.route);
+      }catch(err){toast(err.message,true);}finally{btn.disabled=false;}
+    };
+    dlg.showModal();return;
+  }
+  if(verify){
+    if(old.estado!=='aprovado'||old.aprovado_via_importacao!==true||old.importacao_verificada_em)
+      return toast('Este item não está aguardando verificação de importação.',true);
+    if(!await confirmDialog('Conferir aprovação importada',`Marcar a aprovação de ${old.descricao||old.ean} como verificada? O marcador será retirado, mas a aprovação e a origem do relatório serão preservadas.`))return;
+    verify.disabled=true;
+    try{await request('/queima',{method:'PATCH',body:{id,acao:'verificar_importacao'}});
+      toast('Importação verificada. Marcador retirado; o registro permanece aprovado.');await renderRoute(state.route);
+    }catch(error){toast(error.message,true);verify.disabled=false;}
+    return;
+  }
+  if(edit){
+    if(old.estado!=='aprovado')return toast('Somente itens aprovados podem ser editados.',true);
+    const dlg=$('#queima-editar-dialog'),form=$('#queima-editar-form');form.reset();
+    $('#queima-editar-item').textContent=`${old.descricao||old.ean} · Registro ${old.registro_queima||'não informado'} · Lote ${old.lote||'não informado'}`;
+    form.elements.quantidade.value=old.quantidade;
+    form.elements.validade_gondola.value=String(old.validade_gondola||'').slice(0,10);
+    form.elements.preco_gondola.value=old.preco_gondola??'';
+    $('#queima-editar-cancelar').onclick=()=>dlg.close();
+    form.onsubmit=async evt=>{evt.preventDefault();if(!form.reportValidity())return;const btn=form.querySelector('[type=submit]');btn.disabled=true;
+      try{const dados={id,acao:'editar_aprovado',quantidade:Number(form.elements.quantidade.value),
+       validade_gondola:form.elements.validade_gondola.value,preco_gondola:Number(form.elements.preco_gondola.value)};
+       await request('/queima',{method:'PATCH',body:dados});dlg.close();toast('Produto aprovado corrigido e auditado.');await renderRoute(state.route);
+      }catch(error){toast(error.message,true);}finally{btn.disabled=false;}
+    };dlg.showModal();return;
+  }
   const action=appr?'aprovar':rel?'relançar':del?'excluir':'alterar sinalização para '+sin.dataset.status;
-  if(!await confirmDialog('Confirmar operação',`Deseja ${action} este registro?`))return;
+  const detalhe=del?'O item será retirado da lista, inclusive se aprovado, e a exclusão ficará registrada na auditoria. O relatório não o recriará automaticamente.':`Deseja ${action} este registro?`;
+  if(!await confirmDialog('Confirmar operação',detalhe))return;
   try{if(appr){const dados=await solicitarAprovacaoQueima(old);if(!dados)return;await request('/queima',{method:'PATCH',body:{id,estado:'aprovado',...dados}});}
    else if(rel)await request('/queima/relancar',{method:'POST',body:{id}});
    else if(del)await request('/queima',{method:'DELETE',body:{id}});
@@ -1435,6 +1516,44 @@ async function generic(pathname,title){
   if(isVenc&&!body.ean&&!body.codigo_interno)return toast('Informe EAN ou código interno.',true);
   btn.disabled=true;try{await request('/'+pathname,{method:'POST',body});toast('Registro incluído.');if(isTrans)delete form.dataset.requestId;renderRoute(state.route);}catch(err){toast(err.message,true);}finally{btn.disabled=false;}
  };
+ if(isQueima){
+   const input=$('#queima-relatorio-file'),dlg=$('#queima-relatorio-dialog'),confirm=$('#queima-relatorio-confirmar');
+   const resumo=$('#queima-relatorio-resumo'),previa=$('#queima-relatorio-previa');
+   let relatorio=null,versao=0;
+   $('#queima-relatorio-open').onclick=()=>input.click();
+   $('#queima-relatorio-cancelar').onclick=()=>dlg.close();
+   const opcoes=()=>({primeira_carga:$('#queima-relatorio-primeira').checked,corrigir_aprovados:$('#queima-relatorio-corrigir').checked});
+   const conferir=async()=>{
+     if(!relatorio)return;const v=++versao;confirm.disabled=true;
+     resumo.textContent='Comparando o relatório com a Queima da loja…';
+     try{
+      const res=await request('/queima/conciliar-relatorio',{method:'POST',body:{itens:relatorio.itens,...opcoes(),simular:true},timeout:120000,retries:0});
+      if(v!==versao)return;const dados=res.resultado||{},c=dados.contagem||{};
+      const plano=['aprovar_existente','cadastrar_e_aprovar','corrigir_aprovado'].reduce((n,k)=>n+Number(c[k]||0),0);
+      resumo.textContent=`Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} com S · ${relatorio.resumo.nao_aprovados} com N ignoradas · ${relatorio.resumo.sem_preco} sem preço em L. Comparação: ${c.aprovar_existente||0} aprovar existentes · ${c.cadastrar_e_aprovar||0} cadastrar e aprovar · ${c.corrigir_aprovado||0} corrigir aprovados · ${c.ja_aprovado||0} já aprovados · ${c.ja_conciliado||0} já conciliados · ${c.ja_excluido||0} previamente excluídos · ${c.correspondencia_ambigua||0} ambíguos · ${c.prazo_insuficiente||0} prazo insuficiente · ${c.sem_catalogo||0} sem catálogo · ${c.sem_preco||0} sem preço · ${c.sem_correspondencia||0} não encontrados · ${c.formula_especial||0} Fórmulas Especiais · ${c.aba_especial||0} abas bloqueadas · ${c.invalido||0} inválidos.`;
+      previa.innerHTML=`<p>${H(plano)} operação(ões) poderão ser aplicadas com segurança. Exibindo até 100 exemplos.</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(x.acao.replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
+      confirm.disabled=!plano;
+     }catch(error){if(v===versao){resumo.textContent='Não foi possível conferir: '+error.message;toast(error.message,true);}}
+   };
+   input.onchange=async()=>{const file=input.files?.[0];input.value='';if(!file)return;
+     confirm.disabled=true;resumo.textContent='Lendo relatório XLSX…';
+     try{relatorio=await lerRelatorioQueimaXlsx(file,{loja:state.loja});
+       if(relatorio.itens.length>1500)throw Error('O relatório possui mais de 1500 aprovados. Divida o arquivo por período.');
+       if(!relatorio.itens.length)throw Error('Não há itens S válidos neste arquivo.');
+       dlg.showModal();await conferir();
+     }catch(error){relatorio=null;toast('Falha ao ler relatório: '+error.message,true);resumo.textContent=error.message;}
+   };
+   $('#queima-relatorio-primeira').onchange=()=>void conferir();
+   $('#queima-relatorio-corrigir').onchange=()=>void conferir();
+   confirm.onclick=async()=>{if(!relatorio)return;confirm.disabled=true;
+     if(!await confirmDialog('Aplicar conciliação',`Confirmar comparação dos ${relatorio.resumo.aprovados} itens S do relatório? Itens sem preço e correspondências ambíguas não serão alterados.`)){confirm.disabled=false;return;}
+     try{const res=await request('/queima/conciliar-relatorio',{method:'POST',body:{itens:relatorio.itens,...opcoes(),simular:false},timeout:120000,retries:0});
+       const c=res.resultado?.contagem||{};dlg.close();
+       toast(`Conciliação concluída: ${c.aprovar_existente||0} aprovado(s), ${c.cadastrar_e_aprovar||0} incluído(s), ${c.corrigir_aprovado||0} corrigido(s). ${c.sem_preco||0} sem preço e ${c.correspondencia_ambigua||0} ambíguos ignorados.`);
+       await renderRoute(state.route);
+     }catch(error){resumo.textContent='Falha na conciliação. Nenhum lote deve ser considerado confirmado: '+error.message;toast(error.message,true);confirm.disabled=false;}
+   };
+ }
  if(isQueima){
    const file=$('#queima-xls-file'),dlg=$('#queima-import-dialog'),confirm=$('#queima-import-confirm');let preparado=null;
    $('#queima-import-open').onclick=()=>file.click();

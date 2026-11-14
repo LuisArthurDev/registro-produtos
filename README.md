@@ -1,3 +1,7 @@
+> **v44 — Conciliação de Queima por relatório XLSX + badge de Aprovado via importação, filtro e botão Verificado.** Leia [ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md](ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md). Aplique SQL 025 e, depois, SQL 026 antes do deploy.
+
+> **v43:** conciliação de relatório XLSX da Queima, aprovação com preço, correções de aprovados e exclusão lógica. Veja [ATUALIZAR-V43-CONCILIAR-RELATORIO-QUEIMA.md](ATUALIZAR-V43-CONCILIAR-RELATORIO-QUEIMA.md).
+
 > **v41 — Queima exige validade de no mínimo 7 dias.** Migração SQL 023 obrigatória depois da 022. [Guia da atualização](ATUALIZAR-V41-QUEIMA-PRAZO-MINIMO-7-DIAS.md).
 
 > **v40: Importação XLS de Queima com Registro, proibição de produtos vencidos e campos de Gôndola apenas ao aprovar.** Consulte [o guia da v40](ATUALIZAR-V40-IMPORTACAO-XLS-QUEIMA-SEM-VENCIDOS.md) e aplique a **SQL 022** antes do deploy.
@@ -219,3 +223,13 @@ O botão **Exportar XLS** gera seis colunas (`Motivo`, `Codigo`, `Ean`, `Lote`, 
 ## Atualização v39 — Visualização somente Mapa/Lançamentos
 
 Na `visualizacao.html`, somente a aba **Mapa / Lançamentos** é exibida, com as opções **Por mês de lançamento** e **Validade (a vencer)**. As abas **Vencidos / Retiradas** e **Sinalizações** foram removidas da navegação. Consulte `ATUALIZAR-V39-VISUALIZACAO-SOMENTE-MAPA.md`.
+
+
+## v42 — Correção SQL da importação XLS da Queima
+
+A importação XLS foi corrigida na função `public.importar_queima_xls_v40` pela migração `supabase/024_corrigir_importacao_queima_ean_ambiguo.sql`. A variável interna `ean` agora se chama `v_ean`, evitando SQLSTATE 42702. **Aplique a SQL 024 no Supabase depois da SQL 023.** Não exige alteração do frontend. Instruções em [ATUALIZAR-V42-CORRIGIR-IMPORTACAO-XLS-EAN.md](ATUALIZAR-V42-CORRIGIR-IMPORTACAO-XLS-EAN.md).
+
+
+## V45 — Queima importada Sem responsável
+
+Aprovados via XLSX não identificáveis de forma unívoca em um mapa ativo do mesmo EAN e validade passam a aparecer **Sem responsável** na própria Queima. Um administrador pode atribuir, trocar ou remover o funcionário responsável sem perder a aprovação, o histórico ou o badge Verificado. O XLSX não informa Lote, portanto **nenhum mapa fictício é gerado**. Requer SQL 027. Ver [ATUALIZAR-V45-QUEIMA-SEM-RESPONSAVEL.md](ATUALIZAR-V45-QUEIMA-SEM-RESPONSAVEL.md).

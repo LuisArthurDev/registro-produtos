@@ -79,7 +79,7 @@ async function db(table,{method='GET',params={},body,prefer,range}={}) {
   if (secret().split('.').length===3) headers.Authorization=`Bearer ${secret()}`;
   if(prefer) headers.Prefer=prefer;
   if(range) headers.Range=range;
-  const resp=await fetch(endpoint,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(26000)});
+  const resp=await fetch(endpoint,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(table==='rpc/conciliar_queima_relatorio_v43'?58000:26000)});
   const raw=await resp.text();let data;
   try {data=raw?JSON.parse(raw):null;}catch {data=raw;}
   if(!resp.ok) {const e=bad(data?.message||`Erro do banco (${resp.status})`, resp.status>=500?502:resp.status); if(process.env.NODE_ENV==='development')console.error('Supabase:',table,e.message);throw e;}
@@ -736,7 +736,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
   const loja=actorLoja(actor,body.loja||query.get('loja'));
   if(req.method==='GET') {
     admin(actor);
-    const regs=await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,...(['vencidos','transferencias'].includes(table)?{excluido_em:'is.null'}:{}),select:'*',order:'criado_em.desc'},700,10);return {sucesso:true,registros:await filtrarRegistrosSecao(await enriquecerRegistros(regs,table),loja)};
+    const regs=await rows(table,{[extras.lojaCol||'loja_id']:`eq.${loja}`,...(['vencidos','transferencias','queima'].includes(table)?{excluido_em:'is.null'}:{}),select:'*',order:'criado_em.desc'},700,10);return {sucesso:true,registros:await filtrarRegistrosSecao(await enriquecerRegistros(regs,table),loja)};
   }
   admin(actor);
   if(req.method==='POST'){
@@ -773,11 +773,58 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     await audit(actor,'cadastrar_'+table,{id:r[0].id});return {sucesso:true,status:'saved',registro:r[0]};
   }
   if(req.method==='DELETE'&&table==='queima'){
-    const atual=await one('queima',{id:`eq.${norm(body.id)}`,loja_id:`eq.${loja}`});
-    if(!atual)throw bad('Registro de Queima não encontrado.',404);
-    if(atual.estado!=='pendente')throw bad('Somente Queima pendente pode ser excluída. Registros aprovados devem ser preservados.',409);
-    await db('queima',{method:'DELETE',params:{id:`eq.${atual.id}`,loja_id:`eq.${loja}`,estado:'eq.pendente'}});
-    await audit(actor,'excluir_queima',{id:atual.id,registro:atual});return {sucesso:true};
+    const id=norm(body.id);
+    if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador inválido.',422);
+    const atual=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'});
+    if(!atual)throw bad('Registro de Queima não encontrado ou já excluído.',404);
+    // Exclusão lógica preserva auditoria e a chave da planilha; não importa
+    // novamente a mesma ocorrência se o arquivo for reenviado.
+    const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null'},
+      body:{excluido_em:new Date().toISOString(),excluido_por:actor.id,atualizado_em:new Date().toISOString()},prefer:'return=representation'});
+    if(!atualizado?.length)throw bad('Registro modificado por outra operação; atualize e tente novamente.',409);
+    await audit(actor,'excluir_queima',{id,estado_anterior:atual.estado,registro_queima:atual.registro_queima,
+      origem_relatorio_chave:atual.origem_relatorio_chave,quantidade:atual.quantidade});return {sucesso:true};
+  }
+  if(req.method==='PATCH'&&table==='queima'&&body.acao==='atribuir_importacao'){
+    const id=norm(body.id),responsavel=norm(body.responsavel_id);
+    if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador de Queima inválido.',422);
+    if(responsavel&&!/^[a-f0-9-]{36}$/i.test(responsavel))throw bad('Responsável inválido.',422);
+    // Verificação de titular, loja e situação é repetida dentro da RPC transacional.
+    // Não criar mapa com Lote fictício: relatório Procfit não possui Lote.
+    const result=await db('rpc/atribuir_responsavel_queima_importada_v45',{method:'POST',body:{
+      p_loja_id:loja,p_usuario_id:actor.id,p_queima_id:id,p_responsavel_id:responsavel||null
+    }});
+    return {sucesso:true,resultado:result};
+  }
+  if(req.method==='PATCH'&&table==='queima'&&body.acao==='verificar_importacao'){
+    const id=norm(body.id);
+    if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador de Queima inválido.',422);
+    // Ao verificar, não desfazer a aprovação nem apagar a procedência do relatório.
+    const atual=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',
+      aprovado_via_importacao:'eq.true',importacao_verificada_em:'is.null',excluido_em:'is.null'});
+    if(!atual)throw bad('Este item não está aguardando verificação de importação. Atualize a lista.',409);
+    const instante=new Date().toISOString();
+    const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',
+      aprovado_via_importacao:'eq.true',importacao_verificada_em:'is.null',excluido_em:'is.null'},
+      body:{importacao_verificada_em:instante,importacao_verificada_por:actor.id,atualizado_em:instante},
+      prefer:'return=representation'});
+    if(!atualizado?.length)throw bad('Este item foi verificado ou alterado por outra sessão. Atualize a lista.',409);
+    await audit(actor,'verificar_aprovacao_importada',{id,ean:atual.ean,
+      origem_relatorio_chave:atual.origem_relatorio_chave,verificado_em:instante});
+    return {sucesso:true,registro:atualizado[0]};
+  }
+  if(req.method==='PATCH'&&table==='queima'&&body.acao==='editar_aprovado'){
+    const id=norm(body.id);
+    if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador inválido.',422);
+    const atual=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null'});
+    if(!atual)throw bad('Somente itens aprovados e não excluídos podem ser editados.',409);
+    const qt=Number(body.quantidade),gondola=validarDadosGondola(body);
+    if(!Number.isSafeInteger(qt)||qt<1||qt>999999)throw bad('Quantidade deve ser inteira entre 1 e 999999.',422);
+    const patch={quantidade:qt,...gondola,atualizado_em:new Date().toISOString()};
+    const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null'},body:patch,prefer:'return=representation'});
+    if(!atualizado?.length)throw bad('Registro modificado por outra operação. Atualize antes de editar.',409);
+    await audit(actor,'editar_queima_aprovada',{id,antes:{quantidade:atual.quantidade,validade_gondola:atual.validade_gondola,preco_gondola:atual.preco_gondola},depois:patch});
+    return {sucesso:true,registro:atualizado[0]};
   }
   if(req.method==='DELETE'&&['vencidos','transferencias'].includes(table)){
     const id=norm(body.id),key=extras.lojaCol||'loja_id';
@@ -811,7 +858,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     await audit(actor,'editar_'+table,{id,antes:antigo,campos:Object.keys(patch).filter(c=>c!=='atualizado_em')});return {sucesso:true};
   }
   if(req.method==='PATCH'){
-    const atual=await one(table,{id:`eq.${body.id}`,[extras.lojaCol||'loja_id']:`eq.${loja}`});if(!atual)throw bad('Não encontrado.',404);
+    const atual=await one(table,{id:`eq.${body.id}`,[extras.lojaCol||'loja_id']:`eq.${loja}`,...(table==='queima'?{excluido_em:'is.null'}:{})});if(!atual)throw bad('Não encontrado.',404);
     const allowed=extras.patchAllowed||['estado','observacao','situacao'];const patch=Object.fromEntries(Object.entries(body).filter(([k])=>allowed.includes(k)));
     if(table==='queima'&&patch.estado&&!['pendente','aprovado'].includes(patch.estado))throw bad('Use a operação de relançar para preservar o histórico.');
     if(table==='queima'&&patch.estado==='aprovado'){
@@ -1044,6 +1091,32 @@ async function importarXlsQueima(req,actor,body){
  await audit(actor,'importar_xls_queima',{registro,linhas:itens.length,importados:resultado?.importados,ignorados_vencidos:resultado?.ignorados_vencidos,ignorados_prazo_insuficiente:resultado?.ignorados_prazo_insuficiente});
  return {sucesso:true,resultado};
 }
+async function conciliarRelatorioQueima(req,actor,body){
+ admin(actor);const loja=actorLoja(actor,body.loja);
+ const itens=body.itens;
+ if(!Array.isArray(itens)||itens.length<1||itens.length>1500)
+   throw bad('O relatório deve conter de 1 a 1500 linhas aprovadas (S).',422);
+ const primeiro=body.primeira_carga===true,corrigir=body.corrigir_aprovados===true,simular=body.simular!==false;
+ for(const item of itens){
+   if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4||!/^\d{1,20}$/.test(norm(item.codigo_interno))
+     ||!dataValida(item.validade)||!dataValida(item.data_lancamento)
+     ||!Number.isSafeInteger(item.quantidade)||item.quantidade<1||item.quantidade>999999
+     ||!Number.isSafeInteger(item.ocorrencia)||item.ocorrencia<1||item.ocorrencia>10000)
+      throw bad('Linha aprovada inválida no relatório; nenhum dado foi gravado.',422);
+   if(item.preco_gondola!==null&&(typeof item.preco_gondola!=='number'||!Number.isFinite(item.preco_gondola)
+     ||item.preco_gondola<0||item.preco_gondola>9999999999.99||Math.abs(item.preco_gondola*100-Math.round(item.preco_gondola*100))>1e-7))
+     throw bad('Preço de gôndola inválido. Corrija a coluna L.',422);
+ }
+ // A RPC valida a loja, o catálogo e a situação de cada item no banco.
+ // Simulação (prévia) e confirmação usam o mesmo código transacional.
+ const result=await db('rpc/conciliar_queima_relatorio_v43',{method:'POST',body:{
+   p_loja_id:loja,p_usuario_id:actor.id,p_itens:itens.map(x=>({linha:x.linha,codigo_interno:x.codigo_interno,
+    validade:x.validade,data_lancamento:x.data_lancamento,quantidade:x.quantidade,preco_gondola:x.preco_gondola,
+    ocorrencia:x.ocorrencia,aprovado:true})),p_primeira_carga:primeiro,p_corrigir_aprovados:corrigir,p_simular:simular}});
+ if(!simular)await audit(actor,'conciliar_queima_relatorio_v43',{total:itens.length,primeira_carga:primeiro,
+   corrigir_aprovados:corrigir,contagem:result?.contagem});
+ return {sucesso:true,resultado:result};
+}
 async function relancarQueima(req,actor,body){
   admin(actor); const loja=actorLoja(actor,body.loja);
   if(!/^[0-9a-f-]{36}$/i.test(norm(body.id)))throw bad('Identificador inválido.');
@@ -1151,6 +1224,7 @@ async function handle(req){
   if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
   if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);
+  if(pathname==='/queima/conciliar-relatorio'&&req.method==='POST')return conciliarRelatorioQueima(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
   if(pathname==='/vencidos/retirar'&&req.method==='POST')return retirarDanificado(req,actor,body);
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
