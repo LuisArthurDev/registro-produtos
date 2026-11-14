@@ -1,3 +1,5 @@
+> **v47 — Diagnóstico de falhas na conferência XLSX da Queima.** Veja [ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md](ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md). Não requer migração SQL; atualize a API no Vercel para ver o erro PostgreSQL real.
+
 > **v44 — Conciliação de Queima por relatório XLSX + badge de Aprovado via importação, filtro e botão Verificado.** Leia [ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md](ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md). Aplique SQL 025 e, depois, SQL 026 antes do deploy.
 
 > **v43:** conciliação de relatório XLSX da Queima, aprovação com preço, correções de aprovados e exclusão lógica. Veja [ATUALIZAR-V43-CONCILIAR-RELATORIO-QUEIMA.md](ATUALIZAR-V43-CONCILIAR-RELATORIO-QUEIMA.md).
@@ -233,3 +235,8 @@ A importação XLS foi corrigida na função `public.importar_queima_xls_v40` pe
 ## V45 — Queima importada Sem responsável
 
 Aprovados via XLSX não identificáveis de forma unívoca em um mapa ativo do mesmo EAN e validade passam a aparecer **Sem responsável** na própria Queima. Um administrador pode atribuir, trocar ou remover o funcionário responsável sem perder a aprovação, o histórico ou o badge Verificado. O XLSX não informa Lote, portanto **nenhum mapa fictício é gerado**. Requer SQL 027. Ver [ATUALIZAR-V45-QUEIMA-SEM-RESPONSAVEL.md](ATUALIZAR-V45-QUEIMA-SEM-RESPONSAVEL.md).
+
+
+## V46 — Sugestões de responsáveis na Queima
+
+Botão e modal **Sugestões sem responsável** com evidências por EAN/validade e organização por grupo, seleção manual e atribuição auditada via RPC v45. Não requer SQL nova; consulte `ATUALIZAR-V46-SUGESTOES-SEM-RESPONSAVEL.md`.

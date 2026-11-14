@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypt
 import { tratarNotificacoes } from './notificacoes.js';
 import { elegivelTentativaVenda } from '../public/assets/tentativa.js';
 import { chaveSecao, secaoPadraoIgnorada, secaoNaoVisivel, filtrarSecoes } from './secoes.js';
+import { ordenarSugestoesQueima } from './sugestoes-queima.js';
 
 const urlBase = () => String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const secret = () => process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -79,10 +80,32 @@ async function db(table,{method='GET',params={},body,prefer,range}={}) {
   if (secret().split('.').length===3) headers.Authorization=`Bearer ${secret()}`;
   if(prefer) headers.Prefer=prefer;
   if(range) headers.Range=range;
-  const resp=await fetch(endpoint,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(table==='rpc/conciliar_queima_relatorio_v43'?58000:26000)});
+  let resp;
+  try{
+    resp=await fetch(endpoint,{method,headers,body:body===undefined?undefined:JSON.stringify(body),
+      signal:AbortSignal.timeout(table==='rpc/conciliar_queima_relatorio_v43'?55000:26000)});
+  }catch(err){
+    const tempo=err?.name==='AbortError'||err?.name==='TimeoutError';
+    const problem=bad(tempo?'Supabase demorou mais que o limite da consulta. Nenhum resultado de conferência foi confirmado.':'Não foi possível conectar ao Supabase. Consulte os logs do Vercel.',tempo?504:table==='rpc/conciliar_queima_relatorio_v43'?502:500);
+    problem.upstreamCode=tempo?'TIMEOUT':'NETWORK';
+    console.error('[Supabase]',table,tempo?'TIMEOUT':'NETWORK',err?.name||'Error',err?.message||'');
+    throw problem;
+  }
   const raw=await resp.text();let data;
   try {data=raw?JSON.parse(raw):null;}catch {data=raw;}
-  if(!resp.ok) {const e=bad(data?.message||`Erro do banco (${resp.status})`, resp.status>=500?502:resp.status); if(process.env.NODE_ENV==='development')console.error('Supabase:',table,e.message);throw e;}
+  if(!resp.ok){
+    const sqlstate=typeof data?.code==='string'&&/^[A-Z0-9]{5,12}$/i.test(data.code)?data.code:null;
+    const timedout=sqlstate==='57014'||resp.status===504;
+    const e=bad(data?.message||`Erro do banco (${resp.status})`,timedout?504:resp.status>=500?502:resp.status);
+    e.upstreamCode=sqlstate;e.upstreamStatus=resp.status;
+    if(resp.status>=500||timedout){
+      // Jamais registrar apikey, cabeçalhos de autenticação ou todo o payload do XLSX.
+      console.error('[Supabase]',table,'HTTP',resp.status,'SQLSTATE',sqlstate||'não informado',
+        'Mensagem:',String(data?.message||'Erro não especificado').slice(0,450),
+        'Detalhe:',String(data?.details||'').slice(0,450));
+    }
+    throw e;
+  }
   return data;
 }
 async function rows(table,params={},size=1000,maxPages=25) {
@@ -732,6 +755,50 @@ async function enriquecerRegistros(registros, table) {
   return registros.map(x=>{const encontrado=porEan.get(norm(x.ean))||porInterno.get(norm(x.codigo_interno));return {...x,descricao:encontrado?.descricao||norm(x.descricao_original)||null,secao:encontrado?.secao||null,grupo:encontrado?.grupo||null,ean_resolvido:eanValido(x.ean)?x.ean:encontrado?.ean||null};});
 }
 
+// Sugestões por evidências reais da MESMA loja. Operação apenas de leitura:
+// a atribuição continua pela RPC v45, exigindo confirmação do administrador.
+async function sugestoesResponsavelQueima(req,actor,query){
+ if(req.method!=='GET')throw bad('Método não permitido.',405);
+ if(actor.perfil!=='admin')throw bad('Somente administrador da loja pode sugerir responsáveis.',403);
+ const loja=actorLoja(actor,query.get('loja'));
+ const id=norm(query.get('id'));
+ if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador de Queima inválido.',422);
+ const item=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null',
+  select:'id,ean,validade,estado,aprovado_via_importacao,sem_responsavel_importacao'});
+ if(!item||item.estado!=='aprovado'||item.aprovado_via_importacao!==true||item.sem_responsavel_importacao!==true)
+  throw bad('Produto importado sem responsável não encontrado nesta loja. Atualize a lista.',409);
+ const ean=norm(item.ean);
+ const funcionarios=await rows('usuarios',{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',
+  excluido_em:'is.null',select:'id,nome,perfil,ativo,excluido_em',order:'nome.asc'},200,3);
+ let grupo='',secao='',responsavelGrupoId=null,mapasProduto=[],mapasGrupo=[];
+ if(eanValido(ean)){
+  const produto=await one('produtos',{ean:`eq.${ean}`,select:'ean,secao,grupo'});
+  grupo=norm(produto?.grupo);secao=norm(produto?.secao);
+  mapasProduto=await rows('mapa_lancamentos',{loja_id:`eq.${loja}`,ean:`eq.${ean}`,tipo_mapa:'eq.funcionario',
+   excluido_em:'is.null',select:'funcionario_id,ean,validade'},300,5);
+  if(grupo){
+   const organizado=await one('organizacao_grupos',{loja_id:`eq.${loja}`,grupo_chave:`eq.${grupo.trim().toLowerCase()}`,
+    select:'responsavel_id,grupo'});
+   responsavelGrupoId=organizado?.responsavel_id||null;
+   // Amostra limitada dos mapas de outros produtos do MESMO grupo e seção.
+   // Nunca infere titular a partir de um mapa especial ou de outra loja.
+   const relacionados=await rows('produtos',{grupo:`eq.${grupo}`,secao:`eq.${secao}`,
+    select:'ean',order:'ean.asc'},75,1);
+   const codigos=[...new Set(relacionados.map(p=>norm(p.ean)).filter(x=>eanValido(x)&&x!==ean))].slice(0,70);
+   if(codigos.length){
+    for(let i=0;i<codigos.length;i+=35){
+     mapasGrupo.push(...await rows('mapa_lancamentos',{loja_id:`eq.${loja}`,tipo_mapa:'eq.funcionario',
+      excluido_em:'is.null',ean:`in.(${codigos.slice(i,i+35).join(',')})`,select:'funcionario_id,ean'},250,2));
+    }
+   }
+  }
+ }
+ const sugestoes=ordenarSugestoesQueima({funcionarios,mapasProduto,mapasGrupo,responsavelGrupoId,validadeProduto:item.validade,limite:6});
+ return {sucesso:true,queima_id:item.id,grupo,secao,ean,validade:item.validade,
+  sugestoes,funcionarios:funcionarios.map(u=>({id:u.id,nome:u.nome})),
+  aviso:'Sugestões baseadas em mapas e na organização por grupo; não são atribuições automáticas.'};
+}
+
 async function genericRecords(req,actor,body,query,table,extras={}) {
   const loja=actorLoja(actor,body.loja||query.get('loja'));
   if(req.method==='GET') {
@@ -1223,6 +1290,7 @@ async function handle(req){
   if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
   if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
+  if(pathname==='/queima/sugestoes'&&req.method==='GET')return sugestoesResponsavelQueima(req,actor,query);
   if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);
   if(pathname==='/queima/conciliar-relatorio'&&req.method==='POST')return conciliarRelatorioQueima(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
@@ -1251,7 +1319,22 @@ export default async function handler(req,res){
     if(code>=500){
       console.error(`[API ${referencia}] ${req.method} ${String(req.url).split('?')[0]} - ${e.name}: ${e.message}`);
     }
+    const rota=String(req.url||'').includes('queima/conciliar-relatorio');
+    const diagnosticoSql=rota&&typeof e.upstreamCode==='string'?e.upstreamCode:null;
+    const causa={
+      '57014':'A consulta ultrapassou o limite de tempo do banco. Tente diagnosticar uma amostra do relatório.',
+      '42702':'A função SQL possui uma referência ambígua a coluna ou variável.',
+      '42703':'A função SQL utiliza uma coluna inexistente no esquema atual.',
+      '42883':'A função SQL chamada não corresponde à versão instalada no banco.',
+      '23502':'A operação encontrou um campo obrigatório sem valor no banco.',
+      '23505':'O banco detectou uma chave duplicada ao processar a conciliação.',
+      'PGRST202':'A função de conciliação não foi encontrada no cache do Supabase.'
+    };
     const mensagem=code===503?'Serviço indisponível: confira as variáveis de ambiente no Vercel.':
+      rota&&code>=500?(diagnosticoSql&&causa[diagnosticoSql]
+        ?`Erro Supabase (${diagnosticoSql}): ${causa[diagnosticoSql]}`
+        :`Falha da conciliação no Supabase${diagnosticoSql?` (código ${diagnosticoSql})`:''}. Consulte os logs do Vercel usando a referência.`):
+      code===504?'A conexão com o banco excedeu o tempo de execução.':
       code===502?'Falha na comunicação com o Supabase. Verifique a conexão e tente novamente.':
       code>=500?'Erro interno no servidor. Consulte os logs do Vercel com a referência informada.':e.message;
     json(res,code,{sucesso:false,mensagem,...(code>=500?{referencia}:{})});

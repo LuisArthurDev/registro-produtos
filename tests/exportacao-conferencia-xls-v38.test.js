@@ -120,6 +120,6 @@ test('interface disponibiliza Exportar XLS, sem alterar o botão Copiar Procfit'
  assert.match(app,/link\.download='conferencia-procfit-'.+\.xls'/);
  assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
  assert.doesNotMatch(app,/Exportar conferência CSV|id="compare-csv"/);
- assert.match(sw,/registro-validades-v45-queima-sem-responsavel/);
+ assert.match(sw,/registro-validades-v47-diagnostico-conciliacao-supabase/);
  assert.match(sw,/\/assets\/conferencia-xls\.js/);
 });
