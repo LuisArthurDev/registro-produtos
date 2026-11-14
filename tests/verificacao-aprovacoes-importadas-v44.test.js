@@ -108,7 +108,7 @@ test('Badge, filtro pendentes/verificados e botão Verificado estão na tela de 
 });
 test('PWA e workflow incluem a nova migração e versão do badge',()=>{
  const worker=read('public/sw.js'),yaml=read('.github/workflows/migracao-supabase.yml');
- assert.match(worker,/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(worker,/registro-validades-v54-importacao-historica-grupos/);
  assert.match(yaml,/verificar_aprovacoes_importadas_v44/);
  assert.match(yaml,/supabase\/026_verificacao_aprovacoes_importadas\.sql/);
 });

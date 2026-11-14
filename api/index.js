@@ -765,7 +765,7 @@ async function listarLancamentosTitularidade(actor,query){
   const dados=await filtrarRegistrosSecao(lista.map(x=>({...x,catalogo:x.produtos||catalogo.get(x.ean)||{}})),actor.loja_id);
   return {sucesso:true,quantidade:dados.length,secoes:[...new Set(dados.map(x=>norm(x.catalogo?.secao)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),
     registros:dados.map(x=>({id:x.id,ean:x.ean,lote:x.lote,validade:x.validade,quantidade:x.quantidade,mes_lancamento:x.mes_lancamento,
-      mapa_nome:x.mapa_nome,secao:norm(x.catalogo?.secao),descricao:norm(x.catalogo?.descricao)}))};
+      mapa_nome:x.mapa_nome,grupo:norm(x.catalogo?.grupo),secao:norm(x.catalogo?.secao),descricao:norm(x.catalogo?.descricao)}))};
 }
 async function transferirTitularidade(actor,body){
   if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode transferir lançamentos.',403);
@@ -807,6 +807,7 @@ async function sugestoesResponsavelQueima(req,actor,query){
  if(req.method!=='GET')throw bad('Método não permitido.',405);
  if(actor.perfil!=='admin')throw bad('Somente administrador da loja pode sugerir responsáveis.',403);
  const loja=actorLoja(actor,query.get('loja'));
+ let consultaParcial=false;
  const id=norm(query.get('id'));
  if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador de Queima inválido.',422);
  const item=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,excluido_em:'is.null',
@@ -814,35 +815,61 @@ async function sugestoesResponsavelQueima(req,actor,query){
  if(!item||item.estado!=='aprovado'||item.aprovado_via_importacao!==true||item.sem_responsavel_importacao!==true)
   throw bad('Produto importado sem responsável não encontrado nesta loja. Atualize a lista.',409);
  const ean=norm(item.ean);
- const funcionarios=await rows('usuarios',{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',
-  excluido_em:'is.null',select:'id,nome,perfil,ativo,excluido_em',order:'nome.asc'},200,3);
+ const funcionarios=[];
+ let ultimoFuncionario;
+ for(;;){
+  const lote=await db('usuarios',{params:{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',
+   excluido_em:'is.null',select:'id,nome,perfil,ativo,excluido_em',order:'id.asc',limit:200,
+   ...(ultimoFuncionario?{id:`gt.${ultimoFuncionario}`}:{})}});
+  if(!lote.length)break;
+  funcionarios.push(...lote);
+  ultimoFuncionario=lote.at(-1).id;
+ }
+ funcionarios.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
  let grupo='',secao='',responsavelGrupoId=null,mapasProduto=[],mapasGrupo=[];
  if(eanValido(ean)){
   const produto=await one('produtos',{ean:`eq.${ean}`,select:'ean,secao,grupo'});
   grupo=norm(produto?.grupo);secao=norm(produto?.secao);
-  mapasProduto=await rows('mapa_lancamentos',{loja_id:`eq.${loja}`,ean:`eq.${ean}`,tipo_mapa:'eq.funcionario',
-   excluido_em:'is.null',select:'funcionario_id,ean,validade'},300,5);
+  // Consulta limitada por relevância, sem tentar esgotar todos os mapas históricos.
+  // rows(...,300,5) encerrava em 413 se 1500 ou mais registros fossem encontrados.
+  try{
+   mapasProduto=(await db('mapa_lancamentos',{params:{loja_id:`eq.${loja}`,ean:`eq.${ean}`,
+    tipo_mapa:'eq.funcionario',excluido_em:'is.null',select:'funcionario_id,ean,validade',
+    order:'criado_em.desc',limit:180}})).slice(0,180);
+   consultaParcial ||= mapasProduto.length>=180;
+  }catch(erro){console.warn('[Sugestoes Queima] Historico de EAN indisponivel:',erro?.upstreamCode||erro?.status||'erro');consultaParcial=true;}
   if(grupo){
-   const organizado=await one('organizacao_grupos',{loja_id:`eq.${loja}`,grupo_chave:`eq.${grupo.trim().toLowerCase()}`,
-    select:'responsavel_id,grupo'});
-   responsavelGrupoId=organizado?.responsavel_id||null;
-   // Amostra limitada dos mapas de outros produtos do MESMO grupo e seção.
-   // Nunca infere titular a partir de um mapa especial ou de outra loja.
-   const relacionados=await rows('produtos',{grupo:`eq.${grupo}`,secao:`eq.${secao}`,
-    select:'ean',order:'ean.asc'},75,1);
-   const codigos=[...new Set(relacionados.map(p=>norm(p.ean)).filter(x=>eanValido(x)&&x!==ean))].slice(0,70);
-   if(codigos.length){
-    for(let i=0;i<codigos.length;i+=35){
-     mapasGrupo.push(...await rows('mapa_lancamentos',{loja_id:`eq.${loja}`,tipo_mapa:'eq.funcionario',
-      excluido_em:'is.null',ean:`in.(${codigos.slice(i,i+35).join(',')})`,select:'funcionario_id,ean'},250,2));
+   try{
+    const organizado=await one('organizacao_grupos',{loja_id:`eq.${loja}`,grupo_chave:`eq.${grupo.trim().toLowerCase()}`,
+     select:'responsavel_id,grupo'});
+    responsavelGrupoId=organizado?.responsavel_id||null;
+   }catch(erro){
+    consultaParcial=true;
+    console.warn('[Sugestoes Queima] Organização indisponível:',erro?.upstreamCode||erro?.status||'erro');
+   }
+   // Usa uma amostra dos mapas de outros produtos do mesmo grupo e seção.
+   try{
+    const relacionados=await db('produtos',{params:{grupo:`eq.${grupo}`,secao:`eq.${secao}`,
+      select:'ean',order:'ean.asc',limit:70}});
+    consultaParcial ||= relacionados.length>=70;
+    const codigos=[...new Set(relacionados.map(p=>norm(p.ean)).filter(x=>eanValido(x)&&x!==ean))].slice(0,65);
+    for(let i=0;i<codigos.length;i+=30){
+     const amostra=await db('mapa_lancamentos',{params:{loja_id:`eq.${loja}`,
+      tipo_mapa:'eq.funcionario',excluido_em:'is.null',ean:`in.(${codigos.slice(i,i+30).join(',')})`,
+      select:'funcionario_id,ean',order:'criado_em.desc',limit:120}});
+     consultaParcial ||= amostra.length>=120;
+     mapasGrupo.push(...amostra.slice(0,120));
     }
+   }catch(erro){
+    consultaParcial=true;
+    console.warn('[Sugestoes Queima] Amostra de grupo indisponivel:',erro?.upstreamCode||erro?.status||'erro');
    }
   }
  }
  const sugestoes=ordenarSugestoesQueima({funcionarios,mapasProduto,mapasGrupo,responsavelGrupoId,validadeProduto:item.validade,limite:6});
  return {sucesso:true,queima_id:item.id,grupo,secao,ean,validade:item.validade,
-  sugestoes,funcionarios:funcionarios.map(u=>({id:u.id,nome:u.nome})),
-  aviso:'Sugestões baseadas em mapas e na organização por grupo; não são atribuições automáticas.'};
+  sugestoes,funcionarios:funcionarios.map(u=>({id:u.id,nome:u.nome})),consulta_parcial:consultaParcial,
+  aviso:consultaParcial?'Histórico consultado por amostragem. As sugestões são indicativas; confira a organização antes de atribuir.':'Sugestões baseadas em mapas e na organização por grupo; não são atribuições automáticas.'};
 }
 
 async function genericRecords(req,actor,body,query,table,extras={}) {
@@ -897,6 +924,15 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(!atualizado?.length)throw bad('Registro modificado por outra operação; atualize e tente novamente.',409);
     await audit(actor,'excluir_queima',{id,estado_anterior:atual.estado,registro_queima:atual.registro_queima,
       origem_relatorio_chave:atual.origem_relatorio_chave,quantidade:atual.quantidade});return {sucesso:true};
+  }
+  if(req.method==='PATCH'&&table==='queima'&&body.acao==='atribuir_importacao_lote'){
+    const uid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    const ids=body.ids,responsavel=norm(body.responsavel_id);
+    if(!Array.isArray(ids)||!ids.length||ids.length>2000||ids.some(id=>typeof id!=='string'||!uid.test(id))||!uid.test(responsavel))
+      throw bad('Seleção ou responsável inválido.',422);
+    return db('rpc/atribuir_responsavel_queima_lote_v54',{method:'POST',body:{
+      p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_responsavel_id:responsavel
+    }});
   }
   if(req.method==='PATCH'&&table==='queima'&&body.acao==='atribuir_importacao'){
     const id=norm(body.id),responsavel=norm(body.responsavel_id);
@@ -1112,7 +1148,7 @@ async function pendencias(req,actor,body,query){
       const mapa=norm(orig.mapa_nome),tipoMapa=norm(orig.tipo_mapa);
       if(tipoMapa!=='funcionario'&&!specials.includes(tipoMapa))throw bad('Tipo de mapa desconhecido.');
       let usuario=null;
-      if(tipoMapa==='funcionario'){
+      if(tipoMapa==='funcionario'&&mapa!=='Sem responsável'){
         usuario=await one('usuarios',{loja_id:`eq.${store}`,nome_normalizado:`eq.${normalizarNome(mapa)}`,select:'id'});
         if(!usuario)throw bad('Funcionário do mapa não está cadastrado na loja. Cadastre-o primeiro.',409);
       }

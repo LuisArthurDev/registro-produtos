@@ -1,3 +1,5 @@
+> **V53 — Sugestões da Queima, tabela compacta e menu lateral recolhido.** Veja [ATUALIZAR-V53.md](ATUALIZAR-V53.md).
+
 > **V51 — Visualização com Queima aprovada por funcionário, prevenção de timeout na prévia XLSX e edição das duas validades.** Execute a migração **SQL 030** antes de atualizar a API e a PWA. Guia: [ATUALIZAR-V51-VISUALIZACAO-QUEIMA-TIMEOUT-VALIDADES.md](ATUALIZAR-V51-VISUALIZACAO-QUEIMA-TIMEOUT-VALIDADES.md).
 
 > **V50:** Importação Procfit de todos os produtos `S` ainda não lançados, **sem exigir preço nem catálogo/EAN**, apenas validade futura (não vencido nem vencendo hoje). SQL 029 obrigatória. [Guia V50](ATUALIZAR-V50-IMPORTAR-TODOS-S-NAO-VENCIDOS.md).

@@ -48,10 +48,14 @@ function mock(role='admin',flags={}){
   let data=[];
   if(table==='sessoes')data=[{token_hash:hash,usuario_id:ad,expira_em:'2099-01-01',ultima_atividade:new Date().toISOString(),manter_conectado:true}];
   else if(table==='usuarios'&&!params.has('perfil'))data=[{id:ad,nome:'Admin',perfil:role,loja_id:'151',ativo:true}];
-  else if(table==='usuarios')data=usuarios;
+  else if(table==='usuarios'){
+   const equipe=flags.equipe||usuarios;
+   const cursor=params.get('id')?.slice(3)||'';
+   data=equipe.filter(u=>u.ativo&&u.id>cursor).slice(0,Number(params.get('limit')));
+  }
   else if(table==='queima')data=flags.notEligible?[]:[{id:item,loja_id:'151',ean:'07898962711477',validade:'2026-12-30',estado:'aprovado',aprovado_via_importacao:true,sem_responsavel_importacao:true}];
   else if(table==='produtos'&&params.has('ean')&&params.get('ean').startsWith('eq.'))data=[{ean:'07898962711477',secao:'CONVENIENCIA',grupo:'DOCES'}];
-  else if(table==='produtos')data=[{ean:'07898962711477'},{ean:'7898962711477'},{ean:'7891234567890'}];
+  else if(table==='produtos')data=flags.muitosProdutos?Array.from({length:75},(_,i)=>({ean:String(7890000000000+i)})):[{ean:'07898962711477'},{ean:'7898962711477'},{ean:'7891234567890'}];
   else if(table==='organizacao_grupos')data=[{responsavel_id:bruna,grupo:'DOCES'}];
   else if(table==='mapa_lancamentos'&&params.get('ean')?.startsWith('eq.'))data=[{funcionario_id:alice,ean:'07898962711477',validade:'2026-12-30'}];
   else if(table==='mapa_lancamentos')data=[{funcionario_id:carlos,ean:'7891234567890'}];
@@ -80,6 +84,29 @@ test('API devolve candidatos da própria loja, com evidência e sem editar a Que
  }finally{m.restore();}
 });
 
+test('grupo com 75 produtos não retorna 413 e sinaliza sugestão parcial em vez de bloquear a atribuição',async()=>{
+ const m=mock('admin',{muitosProdutos:true});try{
+  const r=await m.request(`/queima/sugestoes?id=${item}`);
+  assert.equal(r.statusCode,200,JSON.stringify(r.value));
+  assert.equal(r.value.consulta_parcial,true);
+  assert.match(r.value.aviso,/amostragem/);
+  assert.ok(r.value.funcionarios.some(x=>x.id===alice));
+  assert.ok(m.calls.filter(x=>x.table==='mapa_lancamentos').length<=4);
+  assert.ok(m.calls.filter(x=>x.table==='produtos'&&x.params.has('grupo')).every(x=>Number(x.params.get('limit'))<=70));
+  assert.ok(m.calls.every(x=>x.method==='GET'));
+ }finally{m.restore();}
+});
+
+test('sugestões deixam atribuir a qualquer funcionário mesmo após 600 resultados',async()=>{
+ const equipe=Array.from({length:601},(_,i)=>funcionario(String(i).padStart(8,'0')+'-0000-4000-8000-000000000000','Pessoa '+i));
+ const m=mock('admin',{equipe});try{
+  const r=await m.request(`/queima/sugestoes?id=${item}`);
+  assert.equal(r.statusCode,200,JSON.stringify(r.value));
+  assert.equal(r.value.funcionarios.length,601);
+  assert.ok(r.value.funcionarios.some(x=>x.id===equipe.at(-1).id));
+ }finally{m.restore();}
+});
+
 test('API recusa funcionário, id inválido e item que deixou de estar sem responsável',async()=>{
  for(const [role,flags,path,code] of [
   ['funcionario',{},`/queima/sugestoes?id=${item}`,403],
@@ -102,5 +129,5 @@ test('frontend tem modal global e por produto, opção manual e confirmação an
  assert.match(app,/Escolher funcionário/);
  assert.match(app,/confirmDialog\('Confirmar atribuição'/);
  assert.match(app,/acao:'atribuir_importacao'/);
- assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(sw,/registro-validades-v54-importacao-historica-grupos/);
 });

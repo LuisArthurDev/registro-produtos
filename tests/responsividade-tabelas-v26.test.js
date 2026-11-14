@@ -46,5 +46,5 @@ test('V28: linhas compactas preservadas, sem scroll horizontal',()=>{
 
 test('PWA inclui o novo módulo e usa cache atualizado',()=>{
  assert.match(sw,/tabelas-responsivas\.js/);
- assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(sw,/registro-validades-v54-importacao-historica-grupos/);
 });

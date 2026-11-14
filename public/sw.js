@@ -1,6 +1,6 @@
 // Service worker conservador: recursos estáticos ficam disponíveis offline; API nunca é cacheada.
-const NAME='registro-validades-v51-visualizacao-queima-timeout-validades';
-const STATIC=['/','/index.html','/lancamentos.html','/visualizacao.html','/assets/visualizacao.js','/assets/queima-grafico.js','/assets/app.css','/assets/app.js','/assets/filtros-persistentes.js','/assets/tabelas-responsivas.js','/assets/conciliacao-estoque.js','/assets/filtro-conferencia-procfit.js','/assets/paginacao-completa.js','/assets/procfit.js','/assets/conferencia-xls.js','/assets/queima-xls.js','/assets/queima-relatorio-xlsx.js','/assets/queima-conciliacao-lotes.js','/assets/procfit-preparacao-tdb.js','/assets/icones-acoes.js','/assets/organizacao-secoes.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/estoque-importacao.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];
+const NAME='registro-validades-v54-importacao-historica-grupos';
+const STATIC=['/','/index.html','/lancamentos.html','/visualizacao.html','/assets/visualizacao.js','/assets/queima-grafico.js','/assets/app.css?v=53','/assets/app.js?v=54','/assets/filtros-persistentes.js','/assets/tabelas-responsivas.js','/assets/conciliacao-estoque.js','/assets/filtro-conferencia-procfit.js','/assets/paginacao-completa.js','/assets/procfit.js','/assets/conferencia-xls.js','/assets/queima-xls.js','/assets/queima-relatorio-xlsx.js','/assets/queima-conciliacao-lotes.js','/assets/procfit-preparacao-tdb.js','/assets/icones-acoes.js','/assets/organizacao-secoes.js','/assets/push.js','/assets/scanner.js','/assets/ods.js','/assets/estoque-importacao.js','/assets/validade.js','/icon-192.png','/manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(NAME).then(c=>c.addAll(STATIC)));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const name of await caches.keys())if(name.startsWith('registro-validades-')&&name!==NAME)await caches.delete(name);await self.clients.claim();})());});
 self.addEventListener('fetch',event=>{
@@ -9,7 +9,7 @@ self.addEventListener('fetch',event=>{
  const url=new URL(req.url);
  if(url.origin!==self.location.origin)return;
  event.respondWith((async()=>{
-   try{const res=await fetch(req);if(res.ok&&STATIC.includes(url.pathname)){const c=await caches.open(NAME);c.put(req,res.clone());}return res;}
+   try{const res=await fetch(req);if(res.ok&&STATIC.includes(url.pathname+url.search)){const c=await caches.open(NAME);c.put(req,res.clone());}return res;}
    catch{const cached=await caches.match(req);if(cached)return cached;if(req.mode==='navigate')return (await caches.match('/index.html'))||Response.error();return Response.error();}
  })());
 });

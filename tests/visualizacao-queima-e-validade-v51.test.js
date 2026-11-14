@@ -94,7 +94,7 @@ test('SQL030 otimiza catálogo para um lote de 10 e preserva apenas novas aprova
  assert.match(sql,/NEW\.validade <= \(now\(\) AT TIME ZONE 'America\/Sao_Paulo'\)::date/);
  const wf=read('.github/workflows/migracao-supabase.yml');assert.match(wf,/queima_timeout_e_validade_v51/);
  assert.match(wf,/supabase\/030_conciliacao_queima_indice_lotes_editar_validade\.sql/);
- assert.match(read('public/sw.js'),/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(read('public/sw.js'),/registro-validades-v54-importacao-historica-grupos/);
 });
 
 test('Timeout SQL 57014 reduz progressivamente o lote sem perder linhas, na prévia e na confirmação',async()=>{

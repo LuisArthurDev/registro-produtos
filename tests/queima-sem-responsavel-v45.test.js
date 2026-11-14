@@ -107,5 +107,5 @@ test('Migração 027 disponível no GitHub Actions e cache de frontend atualizad
  const sw=source('public/sw.js');
  assert.match(workflow,/responsaveis_queima_importada_v45/);
  assert.match(workflow,/supabase\/027_queima_importada_sem_responsavel\.sql/);
- assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(sw,/registro-validades-v54-importacao-historica-grupos/);
 });

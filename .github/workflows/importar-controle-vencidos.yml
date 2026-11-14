@@ -1,0 +1,39 @@
+name: Importar Controle de Vencidos (setembro e outubro de 2026)
+on:
+  workflow_dispatch:
+    inputs:
+      loja:
+        description: Loja de destino
+        default: '151'
+        required: true
+        type: string
+      gravar:
+        description: Gravar no Supabase (desmarcado executa a prévia)
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: supabase-migracao
+  cancel-in-progress: false
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      CONTROLE_BUCKET: ${{ vars.CONTROLE_BUCKET || 'migracao' }}
+      LOJA_DESTINO: ${{ inputs.loja }}
+      GRAVAR: ${{ inputs.gravar }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install openpyxl==3.1.5
+      - name: Ler planilha e importar
+        run: |
+          args=(--loja "$LOJA_DESTINO")
+          if [[ "$GRAVAR" == true ]]; then args+=(--apply); fi
+          python scripts/importar_controle_vencidos.py "${args[@]}"

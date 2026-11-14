@@ -42,7 +42,7 @@ async function simulate(path,method='GET',payload={}){
 test('Página nova usa o mesmo app, possui layout próprio e scanner permanece em Lançamentos',()=>{
  const html=read('public/visualizacao.html'),launch=read('public/lancamentos.html'),js=read('public/assets/app.js');
  assert.match(html,/<body class="launch-route view-route">/);
- assert.match(html,/src="\/assets\/app.js"/);
+ assert.match(html,/src="\/assets\/app\.js\?v=54"/);
  assert.match(js,/case 'visualizacao':await renderVisualizacao/);
  assert.match(js,/IS_VIEW_PAGE/);
  assert.match(js,/href="\/visualizacao.html"/);

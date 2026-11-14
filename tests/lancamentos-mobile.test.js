@@ -7,7 +7,7 @@ test('lancamentos.html é uma página verdadeira e não um redirecionamento',()=
  assert.match(standalone,/<body class="launch-route">/);
  assert.match(standalone,/<main id="content"/);
  assert.match(standalone,/id="ean-scanner-dialog"/);
- assert.match(standalone,/src="\/assets\/app.js"/);
+ assert.match(standalone,/src="\/assets\/app\.js\?v=54"/);
  assert.doesNotMatch(standalone,/http-equiv="refresh"/);
  assert.doesNotMatch(standalone,/location.replace/);
 });
@@ -26,6 +26,6 @@ test('página suporta 320 a 800 pixels, entrada por câmera e áreas de toque',(
  assert.match(css,/\.launch-route #form-launch input/);
  assert.match(css,/min-height:48px/);
  assert.match(css,/safe-area-inset-bottom/);
- assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
+ assert.match(sw,/registro-validades-v54-importacao-historica-grupos/);
  assert.match(sw,/lancamentos\.html/);
 });
