@@ -1,3 +1,5 @@
+> **v40: Importação XLS de Queima com Registro, proibição de produtos vencidos e campos de Gôndola apenas ao aprovar.** Consulte [o guia da v40](ATUALIZAR-V40-IMPORTACAO-XLS-QUEIMA-SEM-VENCIDOS.md) e aplique a **SQL 022** antes do deploy.
+
 > **Atualização v35:** filtros mantidos após recarregar e marcação em lote de Fórmulas Especiais. Leia [o guia da v35](ATUALIZAR-V35-FILTROS-FORMULAS-LOTE.md). Requer SQL 021 no Supabase após SQL 020.
 
 > **Versão v34 — Fórmulas Especiais, histórico completo pelo olho na Visualização, Queima com Validade e Preço da Gôndola.** [Guia de instalação](ATUALIZAR-V34-FORMULAS-ESPECIAIS-GONDOLA-HISTORICO.md) — executar **SQL 020** antes do deploy.
@@ -210,3 +212,8 @@ O botão da conferência foi restaurado para **Copiar para Conector Procfit — 
 ## V38 — Exportar XLS da Conferência
 
 O botão **Exportar XLS** gera seis colunas (`Motivo`, `Codigo`, `Ean`, `Lote`, `Validade`, `Quantidade`) com o Código Interno como identificador preferencial; somente na ausência dele usa EAN. Quantidades são corrigidas pelo saldo, com filtros e regras de exclusão. Consulte [ATUALIZAR-V38-EXPORTAR-CONFERENCIA-XLS.md](ATUALIZAR-V38-EXPORTAR-CONFERENCIA-XLS.md).
+
+
+## Atualização v39 — Visualização somente Mapa/Lançamentos
+
+Na `visualizacao.html`, somente a aba **Mapa / Lançamentos** é exibida, com as opções **Por mês de lançamento** e **Validade (a vencer)**. As abas **Vencidos / Retiradas** e **Sinalizações** foram removidas da navegação. Consulte `ATUALIZAR-V39-VISUALIZACAO-SOMENTE-MAPA.md`.

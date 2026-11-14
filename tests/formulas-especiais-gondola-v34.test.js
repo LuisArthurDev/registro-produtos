@@ -11,11 +11,11 @@ const m1='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const m2='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const token='a'.repeat(64),hash=createHash('sha256').update(token).digest('hex');
 const EAN='07898962711477';
-function environment({perfil='admin',formula=false,tipo='Estoque'}={}){
+function environment({perfil='admin',formula=false,tipo='Estoque',validadeMapa='2027-12-31'}={}){
  const prev=globalThis.fetch,oldUrl=process.env.SUPABASE_URL,oldSecret=process.env.SUPABASE_SECRET_KEY;
  process.env.SUPABASE_URL='https://mock.supabase.co';process.env.SUPABASE_SECRET_KEY='sb_secret_test';
  let p={id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',ean:EAN,codigo_interno:'97362',descricao:'Produto da loja',secao:'HIGIENE',grupo:'BELEZA',formula_especial:formula};
- const mapa=[{id:m1,loja_id:'151',tipo_mapa:tipo,mapa_nome:tipo==='funcionario'?'Isabela':tipo,produto_id:p.id,ean:EAN,lote:'ABC123',validade:'2027-12-31',quantidade:3,excluido_em:null,produtos:{codigo_interno:'97362',descricao:'Produto da loja',secao:'HIGIENE',grupo:'BELEZA',formula_especial:formula}},
+ const mapa=[{id:m1,loja_id:'151',tipo_mapa:tipo,mapa_nome:tipo==='funcionario'?'Isabela':tipo,produto_id:p.id,ean:EAN,lote:'ABC123',validade:validadeMapa,quantidade:3,excluido_em:null,produtos:{codigo_interno:'97362',descricao:'Produto da loja',secao:'HIGIENE',grupo:'BELEZA',formula_especial:formula}},
   {id:m2,loja_id:'151',tipo_mapa:'funcionario',mapa_nome:'Isabela',ean:'07890000123456',lote:'XYZ',validade:'2027-11-30',quantidade:2,excluido_em:null,produtos:null}];
  const queimas=[
   {id:'q1',loja_id:'151',lancamento_id:m1,ean:EAN,lote:'ABC123',quantidade:3,estado:'pendente',criado_em:'2026-11-11T14:00:00Z',validade_gondola:'2026-11-29',preco_gondola:8.9},
@@ -87,43 +87,92 @@ test('Funcionário não altera Fórmulas Especiais e booleans em formato string 
 test('Mapa informa a marcação e bloqueia Fórmula Especial antes de encaminhar para Queima',async()=>{
  const env=environment({formula:true,tipo:'Estoque'});try{
   const m=await env.call('mapas');assert.equal(m.statusCode,200);assert.equal(m.data.registros[0].formula_especial,true);
-  const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',itens:[{id:m1,validade_gondola:'2026-11-30',preco_gondola:10}]});
-  assert.equal(r.statusCode,409);assert.ok(!env.calls.some(x=>x.table==='rpc/encaminhar_mapa_queima_itens_v34'));
+  const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
+  assert.equal(r.statusCode,409);assert.ok(!env.calls.some(x=>x.table==='rpc/encaminhar_mapa_queima_v40'));
  }finally{env.restore();}
 });
 test('Abas especiais não podem entrar em Queima (exceto Estoque)',async()=>{
  for(const tipo of ['Termolabil','Psicotropicos','Antibioticos']){
   const env=environment({tipo});try{
-   const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',itens:[{id:m1,validade_gondola:'2026-11-30',preco_gondola:10}]});
-   assert.equal(r.statusCode,409,tipo);assert.ok(!env.calls.some(x=>x.table==='rpc/encaminhar_mapa_queima_itens_v34'));
+   const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
+   assert.equal(r.statusCode,409,tipo);assert.ok(!env.calls.some(x=>x.table==='rpc/encaminhar_mapa_queima_v40'));
   }finally{env.restore();}
  }
 });
-test('Estoque pode enviar dois registros com preços e validades individuais em uma transação',async()=>{
+test('Estoque pode enviar dois registros para uma solicitação sem dados de gôndola no lançamento',async()=>{
  const env=environment({tipo:'Estoque'});try{
-  const itens=[{id:m1,validade_gondola:'2026-11-30',preco_gondola:5.9},{id:m2,validade_gondola:'2026-12-15',preco_gondola:12.4}];
-  const r=await env.call('mapas/encaminhar','POST',{ids:[m1,m2],destino:'queima',itens});
+  const registro_queima='166240';
+  const r=await env.call('mapas/encaminhar','POST',{ids:[m1,m2],destino:'queima',registro_queima});
   assert.equal(r.statusCode,200);assert.equal(r.data.resultado.processados,2);
-  const rpc=env.calls.filter(x=>x.table==='rpc/encaminhar_mapa_queima_itens_v34');assert.equal(rpc.length,1);
-  assert.deepEqual(rpc[0].body.p_itens,itens);
+  const rpc=env.calls.filter(x=>x.table==='rpc/encaminhar_mapa_queima_v40');assert.equal(rpc.length,1);
+  assert.deepEqual(rpc[0].body.p_ids,[m1,m2]);assert.equal(rpc[0].body.p_registro,registro_queima);
  }finally{env.restore();}
 });
 test('Queima manual de Fórmula Especial é bloqueada mesmo com dados válidos da Gôndola',async()=>{
  const env=environment({formula:true});try{
-  const r=await env.call('queima','POST',{ean:EAN,lote:'ABC123',validade:'2027-12-01',quantidade:2,validade_gondola:'2026-11-30',preco_gondola:8.90});
+  const r=await env.call('queima','POST',{ean:EAN,lote:'ABC123',validade:'2027-12-01',quantidade:2,registro_queima:'166240'});
   assert.equal(r.statusCode,409);assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='POST').length,0);
  }finally{env.restore();}
 });
-test('Queima manual exige validade e preço da gôndola; um preço negativo não grava',async()=>{
+test('Cadastro da Queima exige Registro e validade não vencida, mas não exige dados da gôndola',async()=>{
  const env=environment();try{
   const base={ean:EAN,lote:'L1',validade:'2027-12-01',quantidade:2};
   assert.equal((await env.call('queima','POST',base)).statusCode,422);
-  assert.equal((await env.call('queima','POST',{...base,validade_gondola:'2026-11-30',preco_gondola:-1})).statusCode,422);
-  assert.ok(!env.calls.some(x=>x.table==='queima'&&x.method==='POST'));
-  const good=await env.call('queima','POST',{...base,validade_gondola:'2026-11-30',preco_gondola:8.50});
-  assert.equal(good.statusCode,200);const insert=env.calls.find(x=>x.table==='queima'&&x.method==='POST');
-  assert.equal(insert.body.validade_gondola,'2026-11-30');assert.equal(insert.body.preco_gondola,8.5);
+  assert.equal((await env.call('queima','POST',{...base,registro_queima:'166240'})).statusCode,200);
+  const gravado=env.calls.find(x=>x.table==='queima'&&x.method==='POST');
+  assert.equal(gravado.body.registro_queima,'166240');
+  assert.equal(gravado.body.validade_gondola,undefined);assert.equal(gravado.body.preco_gondola,undefined);
  }finally{env.restore();}
+});
+test('API bloqueia cadastro manual vencido antes de chamar o banco',async()=>{
+ const env=environment();try{
+  const r=await env.call('queima','POST',{ean:EAN,lote:'ABC123',validade:'2000-01-01',quantidade:2,registro_queima:'166240'});
+  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/vencido/i);
+  assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='POST').length,0);
+ }finally{env.restore();}
+});
+test('API bloqueia encaminhamento do mapa vencido antes da RPC',async()=>{
+ const env=environment({validadeMapa:'2000-01-01'});try{
+  const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
+  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/vencido/i);
+  assert.equal(env.calls.filter(c=>c.table==='rpc/encaminhar_mapa_queima_v40').length,0);
+ }finally{env.restore();}
+});
+test('Aprovação exige Validade e Preço da Gôndola; novo lançamento não os preenche',async()=>{
+ const env=environment();try{
+  const sem=await env.call('queima','PATCH',{id:'q1',estado:'aprovado'});
+  assert.equal(sem.statusCode,422);
+  assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='PATCH').length,0);
+  const approved=await env.call('queima','PATCH',{id:'q1',estado:'aprovado',validade_gondola:'2026-11-30',preco_gondola:15.50});
+  assert.equal(approved.statusCode,200,JSON.stringify(approved.data));
+  const patch=env.calls.find(c=>c.table==='queima'&&c.method==='PATCH');
+  assert.equal(patch.body.estado,'aprovado');
+  assert.equal(patch.body.validade_gondola,'2026-11-30');assert.equal(patch.body.preco_gondola,15.5);
+ }finally{env.restore();}
+});
+test('API importa XLS pelo Registro, envia código interno e mantém as linhas repetidas',async()=>{
+ const env=environment();try{
+  const base={codigo_interno:'93301',ean:'',lote:'17316',validade:'2026-11-28',quantidade:1,motivo:4};
+  const linhas=[{linha:2,...base},{linha:3,...base}];
+  const r=await env.call('queima/importar-xls','POST',{registro:'166240',itens:linhas});
+  assert.equal(r.statusCode,200,JSON.stringify(r.data));
+  const rpc=env.calls.filter(c=>c.table==='rpc/importar_queima_xls_v40');
+  assert.equal(rpc.length,1);assert.equal(rpc[0].body.p_registro,'166240');
+  assert.deepEqual(rpc[0].body.p_itens.map(x=>x.linha),[2,3]);
+  assert.deepEqual(rpc[0].body.p_itens.map(x=>x.codigo_interno),['93301','93301']);
+ }finally{env.restore();}
+});
+test('Importação não aceita funcionário, registro inválido ou linhas duplicadas',async()=>{
+ const linhas=[{linha:2,codigo_interno:'93301',ean:'',lote:'A',validade:'2026-11-28',quantidade:2,motivo:4}];
+ const funcionario=environment({perfil:'funcionario'});try{
+  assert.equal((await funcionario.call('queima/importar-xls','POST',{registro:'166240',itens:linhas})).statusCode,403);
+  assert.equal(funcionario.calls.filter(c=>c.table==='rpc/importar_queima_xls_v40').length,0);
+ }finally{funcionario.restore();}
+ const admin=environment();try{
+  assert.equal((await admin.call('queima/importar-xls','POST',{registro:'abc',itens:linhas})).statusCode,422);
+  assert.equal((await admin.call('queima/importar-xls','POST',{registro:'166240',itens:[linhas[0],linhas[0]]})).statusCode,422);
+  assert.equal(admin.calls.filter(c=>c.table==='rpc/importar_queima_xls_v40').length,0);
+ }finally{admin.restore();}
 });
 test('Visualização retorna TODAS as Queimas do EAN, inclusive outros lotes e aprovados',async()=>{
  const env=environment({tipo:'Estoque'});try{
@@ -169,7 +218,7 @@ test('Interface possui olho no início, novos campos de Queima e os controles de
  assert.doesNotMatch(view,/data-view-info="\$\{link\(r\.id\)\}">ⓘ Queima/);
  assert.doesNotMatch(view,/request\('\/queima',\{method:'POST'/);
  assert.match(app,/data-formula-map/);assert.match(app,/data-product-formula/);
- assert.match(app,/const gondola=destino==='queima'\?await solicitarDadosGondola/);
+ assert.match(app,/const registro=destino==='queima'\?await solicitarRegistroQueima/);
  assert.match(app,/name="validade_gondola"/);assert.match(app,/name="preco_gondola"/);
  assert.match(html,/name="formula_especial"/);assert.match(html,/id="queima-gondola-dialog"/);
  assert.match(flow,/formulas_especiais_queima_gondola/);

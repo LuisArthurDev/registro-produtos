@@ -11,6 +11,7 @@ import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js';
 import { resumoQueima } from './queima-grafico.js';
+import { lerArquivoQueimaXls, vencidoParaQueima } from './queima-xls.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -542,34 +543,19 @@ function printableTable(target,makeAll){
  window.addEventListener('afterprint',done,{once:true});
  window.print();setTimeout(done,12000);
 }
-async function solicitarDadosGondola(registros){
+async function solicitarRegistroQueima(registros){
  const dlg=$('#queima-gondola-dialog'),form=$('#queima-gondola-form'),lista=$('#queima-gondola-items');
- if(!dlg||!form||!lista){toast('Formulário de Gôndola indisponível. Atualize a página.',true);return null;}
- if(!Array.isArray(registros)||!registros.length)return null;
- form.reset();
- lista.innerHTML=registros.map((r,i)=>`<fieldset class="gondola-item" data-registro-id="${H(r.id)}">
-   <legend>${i+1}. ${H(r.descricao||r.ean)} · EAN ${H(r.ean)} · Lote ${H(r.lote)} · ${H(r.quantidade)} un.</legend>
-   <div class="form-grid"><label>Validade da Gôndola<input type="date" name="validade_gondola" required></label>
-   <label>Preço da Gôndola (R$)<input type="number" name="preco_gondola" min="0" max="9999999999.99" step="0.01" required></label></div></fieldset>`).join('');
- $('#queima-gondola-count').textContent=`${registros.length} produto(s). Informe a Validade e o Preço da Gôndola de cada item.`;
+ if(!dlg||!form||!lista){toast('Formulário de Registro indisponível. Atualize a página.',true);return null;}
+ form.reset();lista.innerHTML=registros.slice(0,5).map(r=>`<p>${H(r.descricao||r.ean)} · Lote ${H(r.lote)}</p>`).join('');
+ $('#queima-gondola-count').textContent=`${registros.length} produto(s). Informe o Registro (número da solicitação Procfit).`;
  return new Promise(resolve=>{
-   let encerrado=false;
-   const finalizar=valor=>{if(encerrado)return;encerrado=true;dlg.close();resolve(valor);};
-   form.onsubmit=event=>{
-     event.preventDefault();
-     const itens=[...lista.querySelectorAll('.gondola-item')].map(item=>({
-       id:item.dataset.registroId,
-       validade_gondola:item.querySelector('[name="validade_gondola"]').value,
-       preco_gondola:Number(item.querySelector('[name="preco_gondola"]').value)
-     }));
-     if(itens.some(item=>!/^\d{4}-\d{2}-\d{2}$/.test(item.validade_gondola)||!Number.isFinite(item.preco_gondola)||item.preco_gondola<0)){
-       toast('Confira a validade e o preço da gôndola de cada produto.',true);return;
-     }
-     finalizar({itens});
-   };
-   dlg.oncancel=e=>{e.preventDefault();finalizar(null);};
-   $('#queima-gondola-cancel').onclick=()=>finalizar(null);
-   dlg.showModal();lista.querySelector('input')?.focus();
+  let encerrado=false;const finalizar=valor=>{if(encerrado)return;encerrado=true;dlg.close();resolve(valor);};
+  form.onsubmit=e=>{e.preventDefault();const registro_queima=form.elements.registro_queima.value.trim();
+   if(!/^\d{1,20}$/.test(registro_queima))return toast('Informe o número do Registro da Queima.',true);
+   finalizar({registro_queima});};
+  dlg.oncancel=e=>{e.preventDefault();finalizar(null);};
+  $('#queima-gondola-cancel').onclick=()=>finalizar(null);
+  dlg.showModal();form.elements.registro_queima.focus();
  });
 }
 function mapsTable(rows,{actions=false,selectable=false}={}){
@@ -577,7 +563,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span>${r.formula_especial?'<span class="pill amber" title="Não pode ser lançado na Queima nem copiado para o Procfit">Fórmula Especial</span>':''}<span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}</td>
- ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${statusVal(r.validade,r.secao)[0]==='Vencido'?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
@@ -692,10 +678,10 @@ async function mapas(forced=''){
      return;
    }
    const send=e.target.closest('[data-send-map]');if(send){const destino=send.dataset.sendTo,reg=rows.find(x=>x.id===send.dataset.sendMap);if(!reg)return;
-     if(destino==='queima'&&(reg.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(reg.tipo_mapa)))return toast('Este produto não pode entrar na Queima.',true);
-     const gondola=destino==='queima'?await solicitarDadosGondola([reg]):{};if(destino==='queima'&&!gondola)return;
+     if(destino==='queima'&&(reg.validade<nowBrISO()||reg.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(reg.tipo_mapa)))return toast('Este produto não pode entrar na Queima.',true);
+     const registro=destino==='queima'?await solicitarRegistroQueima([reg]):{};if(destino==='queima'&&!registro)return;
      if(!await confirmDialog(destino==='vencidos'?'Lançar como Vencido':'Lançar na Queima',`Encaminhar ${reg.quantidade} unidade(s) do EAN ${reg.ean} (${reg.mapa_nome})?`))return;
-     try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino,...gondola}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
+     try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino,...registro}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
    }
  };
  if(able){
@@ -760,11 +746,11 @@ async function mapas(forced=''){
   for(const destino of ['queima','vencidos'])$('#map-to-'+destino).onclick=async()=>{
    const ids=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0));
    if(!ids.length)return toast('Selecione ao menos um lançamento.',true);
-   if(destino==='queima'&&ids.some(id=>rows.some(r=>r.id===id&&(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome)))))return toast('Sua seleção contém Fórmulas Especiais ou abas especiais que não podem entrar na Queima.',true);
+   if(destino==='queima'&&ids.some(id=>rows.some(r=>r.id===id&&(r.validade<nowBrISO()||r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome)))))return toast('Sua seleção contém Fórmulas Especiais ou abas especiais que não podem entrar na Queima.',true);
    const selecionados=ids.map(id=>rows.find(r=>r.id===id)).filter(Boolean);
-   const gondola=destino==='queima'?await solicitarDadosGondola(selecionados):{};if(destino==='queima'&&!gondola)return;
+   const registro=destino==='queima'?await solicitarRegistroQueima(selecionados):{};if(destino==='queima'&&!registro)return;
    if(!await confirmDialog('Encaminhar '+ids.length+' produto(s)',destino==='queima'?'O lançamento original será preservado e incluído na Queima com motivo 4.':'A quantidade do mapa será zerada e o registro será preservado para auditoria.'))return;
-   try{await request('/mapas/encaminhar',{method:'POST',body:{ids,destino,...gondola}});toast('Encaminhamento concluído.');renderRoute(state.route);}catch(err){toast(err.message,true);}
+   try{await request('/mapas/encaminhar',{method:'POST',body:{ids,destino,...registro}});toast('Encaminhamento concluído.');renderRoute(state.route);}catch(err){toast(err.message,true);}
   };
  }
  apply();
@@ -1365,12 +1351,23 @@ async function notificacoes(){
  });
 }
 
+async function solicitarAprovacaoQueima(registro){
+ const dlg=$('#queima-aprovar-dialog'),form=$('#queima-aprovar-form');if(!dlg||!form)return null;
+ form.reset();$('#queima-aprovar-item').textContent=`Registro ${registro.registro_queima||'—'} · ${registro.descricao||registro.ean} · Lote ${registro.lote}`;
+ return new Promise(resolve=>{let done=false;const finish=x=>{if(done)return;done=true;dlg.close();resolve(x);};
+  form.onsubmit=e=>{e.preventDefault();const validade_gondola=form.elements.validade_gondola.value;
+   const preco_gondola=Number(form.elements.preco_gondola.value);
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(validade_gondola)||!Number.isFinite(preco_gondola)||preco_gondola<0)return toast('Confira validade e preço da gôndola.',true);
+   finish({validade_gondola,preco_gondola});};
+  dlg.oncancel=e=>{e.preventDefault();finish(null);};$('#queima-aprovar-cancel').onclick=()=>finish(null);
+  dlg.showModal();form.elements.validade_gondola.focus();});
+}
 async function generic(pathname,title){
  const d=await request(urlWithLoja('/'+pathname)),rows=d.registros||[];
  const isQueima=pathname==='queima',isVenc=pathname==='vencidos',isAudit=pathname==='auditoria',isSinal=pathname==='sinalizacoes',isTrans=pathname==='transferencias';
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- '<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
  ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select><label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
@@ -1378,10 +1375,23 @@ async function generic(pathname,title){
  ${isVenc?'<label>Código interno (opcional)<input name="codigo_interno"></label><label class="full">Descrição original<input name="descricao_original"></label>':''}
  ${isSinal?'<label class="full">Motivo / observação<input name="observacao" required maxlength="600"></label>':`<label>Lote<input name="lote" maxlength="100"></label><label>Validade<input type="date" name="validade"></label><label>Quantidade<input type="number" min="1" value="1" name="quantidade" required></label>`}
  ${isTrans?`<label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" required></label><label>Romaneio<input name="romaneio" maxlength="100" required></label><div class="notice full">Loja destino: ${H(state.user.loja)} (automática, não editável).</div>`:''}
- ${isQueima?'<label>Validade da Gôndola<input name="validade_gondola" type="date" required></label><label>Preço da Gôndola (R$)<input name="preco_gondola" type="number" min="0" step="0.01" required></label>':''}
+ ${isQueima?'<label>Registro da Queima<input name="registro_queima" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20" placeholder="166240" required></label>':''}
  ${isVenc?'<label>Motivo<select name="motivo"><option value="vencido">Vencido</option><option value="danificado">Danificado</option></select></label>':''}
  <div class="form-actions"><button class="primary">Registrar</button></div></form></section>`:'');
- const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','EAN','Descrição','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
+ if(isQueima){
+  $('#content').insertAdjacentHTML('beforeend',`<input type="file" id="queima-xls-file" accept=".xls,application/vnd.ms-excel" hidden>
+  <dialog id="queima-import-dialog" class="dialog dialog-wide"><div class="dialog-inner"><h2>Importar Queima do Procfit</h2>
+   <p id="queima-import-summary" role="status"></p><div id="queima-import-preview" class="queima-import-preview"></div>
+   <div class="dialog-actions"><button type="button" id="queima-import-cancel" class="btn-outline">Cancelar</button>
+   <button type="button" id="queima-import-confirm" class="primary">Registrar produtos válidos</button></div></div></dialog>
+  <dialog id="queima-aprovar-dialog" class="dialog"><form id="queima-aprovar-form" class="dialog-inner">
+   <h2>Aprovar produto na Queima</h2><p id="queima-aprovar-item"></p>
+   <div class="form-grid"><label>Validade da Gôndola<input type="date" name="validade_gondola" required></label>
+   <label>Preço da Gôndola (R$)<input type="number" name="preco_gondola" min="0" max="9999999999.99" step="0.01" required></label></div>
+   <div class="dialog-actions"><button id="queima-aprovar-cancel" type="button" class="btn-outline">Cancelar</button>
+   <button type="submit" class="primary">Aprovar com dados da Gôndola</button></div></form></dialog>`);
+ }
+ const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Registro','Data','EAN','Descrição','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
   const ean=r.ean_resolvido||r.ean||'Não informado',desc=r.descricao||r.descricao_original||'Sem descrição cadastrada';
@@ -1392,7 +1402,7 @@ async function generic(pathname,title){
     const lastMonth=mesBrasil(r.criado_em)!==nowBrISO().slice(0,7),pendente=r.estado==='pendente';
     const primary=pendente?(lastMonth?`<button class="action-link" data-relaunch="${H(r.id)}">Relançar</button>`:`<button class="action-link" data-approve="${H(r.id)}">Aprovar</button>`):`<button type="button" class="action-link" disabled title="Registro não pode ser aprovado novamente">${r.estado==='aprovado'?'Aprovado':'Relançado'}</button>`;
     const apagar=pendente?` <button class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`:'';
-    return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
+    return `<tr>${td(r.registro_queima)}<td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}</td><td class="row-actions">${primary}${apagar}</td></tr>`;
   }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
@@ -1406,14 +1416,14 @@ async function generic(pathname,title){
  $('#gen-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['gen-pages']);if(n>0){page=n-1;draw();}},{once:true});
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
-  const match={'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
+  const match={'Registro':x.registro_queima,'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
  })));
  $('#gen-list').onclick=async e=>{
   const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]');if(!appr&&!rel&&!sin&&!del)return;
   const id=appr?.dataset.approve||rel?.dataset.relaunch||sin?.dataset.sinal||del?.dataset.deleteBurn,old=rows.find(x=>x.id===id);if(!old)return;
   const action=appr?'aprovar':rel?'relançar':del?'excluir':'alterar sinalização para '+sin.dataset.status;
   if(!await confirmDialog('Confirmar operação',`Deseja ${action} este registro?`))return;
-  try{if(appr)await request('/queima',{method:'PATCH',body:{id,estado:'aprovado'}});
+  try{if(appr){const dados=await solicitarAprovacaoQueima(old);if(!dados)return;await request('/queima',{method:'PATCH',body:{id,estado:'aprovado',...dados}});}
    else if(rel)await request('/queima/relancar',{method:'POST',body:{id}});
    else if(del)await request('/queima',{method:'DELETE',body:{id}});
    else await request('/sinalizacoes',{method:'PATCH',body:{id,situacao:sin.dataset.status}});
@@ -1421,10 +1431,36 @@ async function generic(pathname,title){
   }catch(err){toast(err.message,true);}
  };
  const form=$('#generic-form');if(form)form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('[type="submit"]'),body=Object.fromEntries(new FormData(form));
-  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isTrans){body.requestId=form.dataset.requestId||newId();form.dataset.requestId=body.requestId;}if(isQueima){body.motivo='4';body.estado='pendente';}
+  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isTrans){body.requestId=form.dataset.requestId||newId();form.dataset.requestId=body.requestId;}if(isQueima){body.motivo='4';body.estado='pendente';if(vencidoParaQueima(body.validade,nowBrISO()))return toast('Produto vencido não pode ser lançado na Queima.',true);}
   if(isVenc&&!body.ean&&!body.codigo_interno)return toast('Informe EAN ou código interno.',true);
   btn.disabled=true;try{await request('/'+pathname,{method:'POST',body});toast('Registro incluído.');if(isTrans)delete form.dataset.requestId;renderRoute(state.route);}catch(err){toast(err.message,true);}finally{btn.disabled=false;}
  };
+ if(isQueima){
+   const file=$('#queima-xls-file'),dlg=$('#queima-import-dialog'),confirm=$('#queima-import-confirm');let preparado=null;
+   $('#queima-import-open').onclick=()=>file.click();
+   $('#queima-import-cancel').onclick=()=>dlg.close();
+   file.onchange=async()=>{const selected=file.files?.[0];file.value='';if(!selected)return;
+    try{
+      const dados=lerArquivoQueimaXls(await selected.arrayBuffer(),selected.name),hoje=nowBrISO();
+      const vencidos=dados.itens.filter(r=>vencidoParaQueima(r.validade,hoje));
+      const validos=dados.itens.filter(r=>!vencidoParaQueima(r.validade,hoje));
+      if(dados.itens.length>3000)throw new Error('Arquivo com mais de 3000 linhas. Divida o relatório.');
+      preparado=dados;
+      $('#queima-import-summary').textContent=`Registro ${dados.registro} · ${dados.itens.length} linha(s) · ${validos.length} com validade não vencida · ${vencidos.length} vencida(s) que serão ignoradas. Motivo 4. A aprovação e os dados da gôndola ficam para depois.`;
+      const primeiras=dados.itens.slice(0,40);
+      $('#queima-import-preview').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Linha</th><th>Produto</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Qtd.</th><th>Situação</th></tr></thead><tbody>${primeiras.map(x=>`<tr><td>${x.linha}</td><td>${H(x.codigo_interno||x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${x.quantidade}</td><td>${vencidoParaQueima(x.validade,hoje)?pill('Vencido · ignorar','red'):pill('Validar no catálogo','green')}</td></tr>`).join('')}</tbody></table></div>${dados.itens.length>40?`<p>Exibindo 40 de ${dados.itens.length} linhas. A importação considerará todas as linhas.</p>`:''}`;
+      confirm.disabled=!validos.length;dlg.showModal();
+    }catch(err){preparado=null;toast('Não foi possível ler o XLS: '+err.message,true);}
+   };
+   confirm.onclick=async()=>{if(!preparado)return;confirm.disabled=true;
+    try{const {registro,itens}=preparado;const res=await request('/queima/importar-xls',{method:'POST',body:{registro,itens},timeout:120000,retries:0});
+      const r=res.resultado||{};dlg.close();preparado=null;
+      toast(`Registro ${registro}: ${r.importados||0} lançado(s); ${r.ignorados_vencidos||0} vencido(s), ${r.ignorados_duplicados||0} já importado(s), ${r.ignorados_sem_catalogo||0} sem catálogo, ${r.ignorados_formula_especial||0} Fórmula(s) Especial(is), ${r.ignorados_abas_especiais||0} de abas especiais e ${r.ignorados_invalidos||0} inválidos ignorados.`);
+      await renderRoute(state.route);
+    }catch(err){toast('Falha na importação: '+err.message,true);$('#queima-import-summary').textContent='Importação não confirmada: '+err.message+' Confira o Registro antes de repetir.';}
+    finally{confirm.disabled=false;}
+   };
+ }
  apply();
 }
 async function transferenciasPainel(){

@@ -92,6 +92,6 @@ test('interface filtra antes de conciliar, usa apenas dados elegíveis na cópia
   assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
   assert.match(app,/gerarConferenciaXls\(elegiveis\)/);
   assert.match(app,/apenas os mapas dos funcionários e a aba especial/);
-  assert.match(sw,/registro-validades-v38-exportar-xls-conferencia/);
+  assert.match(sw,/registro-validades-v40-importar-queima-nao-vencidos/);
   assert.match(sw,/filtro-conferencia-procfit\.js/);
 });

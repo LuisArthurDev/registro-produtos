@@ -10,6 +10,13 @@ const norm = value => String(value ?? '').trim();
 export const normalizarNome = s => norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ');
 export const eanValido = ean => /^\d{8,14}$/.test(String(ean ?? ''));
 export const dataValida = iso => { if(!/^\d{4}-\d\d-\d\d$/.test(String(iso)))return false; const dt = new Date(iso+'T00:00:00Z'); return !isNaN(dt) && dt.toISOString().slice(0,10)===iso; };
+export function hojeSaoPaulo(data=new Date()){
+ const v=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(data).map(x=>[x.type,x.value]));
+ return `${v.year}-${v.month}-${v.day}`;
+}
+export const validadeVencidaParaQueima=(validade,hoje=hojeSaoPaulo())=>!dataValida(validade)||validade<hoje;
+const validarRegistroQueima=valor=>{const registro=norm(valor);if(!/^\d{1,20}$/.test(registro))throw bad('Informe o Registro da Queima (número da solicitação Procfit).',422);return registro;};
+const validarPrazoQueima=validade=>{if(validadeVencidaParaQueima(validade))throw bad('Produto vencido ou sem validade: não pode ser lançado na Queima.',409);return validade;};
 export function hashPin(pin,salt=randomBytes(24).toString('hex')) {
   if(!/^\d{6,12}$/.test(String(pin))) throw bad('O novo PIN deve ter 6 a 12 dígitos.');
   return `scrypt$${salt}$${scryptSync(String(pin), salt, 64).toString('hex')}`;
@@ -724,7 +731,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
   admin(actor);
   if(req.method==='POST'){
     const payload={...body};delete payload.loja;delete payload.sessao;
-    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa','codigo_interno','descricao_original','mapa_origem','validade_gondola','preco_gondola'];
+    const allowed=extras.allowed||['ean','lote','validade','quantidade','motivo','observacao','romaneio','loja_origem','loja_destino','lancamento_id','estado','origem_mapa','codigo_interno','descricao_original','mapa_origem','validade_gondola','preco_gondola','registro_queima'];
     const data=Object.fromEntries(Object.entries(payload).filter(([k])=>allowed.includes(k)));
     data[extras.lojaCol||'loja_id']=loja;
     if(extras.usuarioCol!==false)data[extras.usuarioCol||'usuario_id']=actor.id;
@@ -732,9 +739,12 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(table==='queima'&&!eanValido(data.ean))throw bad('EAN obrigatório na Queima.');
     if(table==='vencidos'&&!data.ean&&!data.codigo_interno)throw bad('Informe EAN ou código interno para a retirada.');
     if(table==='queima'){
-      Object.assign(data,validarDadosGondola(body));
+      data.registro_queima=validarRegistroQueima(body.registro_queima);
+      validarPrazoQueima(data.validade);
       await validarLiberacaoQueima({ean:norm(data.ean),lancamento_id:data.lancamento_id,origem_mapa:data.origem_mapa},loja);
-      data.motivo='4';
+      data.estado='pendente';data.motivo='4';
+      // No cadastro da Queima NÃO se informa gôndola; esses campos são da aprovação.
+      delete data.validade_gondola;delete data.preco_gondola;
     }
     if(table==='transferencias'){
       if(actor.perfil!=='admin')throw bad('Somente o administrador da loja pode registrar transferências.',403);
@@ -795,12 +805,14 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     const allowed=extras.patchAllowed||['estado','observacao','situacao'];const patch=Object.fromEntries(Object.entries(body).filter(([k])=>allowed.includes(k)));
     if(table==='queima'&&patch.estado&&!['pendente','aprovado'].includes(patch.estado))throw bad('Use a operação de relançar para preservar o histórico.');
     if(table==='queima'&&patch.estado==='aprovado'){
+      Object.assign(patch,validarDadosGondola(body));
       if(atual.estado!=='pendente')throw bad('Somente uma Queima pendente pode ser aprovada.',409);
       // O front exige relançar o mês anterior; mesmo a chamada direta não pode aprovar.
       const [yy,mm]=String(atual.criado_em).slice(0,7).split('-');
       const nowParts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
       if(`${yy}-${mm}`!==`${nowParts.year}-${nowParts.month}`)throw bad('Queima de mês anterior: relance antes de aprovar.',409);
     }
+    if(table==='queima'&&patch.estado!=='aprovado'&&(body.validade_gondola!==undefined||body.preco_gondola!==undefined))throw bad('Validade e Preço da Gôndola só podem ser informados na aprovação.',422);
     if(table==='sinalizacoes'&&patch.situacao&&!['aberto','resolvido','negado'].includes(patch.situacao))throw bad('Situação inválida.');
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração válida.');
     await db(table,{method:'PATCH',params:{id:`eq.${atual.id}`},body:patch});await audit(actor,'atualizar_'+table,{id:atual.id});return {sucesso:true};
@@ -976,18 +988,13 @@ async function encaminharMapa(req,actor,body){
   if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>!/^[0-9a-f-]{36}$/i.test(norm(id))))throw bad('Selecione de 1 a 100 registros válidos.');
   if(!['queima','vencidos'].includes(body.destino))throw bad('Destino inválido.');
   if(new Set(ids).size!==ids.length)throw bad('Não repita o mesmo registro na seleção.',422);
-  let dadosGondola=[];
+  let registroQueima=null;
   if(body.destino==='queima'){
-    if(!Array.isArray(body.itens)||body.itens.length!==ids.length)throw bad('Informe Validade e Preço da Gôndola de cada produto selecionado.',422);
-    const idsDeItens=new Set();
-    dadosGondola=body.itens.map(item=>{
-      const id=norm(item.id);
-      if(!ids.includes(id)||idsDeItens.has(id))throw bad('A lista de informações da Gôndola não corresponde à seleção.',422);
-      idsDeItens.add(id);return {id,...validarDadosGondola(item)};
-    });
+    registroQueima=validarRegistroQueima(body.registro_queima);
     const itens=await rows('mapa_lancamentos',{
-      loja_id:`eq.${loja}`,id:`in.(${ids.join(',')})`,select:'id,ean,tipo_mapa,mapa_nome'},250,2);
+      loja_id:`eq.${loja}`,id:`in.(${ids.join(',')})`,select:'id,ean,validade,tipo_mapa,mapa_nome'},250,2);
     if(itens.length!==ids.length)throw bad('Algum registro não foi localizado para a Queima.',404);
+    for(const item of itens)validarPrazoQueima(item.validade);
     if(itens.some(r=>queimaMapasProibidos.has(r.tipo_mapa)||queimaMapasProibidos.has(r.mapa_nome)))
       throw bad('Abas especiais (exceto Estoque) não podem lançar na Queima.',409);
     const eans=[...new Set(itens.map(x=>x.ean).filter(eanValido))];
@@ -996,13 +1003,36 @@ async function encaminharMapa(req,actor,body){
       if(especiais.length)throw bad('Fórmula Especial: a seleção contém produto bloqueado para Queima.',409);
     }
   }
-  const rpc=body.destino==='queima'?'rpc/encaminhar_mapa_queima_itens_v34':'rpc/encaminhar_mapa';
+  const rpc=body.destino==='queima'?'rpc/encaminhar_mapa_queima_v40':'rpc/encaminhar_mapa';
   const payload=body.destino==='queima'?{
-    p_loja_id:loja,p_usuario_id:actor.id,p_itens:dadosGondola
+    p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_registro:registroQueima
   }:{p_loja_id:loja,p_usuario_id:actor.id,p_ids:ids,p_destino:body.destino};
   const resultado=await db(rpc,{method:'POST',body:payload});
-  await audit(actor,'encaminhar_mapa',{ids,destino:body.destino,...(body.destino==='queima'?{quantidade_itens_gondola:dadosGondola.length}:{})});
+  await audit(actor,'encaminhar_mapa',{ids,destino:body.destino,...(registroQueima?{registro_queima:registroQueima}:{})});
   return {sucesso:true,resultado};
+}
+async function importarXlsQueima(req,actor,body){
+ admin(actor);const loja=actorLoja(actor,body.loja);
+ const registro=validarRegistroQueima(body.registro);
+ const itens=body.itens;
+ if(!Array.isArray(itens)||itens.length<1||itens.length>3000)throw bad('Envie de 1 a 3000 produtos do relatório XLS.',422);
+ const linhas=new Set();let vencidos=0;const hoje=hojeSaoPaulo();
+ for(const r of itens){
+   if(!r||typeof r!=='object'||Array.isArray(r))throw bad('Linha XLS inválida.',422);
+   if(!Number.isInteger(r.linha)||r.linha<2||linhas.has(r.linha))throw bad('Linhas XLS inválidas ou repetidas.',422);
+   linhas.add(r.linha);
+   if(!/^\d{1,20}$/.test(norm(r.codigo_interno))&&!eanValido(norm(r.ean)))throw bad(`Linha ${r.linha}: Código Interno/EAN inválido.`,422);
+   if(!dataValida(r.validade))throw bad(`Linha ${r.linha}: validade inválida.`,422);
+   if(r.validade<hoje)vencidos++;
+   if(!norm(r.lote)||norm(r.lote).length>100||!Number.isInteger(r.quantidade)||r.quantidade<=0||r.quantidade>999999||Number(r.motivo)!==4)
+     throw bad(`Linha ${r.linha}: lote, quantidade ou motivo inválido.`,422);
+ }
+ // O SQL faz a comparação com o relógio do servidor e a gravação atômica.
+ // As linhas vencidas nunca entram na Queima; permanecem no resumo de ignoradas.
+ const resultado=await db('rpc/importar_queima_xls_v40',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_registro:registro,
+  p_itens:itens.map(({linha,codigo_interno,ean,lote,validade,quantidade,motivo})=>({linha,codigo_interno:norm(codigo_interno),ean:norm(ean),lote:norm(lote),validade,quantidade,motivo}))}});
+ await audit(actor,'importar_xls_queima',{registro,linhas:itens.length,importados:resultado?.importados,ignorados_vencidos:resultado?.ignorados_vencidos});
+ return {sucesso:true,resultado};
 }
 async function relancarQueima(req,actor,body){
   admin(actor); const loja=actorLoja(actor,body.loja);
@@ -1110,6 +1140,7 @@ async function handle(req){
   if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
   if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
+  if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
   if(pathname==='/vencidos/retirar'&&req.method==='POST')return retirarDanificado(req,actor,body);
   if(pathname.startsWith('/mapas'))return mapas(req,actor,pathname,body,query);
