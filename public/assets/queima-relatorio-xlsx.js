@@ -83,15 +83,26 @@ export function interpretarRelatorioQueimaLinhas(linhas,{loja=''}={}){
   resumo.aprovados++;
   if(loja){const local=asString(c[3]),match=/\bV\s*0*(\d+)\b/i.exec(local);
    if(match&&String(Number(match[1]))!==String(Number(loja))){resumo.outras_lojas++;continue;}}
-  const produto=asString(c[1]),codigo=/^(\d+)\s*-\s*(.+)$/.exec(produto);const validade=validIso(c[7]),data_lancamento=validIso(c[0]);
-  const quantidade=Number(String(c[9]??'').replace(',','.')),precoTexto=asString(c[11]).replace(',','.'),preco_gondola=precoTexto===''?null:Number(precoTexto);
+  const produto=asString(c[1]),codigo=/^(\d{1,20})(?:\s*-\s*(.*))?$/.exec(produto);
+  const validade=validIso(c[7])||null,data_lancamento=validIso(c[0])||null;
+  const qtdTexto=asString(c[9]).replace(',','.'),qtd=Number(qtdTexto);
+  // Se não há quantidade legível, a Queima admite zero com marca de pendência.
+  // Nunca inventar unidade. A correção será feita manualmente depois.
+  const quantidade=qtdTexto!==''&&Number.isSafeInteger(qtd)&&qtd>=0&&qtd<=999999?qtd:0;
+  const precoTexto=asString(c[11]).replace(',','.'),preco=Number(precoTexto);
+  const preco_gondola=precoTexto!==''&&Number.isFinite(preco)&&preco>=0&&preco<=9999999999.99?preco:null;
   if(preco_gondola===null)resumo.sem_preco++;
-  if(!codigo||!validade||!Number.isSafeInteger(quantidade)||quantidade<=0||quantidade>999999||preco_gondola!==null&&(!Number.isFinite(preco_gondola)||preco_gondola<0||preco_gondola>9999999999.99)||!data_lancamento){resumo.invalidos++;continue;}
-  // Identificador estável: uma futura reimportação não altera esta ocorrência,
-  // mesmo que preço ou quantidade no relatório tenham sido modificados.
-  const key=[codigo[1].replace(/^0+(?=\d)/,''),validade,data_lancamento].join('|');
+  if(!validade)resumo.sem_validade=(resumo.sem_validade||0)+1;
+  const codigo_interno=codigo?.[1]||null;
+  const descricao_original=(codigo?(codigo[2]||''):produto).slice(0,450);
+  // Identificador estável independentemente de preços, quantidade e catálogo.
+  // Para produto sem Código Interno, preserva o valor original da coluna B.
+  const identificador=codigo_interno?codigo_interno.replace(/^0+(?=\d)/,''):(produto?'texto:'+produto.toLowerCase():'linha:'+r.linha);
+  const key=[identificador,validade||'',data_lancamento||''].join('|');
   const ocorrencia=(repeticoes.get(key)||0)+1;repeticoes.set(key,ocorrencia);
-  items.push({linha:r.linha,codigo_interno:codigo[1],descricao:codigo[2],validade,quantidade,preco_gondola,data_lancamento,ocorrencia,aprovado:true});
+  items.push({linha:r.linha,codigo_interno,produto_relatorio:produto.slice(0,450),descricao_original,
+    validade,quantidade,quantidade_pendente:qtdTexto===''||quantidade===0,
+    preco_gondola,data_lancamento,ocorrencia,aprovado:true});
  }
  if(!resumo.total)throw Error('Nenhum produto com aprovação S/N encontrado neste relatório.');
  return {itens:items,resumo,colunas:{produto:'B',validade:'H',aprovado:'I',quantidade:'J',preco:'L'},sem_lote:true,sem_registro:true};

@@ -46,5 +46,5 @@ test('V28: linhas compactas preservadas, sem scroll horizontal',()=>{
 
 test('PWA inclui o novo módulo e usa cache atualizado',()=>{
  assert.match(sw,/tabelas-responsivas\.js/);
- assert.match(sw,/registro-validades-v49-primeira-importacao-restaurada/);
+ assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
 });

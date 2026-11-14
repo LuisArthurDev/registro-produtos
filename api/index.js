@@ -887,7 +887,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(!atual)throw bad('Somente itens aprovados e não excluídos podem ser editados.',409);
     const qt=Number(body.quantidade),gondola=validarDadosGondola(body);
     if(!Number.isSafeInteger(qt)||qt<1||qt>999999)throw bad('Quantidade deve ser inteira entre 1 e 999999.',422);
-    const patch={quantidade:qt,...gondola,atualizado_em:new Date().toISOString()};
+    const patch={quantidade:qt,quantidade_pendente:false,...gondola,atualizado_em:new Date().toISOString()};
     const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null'},body:patch,prefer:'return=representation'});
     if(!atualizado?.length)throw bad('Registro modificado por outra operação. Atualize antes de editar.',409);
     await audit(actor,'editar_queima_aprovada',{id,antes:{quantidade:atual.quantidade,validade_gondola:atual.validade_gondola,preco_gondola:atual.preco_gondola},depois:patch});
@@ -1168,19 +1168,24 @@ async function conciliarRelatorioQueima(req,actor,body){
  if(body.corrigir_aprovados===true)throw bad('Correção via relatório não permitida. Edite o item manualmente na Queima.',422);
  const primeiro=body.primeira_carga===true,corrigir=false,simular=body.simular!==false;
  for(const item of itens){
-   if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4||!/^\d{1,20}$/.test(norm(item.codigo_interno))
-     ||!dataValida(item.validade)||!dataValida(item.data_lancamento)
-     ||!Number.isSafeInteger(item.quantidade)||item.quantidade<1||item.quantidade>999999
-     ||!Number.isSafeInteger(item.ocorrencia)||item.ocorrencia<1||item.ocorrencia>10000)
-      throw bad('Linha aprovada inválida no relatório; nenhum dado foi gravado.',422);
+   if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4
+     ||item.codigo_interno!=null&&!/^\d{1,20}$/.test(norm(item.codigo_interno))
+     ||item.validade!=null&&!dataValida(item.validade)
+     ||item.data_lancamento!=null&&!dataValida(item.data_lancamento)
+     ||!Number.isSafeInteger(item.quantidade)||item.quantidade<0||item.quantidade>999999
+     ||!Number.isSafeInteger(item.ocorrencia)||item.ocorrencia<1||item.ocorrencia>10000
+     ||(item.produto_relatorio!=null&&(typeof item.produto_relatorio!=='string'||item.produto_relatorio.length>450))
+     ||(item.descricao_original!=null&&(typeof item.descricao_original!=='string'||item.descricao_original.length>450)))
+     throw bad('Linha S inválida no relatório; nenhum dado foi gravado.',422);
    if(item.preco_gondola!==null&&(typeof item.preco_gondola!=='number'||!Number.isFinite(item.preco_gondola)
      ||item.preco_gondola<0||item.preco_gondola>9999999999.99||Math.abs(item.preco_gondola*100-Math.round(item.preco_gondola*100))>1e-7))
-     throw bad('Preço de gôndola inválido. Corrija a coluna L.',422);
+     throw bad('Preço inválido no relatório. Não é necessário preço para importar; deixe-o sem informação.',422);
  }
  // A RPC valida a loja, o catálogo e a situação de cada item no banco.
  // Simulação (prévia) e confirmação usam o mesmo código transacional.
  const result=await db('rpc/conciliar_queima_relatorio_v43',{method:'POST',body:{
    p_loja_id:loja,p_usuario_id:actor.id,p_itens:itens.map(x=>({linha:x.linha,codigo_interno:x.codigo_interno,
+    produto_relatorio:x.produto_relatorio,descricao_original:x.descricao_original,
     validade:x.validade,data_lancamento:x.data_lancamento,quantidade:x.quantidade,preco_gondola:x.preco_gondola,
     ocorrencia:x.ocorrencia,aprovado:true})),p_primeira_carga:primeiro,p_corrigir_aprovados:corrigir,p_simular:simular}});
  if(!simular)await audit(actor,'conciliar_queima_relatorio_v43',{total:itens.length,primeira_carga:primeiro,

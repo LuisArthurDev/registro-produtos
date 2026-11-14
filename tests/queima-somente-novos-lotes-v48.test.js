@@ -158,6 +158,6 @@ test('Workflow oferece SQL 028, cache PWA inclui o módulo de lotes',()=>{
  const wf=read('.github/workflows/migracao-supabase.yml'),sw=read('public/sw.js');
  assert.match(wf,/queima_so_novos_lotes_v48/);
  assert.match(wf,/supabase\/028_queima_relatorio_somente_novos_em_lotes\.sql/);
- assert.match(sw,/registro-validades-v49-primeira-importacao-restaurada/);
+ assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
  assert.match(sw,/\/assets\/queima-conciliacao-lotes\.js/);
 });

@@ -78,13 +78,13 @@ test('aplicar conciliação usa RPC e registra auditoria; sem POST direto de apr
   assert.ok(!env.calls.some(c=>c.table==='queima'&&c.method==='POST'));
  }finally{env.restore();}
 });
-test('funcionário não reconcilia aprovados e código/quantidade inválidos não chegam ao SQL',async()=>{
+test('funcionário não concilia; dados ausentes são permitidos, identificadores inválidos são barrados',async()=>{
  const emp=mock({perfil:'funcionario'});try{
   const r=await emp.call('queima/conciliar-relatorio','POST',{itens:[item]});assert.equal(r.statusCode,403);
   assert.ok(!emp.calls.some(c=>c.table==='rpc/conciliar_queima_relatorio_v43'));
  }finally{emp.restore();}
  const admin=mock();try{
-  for(const err of [{...item,quantidade:0},{...item,preco_gondola:-1},{...item,aprovado:false},{...item,validade:'2026-02-30'}]){
+  for(const err of [{...item,preco_gondola:-1},{...item,aprovado:false},{...item,validade:'2026-02-30'}]){
    const r=await admin.call('queima/conciliar-relatorio','POST',{itens:[err]});assert.equal(r.statusCode,422,JSON.stringify(r.data));
   }
   assert.ok(!admin.calls.some(c=>c.table==='rpc/conciliar_queima_relatorio_v43'));

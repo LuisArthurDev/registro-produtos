@@ -1392,7 +1392,7 @@ async function generic(pathname,title){
    <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
    <p class="footer-hint">Colunas: B Produto · H Validade · I Aprovado (S) · J Unidade · L Preço. Itens com N são ignorados.</p>
    <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-primeira"> <span><strong>Primeira importação:</strong> usar este relatório para cadastrar e aprovar todos os produtos elegíveis com S ainda ausentes da Queima. É possível marcar novamente para recuperar itens não importados anteriormente; os que já existem nunca são alterados.</span></label>
-   <p class="notice" role="note"><strong>Primeira importação ou uso posterior:</strong> somente produtos novos serão cadastrados e aprovados, exigindo preço válido, catálogo válido e pelo menos 7 dias de validade. Produtos já cadastrados (pendentes ou aprovados) serão ignorados. <strong>Quantidade, preço e validade da gôndola existentes só podem ser corrigidos manualmente.</strong> Itens N são ignorados. O relatório não informa lote nem Registro; nenhum deles será inventado.</p>
+   <p class="notice" role="note"><strong>Todos os itens S ainda não lançados serão cadastrados e aprovados.</strong> Preço, quantidade e catálogo/EAN não são obrigatórios: dados ausentes ficam identificados para edição manual. <strong>Apenas produtos vencidos, que vencem hoje ou sem validade verificável não entram.</strong> Itens com N e produtos já cadastrados não são alterados. Nenhum lote, Registro, preço ou EAN será inventado.</p>
    <p class="footer-hint">A conferência é feita em lotes pequenos para evitar o tempo limite do Supabase. Reimportar o relatório não duplica produtos nem altera aprovados existentes.</p>
    <p id="queima-relatorio-resumo" role="status" aria-live="polite"></p>
    <div id="queima-relatorio-previa" class="queima-import-preview"></div>
@@ -1429,7 +1429,7 @@ async function generic(pathname,title){
  const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Registro','Data','EAN','Descrição','Responsável','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade','Motivo','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
-  const ean=r.ean_resolvido||r.ean||'Não informado',desc=r.descricao||r.descricao_original||'Sem descrição cadastrada';
+  const ean=r.ean_resolvido||r.ean||(r.codigo_interno?'Cod. '+r.codigo_interno:'EAN não informado'),desc=r.descricao||r.descricao_original||r.produto_relatorio||'Sem descrição cadastrada';
   if(isAudit){const obj=r.dados&&typeof r.dados==='object'?r.dados:{},orig=r.usuarios?.nome||obj.autor_original||obj.nome_usuario||null;
    return `<tr><td>${dtBR(r.criado_em)}</td><td>${H(orig||'Usuário não identificado')}</td><td>${H(r.acao)}</td><td>${H(obj.descricao||[obj.mapa,obj.ean,obj.lote,obj.destino].filter(Boolean).join(' · ')||'Evento registrado')}</td></tr>`;
   }
@@ -1440,6 +1440,7 @@ async function generic(pathname,title){
     const importado=r.aprovado_via_importacao===true;
     const aguardaVerificacao=importado&&r.importacao_verificada_em==null&&r.estado==='aprovado';
     const marcador=aguardaVerificacao?' <span class="pill amber" title="Aprovado pelo relatório Procfit; aguardando conferência manual">Aprovado via importação</span>':'';
+    const precoPendente=importado&&r.estado==='aprovado'&&r.preco_gondola==null?' <span class="pill amber" title="Preço ausente no relatório. Preencha pelo botão Editar">Preço pendente</span>':'';
     const verificar=aguardaVerificacao?` <button type="button" class="action-link" data-verify-burn="${H(r.id)}" title="Marcar aprovação importada como conferida sem desfazer a aprovação">Verificado</button>`:'';
     const semResponsavel=r.aprovado_via_importacao===true&&r.estado==='aprovado'&&r.sem_responsavel_importacao===true;
     const nomeResponsavel=r.responsavel_importacao_id?(state.staff.find(u=>u.id===r.responsavel_importacao_id)?.nome||'Funcionário atribuído'):(semResponsavel?'Sem responsável':(r.origem_mapa||'—'));
@@ -1447,7 +1448,7 @@ async function generic(pathname,title){
     const atribuir=importado&&r.estado==='aprovado'?` <button type="button" class="action-link" data-assign-burn="${H(r.id)}">${semResponsavel?'Atribuir responsável':'Alterar responsável'}</button>`:'';
     const sugestoes=semResponsavel?` <button type="button" class="action-link" data-suggest-burn="${H(r.id)}">Ver sugestões</button>`:'';
     const apagar=` <button type="button" class="action-link danger-text" data-delete-burn="${H(r.id)}">Excluir</button>`;
-    return `<tr>${td(r.registro_queima)}<td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}<td>${badgeResponsavel}</td>${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td>${td(r.quantidade)}${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}${marcador}</td><td class="row-actions">${primary}${verificar}${atribuir}${sugestoes}${editar}${apagar}</td></tr>`;
+    return `<tr>${td(r.registro_queima)}<td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}<td>${badgeResponsavel}</td>${td(r.lote)}<td>${dataBR(r.validade)}</td><td>${dataBR(r.validade_gondola)}</td><td>${r.preco_gondola==null?'—':H(Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td><td>${r.quantidade_pendente?'Pendente':H(r.quantidade)}</td>${td(r.motivo)}<td>${pill(r.estado,r.estado==='aprovado'?'green':pendente?'amber':'')}${marcador}${precoPendente}</td><td class="row-actions">${primary}${verificar}${atribuir}${sugestoes}${editar}${apagar}</td></tr>`;
   }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
@@ -1523,7 +1524,7 @@ async function generic(pathname,title){
  $('#gen-list').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['gen-pages']);if(n>0){page=n-1;draw();}},{once:true});
  $('#gen-refresh').onclick=()=>renderRoute(state.route);$('#gen-print').onclick=()=>printableTable('#gen-list',()=>renderTable(filtered));
  $('#gen-export').onclick=()=>exportCsv(`${pathname}-${nowBrISO()}.csv`,cols,filtered.map(x=>cols.map(k=>{
-  const match={'Registro':x.registro_queima,'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'Responsável':x.sem_responsavel_importacao?'Sem responsável':(state.staff.find(u=>u.id===x.responsavel_importacao_id)?.nome||x.origem_mapa||''),'EAN':x.ean_resolvido||x.ean||'','Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
+  const match={'Registro':x.registro_queima,'Data':x.criado_em,'Data / hora':x.criado_em,'Usuário':x.usuarios?.nome||x.dados?.autor_original||'Não identificado','Evento':x.acao,'Descrição':x.descricao||x.descricao_original||x.dados?.descricao,'Responsável':x.sem_responsavel_importacao?'Sem responsável':(state.staff.find(u=>u.id===x.responsavel_importacao_id)?.nome||x.origem_mapa||''),'EAN':x.ean_resolvido||x.ean||(x.codigo_interno?'Cod. '+x.codigo_interno:''),'Lote':x.lote,'Validade':x.validade,'Validade da Gôndola':x.validade_gondola,'Preço da Gôndola':x.preco_gondola,'Quantidade':x.quantidade,'Motivo':x.motivo,'Situação':x.estado||x.situacao,'Observação':x.observacao,'Loja origem':x.loja_origem,'Loja destino':x.loja_destino,'Romaneio':x.romaneio};return match[k]||'';
  })));
  $('#gen-list').onclick=async e=>{
   const appr=e.target.closest('[data-approve]'),rel=e.target.closest('[data-relaunch]'),sin=e.target.closest('[data-sinal]'),del=e.target.closest('[data-delete-burn]'),edit=e.target.closest('[data-edit-burn]'),verify=e.target.closest('[data-verify-burn]'),assign=e.target.closest('[data-assign-burn]'),sug=e.target.closest('[data-suggest-burn]');
@@ -1604,7 +1605,7 @@ async function generic(pathname,title){
    let previaConfirmada=false,emExecucao=false;
    const mostrarResumo=(dados)=>{
     const c=dados.contagem||{};
-    resumo.textContent=`${primeira.checked?'Primeira importação':'Importação de novos'} · Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} aprovadas S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Ignorados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já cadastrados, ${c.ja_excluido||0} excluídos anteriormente, ${c.repetido_no_relatorio||0} repetidos no XLSX, ${c.sem_preco||0} sem preço, ${c.sem_catalogo||0} sem catálogo, ${c.prazo_insuficiente||0} com menos de 7 dias, ${c.formula_especial||0} Fórmulas Especiais, ${c.aba_especial||0} abas especiais, ${c.invalido||0} inválidos. Nada existente será corrigido.`;
+    resumo.textContent=`${primeira.checked?'Primeira importação':'Importação de novos'} · Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} com S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Não lançados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já existentes · ${c.ja_excluido||0} excluídos · ${c.repetido_no_relatorio||0} repetidos · ${c.vencido||0} vencidos/hoje · ${c.sem_validade||0} sem validade verificável. ${relatorio.resumo.sem_preco||0} linhas S sem preço serão cadastradas sem esse valor. Produtos existentes não serão modificados.`;
     previa.innerHTML=`<p>${c.cadastrar_e_aprovar||0} produto(s) novo(s) apto(s), sujeitos à conferência final no banco. Até 100 exemplos:</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(String(x.acao||'').replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
    };
    const conferir=async()=>{
@@ -1632,7 +1633,7 @@ async function generic(pathname,title){
    input.onchange=async()=>{const file=input.files?.[0];input.value='';if(!file)return;
      confirm.disabled=true;previaConfirmada=false;resumo.textContent='Lendo relatório XLSX…';
      try{relatorio=await lerRelatorioQueimaXlsx(file,{loja:state.loja});
-       if(relatorio.itens.length>1500)throw Error('O relatório possui mais de 1500 aprovados. Divida o arquivo por período.');
+       if(relatorio.itens.length>50000)throw Error('O relatório ultrapassa 50 mil linhas S.');
        if(!relatorio.itens.length)throw Error('Não há itens S válidos neste arquivo.');
        dlg.showModal();await conferir();
      }catch(error){relatorio=null;toast('Falha ao ler relatório: '+error.message,true);resumo.textContent=error.message;}

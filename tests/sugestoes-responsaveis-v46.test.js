@@ -102,5 +102,5 @@ test('frontend tem modal global e por produto, opção manual e confirmação an
  assert.match(app,/Escolher funcionário/);
  assert.match(app,/confirmDialog\('Confirmar atribuição'/);
  assert.match(app,/acao:'atribuir_importacao'/);
- assert.match(sw,/registro-validades-v49-primeira-importacao-restaurada/);
+ assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
 });
