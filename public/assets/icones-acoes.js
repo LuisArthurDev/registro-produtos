@@ -95,7 +95,7 @@ function decorate(button){
  button.classList.add('icon-action','icon-action--'+variant);
  for(const cls of ['neutral','danger','success','warning'])if(cls!==variant)button.classList.remove('icon-action--'+cls);
  // As confirmações sensíveis mantêm texto visível, além do SVG.
- const explicito=!!button.closest('dialog,.view-tabs,.view-month-modes,.view-title .toolbar,.view-controls') || button.matches('.primary,[data-icon-keep-label]');
+ const explicito=!!button.closest('dialog'); // Ações externas a diálogos são ícones com title e aria-label
  button.classList.toggle('icon-action--labeled',explicito);
  const svg=`<svg data-action-svg="${kind}" class="icon-action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[kind]}</svg>`;
  button.innerHTML=svg+(explicito?`<span class="icon-action-label"></span>`:`<span class="icon-action-text"></span>`);

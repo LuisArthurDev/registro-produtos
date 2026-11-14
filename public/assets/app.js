@@ -9,7 +9,7 @@ import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
 import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
-import { instalarIconesDeAcao } from './icones-acoes.js';
+import { instalarIconesDeAcao } from './icones-acoes.js?v=59';
 import { resumoQueima } from './queima-grafico.js';
 import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
@@ -641,7 +641,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span>${r.formula_especial?'<span class="pill amber" title="Não pode ser lançado na Queima nem copiado para o Procfit">Fórmula Especial</span>':''}<span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}</td>
- ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:prazoInsuficienteParaQueima(r.validade,nowBrISO())?`<span class="second" title="Queima exige validade de pelo menos 7 dias">Queima bloqueada · menos de 7 dias</span>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button>${r.tipo_mapa==='funcionario'?`<button type="button" class="action-link" data-transfer-map="${H(r.id)}" title="Transferir item para outro funcionário" aria-label="Transferir item para outro funcionário">Transferir item</button>`:''}<button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:prazoInsuficienteParaQueima(r.validade,nowBrISO())?`<span class="second" title="Queima exige validade de pelo menos 7 dias">Queima bloqueada · menos de 7 dias</span>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=forced==='Estoque'?[]:await nomesMapasComFuncionariosAtivos(rows);
@@ -654,12 +654,61 @@ async function mapas(forced=''){
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
  ${!isStock&&able?`<select id="map-owner"><option value="">Todos os mapas</option>${tipo.map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('')}</select>`:''}
  <select id="map-status"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A vencer">A vencer</option><option value="Vendável">Vendável</option></select>
- <label>Mês do mapa <input type="month" id="map-month"></label><label>Validade a partir de <input type="date" id="map-valid-from" class="filter-date"></label>
+ <label>Mês do mapa <select id="map-month" aria-label="Filtrar mês do lançamento"><option value="">Todos os meses</option>${[...new Set(rows.map(r=>String(r.mes_lancamento||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse().map(m=>`<option value="${H(m)}">${H(m.slice(5,7)+'/'+m.slice(0,4))}</option>`).join('')}</select></label><label>Validade a partir de <input type="date" id="map-valid-from" class="filter-date"></label>
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
  ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="btn-outline danger-text" id="map-delete-filtered" data-icon-keep-label type="button" disabled>Excluir em lote</button>'):''}</div>
  <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-xls" type="button" data-icon-keep-label title="Exportar quantidade corrigida em planilha XLS">Exportar XLS</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
+
+ // Transferência individual: reutiliza a RPC validada e auditada já usada em Funcionários.
+ // Origem e destino são identificadores de conta, nunca nomes informados pelo navegador.
+ if(!isStock&&able){
+  const dlg=document.createElement('dialog');dlg.id='map-transfer-item-dialog';dlg.className='dialog';
+  dlg.setAttribute('aria-labelledby','map-transfer-item-title');
+  dlg.innerHTML=`<form class="dialog-inner" id="map-transfer-item-form">
+    <h2 id="map-transfer-item-title">Transferir item do Mapa de Validade</h2>
+    <p id="map-transfer-item-description" class="footer-hint"></p>
+    <label>Funcionário de destino<select id="map-transfer-item-target" required><option value="">Selecione um funcionário</option></select></label>
+    <p id="map-transfer-item-error" class="notice warn" hidden role="alert"></p>
+    <div class="dialog-actions"><button type="button" class="btn-outline" id="map-transfer-item-cancel">Cancelar</button><button type="submit" class="primary" id="map-transfer-item-confirm">Confirmar transferência</button></div>
+   </form>`;
+  $('#content').append(dlg);
+  dlg.addEventListener('close',()=>dlg.remove());
+  $('#map-transfer-item-cancel').onclick=()=>dlg.close();
+  let itemTransferencia=null,origemTransferencia=null;
+  const abrirTransferencia=async reg=>{
+   itemTransferencia=reg;origemTransferencia=null;
+   const select=$('#map-transfer-item-target');select.innerHTML='<option value="">Carregando funcionários...</option>';
+   $('#map-transfer-item-error').hidden=true;
+   $('#map-transfer-item-description').textContent=`${reg.descricao||reg.ean} · EAN ${reg.ean} · Lote ${reg.lote} · ${reg.quantidade} unidade(s) · Atual: ${reg.mapa_nome}`;
+   dlg.showModal();
+   try{
+    const funcionarios=await staffList();
+    const origem=funcionarios.find(u=>u.perfil==='funcionario'&&(reg.funcionario_id?String(u.id)===String(reg.funcionario_id):u.nome===reg.mapa_nome));
+    if(!origem&&reg.mapa_nome!=='Sem responsável')throw new Error('O responsável atual não foi localizado no cadastro. Use a tela Funcionários para conferir a titularidade.');
+    origemTransferencia=origem?.id||'flutuando';
+    const destinos=funcionarios.filter(u=>u.perfil==='funcionario'&&u.ativo===true&&!u.excluido_em&&u.id!==origemTransferencia);
+    select.innerHTML='<option value="">Selecione um funcionário</option>'+destinos.map(u=>`<option value="${H(u.id)}">${H(u.nome)}</option>`).join('');
+    if(!destinos.length)throw new Error('Não há outro funcionário ativo disponível para receber este item.');
+   }catch(e){$('#map-transfer-item-error').textContent=e.message;$('#map-transfer-item-error').hidden=false;select.innerHTML='<option value="">Indisponível</option>';}
+  };
+  $('#map-transfer-item-form').onsubmit=async e=>{
+   e.preventDefault();const destino=$('#map-transfer-item-target').value,reg=itemTransferencia;
+   if(!reg||!origemTransferencia||!destino||destino===origemTransferencia)return;
+   const target=state.staff.find(u=>u.id===destino);
+   if(!target||target.ativo!==true)return toast('Escolha um funcionário ativo.',true);
+   if(!await confirmDialog('Confirmar transferência',`Transferir somente o lançamento ${reg.ean}, lote ${reg.lote}, de ${reg.mapa_nome} para ${target.nome}? A quantidade, validade e mês de lançamento serão preservados.`))return;
+   const btn=$('#map-transfer-item-confirm');btn.disabled=true;$('#map-transfer-item-error').hidden=true;
+   try{
+    const r=await request('/usuarios/transferir',{method:'POST',body:{origem:origemTransferencia,destino,mes:'',secao:'',todos:false,ids:[reg.id]}});
+    if(r.quantidade!==1)throw new Error('A transferência não retornou um item transferido. Confira a listagem.');
+    dlg.close();toast(`Item transferido para ${target.nome}.`);await renderRoute('mapas');
+   }catch(err){$('#map-transfer-item-error').textContent=err.message;$('#map-transfer-item-error').hidden=false;}
+   finally{if(btn.isConnected)btn.disabled=false;}
+  };
+  $('#maps-table').addEventListener('click',e=>{const bt=e.target.closest('[data-transfer-map]');if(!bt)return;const reg=rows.find(x=>x.id===bt.dataset.transferMap);if(reg)void abrirTransferencia(reg);});
+ }
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
   page=Math.min(page,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));
@@ -895,14 +944,14 @@ async function mapas(forced=''){
     $('#map-tab-list').setAttribute('aria-selected',String(!paraComparacao));
     $('#map-tab-compare').setAttribute('aria-selected',String(paraComparacao));
     if(paraComparacao){
-      if(!$('#map-month').value){$('#map-month').value=nowBrISO().slice(0,7);apply();}
-      $('#compare-month').value=$('#map-month').value;
+      // Conferência possui seu próprio mês; não restringir o Mapa de Validade inteiro.
+      if(!$('#compare-month').value)$('#compare-month').value=$('#map-month').value||nowBrISO().slice(0,7);
       await atualizarComparacao();
     }
   };
   $('#map-tab-list').onclick=()=>mudarAba(false);
   $('#map-tab-compare').onclick=()=>mudarAba(true);
-  $('#compare-month').onchange=e=>{$('#map-month').value=e.target.value;apply();atualizarComparacao();};
+  $('#compare-month').onchange=()=>atualizarComparacao();
   $('#compare-refresh').onclick=()=>atualizarComparacao(true);
   $('#compare-size').onchange=()=>{comparePage=0;desenharComparacao();};
   $('#map-compare-section').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['compare-page']);if(n>0){restaurarPaginaConferencia=n-1;if(compareRows.length){comparePage=n-1;desenharComparacao();}}},{once:true});
@@ -1479,11 +1528,27 @@ async function generic(pathname,title){
  const d=await request(urlWithLoja('/'+pathname)),rows=d.registros||[];
  if(pathname==='queima'){try{await staffList();}catch(error){console.warn('Nomes dos responsáveis indisponíveis:',error.message);}}
  const isQueima=pathname==='queima',isVenc=pathname==='vencidos',isAudit=pathname==='auditoria',isSinal=pathname==='sinalizacoes',isTrans=pathname==='transferencias';
+ // Responsável da Queima: registro importado atribuído prevalece sobre o mapa de origem.
+ // Inclui funcionários ativos (mesmo sem itens) e nomes históricos presentes na Queima.
+ const responsavelQueima=(r)=>{
+  if(r.aprovado_via_importacao===true&&r.sem_responsavel_importacao===true&&!r.responsavel_importacao_id)return '';
+  if(r.responsavel_importacao_id){
+   const funcionario=state.staff.find(u=>String(u.id)===String(r.responsavel_importacao_id));
+   return funcionario?.nome||'';
+  }
+  const nome=String(r.origem_mapa||'').trim();
+  return nome&&!['Estoque','Termolabil','Psicotropicos','Antibioticos','Transferencias'].includes(nome)?nome:'';
+ };
+ const nomesResponsaveisQueima=isQueima?[...new Set([
+  ...state.staff.filter(u=>u.perfil==='funcionario'&&u.ativo===true).map(u=>u.nome),
+  ...rows.map(responsavelQueima)
+ ].map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')):[];
+
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
  (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
- ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
+ ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option><optgroup label="Funcionários">'+nomesResponsaveisQueima.map(nome=>'<option value="func:'+H(nome)+'">'+H(nome)+'</option>').join('')+'</optgroup></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
  <form id="generic-form" class="form-grid"><label>EAN<input name="ean" inputmode="numeric" pattern="[0-9]{8,14}" ${isVenc?'':'required'}></label>
  ${isVenc?'<label>Código interno (opcional)<input name="codigo_interno"></label><label class="full">Descrição original<input name="descricao_original"></label>':''}
@@ -1561,7 +1626,7 @@ async function generic(pathname,title){
     const precoPendente=importado&&r.estado==='aprovado'&&r.preco_gondola==null?' <span class="pill amber" title="Preço ausente no relatório. Preencha pelo botão Editar">Preço pendente</span>':'';
     const verificar=aguardaVerificacao?` <button type="button" class="action-link" data-verify-burn="${H(r.id)}" title="Marcar aprovação importada como conferida sem desfazer a aprovação">Verificado</button>`:'';
     const semResponsavel=r.aprovado_via_importacao===true&&r.estado==='aprovado'&&r.sem_responsavel_importacao===true;
-    const nomeResponsavel=r.responsavel_importacao_id?(state.staff.find(u=>u.id===r.responsavel_importacao_id)?.nome||'Funcionário atribuído'):(semResponsavel?'Sem responsável':(r.origem_mapa||'—'));
+    const nomeResponsavel=responsavelQueima(r)||(semResponsavel?'Sem responsável':(r.responsavel_importacao_id?'Funcionário atribuído':(r.origem_mapa||'—')));
     const badgeResponsavel=semResponsavel?'<span class="pill amber">Sem responsável</span>':H(nomeResponsavel);
     const atribuir=importado&&r.estado==='aprovado'?` <button type="button" class="action-link" data-assign-burn="${H(r.id)}">${semResponsavel?'Atribuir responsável':'Alterar responsável'}</button>`:'';
     const sugestoes=semResponsavel?` <button type="button" class="action-link" data-suggest-burn="${H(r.id)}">Ver sugestões</button>`:'';
@@ -1660,7 +1725,7 @@ async function generic(pathname,title){
   botaoGeral.onclick=()=>abrirAtribuicaoPorSecao('queima');
  }
  const apply=()=>{const q=$('#gen-search').value.toLowerCase(),status=$('#gen-status').value,from=$('#gen-since').value,importFiltro=isQueima?$('#gen-import-filter').value:'',filtroResponsavel=isQueima?$('#gen-owner-filter').value:'';
-  filtered=rows.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote,x.acao,x.observacao,JSON.stringify(x.dados||{}),x.romaneio].join(' ').toLowerCase().includes(q)&&(!status||String(x.estado||x.situacao)==status)&&(!from||String(x.criado_em||'').slice(0,10)>=from)&&(!importFiltro||(importFiltro==='todos_importados'?x.estado==='aprovado'&&x.aprovado_via_importacao===true:importFiltro==='pendentes'?x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em:x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!!x.importacao_verificada_em))&&(!filtroResponsavel||(filtroResponsavel==='sem'?x.aprovado_via_importacao===true&&x.sem_responsavel_importacao===true:x.aprovado_via_importacao===true&&!!x.responsavel_importacao_id)));
+  filtered=rows.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote,x.acao,x.observacao,JSON.stringify(x.dados||{}),x.romaneio].join(' ').toLowerCase().includes(q)&&(!status||String(x.estado||x.situacao)==status)&&(!from||String(x.criado_em||'').slice(0,10)>=from)&&(!importFiltro||(importFiltro==='todos_importados'?x.estado==='aprovado'&&x.aprovado_via_importacao===true:importFiltro==='pendentes'?x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em:x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!!x.importacao_verificada_em))&&(!filtroResponsavel||(filtroResponsavel==='sem'?!responsavelQueima(x):filtroResponsavel==='com'?!!responsavelQueima(x):filtroResponsavel.startsWith('func:')?responsavelQueima(x)===filtroResponsavel.slice(5):true)));
   page=0;draw();};
  const draw=()=>{const sz=Number($('#gen-size').value),np=Math.max(1,Math.ceil(filtered.length/sz));page=Math.max(0,Math.min(np-1,page));$('#gen-list').innerHTML=renderTable(filtered.slice(page*sz,(page+1)*sz));$('#gen-counter').textContent=`${filtered.length} registro(s)`+(isQueima?` · ${rows.filter(x=>x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em).length} aprovação(ões) importada(s) aguardando verificação · ${rows.filter(x=>x.estado==='aprovado'&&x.aprovado_via_importacao===true&&x.sem_responsavel_importacao===true).length} sem responsável`:``);$('#gen-pages').textContent=`Página ${page+1} de ${np}`;$('#gen-prev').disabled=page===0;$('#gen-next').disabled=page>=np-1;};
  for(const id of ['gen-search','gen-status','gen-since',...(isQueima?['gen-import-filter','gen-owner-filter']:[])])$('#'+id).addEventListener('input',apply);$('#gen-size').onchange=apply;$('#gen-prev').onclick=()=>{page--;draw();};$('#gen-next').onclick=()=>{page++;draw();};
