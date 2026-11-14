@@ -826,3 +826,49 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 @media(max-width:520px){
  .atribuicao-secao-item{grid-template-columns:minmax(0,1fr);gap:5px}
 }
+
+
+/* v56 — todas as tabelas do Painel Conferente com a altura compacta da Queima.
+   Não altera a estrutura, não esconde colunas nem remove botões de ação. */
+body:not(.launch-route):not(.view-route) .page-content .table-wrap table{border-collapse:collapse;line-height:1.2}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody tr{height:34px!important;min-height:0!important}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap th,
+body:not(.launch-route):not(.view-route) .page-content .table-wrap td{
+ padding:5px 6px!important;font-size:11px!important;line-height:1.2!important;
+ vertical-align:middle!important;white-space:nowrap!important
+}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap td .second{margin-top:1px;font-size:10px;line-height:1.1}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap .pill{padding:2px 5px;font-size:10px}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap td:not(.row-actions){max-width:240px;overflow:hidden;text-overflow:ellipsis}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap td.row-actions{overflow:visible;white-space:nowrap}
+body:not(.launch-route):not(.view-route) .page-content .table-wrap .action-link{padding:3px 5px;font-size:10px}
+@media(max-width:620px){
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody tr{height:34px!important;min-height:0!important;padding:0!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap td,
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap th{font-size:10px!important;padding:4px!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap td:not(.row-actions){min-width:0;max-width:160px}
+}
+.atribuicao-secao-item{align-items:start}
+.atribuicao-secao-resumo{min-width:0;display:grid;gap:4px}
+.atribuicao-secao-resumo small{display:block;color:var(--muted);font-weight:400}
+.atribuicao-secao-resumo .atribuicao-sugestao{color:#82e4d5;font-weight:650}
+.atribuicao-ranking{display:flex;flex-wrap:wrap;gap:4px 9px;margin-top:4px;font-size:11px;color:var(--muted)}
+.atribuicao-ranking span{white-space:nowrap}
+.atribuicao-secao-item>label{min-width:0}
+/* Entre 700px e 1139px, não deixar o estilo responsivo anterior transformar linhas em blocos. */
+@media screen and (min-width:700px) and (max-width:1139px){
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap table{display:table!important;width:100%!important;table-layout:fixed!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap thead{display:table-header-group!important;position:static!important;width:auto!important;height:auto!important;clip-path:none!important;overflow:visible!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody{display:table-row-group!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr{display:table-row!important;padding:0!important;margin:0!important;height:34px!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td{display:table-cell!important;width:auto!important;max-width:0!important;padding:5px 4px!important;overflow:hidden;text-overflow:ellipsis}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td.row-actions{max-width:none!important;overflow:visible!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap td[data-label]::before{display:none!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap td:has(.product-name){display:table-cell!important}
+}
+/* Em celulares muito estreitos, conservar todas as ações e evitar cortes de controles. */
+@media screen and (max-width:699px){
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr{padding:5px 3px!important;gap:3px 8px!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td{padding:2px 1px!important}
+ body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td.row-actions{max-width:100%!important;flex-wrap:wrap!important}
+}

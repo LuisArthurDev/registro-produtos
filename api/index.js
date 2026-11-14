@@ -820,11 +820,39 @@ async function atribuicaoPorSecao(req,actor,body,query){
     secao.unidades+=Number(item.quantidade)||0;
     secao.grupos.add(chaveSecao(item.grupo));
   }
+  // Uma única agregação no banco, sem transferir todos os mapas para a API.
+  // Se a migração ainda não foi instalada, a organização manual continua utilizável.
+  let historicoPorSecao=new Map(),historicoIndisponivel=false;
+  try {
+    const agregado=await db('rpc/resumo_responsaveis_por_secao_v56',{method:'POST',body:{p_loja:loja}});
+    for(const linha of (Array.isArray(agregado)?agregado:[])){
+      const chave=chaveSecao(linha.secao_chave);
+      if(!historicoPorSecao.has(chave))historicoPorSecao.set(chave,[]);
+      if(ativos.has(linha.funcionario_id))historicoPorSecao.get(chave).push({
+        funcionario_id:linha.funcionario_id,
+        nome:funcionarios.find(u=>u.id===linha.funcionario_id)?.nome||'',
+        lancamentos:Number(linha.lancamentos)||0,
+        unidades:Number(linha.unidades)||0
+      });
+    }
+    for(const lista of historicoPorSecao.values())lista.sort((a,b)=>b.lancamentos-a.lancamentos||b.unidades-a.unidades||a.nome.localeCompare(b.nome,'pt-BR'));
+  }catch(erro){
+    historicoIndisponivel=true;
+    console.warn('[Atribuição por seção] Resumo histórico indisponível:',erro?.message||erro);
+  }
   return {sucesso:true,funcionarios,secoes:[...secoes].map(([chave,{grupos,...secao}])=>{
     const titular=chave?porSecao.get(chave):null;
     const destinos=new Set([...grupos].map(grupo=>porGrupo.get(grupo)));
     const consenso=destinos.size===1?[...destinos][0]:null;
-    return {...secao,responsavel_id:ativos.has(titular)?titular:ativos.has(consenso)?consenso:null};
+    const ranking=historicoPorSecao.get(chave)||[];
+    const principal=ranking[0];
+    const empate=principal&&ranking[1]?.lancamentos===principal.lancamentos;
+    const sugestao=principal&&!empate?principal.funcionario_id:null;
+    const configurado=ativos.has(titular)?titular:ativos.has(consenso)?consenso:null;
+    return {...secao,responsavel_id:sugestao||configurado||null,
+      sugestao_historico_id:sugestao,ranking_responsaveis:ranking.slice(0,8),
+      historico_indisponivel:historicoIndisponivel,empate_historico:!!empate,
+      criterio_sugestao:sugestao?'historico':configurado?'organizacao':'nenhum'};
   }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'))};
 }
 async function enriquecerRegistros(registros, table) {

@@ -549,12 +549,21 @@ async function abrirAtribuicaoPorSecao(origem){
     if(!dialog.open)return;
     if(!secoes.length){lista.textContent='Nenhum item sem responsável nesta tela.';return;}
     if(!funcionarios.length){lista.textContent='Cadastre ou ative um funcionário da loja para atribuir os itens.';return;}
-    lista.innerHTML=secoes.map((secao,i)=>`<label class="staff-move-item atribuicao-secao-item">
-     <span><strong>${H(secao.nome)}</strong><small>${secao.ids.length} lançamento(s) · ${secao.unidades} unidade(s)${secao.responsavel_id?' · Responsável sugerido':' · Defina um responsável'}</small></span>
-     <select required data-secao="${i}" aria-label="Responsável por ${H(secao.nome)}">
-      <option value="">Escolha um funcionário</option>
-      ${funcionarios.map(u=>`<option value="${H(u.id)}" ${u.id===secao.responsavel_id?'selected':''}>${H(u.nome)}</option>`).join('')}
-     </select></label>`).join('');
+    lista.innerHTML=secoes.map((secao,i)=>{
+     const ranking=Array.isArray(secao.ranking_responsaveis)?secao.ranking_responsaveis:[];
+     const lider=ranking[0];
+     const status=secao.historico_indisponivel?'Histórico indisponível; confira se a migração v56 foi aplicada':
+       secao.empate_historico?'Empate no número de lançamentos; escolha manualmente':
+       secao.criterio_sugestao==='historico'&&lider?`Sugestão: ${lider.nome} · ${lider.lancamentos} lançamento(s) nesta seção`:
+       secao.criterio_sugestao==='organizacao'?'Sugestão baseada na organização cadastrada':'Sem histórico suficiente; escolha manualmente';
+     const opcoes=ranking.length?`<div class="atribuicao-ranking" title="Histórico de lançamentos nesta seção">${ranking.map((r,j)=>`<span>${j===0&&!secao.empate_historico?'★ ':''}${H(r.nome)}: <strong>${r.lancamentos}</strong> lançamento(s)</span>`).join('')}</div>`:'';
+     return `<div class="staff-move-item atribuicao-secao-item">
+      <span class="atribuicao-secao-resumo"><strong>${H(secao.nome)}</strong><small>${secao.ids.length} lançamento(s) sem responsável · ${secao.unidades} unidade(s)</small><small class="atribuicao-sugestao">${H(status)}</small>${opcoes}</span>
+      <label>Responsável<select required data-secao="${i}" aria-label="Responsável por ${H(secao.nome)}">
+       <option value="">Escolha um funcionário</option>
+       ${funcionarios.map(u=>`<option value="${H(u.id)}" ${u.id===secao.responsavel_id?'selected':''}>${H(u.nome)}</option>`).join('')}
+      </select></label></div>`;
+    }).join('');
     const campos=[...lista.querySelectorAll('select')];
     const total=secoes.reduce((s,x)=>s+x.ids.length,0);
     const atualizar=()=>{salvar.disabled=campos.some(c=>!c.value);};
