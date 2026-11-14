@@ -527,6 +527,56 @@ async function submitLaunch(data, form) {
  }
 }
 
+async function abrirAtribuicaoPorSecao(origem){
+  if($('#atribuicao-secoes-dialog'))return;
+  document.body.insertAdjacentHTML('beforeend',`<dialog id="atribuicao-secoes-dialog" class="dialog dialog-wide">
+   <form class="dialog-inner">
+    <h2>Sugestões sem responsável por seção</h2>
+    <p>Revise os responsáveis sugeridos e escolha um funcionário para cada seção sem indicação.</p>
+    <div id="atribuicao-secoes-lista" class="staff-move-items" aria-live="polite">Consultando seções…</div>
+    <p id="atribuicao-secoes-erro" class="error-note" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" class="btn-outline">Cancelar</button>
+    <button type="submit" class="primary" disabled>Confirmar atribuições</button></div>
+   </form></dialog>`);
+  const dialog=$('#atribuicao-secoes-dialog'),lista=$('#atribuicao-secoes-lista'),erro=$('#atribuicao-secoes-erro');
+  const salvar=dialog.querySelector('[type="submit"]'),cancelar=dialog.querySelector('[type="button"]');
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  dialog.addEventListener('cancel',e=>{if(cancelar.disabled)e.preventDefault();});
+  cancelar.onclick=()=>dialog.close();
+  dialog.showModal();
+  try{
+    const {secoes,funcionarios}=await request('/atribuicao-secoes?origem='+origem,{timeout:50000});
+    if(!dialog.open)return;
+    if(!secoes.length){lista.textContent='Nenhum item sem responsável nesta tela.';return;}
+    if(!funcionarios.length){lista.textContent='Cadastre ou ative um funcionário da loja para atribuir os itens.';return;}
+    lista.innerHTML=secoes.map((secao,i)=>`<label class="staff-move-item atribuicao-secao-item">
+     <span><strong>${H(secao.nome)}</strong><small>${secao.ids.length} lançamento(s) · ${secao.unidades} unidade(s)${secao.responsavel_id?' · Responsável sugerido':' · Defina um responsável'}</small></span>
+     <select required data-secao="${i}" aria-label="Responsável por ${H(secao.nome)}">
+      <option value="">Escolha um funcionário</option>
+      ${funcionarios.map(u=>`<option value="${H(u.id)}" ${u.id===secao.responsavel_id?'selected':''}>${H(u.nome)}</option>`).join('')}
+     </select></label>`).join('');
+    const campos=[...lista.querySelectorAll('select')];
+    const total=secoes.reduce((s,x)=>s+x.ids.length,0);
+    const atualizar=()=>{salvar.disabled=campos.some(c=>!c.value);};
+    lista.onchange=atualizar;
+    atualizar();
+    salvar.textContent=`Atribuir ${total} lançamento(s)`;
+    dialog.querySelector('form').onsubmit=async(e)=>{
+      e.preventDefault();
+      if(salvar.disabled)return;
+      const lotes=campos.map((c,i)=>({ids:secoes[i].ids,responsavel_id:c.value}));
+      salvar.disabled=true;cancelar.disabled=true;campos.forEach(c=>c.disabled=true);erro.hidden=true;
+      try{
+        const r=await request('/atribuicao-secoes',{method:'POST',body:{origem,lotes},retries:0,timeout:58000});
+        dialog.close();toast(`${r.quantidade} lançamento(s) atribuídos.`);await renderRoute(state.route);
+      }catch(e){
+        erro.textContent='Não foi possível confirmar a atribuição. '+e.message;erro.hidden=false;
+        cancelar.disabled=false;campos.forEach(c=>c.disabled=false);atualizar();
+      }
+    };
+  }catch(e){if(dialog.open)lista.textContent='Não foi possível consultar as seções. '+e.message;}
+}
+
 async function confirmDialog(title,message){const d=$('#confirm-dialog');$('#dialog-title').textContent=title;$('#dialog-message').textContent=message;return new Promise(resolve=>{d.addEventListener('close',()=>resolve(d.returnValue==='confirm'),{once:true});d.showModal();});}
 function exportCsv(nome, cabecalho, linhas){
  const safe=v=>{
@@ -582,7 +632,7 @@ async function mapas(forced=''){
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
- ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button>'):''}</div>
+ ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar página</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="btn-outline danger-text" id="map-delete-filtered" data-icon-keep-label type="button" disabled>Excluir em lote</button>'):''}</div>
  <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-xls" type="button" data-icon-keep-label title="Exportar quantidade corrigida em planilha XLS">Exportar XLS</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
  const draw=()=>{
@@ -594,6 +644,8 @@ async function mapas(forced=''){
   $('#map-page-label').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil(filtered.length/Number($('#map-size').value)))}`;
   $('#map-counter').textContent=`${filtered.length} registro(s) · ${filtered.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · ${selected.size} selecionado(s)`;
   for(const id of ['map-formula-on','map-formula-off'])if($('#'+id))$('#'+id).disabled=!selected.size;
+  const apagar=$('#map-delete-filtered');
+  if(apagar)apagar.disabled=apagar.dataset.excluindo==='1'||!filtered.some(r=>selected.has(r.id));
   const descida=$('#stock-descend-selected');
   if(descida){const validos=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0&&r.tipo_mapa==='Estoque'));
     descida.disabled=!validos.length;descida.textContent=validos.length?`Descer ${validos.length} selecionado(s) para mapa`:'Descer selecionados para o mapa';}
@@ -689,6 +741,19 @@ async function mapas(forced=''){
  if(able){
   $('#map-select-all').onchange=e=>{for(const r of paged()){if(e.target.checked)selected.add(r.id);else selected.delete(r.id);}draw();};
   $('#map-unselect').onclick=()=>{selected.clear();$('#map-select-all').checked=false;draw();};
+  const excluirLote=$('#map-delete-filtered');
+  if(excluirLote)excluirLote.onclick=async()=>{
+    const ids=filtered.filter(r=>selected.has(r.id)).map(r=>r.id);
+    if(!ids.length)return;
+    if(ids.length>10000)return toast('Selecione até 10.000 lançamentos. Use os filtros para dividir a seleção.',true);
+    if(!await confirmDialog('Excluir em lote',`Excluir ${ids.length} lançamento(s) selecionado(s) nos filtros atuais, incluindo outras páginas? A exclusão será registrada na auditoria.`))return;
+    excluirLote.dataset.excluindo='1';excluirLote.disabled=true;
+    try{
+      const r=await request('/mapas/excluir-lote',{method:'DELETE',body:{ids},retries:0,timeout:58000});
+      toast(`${r.quantidade} lançamento(s) excluído(s).`);await renderRoute(state.route);
+    }catch(err){toast(err.message,true);}
+    finally{delete excluirLote.dataset.excluindo;if(excluirLote.isConnected)draw();}
+  };
   if($('#map-select-filtered'))$('#map-select-filtered').onclick=()=>{for(const item of filtered)selected.add(item.id);draw();};
   async function salvarFormulasSelecionadas(ativo){
     // Seleção é de lançamentos; marcação é DO PRODUTO, uma vez por EAN.
@@ -1167,7 +1232,7 @@ async function usuarios(){
  const semResponsavel=mapasAtivos.filter(x=>x.tipo_mapa==='funcionario'&&!x.funcionario_id&&x.mapa_nome==='Sem responsável').length;
  const opUsuario=u=>`<option value="${H(u.id)}">${H(u.nome)}${u.ativo?'':' (inativo)'}</option>`;
  $('#content').innerHTML=header('Funcionários','Edite nomes, transfira lançamentos de qualquer mês e organize as seções sem alterar mapas operacionais.',
- '<button class="primary" id="staff-move-open" type="button">Transferir lançamentos</button>')+
+ '<button class="primary" id="staff-move-open" type="button">Transferir lançamentos</button><button class="btn-outline" id="staff-sug-secoes" type="button" data-icon-keep-label>Sugestões sem responsável</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="staff-search" class="wide" placeholder="Buscar funcionário"><select id="staff-filter"><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option></select><button class="btn-outline" id="staff-print" type="button">Imprimir</button></div>
  <p id="staff-total" class="footer-hint"></p><div class="notice" style="margin-bottom:14px"><strong>Lançamentos sem responsável:</strong> ${semResponsavel}. Utilize <strong>Transferir lançamentos</strong> para atribuí-los a um novo funcionário.</div><div id="staff-list"></div></section>
  <section class="card card-pad secondary-card"><h2>Adicionar funcionário</h2><form id="user-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>PIN inicial<input required type="password" name="pin" inputmode="numeric" pattern="[0-9]{6,12}" autocomplete="new-password"></label><div class="form-actions"><button class="primary">Cadastrar funcionário</button></div></form></section>
@@ -1246,6 +1311,7 @@ async function usuarios(){
  selectOrigem.onchange=()=>{cacheOrigem='';void consultarItens();};selectMes.onchange=()=>{cacheMes='';void consultarItens();};
  $('#staff-move-reload').onclick=consultarItens;
  $('#staff-move-open').onclick=()=>abrirMover();
+ $('#staff-sug-secoes').onclick=()=>abrirAtribuicaoPorSecao('mapas');
  $('#staff-move-confirm').onclick=async()=>{
   const origem=selectOrigem.value,destino=selectDestino.value,mes=selectMes.value,secao=selectSecao.value,todos=$('#staff-move-all').checked;
   if(!origem||!destino||origem===destino){$('#staff-move-error').textContent='Escolha origem e destino diferentes.';$('#staff-move-error').hidden=false;return;}
@@ -1479,7 +1545,7 @@ async function generic(pathname,title){
   const dlg=$('#queima-sug-dialog'),produtosSelect=$('#queima-sug-produto'),pessoasSelect=$('#queima-sug-select'),lista=$('#queima-sug-list'),salvar=$('#queima-sug-confirmar');
   const semTitular=rows.filter(x=>x.aprovado_via_importacao===true&&x.estado==='aprovado'&&x.sem_responsavel_importacao===true);
   const botaoGeral=$('#queima-sug-open');
-  botaoGeral.disabled=!semTitular.length;
+
   botaoGeral.textContent=`Sugestões sem responsável (${semTitular.length})`;
   const identificar=x=>`${x.descricao||x.ean_resolvido||x.ean||'Produto'} · ${dataBR(x.validade)} · Registro ${x.registro_queima||'—'}`;
   produtosSelect.innerHTML=semTitular.map(x=>`<option value="${H(x.id)}">${H(identificar(x))}</option>`).join('');
@@ -1553,7 +1619,7 @@ async function generic(pathname,title){
    if(!semTitular.length)return toast('Não há produtos aprovados sem responsável para conferir.',true);
    dlg.showModal();await carregarSugestoes(semTitular.some(x=>x.id===id)?id:semTitular[0].id);
   };
-  botaoGeral.onclick=()=>{void abrirSugestoesQueima();};
+  botaoGeral.onclick=()=>abrirAtribuicaoPorSecao('queima');
  }
  const apply=()=>{const q=$('#gen-search').value.toLowerCase(),status=$('#gen-status').value,from=$('#gen-since').value,importFiltro=isQueima?$('#gen-import-filter').value:'',filtroResponsavel=isQueima?$('#gen-owner-filter').value:'';
   filtered=rows.filter(x=>[x.ean,x.ean_resolvido,x.descricao,x.descricao_original,x.lote,x.acao,x.observacao,JSON.stringify(x.dados||{}),x.romaneio].join(' ').toLowerCase().includes(q)&&(!status||String(x.estado||x.situacao)==status)&&(!from||String(x.criado_em||'').slice(0,10)>=from)&&(!importFiltro||(importFiltro==='todos_importados'?x.estado==='aprovado'&&x.aprovado_via_importacao===true:importFiltro==='pendentes'?x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!x.importacao_verificada_em:x.estado==='aprovado'&&x.aprovado_via_importacao===true&&!!x.importacao_verificada_em))&&(!filtroResponsavel||(filtroResponsavel==='sem'?x.aprovado_via_importacao===true&&x.sem_responsavel_importacao===true:x.aprovado_via_importacao===true&&!!x.responsavel_importacao_id)));

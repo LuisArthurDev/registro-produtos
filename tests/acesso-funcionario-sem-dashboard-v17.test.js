@@ -29,5 +29,5 @@ test('Visualização não apresenta gráfico de Queima, reservado ao Dashboard',
   assert.match(visual,/Todas as abas especiais/);
 });
 test('cache da PWA é atualizado',()=>{
-  assert.match(serviceWorker,/registro-validades-v54-importacao-historica-grupos/);
+  assert.match(serviceWorker,/registro-validades-v55-atribuicao-por-secao/);
 });

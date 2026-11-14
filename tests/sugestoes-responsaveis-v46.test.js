@@ -55,7 +55,9 @@ function mock(role='admin',flags={}){
   }
   else if(table==='queima')data=flags.notEligible?[]:[{id:item,loja_id:'151',ean:'07898962711477',validade:'2026-12-30',estado:'aprovado',aprovado_via_importacao:true,sem_responsavel_importacao:true}];
   else if(table==='produtos'&&params.has('ean')&&params.get('ean').startsWith('eq.'))data=[{ean:'07898962711477',secao:'CONVENIENCIA',grupo:'DOCES'}];
+  else if(table==='produtos'&&params.get('ean')?.startsWith('in.'))data=[{ean:'07898962711477',secao:'CONVENIENCIA',grupo:'DOCES'}];
   else if(table==='produtos')data=flags.muitosProdutos?Array.from({length:75},(_,i)=>({ean:String(7890000000000+i)})):[{ean:'07898962711477'},{ean:'7898962711477'},{ean:'7891234567890'}];
+  else if(table==='organizacao_secoes'&&params.get('select')?.includes('responsavel_id'))data=[{secao_chave:'conveniencia',responsavel_id:alice}];
   else if(table==='organizacao_grupos')data=[{responsavel_id:bruna,grupo:'DOCES'}];
   else if(table==='mapa_lancamentos'&&params.get('ean')?.startsWith('eq.'))data=[{funcionario_id:alice,ean:'07898962711477',validade:'2026-12-30'}];
   else if(table==='mapa_lancamentos')data=[{funcionario_id:carlos,ean:'7891234567890'}];
@@ -107,6 +109,15 @@ test('sugestões deixam atribuir a qualquer funcionário mesmo após 600 resulta
  }finally{m.restore();}
 });
 
+test('prévia da Queima agrupa por seção e prioriza o titular ativo da seção',async()=>{
+ const m=mock();try{
+  const r=await m.request('/atribuicao-secoes?origem=queima');
+  assert.equal(r.statusCode,200,JSON.stringify(r.value));
+  assert.deepEqual(r.value.secoes,[{nome:'CONVENIENCIA',ids:[item],unidades:0,responsavel_id:alice}]);
+  assert.ok(m.calls.every(c=>c.method==='GET'));
+ }finally{m.restore();}
+});
+
 test('API recusa funcionário, id inválido e item que deixou de estar sem responsável',async()=>{
  for(const [role,flags,path,code] of [
   ['funcionario',{},`/queima/sugestoes?id=${item}`,403],
@@ -129,5 +140,5 @@ test('frontend tem modal global e por produto, opção manual e confirmação an
  assert.match(app,/Escolher funcionário/);
  assert.match(app,/confirmDialog\('Confirmar atribuição'/);
  assert.match(app,/acao:'atribuir_importacao'/);
- assert.match(sw,/registro-validades-v54-importacao-historica-grupos/);
+ assert.match(sw,/registro-validades-v55-atribuicao-por-secao/);
 });

@@ -819,3 +819,10 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
  #gen-list.queima-table-compacta .table-wrap th:nth-child(9){width:42px}
  #gen-list.queima-table-compacta .table-wrap th:nth-child(10){width:31px}
 }
+
+#atribuicao-secoes-lista{max-height:min(54vh,480px)}
+.atribuicao-secao-item{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.atribuicao-secao-item select{width:100%;min-width:0}
+@media(max-width:520px){
+ .atribuicao-secao-item{grid-template-columns:minmax(0,1fr);gap:5px}
+}

@@ -781,6 +781,52 @@ async function transferirTitularidade(actor,body){
     p_origem:origem==='flutuando'?null:origem,p_destino:destino==='flutuando'?null:destino,
     p_mes:mes,p_secao:secao||null,p_ids:todos?[]:ids,p_todos:todos}});
 }
+async function atribuicaoPorSecao(req,actor,body,query){
+  if(actor.perfil!=='admin')throw bad('Atribuição exclusiva do administrador da loja.',403);
+  const loja=actor.loja_id,origem=norm(body.origem||query.get('origem'));
+  if(!['mapas','queima'].includes(origem))throw bad('Origem inválida.',422);
+  if(req.method==='POST'){
+    const lotes=body.lotes,uid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    if(!Array.isArray(lotes)||!lotes.length||lotes.length>500||lotes.some(l=>!l||!uid.test(norm(l.responsavel_id))||
+       !Array.isArray(l.ids)||!l.ids.length||l.ids.some(id=>typeof id!=='string'||!uid.test(id))))
+      throw bad('Defina um responsável e selecione registros válidos para cada seção.',422);
+    const ids=lotes.flatMap(l=>l.ids);
+    if(ids.length>10000||new Set(ids).size!==ids.length)throw bad('Quantidade de itens inválida ou seleção duplicada.',422);
+    return db('rpc/atribuir_sem_responsavel_secoes_v55',{method:'POST',body:{
+      p_loja:loja,p_admin:actor.id,p_origem:origem,p_lotes:lotes
+    }});
+  }
+  if(req.method!=='GET')throw bad('Método não permitido.',405);
+  const [funcionarios,configSecoes,configGrupos,registros]=await Promise.all([
+    rows('usuarios',{loja_id:`eq.${loja}`,perfil:'eq.funcionario',ativo:'eq.true',excluido_em:'is.null',select:'id,nome',order:'nome.asc,id.asc'}),
+    rows('organizacao_secoes',{loja_id:`eq.${loja}`,select:'secao_chave,responsavel_id'}),
+    rows('organizacao_grupos',{loja_id:`eq.${loja}`,select:'grupo_chave,responsavel_id'}),
+    origem==='mapas'
+      ?listarLancamentosTitularidade(actor,new URLSearchParams({origem:'flutuando'})).then(r=>r.registros)
+      :rows('queima',{loja_id:`eq.${loja}`,excluido_em:'is.null',estado:'eq.aprovado',aprovado_via_importacao:'eq.true',
+        sem_responsavel_importacao:'eq.true',responsavel_importacao_id:'is.null',
+        select:'id,ean,codigo_interno,descricao_original,quantidade',order:'id.asc'})
+        .then(r=>enriquecerRegistros(r,'queima')).then(r=>filtrarRegistrosSecao(r,loja))
+  ]);
+  const ativos=new Set(funcionarios.map(u=>u.id));
+  const porSecao=new Map(configSecoes.map(x=>[chaveSecao(x.secao_chave),x.responsavel_id]));
+  const porGrupo=new Map(configGrupos.map(x=>[chaveSecao(x.grupo_chave),x.responsavel_id]));
+  const secoes=new Map();
+  for(const item of registros){
+    const chave=chaveSecao(item.secao);
+    if(!secoes.has(chave))secoes.set(chave,{nome:norm(item.secao)||'Sem seção',ids:[],unidades:0,grupos:new Set()});
+    const secao=secoes.get(chave);
+    secao.ids.push(item.id);
+    secao.unidades+=Number(item.quantidade)||0;
+    secao.grupos.add(chaveSecao(item.grupo));
+  }
+  return {sucesso:true,funcionarios,secoes:[...secoes].map(([chave,{grupos,...secao}])=>{
+    const titular=chave?porSecao.get(chave):null;
+    const destinos=new Set([...grupos].map(grupo=>porGrupo.get(grupo)));
+    const consenso=destinos.size===1?[...destinos][0]:null;
+    return {...secao,responsavel_id:ativos.has(titular)?titular:ativos.has(consenso)?consenso:null};
+  }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'))};
+}
 async function enriquecerRegistros(registros, table) {
   if (!['queima','vencidos','transferencias'].includes(table) || !registros.length) return registros;
   const eans=[...new Set(registros.map(x=>norm(x.ean)).filter(eanValido))];
@@ -1390,10 +1436,18 @@ async function handle(req){
   if(pathname==='/logout'&&req.method==='POST'){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};
   }
+  if(pathname==='/atribuicao-secoes')return atribuicaoPorSecao(req,actor,body,query);
   if(pathname==='/organizacao-secoes')return organizarSecoes(req,actor,body);
   if(pathname.startsWith('/produtos'))return produtos(req,actor,pathname,body,query);
   if(pathname==='/geral'&&req.method==='GET')return painelGeral(actor);
   if(pathname==='/geral/lojas'&&req.method==='POST')return cadastrarLojaGeral(actor,body);
+  if(pathname==='/mapas/excluir-lote'&&req.method==='DELETE'){
+    if(actor.perfil!=='admin')throw bad('Exclusão em lote exclusiva do administrador da loja.',403);
+    const ids=body.ids,uid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    if(!Array.isArray(ids)||!ids.length||ids.length>10000||ids.some(id=>typeof id!=='string'||!uid.test(id))||new Set(ids).size!==ids.length)
+      throw bad('Selecione de 1 a 10000 lançamentos distintos.',422);
+    return db('rpc/excluir_mapas_lote_v55',{method:'POST',body:{p_loja:actor.loja_id,p_admin:actor.id,p_ids:ids}});
+  }
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
   if(pathname==='/queima/sugestoes'&&req.method==='GET')return sugestoesResponsavelQueima(req,actor,query);
   if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);

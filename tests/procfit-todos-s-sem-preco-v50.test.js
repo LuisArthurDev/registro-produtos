@@ -128,5 +128,5 @@ test('SQL 029 é etapa independente no workflow; API contém módulo Sugestões 
  assert.match(workflow,/queima_todos_s_nao_vencidos_v50/);
  assert.match(workflow,/supabase\/029_importacao_queima_todos_s_sem_preco\.sql/);
  assert.match(api,/sugestoes-queima\.js/);
- assert.match(read('public/sw.js'),/registro-validades-v54-importacao-historica-grupos/);
+ assert.match(read('public/sw.js'),/registro-validades-v55-atribuicao-por-secao/);
 });
