@@ -127,16 +127,42 @@ test('Cadastro da Queima exige Registro e validade não vencida, mas não exige 
 test('API bloqueia cadastro manual vencido antes de chamar o banco',async()=>{
  const env=environment();try{
   const r=await env.call('queima','POST',{ean:EAN,lote:'ABC123',validade:'2000-01-01',quantidade:2,registro_queima:'166240'});
-  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/vencido/i);
+  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/7 dias/i);
   assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='POST').length,0);
  }finally{env.restore();}
 });
 test('API bloqueia encaminhamento do mapa vencido antes da RPC',async()=>{
  const env=environment({validadeMapa:'2000-01-01'});try{
   const r=await env.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
-  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/vencido/i);
+  assert.equal(r.statusCode,409);assert.match(r.data.mensagem||'',/7 dias/i);
   assert.equal(env.calls.filter(c=>c.table==='rpc/encaminhar_mapa_queima_v40').length,0);
  }finally{env.restore();}
+});
+test('API manual rejeita menos de 7 dias e aceita prazo exato de 7 dias',async()=>{
+ const {hojeSaoPaulo,limiteMinimoQueima}=await import('../api/index.js');
+ const hoje=hojeSaoPaulo(),limite=limiteMinimoQueima(hoje);
+ const data6=new Date(limite+'T00:00:00Z');data6.setUTCDate(data6.getUTCDate()-1);
+ const env=environment();try{
+  const base={ean:EAN,lote:'ABC123',quantidade:2,registro_queima:'166240'};
+  const bloqueado=await env.call('queima','POST',{...base,validade:data6.toISOString().slice(0,10)});
+  assert.equal(bloqueado.statusCode,409);assert.match(bloqueado.data.mensagem||'',/7 dias/);
+  assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='POST').length,0);
+  const liberado=await env.call('queima','POST',{...base,validade:limite});
+  assert.equal(liberado.statusCode,200,JSON.stringify(liberado.data));
+  assert.equal(env.calls.filter(c=>c.table==='queima'&&c.method==='POST').length,1);
+ }finally{env.restore();}
+});
+test('API mapa bloqueia validade em 6 dias, permite exatamente 7 e preserva aprovação manual',async()=>{
+ const {hojeSaoPaulo,limiteMinimoQueima}=await import('../api/index.js');
+ const limite=limiteMinimoQueima(hojeSaoPaulo());const dt=new Date(limite+'T00:00:00Z');dt.setUTCDate(dt.getUTCDate()-1);
+ const bloqueado=environment({validadeMapa:dt.toISOString().slice(0,10)});try{
+  const r=await bloqueado.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
+  assert.equal(r.statusCode,409);assert.equal(bloqueado.calls.filter(c=>c.table==='rpc/encaminhar_mapa_queima_v40').length,0);
+ }finally{bloqueado.restore();}
+ const ok=environment({validadeMapa:limite});try{
+  const r=await ok.call('mapas/encaminhar','POST',{ids:[m1],destino:'queima',registro_queima:'166240'});
+  assert.equal(r.statusCode,200);assert.equal(ok.calls.filter(c=>c.table==='rpc/encaminhar_mapa_queima_v40').length,1);
+ }finally{ok.restore();}
 });
 test('Aprovação exige Validade e Preço da Gôndola; novo lançamento não os preenche',async()=>{
  const env=environment();try{

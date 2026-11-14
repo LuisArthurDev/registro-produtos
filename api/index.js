@@ -14,9 +14,19 @@ export function hojeSaoPaulo(data=new Date()){
  const v=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(data).map(x=>[x.type,x.value]));
  return `${v.year}-${v.month}-${v.day}`;
 }
-export const validadeVencidaParaQueima=(validade,hoje=hojeSaoPaulo())=>!dataValida(validade)||validade<hoje;
+// Regra de calendário: o produto precisa vencer em 7 dias ou mais,
+// contando a partir da data local da loja em São Paulo. Ex.: 14/11 -> 21/11.
+export const limiteMinimoQueima=(hoje=hojeSaoPaulo())=>{
+ if(!dataValida(hoje))throw bad('Data atual inválida para Queima.',422);
+ const limite=new Date(`${hoje}T00:00:00Z`);
+ limite.setUTCDate(limite.getUTCDate()+7);
+ return limite.toISOString().slice(0,10);
+};
+export const prazoInsuficienteParaQueima=(validade,hoje=hojeSaoPaulo())=>!dataValida(validade)||validade<limiteMinimoQueima(hoje);
+// Alias legado para clientes da v40; agora inclui validade de 0 a 6 dias.
+export const validadeVencidaParaQueima=prazoInsuficienteParaQueima;
 const validarRegistroQueima=valor=>{const registro=norm(valor);if(!/^\d{1,20}$/.test(registro))throw bad('Informe o Registro da Queima (número da solicitação Procfit).',422);return registro;};
-const validarPrazoQueima=validade=>{if(validadeVencidaParaQueima(validade))throw bad('Produto vencido ou sem validade: não pode ser lançado na Queima.',409);return validade;};
+const validarPrazoQueima=validade=>{if(prazoInsuficienteParaQueima(validade))throw bad('A Queima exige pelo menos 7 dias até a validade (data local de São Paulo).',409);return validade;};
 export function hashPin(pin,salt=randomBytes(24).toString('hex')) {
   if(!/^\d{6,12}$/.test(String(pin))) throw bad('O novo PIN deve ter 6 a 12 dígitos.');
   return `scrypt$${salt}$${scryptSync(String(pin), salt, 64).toString('hex')}`;
@@ -1016,22 +1026,22 @@ async function importarXlsQueima(req,actor,body){
  const registro=validarRegistroQueima(body.registro);
  const itens=body.itens;
  if(!Array.isArray(itens)||itens.length<1||itens.length>3000)throw bad('Envie de 1 a 3000 produtos do relatório XLS.',422);
- const linhas=new Set();let vencidos=0;const hoje=hojeSaoPaulo();
+ const linhas=new Set();let vencidos=0,prazoInsuficiente=0;const hoje=hojeSaoPaulo(),limite=limiteMinimoQueima(hoje);
  for(const r of itens){
    if(!r||typeof r!=='object'||Array.isArray(r))throw bad('Linha XLS inválida.',422);
    if(!Number.isInteger(r.linha)||r.linha<2||linhas.has(r.linha))throw bad('Linhas XLS inválidas ou repetidas.',422);
    linhas.add(r.linha);
    if(!/^\d{1,20}$/.test(norm(r.codigo_interno))&&!eanValido(norm(r.ean)))throw bad(`Linha ${r.linha}: Código Interno/EAN inválido.`,422);
    if(!dataValida(r.validade))throw bad(`Linha ${r.linha}: validade inválida.`,422);
-   if(r.validade<hoje)vencidos++;
+   if(r.validade<hoje)vencidos++;else if(r.validade<limite)prazoInsuficiente++;
    if(!norm(r.lote)||norm(r.lote).length>100||!Number.isInteger(r.quantidade)||r.quantidade<=0||r.quantidade>999999||Number(r.motivo)!==4)
      throw bad(`Linha ${r.linha}: lote, quantidade ou motivo inválido.`,422);
  }
  // O SQL faz a comparação com o relógio do servidor e a gravação atômica.
- // As linhas vencidas nunca entram na Queima; permanecem no resumo de ignoradas.
+ // Vencidos ou com menos de 7 dias nunca entram na Queima. SQL revalida cada linha.
  const resultado=await db('rpc/importar_queima_xls_v40',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_registro:registro,
   p_itens:itens.map(({linha,codigo_interno,ean,lote,validade,quantidade,motivo})=>({linha,codigo_interno:norm(codigo_interno),ean:norm(ean),lote:norm(lote),validade,quantidade,motivo}))}});
- await audit(actor,'importar_xls_queima',{registro,linhas:itens.length,importados:resultado?.importados,ignorados_vencidos:resultado?.ignorados_vencidos});
+ await audit(actor,'importar_xls_queima',{registro,linhas:itens.length,importados:resultado?.importados,ignorados_vencidos:resultado?.ignorados_vencidos,ignorados_prazo_insuficiente:resultado?.ignorados_prazo_insuficiente});
  return {sucesso:true,resultado};
 }
 async function relancarQueima(req,actor,body){

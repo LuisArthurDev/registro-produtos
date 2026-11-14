@@ -1,3 +1,5 @@
+> **v41 — Queima exige validade de no mínimo 7 dias.** Migração SQL 023 obrigatória depois da 022. [Guia da atualização](ATUALIZAR-V41-QUEIMA-PRAZO-MINIMO-7-DIAS.md).
+
 > **v40: Importação XLS de Queima com Registro, proibição de produtos vencidos e campos de Gôndola apenas ao aprovar.** Consulte [o guia da v40](ATUALIZAR-V40-IMPORTACAO-XLS-QUEIMA-SEM-VENCIDOS.md) e aplique a **SQL 022** antes do deploy.
 
 > **Atualização v35:** filtros mantidos após recarregar e marcação em lote de Fórmulas Especiais. Leia [o guia da v35](ATUALIZAR-V35-FILTROS-FORMULAS-LOTE.md). Requer SQL 021 no Supabase após SQL 020.

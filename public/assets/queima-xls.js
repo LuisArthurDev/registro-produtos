@@ -6,7 +6,21 @@ const registrar=b=>{const t=new DataView(b.buffer,b.byteOffset,b.byteLength);ret
 const excelData=n=>{if(!Number.isFinite(n)||n<1||n>2958465)throw Error('Data numérica XLS inválida.');
   const v=new Date((Math.floor(n)-25569)*86400000);const iso=v.toISOString().slice(0,10);return iso;};
 export function registroDaQueimaNome(nome){const match=/^queima[-_ ](\d{1,20})(?:\s*\(\d+\))?\.xls$/i.exec(String(nome||''));if(!match)throw Error('O nome do arquivo deve seguir Queima-166240.xls.');return match[1];}
-export function vencidoParaQueima(data,hoje){return /^\d{4}-\d\d-\d\d$/.test(data)&&data<hoje;}
+/** Data de corte: hoje + 7 dias de calendário; hoje e os próximos 6 não entram. */
+export function limiteMinimoQueima(hoje){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(hoje)))throw Error('Data de referência inválida.');
+ const dt=new Date(hoje+'T00:00:00Z');
+ if(!Number.isFinite(dt.getTime())||dt.toISOString().slice(0,10)!==hoje)throw Error('Data de referência inválida.');
+ dt.setUTCDate(dt.getUTCDate()+7);
+ return dt.toISOString().slice(0,10);
+}
+export function prazoInsuficienteParaQueima(data,hoje){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(data)))return true;
+ const dt=new Date(data+'T00:00:00Z');
+ return !Number.isFinite(dt.getTime())||dt.toISOString().slice(0,10)!==data||data<limiteMinimoQueima(hoje);
+}
+export const vencidoParaQueima=prazoInsuficienteParaQueima; // compatibilidade interna com v40
+
 function cfbWorkbook(buffer){
  const bytes=buffer instanceof Uint8Array?buffer:new Uint8Array(buffer),r=registrar(bytes);
  if(bytes.byteLength>12*1024*1024||bytes.length<1024||assinatura.some((v,i)=>bytes[i]!==v))throw Error('Selecione um arquivo XLS binário válido (até 12 MB).');

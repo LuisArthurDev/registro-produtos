@@ -10,13 +10,15 @@ test('Nome do arquivo define Registro; rejeita nomes e extensões errados',()=>{
  assert.equal(registroDaQueimaNome('Queima-001234 (1).xls'),'001234');
  for(const name of ['Produto.xls','Queima-outro.xls','Queima-166240.xlsx','Queima-166240.xls.exe'])assert.throws(()=>registroDaQueimaNome(name),/nome do arquivo/);
 });
-test('Regra de vencimento: dia anterior bloqueado, hoje permitido, amanhã permitido',()=>{
- assert.equal(vencidoParaQueima('2026-11-13','2026-11-14'),true);
- assert.equal(vencidoParaQueima('2026-11-14','2026-11-14'),false);
- assert.equal(vencidoParaQueima('2026-11-15','2026-11-14'),false);
- assert.equal(validadeVencidaParaQueima('2026-11-13','2026-11-14'),true);
- assert.equal(validadeVencidaParaQueima('2026-11-14','2026-11-14'),false);
- assert.equal(validadeVencidaParaQueima('2026-11-15','2026-11-14'),false);
+test('Regra v41: vencimento hoje até 6 dias bloqueado; 7 dias é aceito',()=>{
+ for(const data of ['2026-11-13','2026-11-14','2026-11-15','2026-11-20']){
+  assert.equal(vencidoParaQueima(data,'2026-11-14'),true,data);
+  assert.equal(validadeVencidaParaQueima(data,'2026-11-14'),true,data);
+ }
+ for(const data of ['2026-11-21','2026-11-22','2027-01-01']){
+  assert.equal(vencidoParaQueima(data,'2026-11-14'),false,data);
+  assert.equal(validadeVencidaParaQueima(data,'2026-11-14'),false,data);
+ }
  assert.equal(validadeVencidaParaQueima('2026-02-30','2026-11-14'),true);
  assert.equal(hojeSaoPaulo(new Date('2026-11-14T02:00:00Z')),'2026-11-13');
  assert.equal(hojeSaoPaulo(new Date('2026-11-14T05:00:00Z')),'2026-11-14');
@@ -45,7 +47,7 @@ test('Tela de Visualização oferece apenas Mapa/Lançamentos e dois modos',()=>
  assert.match(view,/data-view-mode="validade"/);
  assert.doesNotMatch(view,/data-view-tab="vencidos"|data-view-tab="sinalizacoes"/);
 });
-test('Banco exige validade futura ou hoje e datas da gôndola somente na aprovação',()=>{
+test('Migração v40 estabelece a base e preserva dados da gôndola somente na aprovação',()=>{
  const sql=read('supabase/022_importacao_xls_queima_validade.sql');
  assert.match(sql,/NEW\.validade < \(now\(\) AT TIME ZONE 'America\/Sao_Paulo'\)::date/);
  assert.match(sql,/BEFORE INSERT ON public\.queima/);
@@ -62,11 +64,11 @@ test('Banco exige validade futura ou hoje e datas da gôndola somente na aprova�
  assert.match(sql,/abas_especiais/);
  assert.match(sql,/relancar_queima/);
 });
-test('Front separa importação pendente de aprovação e respeita validação de vencidos',()=>{
+test('Front separa importação pendente de aprovação e aplica validação do mínimo de 7 dias',()=>{
  const app=read('public/assets/app.js'),api=read('api/index.js');
  assert.match(app,/id="queima-import-open"/);
  assert.match(app,/lerArquivoQueimaXls\(await selected\.arrayBuffer\(\),selected\.name\)/);
- assert.match(app,/vencidoParaQueima\(r\.validade,hoje\)/);
+ assert.match(app,/prazoInsuficienteParaQueima\(r\.validade,hoje\)/);
  assert.match(app,/request\('\/queima\/importar-xls'/);
  assert.match(app,/solicitarAprovacaoQueima\(old\)/);
  assert.match(app,/Registro da Queima/);

@@ -88,7 +88,7 @@ test('produto e mapa têm seleção em lote, e a marcação é por EAN, não por
  assert.match(app,/id="product-formula-on"/);assert.match(app,/id="product-formula-off"/);
  assert.match(app,/new Set\(\[\.\.\.selected\]\.map\(id=>rows\.find\(r=>r\.id===id\)\?\.ean\)/);
  assert.match(app,/request\('\/produtos\/formulas-lote'/);
- assert.match(sw,/registro-validades-v40-importar-queima-nao-vencidos/);
+ assert.match(sw,/registro-validades-v41-queima-validade-minima-7-dias/);
  assert.match(sw,/filtros-persistentes\.js/);
 });
 test('filtros são isolados por usuário, loja e aba e não confundem seleção de operadores',()=>{

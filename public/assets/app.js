@@ -11,7 +11,7 @@ import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js';
 import { resumoQueima } from './queima-grafico.js';
-import { lerArquivoQueimaXls, vencidoParaQueima } from './queima-xls.js';
+import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -563,7 +563,7 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span>${r.formula_especial?'<span class="pill amber" title="Não pode ser lançado na Queima nem copiado para o Procfit">Fórmula Especial</span>':''}<span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
  <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}</td>
- ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
+ ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button><button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:prazoInsuficienteParaQueima(r.validade,nowBrISO())?`<span class="second" title="Queima exige validade de pelo menos 7 dias">Queima bloqueada · menos de 7 dias</span>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=[...new Set(rows.map(r=>r.mapa_nome))].sort();
@@ -678,7 +678,7 @@ async function mapas(forced=''){
      return;
    }
    const send=e.target.closest('[data-send-map]');if(send){const destino=send.dataset.sendTo,reg=rows.find(x=>x.id===send.dataset.sendMap);if(!reg)return;
-     if(destino==='queima'&&(reg.validade<nowBrISO()||reg.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(reg.tipo_mapa)))return toast('Este produto não pode entrar na Queima.',true);
+     if(destino==='queima'&&(prazoInsuficienteParaQueima(reg.validade,nowBrISO())||reg.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(reg.tipo_mapa)))return toast('Este produto não pode entrar na Queima. Verifique o prazo mínimo de 7 dias e as demais restrições.',true);
      const registro=destino==='queima'?await solicitarRegistroQueima([reg]):{};if(destino==='queima'&&!registro)return;
      if(!await confirmDialog(destino==='vencidos'?'Lançar como Vencido':'Lançar na Queima',`Encaminhar ${reg.quantidade} unidade(s) do EAN ${reg.ean} (${reg.mapa_nome})?`))return;
      try{await request('/mapas/encaminhar',{method:'POST',body:{ids:[reg.id],destino,...registro}});toast('Encaminhamento concluído.');await renderRoute(state.route);}catch(err){toast(err.message,true);}return;
@@ -746,7 +746,7 @@ async function mapas(forced=''){
   for(const destino of ['queima','vencidos'])$('#map-to-'+destino).onclick=async()=>{
    const ids=[...selected].filter(id=>rows.some(r=>r.id===id&&Number(r.quantidade)>0));
    if(!ids.length)return toast('Selecione ao menos um lançamento.',true);
-   if(destino==='queima'&&ids.some(id=>rows.some(r=>r.id===id&&(r.validade<nowBrISO()||r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome)))))return toast('Sua seleção contém Fórmulas Especiais ou abas especiais que não podem entrar na Queima.',true);
+   if(destino==='queima'&&ids.some(id=>rows.some(r=>r.id===id&&(prazoInsuficienteParaQueima(r.validade,nowBrISO())||r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome)))))return toast('A seleção contém item com menos de 7 dias de validade, Fórmula Especial ou aba bloqueada para Queima.',true);
    const selecionados=ids.map(id=>rows.find(r=>r.id===id)).filter(Boolean);
    const registro=destino==='queima'?await solicitarRegistroQueima(selecionados):{};if(destino==='queima'&&!registro)return;
    if(!await confirmDialog('Encaminhar '+ids.length+' produto(s)',destino==='queima'?'O lançamento original será preservado e incluído na Queima com motivo 4.':'A quantidade do mapa será zerada e o registro será preservado para auditoria.'))return;
@@ -1431,7 +1431,7 @@ async function generic(pathname,title){
   }catch(err){toast(err.message,true);}
  };
  const form=$('#generic-form');if(form)form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('[type="submit"]'),body=Object.fromEntries(new FormData(form));
-  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isTrans){body.requestId=form.dataset.requestId||newId();form.dataset.requestId=body.requestId;}if(isQueima){body.motivo='4';body.estado='pendente';if(vencidoParaQueima(body.validade,nowBrISO()))return toast('Produto vencido não pode ser lançado na Queima.',true);}
+  for(const key of Object.keys(body))if(body[key]==='')delete body[key];if(body.quantidade)body.quantidade=Number(body.quantidade);if(isTrans){body.requestId=form.dataset.requestId||newId();form.dataset.requestId=body.requestId;}if(isQueima){body.motivo='4';body.estado='pendente';if(prazoInsuficienteParaQueima(body.validade,nowBrISO()))return toast('Queima exige validade de pelo menos 7 dias a partir de hoje.',true);}
   if(isVenc&&!body.ean&&!body.codigo_interno)return toast('Informe EAN ou código interno.',true);
   btn.disabled=true;try{await request('/'+pathname,{method:'POST',body});toast('Registro incluído.');if(isTrans)delete form.dataset.requestId;renderRoute(state.route);}catch(err){toast(err.message,true);}finally{btn.disabled=false;}
  };
@@ -1442,20 +1442,22 @@ async function generic(pathname,title){
    file.onchange=async()=>{const selected=file.files?.[0];file.value='';if(!selected)return;
     try{
       const dados=lerArquivoQueimaXls(await selected.arrayBuffer(),selected.name),hoje=nowBrISO();
-      const vencidos=dados.itens.filter(r=>vencidoParaQueima(r.validade,hoje));
-      const validos=dados.itens.filter(r=>!vencidoParaQueima(r.validade,hoje));
+      const limite=limiteMinimoQueima(hoje);
+      const vencidos=dados.itens.filter(r=>r.validade<hoje);
+      const prazoInsuficiente=dados.itens.filter(r=>r.validade>=hoje&&prazoInsuficienteParaQueima(r.validade,hoje));
+      const validos=dados.itens.filter(r=>!prazoInsuficienteParaQueima(r.validade,hoje));
       if(dados.itens.length>3000)throw new Error('Arquivo com mais de 3000 linhas. Divida o relatório.');
       preparado=dados;
-      $('#queima-import-summary').textContent=`Registro ${dados.registro} · ${dados.itens.length} linha(s) · ${validos.length} com validade não vencida · ${vencidos.length} vencida(s) que serão ignoradas. Motivo 4. A aprovação e os dados da gôndola ficam para depois.`;
+      $('#queima-import-summary').textContent=`Registro ${dados.registro} · ${dados.itens.length} linha(s) · ${validos.length} apta(s) (validade mínima ${dataBR(limite)}) · ${vencidos.length} vencida(s) · ${prazoInsuficiente.length} com menos de 7 dias, todas ignoradas. Motivo 4. A aprovação e os dados da gôndola ficam para depois.`;
       const primeiras=dados.itens.slice(0,40);
-      $('#queima-import-preview').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Linha</th><th>Produto</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Qtd.</th><th>Situação</th></tr></thead><tbody>${primeiras.map(x=>`<tr><td>${x.linha}</td><td>${H(x.codigo_interno||x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${x.quantidade}</td><td>${vencidoParaQueima(x.validade,hoje)?pill('Vencido · ignorar','red'):pill('Validar no catálogo','green')}</td></tr>`).join('')}</tbody></table></div>${dados.itens.length>40?`<p>Exibindo 40 de ${dados.itens.length} linhas. A importação considerará todas as linhas.</p>`:''}`;
+      $('#queima-import-preview').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Linha</th><th>Produto</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Qtd.</th><th>Situação</th></tr></thead><tbody>${primeiras.map(x=>`<tr><td>${x.linha}</td><td>${H(x.codigo_interno||x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${x.quantidade}</td><td>${x.validade<hoje?pill('Vencido · ignorar','red'):prazoInsuficienteParaQueima(x.validade,hoje)?pill('Menos de 7 dias · ignorar','red'):pill('Validar no catálogo','green')}</td></tr>`).join('')}</tbody></table></div>${dados.itens.length>40?`<p>Exibindo 40 de ${dados.itens.length} linhas. A importação considerará todas as linhas.</p>`:''}`;
       confirm.disabled=!validos.length;dlg.showModal();
     }catch(err){preparado=null;toast('Não foi possível ler o XLS: '+err.message,true);}
    };
    confirm.onclick=async()=>{if(!preparado)return;confirm.disabled=true;
     try{const {registro,itens}=preparado;const res=await request('/queima/importar-xls',{method:'POST',body:{registro,itens},timeout:120000,retries:0});
       const r=res.resultado||{};dlg.close();preparado=null;
-      toast(`Registro ${registro}: ${r.importados||0} lançado(s); ${r.ignorados_vencidos||0} vencido(s), ${r.ignorados_duplicados||0} já importado(s), ${r.ignorados_sem_catalogo||0} sem catálogo, ${r.ignorados_formula_especial||0} Fórmula(s) Especial(is), ${r.ignorados_abas_especiais||0} de abas especiais e ${r.ignorados_invalidos||0} inválidos ignorados.`);
+      toast(`Registro ${registro}: ${r.importados||0} lançado(s); ${r.ignorados_vencidos||0} vencido(s), ${r.ignorados_prazo_insuficiente||0} com menos de 7 dias, ${r.ignorados_duplicados||0} já importado(s), ${r.ignorados_sem_catalogo||0} sem catálogo, ${r.ignorados_formula_especial||0} Fórmula(s) Especial(is), ${r.ignorados_abas_especiais||0} de abas especiais e ${r.ignorados_invalidos||0} inválidos ignorados.`);
       await renderRoute(state.route);
     }catch(err){toast('Falha na importação: '+err.message,true);$('#queima-import-summary').textContent='Importação não confirmada: '+err.message+' Confira o Registro antes de repetir.';}
     finally{confirm.disabled=false;}
