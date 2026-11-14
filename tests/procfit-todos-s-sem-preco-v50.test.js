@@ -87,7 +87,7 @@ test('Interface mantém Primeira importação, edição manual e resumos de iten
  assert.match(ui,/c\.vencido\|\|0/);
  assert.match(ui,/c\.sem_validade\|\|0/);
  assert.match(ui,/acao:'editar_aprovado'/);
- assert.match(api,/quantidade_pendente:false/);
+ assert.match(api,/quantidade_pendente:manterQuantidadePendente/);
  assert.doesNotMatch(ui,/id="queima-relatorio-corrigir"/);
 });
 
@@ -128,5 +128,5 @@ test('SQL 029 é etapa independente no workflow; API contém módulo Sugestões 
  assert.match(workflow,/queima_todos_s_nao_vencidos_v50/);
  assert.match(workflow,/supabase\/029_importacao_queima_todos_s_sem_preco\.sql/);
  assert.match(api,/sugestoes-queima\.js/);
- assert.match(read('public/sw.js'),/registro-validades-v50-procfit-todos-s-novos/);
+ assert.match(read('public/sw.js'),/registro-validades-v51-visualizacao-queima-timeout-validades/);
 });

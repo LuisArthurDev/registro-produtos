@@ -16,7 +16,7 @@ const rows=[
  {linha:8,colunas:['46321','1001 - LOJA DIFERENTE','Edinaldo','V152 - Praça','','E','','46507','S','1','9.99','2.50']}
 ];
 const item={linha:4,codigo_interno:'88441',validade:'2026-11-24',quantidade:1,preco_gondola:7.48,data_lancamento:'2026-10-26',ocorrencia:1,aprovado:true};
-function mock({perfil='admin',status='aprovado'}={}){
+function mock({perfil='admin',status='aprovado',importado=false,quantidadePendente=false}={}){
  const old=globalThis.fetch, envUrl=process.env.SUPABASE_URL, envSec=process.env.SUPABASE_SECRET_KEY;
  process.env.SUPABASE_URL='https://test.supabase.co';process.env.SUPABASE_SECRET_KEY='sb_secret_test';
  const calls=[];
@@ -25,7 +25,7 @@ function mock({perfil='admin',status='aprovado'}={}){
   calls.push({table,method,body,params:u.searchParams});let data=[];
   if(table==='sessoes')data=[{token_hash:hash,usuario_id:actorId,expira_em:'2099-01-01T00:00:00Z',ultima_atividade:new Date().toISOString()}];
   else if(table==='usuarios')data=[{id:actorId,loja_id:'151',perfil,ativo:true,nome:'Admin'}];
-  else if(table==='queima')data=[{id:burnId,loja_id:'151',estado:status,quantidade:2,validade_gondola:'2026-12-30',preco_gondola:8.5,registro_queima:'166240'}];
+  else if(table==='queima')data=[{id:burnId,loja_id:'151',estado:status,quantidade:quantidadePendente?0:2,quantidade_pendente:quantidadePendente,aprovado_via_importacao:importado,validade:'2026-12-30',validade_gondola:'2026-12-30',preco_gondola:importado?null:8.5,registro_queima:'166240'}];
   else if(table==='rpc/conciliar_queima_relatorio_v43')data={simulacao:body.p_simular,contagem:{aprovar_existente:1,sem_preco:1,sem_catalogo:0},amostras:[{linha:4,acao:'aprovar_existente'}]};
   else if(table==='auditoria')data=null;
   return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}});
@@ -90,14 +90,37 @@ test('funcionário não concilia; dados ausentes são permitidos, identificadore
   assert.ok(!admin.calls.some(c=>c.table==='rpc/conciliar_queima_relatorio_v43'));
  }finally{admin.restore();}
 });
-test('aprovado pode editar quantidade, validade da gôndola e preço mantendo o estado',async()=>{
+test('aprovado pode editar quantidade, validade do produto, validade da gôndola e preço mantendo estado',async()=>{
  const env=mock();try{
-  const r=await env.call('queima','PATCH',{id:burnId,acao:'editar_aprovado',quantidade:9,preco_gondola:4.72,validade_gondola:'2026-11-30'});
+  const r=await env.call('queima','PATCH',{id:burnId,acao:'editar_aprovado',quantidade:9,preco_gondola:4.72,validade:'2026-12-31',validade_gondola:'2026-11-30'});
   assert.equal(r.statusCode,200,JSON.stringify(r.data));
   const patch=env.calls.find(c=>c.table==='queima'&&c.method==='PATCH');
   assert.equal(patch.body.quantidade,9);assert.equal(patch.body.preco_gondola,4.72);
-  assert.equal(patch.body.validade_gondola,'2026-11-30');assert.equal(patch.body.estado,undefined);
+  assert.equal(patch.body.validade,'2026-12-31');assert.equal(patch.body.validade_gondola,'2026-11-30');assert.equal(patch.body.estado,undefined);
   assert.ok(env.calls.some(c=>c.table==='auditoria'));
+ }finally{env.restore();}
+});
+test('Aprovado importado sem preço e quantidade conhecida pode corrigir as duas validades sem inventar valores',async()=>{
+ const env=mock({importado:true,quantidadePendente:true});try{
+  const r=await env.call('queima','PATCH',{id:burnId,acao:'editar_aprovado',quantidade:0,preco_gondola:null,
+   validade:'2026-11-18',validade_gondola:'2026-11-19'});
+  assert.equal(r.statusCode,200,JSON.stringify(r.data));
+  const patch=env.calls.find(x=>x.table==='queima'&&x.method==='PATCH');
+  assert.equal(patch.body.validade,'2026-11-18');assert.equal(patch.body.validade_gondola,'2026-11-19');
+  assert.equal(patch.body.quantidade,0);assert.equal(patch.body.quantidade_pendente,true);
+  assert.equal(patch.body.preco_gondola,null);assert.equal(patch.body.estado,undefined);
+ }finally{env.restore();}
+});
+test('As duas validades são validadas separadamente e não podem ser datas impossíveis',async()=>{
+ const env=mock();try{
+  for(const patch of [
+   {validade:'2026-02-30',validade_gondola:'2027-01-01'},
+   {validade:'2027-01-01',validade_gondola:'2026-11-31'},
+  ]){
+   const r=await env.call('queima','PATCH',{id:burnId,acao:'editar_aprovado',quantidade:2,preco_gondola:8.9,...patch});
+   assert.equal(r.statusCode,422,JSON.stringify(r.data));
+  }
+  assert.equal(env.calls.filter(x=>x.table==='queima'&&x.method==='PATCH').length,0);
  }finally{env.restore();}
 });
 test('exclusão do aprovado é lógica e auditável; não faz DELETE físico',async()=>{

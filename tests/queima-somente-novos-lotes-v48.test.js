@@ -30,32 +30,32 @@ function mockAPI(){
  }};
 }
 
-test('Divide 95 linhas em 40, 40 e 15, preservando ordem e sem perder produtos',()=>{
+test('Divide 95 linhas em lotes de 10 sem perder produtos',()=>{
  const data=Array.from({length:95},(_,i)=>({linha:i+4}));
  const lotes=dividirQueimaEmLotes(data);
- assert.equal(TAM_LOTE_QUEIMA,40);assert.deepEqual(lotes.map(l=>l.length),[40,40,15]);
+ assert.equal(TAM_LOTE_QUEIMA,10);assert.deepEqual(lotes.map(l=>l.length),[10,10,10,10,10,10,10,10,10,5]);
  assert.deepEqual(lotes.flat(),data);
  assert.deepEqual(dividirQueimaEmLotes([],40),[]);
 });
 
-test('Prévia separada em 3 requisições e soma os resultados sem nenhuma mutação',async()=>{
+test('Prévia em lotes de 10 soma todos os resultados sem nenhuma mutação',async()=>{
  const data=Array.from({length:91},(_,i)=>({...item,linha:i+4})),calls=[],status=[];
  const r=await executarQueimaEmLotes(data,async(items,ctx)=>{
   calls.push({n:items.length,ctx});return {resultado:{total_aprovados:items.length,simulacao:true,
     contagem:{cadastrar_e_aprovar:items.length,ja_existente:0},amostras:items.map(x=>({linha:x.linha}))}};
  },{progresso:x=>status.push(x)});
- assert.deepEqual(calls.map(c=>c.n),[40,40,11]);assert.equal(r.contagem.cadastrar_e_aprovar,91);
+ assert.deepEqual(calls.map(c=>c.n),[10,10,10,10,10,10,10,10,10,1]);assert.equal(r.contagem.cadastrar_e_aprovar,91);
  assert.equal(r.amostras.length,91);assert.equal(r.total_aprovados,91);
- assert.equal(status.filter(x=>x.executado).length,3);
+ assert.equal(status.filter(x=>x.executado).length,10);
  assert.ok(calls.every(x=>x.ctx.simular));
 });
 
-test('Após falha do lote 2, nenhum lote posterior é enviado e progresso fica informado',async()=>{
+test('Após erro SQL não recuperável no lote 2, não envia lotes posteriores',async()=>{
  const lista=Array.from({length:94},(_,i)=>i),requests=[];
  await assert.rejects(()=>executarQueimaEmLotes(lista,async (_lote,ctx)=>{
-  requests.push(ctx.indice);if(ctx.indice===2)throw Error('57014');return {resultado:{contagem:{cadastrar_e_aprovar:40}}};
+  requests.push(ctx.indice);if(ctx.indice===2)throw Error('42501');return {resultado:{contagem:{cadastrar_e_aprovar:40}}};
  },{simular:false}),(e)=>{
-  assert.equal(e.message,'57014');assert.equal(e.lotesConcluidos,1);assert.equal(e.totalLotes,3);return true;
+  assert.equal(e.message,'42501');assert.equal(e.lotesConcluidos,1);assert.equal(e.totalLotes,10);return true;
  });
  assert.deepEqual(requests,[1,2]);
 });
@@ -111,7 +111,7 @@ test('Dois caminhos de entrada e caixa de primeira importação acionam o mesmo 
  assert.match(sql,/IF p_corrigir_aprovados IS TRUE THEN/);
  assert.doesNotMatch(sql,/UPDATE public\.queima SET quantidade=/);
 });
-test('API limita a 40 itens para evitar statement timeout',async()=>{
+test('API limita a 10 itens para evitar statement timeout',async()=>{
  const env=mockAPI();try{
   const lista=Array.from({length:41},(_,i)=>({...item,linha:i+4}));
   const r=await env.call({itens:lista,simular:true});
@@ -158,6 +158,6 @@ test('Workflow oferece SQL 028, cache PWA inclui o módulo de lotes',()=>{
  const wf=read('.github/workflows/migracao-supabase.yml'),sw=read('public/sw.js');
  assert.match(wf,/queima_so_novos_lotes_v48/);
  assert.match(wf,/supabase\/028_queima_relatorio_somente_novos_em_lotes\.sql/);
- assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
+ assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
  assert.match(sw,/\/assets\/queima-conciliacao-lotes\.js/);
 });

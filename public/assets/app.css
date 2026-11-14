@@ -693,3 +693,40 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 #gen-list td .pill.amber[title*="relatório Procfit"]{white-space:normal;max-width:100%;line-height:1.35;margin:3px 0 0;overflow-wrap:anywhere}
 #gen-list td.row-actions [data-verify-burn]{font-weight:750;white-space:normal}
 @media(max-width:600px){.queima-import-filter{flex-basis:100%}}
+
+/* Modal de sugestão para Queimas importadas sem responsável (v46). */
+.queima-sug-seletor{display:flex;flex-direction:column;gap:7px;margin:15px 0;color:var(--text);font-weight:650;font-size:13px}
+.queima-sug-seletor select{width:100%;min-height:42px}
+.queima-sug-list{display:grid;gap:10px;max-height:min(50vh,420px);overflow-y:auto;padding:3px 2px}
+.queima-sug-card{background:var(--surface,#18283a);border:1px solid var(--line,#385369);padding:13px 15px;border-radius:11px;min-width:0}
+.queima-sug-card-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px}
+.queima-sug-card ul{margin:10px 0 12px;padding-left:19px;color:var(--muted);font-size:12px;line-height:1.5}
+.queima-sug-card button{max-width:100%;white-space:normal}
+@media(max-width:560px){#queima-sug-dialog .dialog-inner{padding:16px}.queima-sug-card-top{align-items:flex-start}.queima-sug-list{max-height:48vh}}
+
+/* v51: Queima na Visualização mantém linhas (não cards), legíveis no celular,
+   sem rolagem horizontal e com os nomes das colunas junto ao valor. */
+@media(max-width:720px){
+ .view-route #view-results.view-queima-results #view-own-table{overflow:visible;max-width:100%}
+ .view-route #view-results.view-queima-results #view-own-table table{width:100%;min-width:0}
+ .view-route #view-results.view-queima-results #view-own-table thead{display:none}
+ .view-route #view-results.view-queima-results #view-own-table tbody{display:block;min-width:0}
+ .view-route #view-results.view-queima-results #view-own-table tbody tr{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:12px;row-gap:9px;
+  padding:13px 3px;border-bottom:1px solid #34516b;max-width:100%;min-width:0
+ }
+ .view-route #view-results.view-queima-results #view-own-table tbody td{
+  min-width:0;max-width:100%;border:0;padding:0;display:flex;flex-direction:column;
+  align-items:flex-start;gap:4px;white-space:normal;overflow-wrap:anywhere;font-size:13px
+ }
+ .view-route #view-results.view-queima-results #view-own-table tbody td:first-child{grid-column:1/-1;font-size:14px}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(2):before{content:'Lote'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(3):before{content:'Validade do produto'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(4):before{content:'Validade da gôndola'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(5):before{content:'Preço da gôndola'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(6):before{content:'Qtd. informada (conferir)'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(7):before{content:'Situação'}
+ .view-route #view-results.view-queima-results #view-own-table tbody td:nth-child(n+2):before{
+  display:block;color:#9bb5c6;font-size:10px;font-weight:700;letter-spacing:.01em
+ }
+}

@@ -1414,9 +1414,11 @@ async function generic(pathname,title){
    <button type="button" id="queima-sug-confirmar" class="primary" disabled>Confirmar atribuição</button></div></div></dialog>
   <dialog id="queima-editar-dialog" class="dialog" aria-labelledby="queima-editar-title"><form id="queima-editar-form" class="dialog-inner">
    <h2 id="queima-editar-title">Editar Queima aprovada</h2><p id="queima-editar-item"></p>
-   <div class="form-grid"><label>Quantidade<input name="quantidade" type="number" min="1" max="999999" step="1" required></label>
+   <div class="form-grid"><label>Quantidade<input name="quantidade" type="number" min="0" max="999999" step="1" required></label>
+   <label>Validade do Produto<input name="validade" type="date" required></label>
    <label>Validade da Gôndola<input name="validade_gondola" type="date" required></label>
-   <label>Preço da Gôndola (R$)<input name="preco_gondola" type="number" min="0" max="9999999999.99" step="0.01" required></label></div>
+   <label>Preço da Gôndola (R$)<input name="preco_gondola" type="number" min="0" max="9999999999.99" step="0.01"></label></div>
+   <p class="footer-hint">As validades são independentes. Para produtos importados sem preço, deixe o valor em branco até poder informá-lo.</p>
    <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-editar-cancelar">Cancelar</button>
    <button type="submit" class="primary">Salvar correção</button></div></form></dialog>
   <dialog id="queima-aprovar-dialog" class="dialog"><form id="queima-aprovar-form" class="dialog-inner">
@@ -1565,13 +1567,16 @@ async function generic(pathname,title){
     if(old.estado!=='aprovado')return toast('Somente itens aprovados podem ser editados.',true);
     const dlg=$('#queima-editar-dialog'),form=$('#queima-editar-form');form.reset();
     $('#queima-editar-item').textContent=`${old.descricao||old.ean} · Registro ${old.registro_queima||'não informado'} · Lote ${old.lote||'não informado'}`;
+    form.elements.quantidade.min=old.aprovado_via_importacao&&old.quantidade_pendente?'0':'1';
     form.elements.quantidade.value=old.quantidade;
+    form.elements.validade.value=String(old.validade||'').slice(0,10);
     form.elements.validade_gondola.value=String(old.validade_gondola||'').slice(0,10);
     form.elements.preco_gondola.value=old.preco_gondola??'';
     $('#queima-editar-cancelar').onclick=()=>dlg.close();
     form.onsubmit=async evt=>{evt.preventDefault();if(!form.reportValidity())return;const btn=form.querySelector('[type=submit]');btn.disabled=true;
       try{const dados={id,acao:'editar_aprovado',quantidade:Number(form.elements.quantidade.value),
-       validade_gondola:form.elements.validade_gondola.value,preco_gondola:Number(form.elements.preco_gondola.value)};
+       validade:form.elements.validade.value,validade_gondola:form.elements.validade_gondola.value,
+       preco_gondola:form.elements.preco_gondola.value.trim()===''?null:Number(form.elements.preco_gondola.value)};
        await request('/queima',{method:'PATCH',body:dados});dlg.close();toast('Produto aprovado corrigido e auditado.');await renderRoute(state.route);
       }catch(error){toast(error.message,true);}finally{btn.disabled=false;}
     };dlg.showModal();return;
@@ -1615,8 +1620,8 @@ async function generic(pathname,title){
      try{
       const dados=await executarQueimaEmLotes(relatorio.itens,
        (lote)=>enviarLote(lote,true),{
-       simular:true,progresso:({indice,total,executado})=>{
-        if(v===versao)resumo.textContent=`Prévia sem gravação: ${executado?'Concluído':'Analisando'} lote ${indice} de ${total}…`;
+       simular:true,progresso:({indice,total,executado,reduzido,tamanho})=>{
+        if(v===versao)resumo.textContent=reduzido?`Tempo limite no lote ${indice}: dividindo ${tamanho} itens em partes menores, sem gravar nada…`:`Prévia sem gravação: ${executado?'Concluído':'Analisando'} lote ${indice} de ${total}…`;
        }});
       if(v!==versao)return;
       mostrarResumo(dados);previaConfirmada=true;
@@ -1656,8 +1661,8 @@ async function generic(pathname,title){
     try{
       const dados=await executarQueimaEmLotes(relatorio.itens,
        lote=>enviarLote(lote,false,modoConfirmado),{
-       simular:false,progresso:({indice,total,executado})=>{
-        resumo.textContent=`Cadastrando somente novos: ${executado?'Concluído':'Executando'} lote ${indice} de ${total}. Não feche a página.`;
+       simular:false,progresso:({indice,total,executado,reduzido,tamanho})=>{
+        resumo.textContent=reduzido?`Tempo limite no lote ${indice}: dividindo ${tamanho} itens em partes menores. Os lotes anteriores permanecem registrados.`:`Cadastrando somente novos: ${executado?'Concluído':'Executando'} lote ${indice} de ${total}. Não feche a página.`;
        }});
       const c=dados.contagem||{};
       dlg.close();previaConfirmada=false;

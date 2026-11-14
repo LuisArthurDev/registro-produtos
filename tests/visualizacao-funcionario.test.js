@@ -51,8 +51,19 @@ test('Página nova usa o mesmo app, possui layout próprio e scanner permanece e
 });
 test('Tela oferece todos filtros históricos e opções com controle de acesso',()=>{
  const s=read('public/assets/visualizacao.js');
- for(const token of ['Por mês de lançamento','Validade (a vencer)','Vencidos / Retiradas','Sinalizações','Editar','Excluir','Sinalizar','Queima','Encaminhar para Vencidos','Exportar CSV','Imprimir','view-prev','view-size','name="observacao"'])assert.ok(s.includes(token),token);
+ for(const token of ['Por mês de lançamento','Validade (a vencer)','Editar','Excluir','Sinalizar','Queima','Encaminhar para Vencidos','Exportar CSV','Imprimir','view-prev','view-size','name="observacao"'])assert.ok(s.includes(token),token);
  assert.ok(s.includes("loggedAdmin?'<a class=\"btn-outline\""),'somente administrador pode entrar no painel');
+});
+test('Visualização mostra somente Mapa/Lançamentos e os três modos de consulta',()=>{
+ const s=read('public/assets/visualizacao.js');
+ const abas=[...s.matchAll(/data-view-tab=\"([^\"]+)\"/g)].map(m=>m[1]);
+ const modos=[...s.matchAll(/data-view-mode=\"([^\"]+)\"/g)].map(m=>m[1]);
+ assert.deepEqual(abas,['mapas']);
+ assert.deepEqual(modos,['mes','validade','queima']);
+ assert.doesNotMatch(s,/data-view-tab=\"vencidos\"|data-view-tab=\"sinalizacoes\"/);
+ assert.doesNotMatch(s,/request\('\/visualizacao\/(vencidos|sinalizacoes)'/);
+ assert.match(s, /prefs\.tab='mapas'/);
+ for(const token of ['Por mês de lançamento','Validade (a vencer)','data-view-info','data-view-edit','data-view-delete'])assert.ok(s.includes(token),token);
 });
 test('API restringe leitura de vencidos às retiradas do próprio mapa',async()=>{
  const result=await simulate('/visualizacao/vencidos');assert.equal(result.statusCode,200);assert.equal(result.data.registros.length,1);assert.equal(result.data.registros[0].mapa_origem,'Isabela');

@@ -489,11 +489,11 @@ async function visualizacao(req,actor,pathname,body,query){
     (!x.funcionario_id||x.funcionario_id===actor.id)):
    specials.includes(x.tipo_mapa)&&x.mapa_nome===x.tipo_mapa);
  const allowedRows=async()=>rows('mapa_lancamentos',employee?{
-   loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,tipo_mapa:'eq.funcionario',
-   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo,formula_especial)'
+   loja_id:`eq.${loja}`,mapa_nome:`eq.${actor.nome}`,tipo_mapa:'eq.funcionario',excluido_em:'is.null',
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,validade,excluido_em,produtos(secao,grupo,formula_especial)'
   }:{
-   loja_id:`eq.${loja}`,tipo_mapa:`in.(${specials.join(',')})`,
-   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,produtos(secao,grupo,formula_especial)'
+   loja_id:`eq.${loja}`,tipo_mapa:`in.(${specials.join(',')})`,excluido_em:'is.null',
+   select:'id,loja_id,tipo_mapa,mapa_nome,funcionario_id,ean,validade,excluido_em,produtos(secao,grupo,formula_especial)'
   },500,20);
  const getRecord=async id=>{
    if(!/^[0-9a-f-]{36}$/i.test(norm(id)))throw bad('Registro inválido.',422);
@@ -537,6 +537,52 @@ async function visualizacao(req,actor,pathname,body,query){
    ]);
    const ids=new Set((await filtrarRegistrosSecao(owners.filter(allowed),loja)).map(x=>x.id));
    return {sucesso:true,registros:regs.filter(x=>ids.has(x.lancamento_id))};
+ }
+ if(pathname==='/visualizacao/queima-aprovados'&&req.method==='GET'){
+   // Somente os produtos do próprio mapa do funcionário, inclusive itens
+   // de relatório associados a ele após atribuição na Queima.
+   // O administrador fica restrito às abas especiais da sua loja.
+   const mapa=norm(query.get('mapa'));
+   if(mapa&&(employee?normalizarNome(mapa)!==(actor.nome_normalizado||normalizarNome(actor.nome)):!specials.includes(mapa)))
+      throw bad('Mapa não autorizado para esta conta.',403);
+   const mapasPermitidos=(await filtrarRegistrosSecao(
+     (await allowedRows()).filter(allowed),loja)).filter(x=>!mapa||x.mapa_nome===mapa);
+   const ids=new Set(mapasPermitidos.map(x=>x.id));
+   const chaves=new Set(mapasPermitidos.filter(x=>x.ean&&x.validade).map(x=>`${x.ean}|${x.validade}`));
+   const base={loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null',
+     select:'id,lancamento_id,loja_id,ean,codigo_interno,descricao_original,produto_relatorio,lote,validade,validade_gondola,preco_gondola,quantidade,quantidade_pendente,motivo,estado,origem_mapa,registro_queima,responsavel_importacao_id,criado_em,aprovado_via_importacao',
+     order:'criado_em.desc,id.desc'};
+   const encontrados=[];
+   if(employee){
+     encontrados.push(...await rows('queima',{...base,responsavel_importacao_id:`eq.${actor.id}`},300,30));
+   }
+   const allIds=[...ids];
+   for(let i=0;i<allIds.length;i+=70){
+     encontrados.push(...await rows('queima',{...base,lancamento_id:`in.(${allIds.slice(i,i+70).join(',')})`},300,20));
+   }
+   // Registros mais antigos podem não trazer lancamento_id.
+   const origens=employee?[actor.nome]:mapa?[mapa]:specials;
+   for(const origem of origens){
+     if(!origem)continue;
+     encontrados.push(...await rows('queima',{...base,origem_mapa:`eq.${origem}`},300,20));
+   }
+   const permitidos=[...new Map(encontrados.map(x=>[x.id,x])).values()].filter(x=>{
+     if(x.loja_id!==loja||x.estado!=='aprovado'||x.excluido_em)return false;
+     if(employee&&x.responsavel_importacao_id===actor.id)return true;
+     if(x.responsavel_importacao_id&&employee&&x.responsavel_importacao_id!==actor.id)return false;
+     if(x.lancamento_id&&ids.has(x.lancamento_id))return true;
+     return origens.includes(x.origem_mapa)&&Boolean(x.ean)&&chaves.has(`${x.ean}|${x.validade}`);
+   });
+   const catalogo=new Map(),eans=[...new Set(permitidos.map(x=>x.ean).filter(Boolean))];
+   for(let i=0;i<eans.length;i+=70){
+     const encontrados=await rows('produtos',{ean:`in.(${eans.slice(i,i+70).join(',')})`,select:'ean,descricao,codigo_interno'},200,5);
+     for(const produto of encontrados)catalogo.set(produto.ean,produto);
+   }
+   permitidos.sort((a,b)=>String(b.criado_em).localeCompare(String(a.criado_em))||String(b.id).localeCompare(String(a.id)));
+   return {sucesso:true,registros:permitidos.map(x=>({...x,
+     descricao:x.descricao_original||catalogo.get(x.ean)?.descricao||x.produto_relatorio||'Produto não identificado',
+     codigoInterno:x.codigo_interno||catalogo.get(x.ean)?.codigo_interno||''})),
+     aviso:'A quantidade informada na Queima pode estar incorreta e não representa necessariamente o saldo do estoque.'};
  }
  if(pathname==='/visualizacao/queima'&&req.method==='GET'){
    const item=await getRecord(query.get('id'));
@@ -885,12 +931,27 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
     if(!/^[a-f0-9-]{36}$/i.test(id))throw bad('Identificador inválido.',422);
     const atual=await one('queima',{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null'});
     if(!atual)throw bad('Somente itens aprovados e não excluídos podem ser editados.',409);
-    const qt=Number(body.quantidade),gondola=validarDadosGondola(body);
-    if(!Number.isSafeInteger(qt)||qt<1||qt>999999)throw bad('Quantidade deve ser inteira entre 1 e 999999.',422);
-    const patch={quantidade:qt,quantidade_pendente:false,...gondola,atualizado_em:new Date().toISOString()};
-    const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null'},body:patch,prefer:'return=representation'});
+    // A validade do produto e a da gôndola são independentes. Pode corrigir
+    // um aprovado sem alterar sua situação ou os dados da importação.
+    const qt=Number(body.quantidade),validade=norm(body.validade),validadeGondola=norm(body.validade_gondola);
+    // Queimas importadas podem trazer quantidade desconhecida (zero + pendente).
+    // Corrigir apenas as datas NÃO obriga inventar unidades para esse registro.
+    const manterQuantidadePendente=atual.aprovado_via_importacao===true&&atual.quantidade_pendente===true&&qt===0;
+    if(!Number.isSafeInteger(qt)||qt<1&&!manterQuantidadePendente||qt>999999)
+      throw bad('Quantidade deve ser inteira de 1 a 999999, ou permanecer 0 quando importada como pendente.',422);
+    if(!dataValida(validade))throw bad('Informe uma validade válida para o produto.',422);
+    if(!dataValida(validadeGondola))throw bad('Informe uma validade válida para a gôndola.',422);
+    const precoTexto=body.preco_gondola==null?'':norm(body.preco_gondola).replace(',','.');
+    let preco=precoTexto===''?null:Number(precoTexto);
+    if(preco===null&&atual.aprovado_via_importacao!==true)throw bad('Preço da gôndola obrigatório para aprovações manuais.',422);
+    if(preco!==null&&(!Number.isFinite(preco)||preco<0||preco>9999999999.99||Math.abs(preco*100-Math.round(preco*100))>1e-7))
+      throw bad('Preço da gôndola inválido.',422);
+    const patch={quantidade:qt,quantidade_pendente:manterQuantidadePendente,validade,validade_gondola:validadeGondola,
+      preco_gondola:preco,atualizado_em:new Date().toISOString()};
+    const atualizado=await db('queima',{method:'PATCH',params:{id:`eq.${id}`,loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null',
+      ...(atual.atualizado_em?{atualizado_em:`eq.${atual.atualizado_em}`}:{})},body:patch,prefer:'return=representation'});
     if(!atualizado?.length)throw bad('Registro modificado por outra operação. Atualize antes de editar.',409);
-    await audit(actor,'editar_queima_aprovada',{id,antes:{quantidade:atual.quantidade,validade_gondola:atual.validade_gondola,preco_gondola:atual.preco_gondola},depois:patch});
+    await audit(actor,'editar_queima_aprovada',{id,antes:{quantidade:atual.quantidade,validade:atual.validade,validade_gondola:atual.validade_gondola,preco_gondola:atual.preco_gondola},depois:patch});
     return {sucesso:true,registro:atualizado[0]};
   }
   if(req.method==='DELETE'&&['vencidos','transferencias'].includes(table)){
@@ -1161,8 +1222,8 @@ async function importarXlsQueima(req,actor,body){
 async function conciliarRelatorioQueima(req,actor,body){
  admin(actor);const loja=actorLoja(actor,body.loja);
  const itens=body.itens;
- if(!Array.isArray(itens)||itens.length<1||itens.length>40)
-   throw bad('Envie lotes de 1 a 40 itens aprovados (S).',422);
+ if(!Array.isArray(itens)||itens.length<1||itens.length>10)
+   throw bad('Envie lotes de 1 a 10 itens aprovados (S).',422);
  // V48: relatórios S servem exclusivamente para ADICIONAR NOVOS produtos.
  // Nunca corrigir nem aprovar entradas anteriores (pendentes ou aprovadas).
  if(body.corrigir_aprovados===true)throw bad('Correção via relatório não permitida. Edite o item manualmente na Queima.',422);

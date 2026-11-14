@@ -120,6 +120,6 @@ test('interface disponibiliza Exportar XLS, sem alterar o botão Copiar Procfit'
  assert.match(app,/link\.download='conferencia-procfit-'.+\.xls'/);
  assert.match(app,/copiarProcfit\(filtrarMapasParaConferencia\(compareRows\)\)/);
  assert.doesNotMatch(app,/Exportar conferência CSV|id="compare-csv"/);
- assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
+ assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
  assert.match(sw,/\/assets\/conferencia-xls\.js/);
 });

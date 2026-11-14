@@ -15,21 +15,21 @@ export function downloadVisualizacaoCSV(nome,colunas,linhas){
 export async function renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog}){
  if(user.perfil==='geral')throw new Error('O Administrador Geral deve utilizar o Painel Geral.');
  const loggedAdmin=isAdmin();
- const [mapData,vencData,signalsData]=await Promise.all([
-  request('/visualizacao/mapas'),
-  request('/visualizacao/vencidos').catch(err=>({registros:[],warning:'Não foi possível carregar Vencidos: '+err.message})),
-  request('/visualizacao/sinalizacoes').catch(err=>({registros:[],warning:'Não foi possível carregar sinalizações: '+err.message}))
- ]);
- const mapas=mapData.registros||[],vencidos=vencData.registros||[],sinalizacoes=signalsData.registros||[];
+ // Esta tela apresenta somente Mapa/Lançamentos; os demais históricos
+ // continuam no Painel Conferente e não são consultados pela Visualização.
+ const mapData=await request('/visualizacao/mapas');
+ const mapas=mapData.registros||[];
+ prefs.tab='mapas';
  const hoje=nowBrISO(),mesAtual=hoje.slice(0,7);
  if(!prefs.month)prefs.month=mesAtual;
+ if(!['mes','validade','queima'].includes(prefs.mode))prefs.mode='mes';
  const owners=loggedAdmin?(mapData.abasPermitidas||['Estoque','Termolabil','Psicotropicos','Antibioticos']):[user.nome];
  const ownerOptions=loggedAdmin?`<label>Mapa<select id="view-owner"><option value="">Todas as abas especiais</option>${owners.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select></label>`:`<div class="notice view-fixed-owner"><strong>Meu mapa:</strong> ${escapeHtml(user.nome)} · Loja ${escapeHtml(user.loja)}</div>`;
  const actions=`<a class="btn-outline" href="/lancamentos.html">← Lançamentos</a>${loggedAdmin?'<a class="btn-outline" href="/#dashboard">Painel Conferente</a>':''}<button class="btn-outline" type="button" id="view-logout">Sair da conta</button>`;
- content.innerHTML=`<div class="page-head view-title"><div><span class="eyebrow">Registro de validades</span><h1>Visualização dos Lançamentos</h1><p>${loggedAdmin?'Histórico das abas especiais da loja, com filtros de mapa, mês e validade.':`Histórico do mapa de ${escapeHtml(user.nome)}, seus vencimentos e sinalizações.`}</p></div><div class="toolbar">${actions}</div></div>
+ content.innerHTML=`<div class="page-head view-title"><div><span class="eyebrow">Registro de validades</span><h1>Visualização dos Lançamentos</h1><p>${loggedAdmin?'Histórico das abas especiais da loja, com filtros de mapa, mês e validade.':`Histórico do mapa de ${escapeHtml(user.nome)}, com filtros de lançamento e validade.`}</p></div><div class="toolbar">${actions}</div></div>
  <section class="card card-pad view-quick-stats"><div class="stat-grid view-stats" id="view-stats"></div></section>
- <section class="card card-pad view-filter-card"><div class="view-tabs" role="group" aria-label="Visualizar dados"><button type="button" data-view-tab="mapas">Mapa / Lançamentos</button><button type="button" data-view-tab="vencidos">Vencidos / Retiradas</button><button type="button" data-view-tab="sinalizacoes">Sinalizações</button></div>
- <div id="view-month-mode" class="view-month-modes"><button type="button" data-view-mode="mes">Por mês de lançamento</button><button type="button" data-view-mode="validade">Validade (a vencer)</button></div>
+ <section class="card card-pad view-filter-card"><div class="view-tabs" role="group" aria-label="Visualizar dados"><button type="button" data-view-tab="mapas">Mapa / Lançamentos</button></div>
+ <div id="view-month-mode" class="view-month-modes"><button type="button" data-view-mode="mes">Por mês de lançamento</button><button type="button" data-view-mode="validade">Validade (a vencer)</button><button type="button" data-view-mode="queima">Queima (aprovados)</button></div>
  <div class="filter-row view-filters">${ownerOptions}
  <label id="view-month-field">Mês do lançamento<input id="view-month" type="month"></label>
  <label class="toolbar-checkbox" id="view-all-month-field"><input id="view-all-months" type="checkbox"> Todos os meses</label>
@@ -39,13 +39,13 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  <label>Filtrar validade<input id="view-validade" type="date"></label>
  <button class="btn-outline" id="view-clear" type="button">Limpar filtros</button></div>
  <div class="view-controls"><label>Itens por página<select id="view-size"><option value="15">15</option><option value="25">25</option><option value="50">50</option></select></label><button id="view-refresh" class="btn-outline" type="button">Atualizar</button><button id="view-export" class="btn-outline" type="button">Exportar CSV</button><button id="view-print" class="btn-outline" type="button">Imprimir</button></div>
- </section><div id="view-warnings" role="status"></div><section class="card card-pad" id="view-results"><h2>Histórico</h2><p id="view-summary" class="footer-hint"></p><div id="view-table"></div><div class="pager"><button id="view-prev" class="btn-outline" type="button">Anterior</button><span id="view-page-label"></span><button id="view-next" class="btn-outline" type="button">Próxima</button></div></section>
+ </section><div id="view-warnings" role="status"></div><p class="notice warn" id="view-queima-alert" role="note" hidden><strong>Atenção:</strong> a quantidade informada na Queima pode estar incorreta. Confira o produto e o estoque antes de utilizar essa quantidade como saldo.</p><section class="card card-pad" id="view-results"><h2>Histórico</h2><p id="view-summary" class="footer-hint"></p><div id="view-table"></div><div class="pager"><button id="view-prev" class="btn-outline" type="button">Anterior</button><span id="view-page-label"></span><button id="view-next" class="btn-outline" type="button">Próxima</button></div></section>
  <dialog class="dialog view-dialog" id="view-edit-dialog"><form id="view-edit-form" class="dialog-inner"><h2>Editar lançamento</h2><p>As alterações são registradas na auditoria. O mapa de destino não poderá ser alterado.</p><div class="form-grid"><label>EAN<input name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" maxlength="14"></label><label>Lote<input name="lote" required maxlength="100"></label><label>Validade<input name="validade" type="date" required></label><label>Quantidade<input name="quantidade" type="number" min="0" max="999999" step="1" required></label></div><p class="error-note" id="view-edit-error" role="alert" hidden></p><div class="dialog-actions"><button id="view-edit-cancel" class="btn-outline" type="button">Cancelar</button><button class="primary" type="submit">Salvar alterações</button></div></form></dialog>
  <dialog class="dialog view-dialog" id="view-signal-dialog"><form id="view-signal-form" class="dialog-inner"><h2>Sinalizar ao Administrador</h2><p id="view-signal-product"></p><p>A sinalização ficará visível na aba Sinalizados do Painel Conferente.</p><fieldset class="view-reasons"><legend>Motivo</legend>${reasons.map((x,i)=>`<label><input type="radio" name="motivo" value="${escapeHtml(x)}" ${i===0?'required':''}> ${escapeHtml(x)}</label>`).join('')}</fieldset><label id="view-other-reason" hidden>Descreva o motivo<textarea name="observacao" rows="3" maxlength="500" placeholder="Explique o problema"></textarea></label><p id="view-signal-error" role="alert" class="error-note" hidden></p><div class="dialog-actions"><button class="btn-outline" type="button" id="view-signal-cancel">Cancelar</button><button type="submit" class="primary">Enviar sinalização</button></div></form></dialog>
  <dialog class="dialog view-dialog" id="view-info-dialog"><div class="dialog-inner"><h2>Histórico completo da Queima</h2><div id="view-info-content"></div><div class="dialog-actions"><button id="view-info-close" type="button" class="btn-outline">Fechar</button></div></div></dialog>`;
  const $=selector=>content.querySelector(selector);
  $('#view-logout').onclick=()=>document.querySelector('#btn-logout')?.click();
- $('#view-warnings').textContent=[vencData.warning,signalsData.warning].filter(Boolean).join(' · ');
+ $('#view-warnings').textContent=mapData.warning||'';
  $('#view-month').value=prefs.month;$('#view-all-months').checked=prefs.allMonths;$('#view-status').value=prefs.status;
  $('#view-search').value=prefs.search;$('#view-lote').value=prefs.lote;$('#view-validade').value=prefs.validade;
  $('#view-size').value=String(prefs.size);if(loggedAdmin)$('#view-owner').value=prefs.owner;
@@ -54,9 +54,21 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  const prettyStatus=r=>{const badge=badgeValidade(r.validade,r.secao);const d=days(r.validade);return badge+(d!==null&&d<=0?` <small class="second">${Math.abs(d)} dia(s) após a validade</small>`:'');};
  const asRow=(cells)=>`<tr>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`;
  const link=x=>escapeHtml(x);
+ let queimaRows=[],queimaLoaded=false,queimaBusy=false,queimaWarning='';
+ const loadQueima=async()=>{
+  if(queimaBusy)return;
+  queimaBusy=true;queimaLoaded=false;draw();
+  try{
+   const params=loggedAdmin&&prefs.owner?'?mapa='+encodeURIComponent(prefs.owner):'';
+   const r=await request('/visualizacao/queima-aprovados'+params);
+   queimaRows=(r.registros||[]).filter(x=>x.estado==='aprovado');
+   queimaWarning=r.aviso||'';queimaLoaded=true;
+  }catch(err){queimaRows=[];queimaWarning=err.message;queimaLoaded=false;toast(err.message,true);}
+  finally{queimaBusy=false;draw();}
+ };
  const rowsForTab=()=>{
-  if(prefs.tab==='vencidos')return vencidos.filter(r=>(!prefs.owner||r.mapa_origem===prefs.owner)&&(!prefs.search||[r.ean_resolvido,r.ean,r.descricao,r.codigo_interno].some(v=>String(v||'').toLowerCase().includes(prefs.search.toLowerCase())))&&(!prefs.lote||String(r.lote||'').toLowerCase().includes(prefs.lote.toLowerCase()))&&(!prefs.validade||r.validade===prefs.validade));
-  if(prefs.tab==='sinalizacoes')return sinalizacoes.filter(r=>(!prefs.owner||mapas.some(m=>m.id===r.lancamento_id&&m.mapa_nome===prefs.owner))&&(!prefs.search||[r.ean,r.observacao].some(v=>String(v||'').toLowerCase().includes(prefs.search.toLowerCase()))));
+  if(prefs.mode==='queima')return queimaRows.filter(r=>(!prefs.search||[r.descricao,r.ean,r.codigoInterno,r.produto_relatorio].some(x=>String(x||'').toLowerCase().includes(prefs.search.toLowerCase())))&&
+   (!prefs.lote||String(r.lote||'').toLowerCase().includes(prefs.lote.toLowerCase()))&&(!prefs.validade||r.validade===prefs.validade));
   return mapas.filter(r=>(!prefs.owner||r.mapa_nome===prefs.owner)&&
    (prefs.mode==='validade'||prefs.allMonths||String(r.mes_lancamento||'').slice(0,7)===prefs.month)&&
    (prefs.mode!=='validade'||prefs.status==='todos'||(prefs.status==='criticos'?['Vencido','A vencer'].includes(statusVal(r.validade,r.secao)[0]):
@@ -67,43 +79,46 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  const refreshStats=()=>{
   const a=mapas.filter(r=>Number(r.quantidade)>0);const win=a.filter(r=>statusVal(r.validade,r.secao)[0]==='A vencer');const expired=a.filter(withdrawn);
   const closest=win.map(x=>days(x.validade)).filter(Number.isFinite).sort((x,y)=>x-y)[0];
-  $('#view-stats').innerHTML=`<div class="card stat"><small>Lançamentos</small><strong>${money(mapas.length)}</strong><p>Todos os meses</p></div><div class="card stat"><small>Unidades</small><strong>${money(a.reduce((n,r)=>n+Number(r.quantidade||0),0))}</strong><p>Quantidade registrada</p></div><div class="card stat warn"><small>A vencer</small><strong>${money(win.length)}</strong><p>${closest!==undefined?`Próximo em ${closest} ${closest===1?'dia':'dias'}`:'Nenhum próximo ao vencimento'}</p></div><div class="card stat danger"><small>Vencidos / Prazo de retirada</small><strong>${money(expired.length)}</strong><p>Itens que exigem atenção</p></div><div class="card stat"><small>Retiradas</small><strong>${money(vencidos.length)}</strong><p>Histórico de vencidos</p></div>${loggedAdmin?`<div class="card stat"><small>Abas especiais disponíveis</small><strong>${money(owners.length)}</strong><p>Selecione a aba no filtro Mapa</p></div>`:''}`;
+  $('#view-stats').innerHTML=`<div class="card stat"><small>Lançamentos</small><strong>${money(mapas.length)}</strong><p>Todos os meses</p></div><div class="card stat"><small>Unidades</small><strong>${money(a.reduce((n,r)=>n+Number(r.quantidade||0),0))}</strong><p>Quantidade registrada</p></div><div class="card stat warn"><small>A vencer</small><strong>${money(win.length)}</strong><p>${closest!==undefined?`Próximo em ${closest} ${closest===1?'dia':'dias'}`:'Nenhum próximo ao vencimento'}</p></div><div class="card stat danger"><small>Vencidos / Prazo de retirada</small><strong>${money(expired.length)}</strong><p>Itens que exigem atenção</p></div>${loggedAdmin?`<div class="card stat"><small>Abas especiais disponíveis</small><strong>${money(owners.length)}</strong><p>Selecione a aba no filtro Mapa</p></div>`:''}`;
  };
  let showing=[];
  const draw=()=>{
   for(const b of content.querySelectorAll('[data-view-tab]')){const active=b.dataset.viewTab===prefs.tab;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));}
   for(const b of content.querySelectorAll('[data-view-mode]')){const active=b.dataset.viewMode===prefs.mode;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));}
-  $('#view-month-mode').hidden=prefs.tab!=='mapas';$('#view-month-field').hidden=prefs.tab!=='mapas'||prefs.mode!=='mes';$('#view-all-month-field').hidden=prefs.tab!=='mapas'||prefs.mode!=='mes';$('#view-status-field').hidden=prefs.tab!=='mapas'||prefs.mode!=='validade';
+  $('#view-month-mode').hidden=false;$('#view-queima-alert').hidden=prefs.mode!=='queima';$('#view-month-field').hidden=prefs.mode!=='mes';$('#view-all-month-field').hidden=prefs.mode!=='mes';$('#view-status-field').hidden=prefs.mode!=='validade';
+  $('#view-results').classList.toggle('view-queima-results',prefs.mode==='queima');
   showing=rowsForTab();const maxPage=Math.max(1,Math.ceil(showing.length/prefs.size));prefs.page=Math.min(prefs.page,maxPage-1);
   const pageRows=showing.slice(prefs.page*prefs.size,(prefs.page+1)*prefs.size);
   let headings=[];let trs=[];
-  if(prefs.tab==='mapas'){
+  if(prefs.mode==='queima'){
+   headings=['Produto / EAN','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Qtd. informada','Situação'];
+   trs=pageRows.map(r=>asRow([
+    `<div class="view-product-first"><div><strong>${link(r.descricao||'Produto não identificado')}</strong><span class="second">${link(r.ean||r.codigoInterno||'Código não informado')}</span></div></div>`,
+    link(r.lote||'Não informado'),formatDate(r.validade),formatDate(r.validade_gondola),
+    r.preco_gondola==null?'Preço não informado':Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
+    r.quantidade_pendente?'A conferir':money(r.quantidade),'<span class="pill green">Aprovado</span>'
+   ]));
+  }else{
    headings=['Produto / EAN','Mapa','Lote','Validade','Quantidade','Mês lançado','Situação','Ações'];
    trs=pageRows.map(r=>asRow([
     `<div class="view-product-first"><button type="button" class="view-eye-queima" data-view-info="${link(r.id)}" title="Ver todos os lançamentos do produto na Queima (inclusive aprovados)" aria-label="Ver histórico completo da Queima do EAN ${link(r.ean)}"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><div><strong>${link(r.descricao||'Produto não identificado')}</strong><span class="second">${link(r.ean)}${r.codigoInterno?` · cód. ${link(r.codigoInterno)}`:''}</span>${r.formula_especial?'<span class="pill amber">Fórmula Especial · Queima bloqueada</span>':''}</div></div>`,
     link(r.mapa_nome),link(r.lote),formatDate(r.validade),money(r.quantidade),link(String(r.mes_lancamento||'').slice(0,7)),prettyStatus(r),
     `<div class="view-row-actions"><button class="action-link" data-view-edit="${link(r.id)}">Editar</button><button class="action-link danger-text" data-view-delete="${link(r.id)}">Excluir</button><button class="action-link" data-view-signal="${link(r.id)}">Sinalizar</button>${Number(r.quantidade)>0&&withdrawn(r)?`<button class="action-link" data-view-retirar="${link(r.id)}">Encaminhar para Vencidos</button>`:''}</div>`]));
-  } else if(prefs.tab==='vencidos'){
-   headings=['Data retirada','Produto / EAN','Lote','Validade','Quantidade','Origem','Motivo'];
-   trs=pageRows.map(r=>asRow([formatTime(r.criado_em),`<strong>${link(r.descricao||r.descricao_original||'Produto não identificado')}</strong><span class="second">${link(r.ean_resolvido||r.ean||r.codigo_interno||'EAN não informado')}</span>`,link(r.lote),formatDate(r.validade),money(r.quantidade),link(r.mapa_origem),link(r.motivo)]));
-  } else {
-   headings=['Data','EAN','Motivo','Situação'];
-   trs=pageRows.map(r=>asRow([formatTime(r.criado_em),link(r.ean),link(r.observacao),link(r.situacao||'aberto')]));
   }
-  $('#view-table').innerHTML=showing.length?`<div class="table-wrap" id="view-own-table"><table><thead><tr>${headings.map(x=>`<th>${link(x)}</th>`).join('')}</tr></thead><tbody>${trs.join('')}</tbody></table></div>`:`<div class="empty"><strong>Nenhum registro encontrado.</strong><p>Altere os filtros ou consulte novamente.</p></div>`;
-  $('#view-summary').textContent=`${showing.length} registro(s) · ${prefs.tab==='mapas'?showing.reduce((n,r)=>n+Number(r.quantidade||0),0)+' unidade(s) · ':''}${prefs.tab==='mapas'?'mapa de validade':prefs.tab==='vencidos'?'retiradas':'sinalizações'}`;
+  $('#view-table').innerHTML=prefs.mode==='queima'&&!queimaLoaded?`<div class="empty"><strong>${queimaBusy?'Consultando produtos aprovados…':'Não foi possível carregar a Queima.'}</strong><p>${link(queimaWarning||'Tente Atualizar.')}</p></div>`:showing.length?`<div class="table-wrap" id="view-own-table"><table><thead><tr>${headings.map(x=>`<th>${link(x)}</th>`).join('')}</tr></thead><tbody>${trs.join('')}</tbody></table></div>`:`<div class="empty"><strong>Nenhum registro encontrado.</strong><p>Altere os filtros ou consulte novamente.</p></div>`;
+  $('#view-summary').textContent=prefs.mode==='queima'?`${showing.length} produto(s) aprovados na Queima · quantidade sujeita a conferência`:`${showing.length} registro(s) · ${showing.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · mapa de validade`;
   $('#view-prev').disabled=prefs.page===0;$('#view-next').disabled=prefs.page>=maxPage-1;$('#view-page-label').textContent=`Página ${prefs.page+1} de ${maxPage}`;
-  $('#view-results h2').textContent=({mapas:'Histórico dos lançamentos',vencidos:'Vencidos e retiradas',sinalizacoes:'Sinalizações para o administrador'})[prefs.tab];
+  $('#view-results h2').textContent=prefs.mode==='queima'?'Meus produtos aprovados na Queima':'Histórico dos lançamentos';
  };
  const markChanged=(key,value)=>{prefs[key]=value;prefs.page=0;draw();};
  for(const x of content.querySelectorAll('[data-view-tab]'))x.onclick=()=>markChanged('tab',x.dataset.viewTab);
- for(const x of content.querySelectorAll('[data-view-mode]'))x.onclick=()=>markChanged('mode',x.dataset.viewMode);
+ for(const x of content.querySelectorAll('[data-view-mode]'))x.onclick=async()=>{markChanged('mode',x.dataset.viewMode);if(prefs.mode==='queima'&&!queimaLoaded)await loadQueima();};
  const bind=(id,key,fn=x=>x.value)=>{$('#'+id).addEventListener('input',event=>markChanged(key,fn(event.target)));};
- bind('view-month','month');bind('view-all-months','allMonths',x=>x.checked);bind('view-status','status');bind('view-search','search');bind('view-lote','lote');bind('view-validade','validade');if(loggedAdmin)bind('view-owner','owner');bind('view-size','size',x=>Number(x.value));
+ bind('view-month','month');bind('view-all-months','allMonths',x=>x.checked);bind('view-status','status');bind('view-search','search');bind('view-lote','lote');bind('view-validade','validade');if(loggedAdmin){$('#view-owner').addEventListener('input',async event=>{markChanged('owner',event.target.value);if(prefs.mode==='queima')await loadQueima();});}bind('view-size','size',x=>Number(x.value));
  $('#view-clear').onclick=()=>{Object.assign(prefs,{owner:'',search:'',lote:'',validade:'',status:'criticos',month:mesAtual,allMonths:true,page:0});
   for(const [id,val] of [['view-search',''],['view-lote',''],['view-validade',''],['view-status','criticos'],['view-month',mesAtual]])$('#'+id).value=val;
-  $('#view-all-months').checked=true;if(loggedAdmin)$('#view-owner').value='';draw();};
- $('#view-refresh').onclick=()=>renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});
+  $('#view-all-months').checked=true;if(loggedAdmin)$('#view-owner').value='';draw();if(prefs.mode==='queima')loadQueima();};
+ $('#view-refresh').onclick=()=>prefs.mode==='queima'?loadQueima():renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});
  $('#view-prev').onclick=()=>{prefs.page--;draw();};$('#view-next').onclick=()=>{prefs.page++;draw();};
  $('#view-results').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['view-page-label']);if(n>0){prefs.page=n-1;draw();}},{once:true});
  $('#view-print').onclick=()=>{
@@ -113,9 +128,10 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
   window.addEventListener('afterprint',restore,{once:true});window.print();setTimeout(restore,3000);
  };
  $('#view-export').onclick=()=>{
-  const all=showing.map(r=>prefs.tab==='mapas'?[r.mapa_nome,r.ean,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento||'').slice(0,7),statusVal(r.validade,r.secao)[0]]:prefs.tab==='vencidos'?[r.criado_em,r.ean_resolvido||r.ean||'',r.descricao,r.lote,r.validade,r.quantidade,r.mapa_origem,r.motivo]:[r.criado_em,r.ean,r.observacao,r.situacao]);
-  const cols=prefs.tab==='mapas'?['Mapa','EAN','Descrição','Lote','Validade','Quantidade','Mês','Situação']:prefs.tab==='vencidos'?['Retirada','EAN','Descrição','Lote','Validade','Quantidade','Mapa','Motivo']:['Data','EAN','Motivo','Situação'];
-  downloadVisualizacaoCSV(`visualizacao-${prefs.tab}-${hoje}.csv`,cols,all);
+  const queimando=prefs.mode==='queima';
+  const all=queimando?showing.map(r=>[r.descricao,r.ean||'',r.codigoInterno||'',r.lote||'',r.validade,r.validade_gondola||'',r.preco_gondola??'',r.quantidade_pendente?'Pendente':r.quantidade,'Aprovado']):showing.map(r=>[r.mapa_nome,r.ean,r.descricao,r.lote,r.validade,r.quantidade,String(r.mes_lancamento||'').slice(0,7),statusVal(r.validade,r.secao)[0]]);
+  const cols=queimando?['Descrição','EAN','Código Interno','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Quantidade informada','Situação']:['Mapa','EAN','Descrição','Lote','Validade','Quantidade','Mês','Situação'];
+  downloadVisualizacaoCSV(`visualizacao-${queimando?'queima':'mapas'}-${hoje}.csv`,cols,all);
  };
  const editDialog=$('#view-edit-dialog'),editForm=$('#view-edit-form'),signalDialog=$('#view-signal-dialog'),signalForm=$('#view-signal-form'),infoDialog=$('#view-info-dialog');
  let editing=null,signaling=null;
@@ -148,5 +164,5 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
     signalDialog.close();toast('Sinalização enviada ao administrador.');await renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});
   }catch(err){$('#view-signal-error').textContent=err.message;$('#view-signal-error').hidden=false;}finally{save.disabled=false;}
  };
- refreshStats();draw();
+ refreshStats();draw();if(prefs.mode==='queima')await loadQueima();
 }

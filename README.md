@@ -1,3 +1,5 @@
+> **V51 — Visualização com Queima aprovada por funcionário, prevenção de timeout na prévia XLSX e edição das duas validades.** Execute a migração **SQL 030** antes de atualizar a API e a PWA. Guia: [ATUALIZAR-V51-VISUALIZACAO-QUEIMA-TIMEOUT-VALIDADES.md](ATUALIZAR-V51-VISUALIZACAO-QUEIMA-TIMEOUT-VALIDADES.md).
+
 > **V50:** Importação Procfit de todos os produtos `S` ainda não lançados, **sem exigir preço nem catálogo/EAN**, apenas validade futura (não vencido nem vencendo hoje). SQL 029 obrigatória. [Guia V50](ATUALIZAR-V50-IMPORTAR-TODOS-S-NAO-VENCIDOS.md).
 
 > **v49:** Botão **Primeira importação XLSX** restaurado na aba Queima, com caixa de seleção no modal. As importações posteriores continuam cadastrando apenas novos; não corrigem registros já aprovados. **Sem SQL nova.** Veja [o guia v49](ATUALIZAR-V49-PRIMEIRA-IMPORTACAO-XLSX.md).

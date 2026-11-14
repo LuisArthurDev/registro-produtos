@@ -57,7 +57,7 @@ test('o botão só aparece na Conferência; copiar não utiliza a página exibid
  assert.match(app,/carregarTodasPaginas\(request,'\/mapas\?'/);
  assert.match(app,/wrap.closest\('#maps-table,#compare-table,/);
  assert.match(app,/carregarTodasPaginas\(request,urlWithLoja\('\/estoque'\)\)/);
- assert.match(sw,/registro-validades-v50-procfit-todos-s-novos/);
+ assert.match(sw,/registro-validades-v51-visualizacao-queima-timeout-validades/);
  assert.match(sw,/paginacao-completa\.js/);
 });
 
