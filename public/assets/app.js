@@ -13,6 +13,7 @@ import { instalarIconesDeAcao } from './icones-acoes.js';
 import { resumoQueima } from './queima-grafico.js';
 import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
+import { executarQueimaEmLotes } from './queima-conciliacao-lotes.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
@@ -1390,13 +1391,12 @@ async function generic(pathname,title){
   <dialog id="queima-relatorio-dialog" class="dialog dialog-wide" aria-labelledby="queima-relatorio-title"><div class="dialog-inner">
    <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
    <p class="footer-hint">Colunas: B Produto · H Validade · I Aprovado (S) · J Unidade · L Preço. Itens com N são ignorados.</p>
-   <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-primeira"> <span><strong>Primeira importação:</strong> cadastrar e aprovar produtos com S que ainda não existirem no sistema, somente quando houver preço, catálogo válido e pelo menos 7 dias até o vencimento. O relatório não informa lote nem Registro; estes ficam sem informação.</span></label>
-   <label class="formula-especial-field"><input type="checkbox" id="queima-relatorio-corrigir"> <span><strong>Correções futuras:</strong> atualizar quantidade, preço e validade da gôndola dos registros já aprovados quando a correspondência for única.</span></label>
-   <p class="notice" role="note">O sistema não inventa preços, lotes ou Registros. Não altera aprovações com correspondência ambígua. Itens com S sem preço na coluna L são sinalizados para revisão.</p>
+   <p class="notice" role="note"><strong>Importar somente produtos novos:</strong> o relatório cadastra e aprova produtos com S que ainda não estejam na Queima, somente com preço válido, catálogo válido e pelo menos 7 dias até o vencimento. Produtos já cadastrados (pendentes ou aprovados) são ignorados. <strong>Quantidade, preço e validade da gôndola existentes só podem ser corrigidos manualmente.</strong> Itens N são ignorados, e o sistema não inventa lote nem Registro.</p>
+   <p class="footer-hint">A conferência é feita em lotes pequenos para evitar o tempo limite do Supabase. Reimportar o relatório não duplica produtos nem altera aprovados existentes.</p>
    <p id="queima-relatorio-resumo" role="status" aria-live="polite"></p>
    <div id="queima-relatorio-previa" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-relatorio-cancelar">Fechar</button>
-   <button type="button" class="primary" id="queima-relatorio-confirmar" disabled>Aplicar conciliação</button></div></div></dialog>
+   <button type="button" class="primary" id="queima-relatorio-confirmar" disabled>Cadastrar e aprovar novos</button></div></div></dialog>
   <dialog id="queima-atribuir-dialog" class="dialog" aria-labelledby="queima-atribuir-title"><form id="queima-atribuir-form" class="dialog-inner">
    <h2 id="queima-atribuir-title">Atribuir responsável da Queima</h2><p id="queima-atribuir-item" class="footer-hint"></p>
    <p class="notice">A atribuição identifica o funcionário responsável pela conferência. O relatório não contém Lote; por isso nenhum lançamento de mapa será fabricado.</p>
@@ -1595,58 +1595,73 @@ async function generic(pathname,title){
    let relatorio=null,versao=0;
    $('#queima-relatorio-open').onclick=()=>input.click();
    $('#queima-relatorio-cancelar').onclick=()=>dlg.close();
-   const opcoes=()=>({primeira_carga:$('#queima-relatorio-primeira').checked,corrigir_aprovados:$('#queima-relatorio-corrigir').checked});
+   const opcoes=()=>({primeira_carga:true,corrigir_aprovados:false});
+   const enviarLote=(itens,simular)=>request('/queima/conciliar-relatorio',{
+    method:'POST',body:{itens,...opcoes(),simular},timeout:65000,retries:0});
+   let previaConfirmada=false,emExecucao=false;
+   const mostrarResumo=(dados)=>{
+    const c=dados.contagem||{};
+    resumo.textContent=`Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} aprovadas S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Ignorados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já cadastrados, ${c.ja_excluido||0} excluídos anteriormente, ${c.repetido_no_relatorio||0} repetidos no XLSX, ${c.sem_preco||0} sem preço, ${c.sem_catalogo||0} sem catálogo, ${c.prazo_insuficiente||0} com menos de 7 dias, ${c.formula_especial||0} Fórmulas Especiais, ${c.aba_especial||0} abas especiais, ${c.invalido||0} inválidos. Nada existente será corrigido.`;
+    previa.innerHTML=`<p>${c.cadastrar_e_aprovar||0} produto(s) novo(s) apto(s), sujeitos à conferência final no banco. Até 100 exemplos:</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(String(x.acao||'').replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
+   };
    const conferir=async()=>{
-     if(!relatorio)return;const v=++versao;confirm.disabled=true;
-     resumo.textContent='Comparando o relatório com a Queima da loja…';
+     if(!relatorio||emExecucao)return;
+     const v=++versao;previaConfirmada=false;confirm.disabled=true;
+     resumo.textContent='Comparando os produtos novos com a Queima, em lotes…';
      try{
-      const res=await request('/queima/conciliar-relatorio',{method:'POST',body:{itens:relatorio.itens,...opcoes(),simular:true},timeout:120000,retries:0});
-      if(v!==versao)return;const dados=res.resultado||{},c=dados.contagem||{};
-      const plano=['aprovar_existente','cadastrar_e_aprovar','corrigir_aprovado'].reduce((n,k)=>n+Number(c[k]||0),0);
-      resumo.textContent=`Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} com S · ${relatorio.resumo.nao_aprovados} com N ignoradas · ${relatorio.resumo.sem_preco} sem preço em L. Comparação: ${c.aprovar_existente||0} aprovar existentes · ${c.cadastrar_e_aprovar||0} cadastrar e aprovar · ${c.corrigir_aprovado||0} corrigir aprovados · ${c.ja_aprovado||0} já aprovados · ${c.ja_conciliado||0} já conciliados · ${c.ja_excluido||0} previamente excluídos · ${c.correspondencia_ambigua||0} ambíguos · ${c.prazo_insuficiente||0} prazo insuficiente · ${c.sem_catalogo||0} sem catálogo · ${c.sem_preco||0} sem preço · ${c.sem_correspondencia||0} não encontrados · ${c.formula_especial||0} Fórmulas Especiais · ${c.aba_especial||0} abas bloqueadas · ${c.invalido||0} inválidos.`;
-      previa.innerHTML=`<p>${H(plano)} operação(ões) poderão ser aplicadas com segurança. Exibindo até 100 exemplos.</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(x.acao.replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
-      confirm.disabled=!plano;
+      const dados=await executarQueimaEmLotes(relatorio.itens,
+       (lote)=>enviarLote(lote,true),{
+       simular:true,progresso:({indice,total,executado})=>{
+        if(v===versao)resumo.textContent=`Prévia sem gravação: ${executado?'Concluído':'Analisando'} lote ${indice} de ${total}…`;
+       }});
+      if(v!==versao)return;
+      mostrarResumo(dados);previaConfirmada=true;
+      confirm.disabled=!Number(dados.contagem?.cadastrar_e_aprovar||0);
      }catch(error){
       if(v!==versao)return;
-      // Diagnóstico estritamente de leitura: quando a comparação integral falha,
-      // verifica UMA ocorrência, sem permitir o botão de confirmação.
       confirm.disabled=true;
-      resumo.textContent='Não foi possível conferir o relatório completo: '+error.message;
-      if(error.code>=500&&relatorio?.itens?.length>1){
-       resumo.textContent+=' Testando uma ocorrência (somente leitura)…';
-       try{
-        const teste=await request('/queima/conciliar-relatorio',{
-         method:'POST',body:{itens:relatorio.itens.slice(0,1),...opcoes(),simular:true},
-         timeout:65000,retries:0});
-        if(v!==versao)return;
-        resumo.textContent=`Falha na conferência completa: ${error.message} A simulação de 1 produto funcionou (linha ${relatorio.itens[0].linha}). A falha pode depender do volume ou de outra linha. Nenhum lançamento foi alterado; confira os logs da referência e não confirme este lote.`;
-        previa.textContent=`Diagnóstico: 1 de ${relatorio.itens.length} itens analisado sem gravação. O relatório completo não está validado.`;
-       }catch(diagnostico){
-        if(v!==versao)return;
-        resumo.textContent=`Falha na conferência completa: ${error.message} A simulação de 1 produto também falhou: ${diagnostico.message} Nenhum lançamento foi alterado.`;
-        previa.textContent=`Diagnóstico sem gravação: linha ${relatorio.itens[0].linha} do relatório.`;
-       }
-      }
-      toast('Conferência não realizada. Consulte o diagnóstico no modal.',true);
+      resumo.textContent=`Não foi possível concluir a prévia: ${error.message}. Lote(s) analisado(s): ${error.lotesConcluidos||0} de ${error.totalLotes||'?'}. Nenhum lançamento foi alterado; o botão de confirmação permanece bloqueado.`;
+      previa.textContent='Erro da prévia. A mensagem inclui o código do Supabase quando disponível. É seguro tentar a conferência novamente.';
+      toast('Conferência não concluída. Confira o erro informado no modal.',true);
      }
    };
    input.onchange=async()=>{const file=input.files?.[0];input.value='';if(!file)return;
-     confirm.disabled=true;resumo.textContent='Lendo relatório XLSX…';
+     confirm.disabled=true;previaConfirmada=false;resumo.textContent='Lendo relatório XLSX…';
      try{relatorio=await lerRelatorioQueimaXlsx(file,{loja:state.loja});
        if(relatorio.itens.length>1500)throw Error('O relatório possui mais de 1500 aprovados. Divida o arquivo por período.');
        if(!relatorio.itens.length)throw Error('Não há itens S válidos neste arquivo.');
        dlg.showModal();await conferir();
      }catch(error){relatorio=null;toast('Falha ao ler relatório: '+error.message,true);resumo.textContent=error.message;}
    };
-   $('#queima-relatorio-primeira').onchange=()=>void conferir();
-   $('#queima-relatorio-corrigir').onchange=()=>void conferir();
-   confirm.onclick=async()=>{if(!relatorio)return;confirm.disabled=true;
-     if(!await confirmDialog('Aplicar conciliação',`Confirmar comparação dos ${relatorio.resumo.aprovados} itens S do relatório? Itens sem preço e correspondências ambíguas não serão alterados.`)){confirm.disabled=false;return;}
-     try{const res=await request('/queima/conciliar-relatorio',{method:'POST',body:{itens:relatorio.itens,...opcoes(),simular:false},timeout:120000,retries:0});
-       const c=res.resultado?.contagem||{};dlg.close();
-       toast(`Conciliação concluída: ${c.aprovar_existente||0} aprovado(s), ${c.cadastrar_e_aprovar||0} incluído(s), ${c.corrigir_aprovado||0} corrigido(s). ${c.sem_preco||0} sem preço e ${c.correspondencia_ambigua||0} ambíguos ignorados.`);
-       await renderRoute(state.route);
-     }catch(error){resumo.textContent='Falha na conciliação. Nenhum lote deve ser considerado confirmado: '+error.message;toast(error.message,true);confirm.disabled=false;}
+   $('#queima-relatorio-cancelar').onclick=()=>{
+    // Fechar durante uma confirmação não reverte lotes já aplicados.
+    if(emExecucao)return toast('A importação está em andamento. Aguarde a conclusão dos lotes.',true);
+    ++versao;dlg.close();
+   };
+   dlg.oncancel=e=>{if(emExecucao){e.preventDefault();toast('A importação está em andamento. Aguarde a conclusão dos lotes.',true);}else ++versao;};
+   confirm.onclick=async()=>{
+    if(!relatorio||!previaConfirmada||emExecucao)return;
+    confirm.disabled=true;
+    if(!await confirmDialog('Cadastrar somente novos produtos',
+      `Confirmar os produtos NOVOS aprovados (S) deste relatório? Os que já estão na Queima não serão alterados. A operação será feita em lotes e pode ser retomada reimportando o arquivo.`)){
+       confirm.disabled=false;return;
+    }
+    emExecucao=true;
+    try{
+      const dados=await executarQueimaEmLotes(relatorio.itens,
+       lote=>enviarLote(lote,false),{
+       simular:false,progresso:({indice,total,executado})=>{
+        resumo.textContent=`Cadastrando somente novos: ${executado?'Concluído':'Executando'} lote ${indice} de ${total}. Não feche a página.`;
+       }});
+      const c=dados.contagem||{};
+      dlg.close();previaConfirmada=false;
+      toast(`Relatório concluído: ${c.cadastrar_e_aprovar||0} novos produto(s) cadastrados e aprovados. ${c.ja_existente||0} já existentes mantidos sem alterações, ${c.ja_conciliado||0} reimportações ignoradas.`);
+      await renderRoute(state.route);
+    }catch(error){
+      previaConfirmada=false;
+      resumo.textContent=`A importação parou no lote ${(error.lotesConcluidos||0)+1} de ${error.totalLotes||'?'}. ${error.message} ${error.lotesConcluidos?'Os lotes anteriores foram confirmados. ':''}Reimporte o mesmo relatório para continuar sem duplicar; nenhum aprovado existente terá preço ou quantidade modificados.`;
+      toast('Importação interrompida. Confira a situação no modal.',true);
+    }finally{emExecucao=false;confirm.disabled=true;}
    };
  }
  if(isQueima){

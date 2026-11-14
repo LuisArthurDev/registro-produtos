@@ -87,8 +87,8 @@ export function interpretarRelatorioQueimaLinhas(linhas,{loja=''}={}){
   const quantidade=Number(String(c[9]??'').replace(',','.')),precoTexto=asString(c[11]).replace(',','.'),preco_gondola=precoTexto===''?null:Number(precoTexto);
   if(preco_gondola===null)resumo.sem_preco++;
   if(!codigo||!validade||!Number.isSafeInteger(quantidade)||quantidade<=0||quantidade>999999||preco_gondola!==null&&(!Number.isFinite(preco_gondola)||preco_gondola<0||preco_gondola>9999999999.99)||!data_lancamento){resumo.invalidos++;continue;}
-  // O identificador de origem NÃO depende de preço/quantidade: correções futuras
-  // devem atualizar a mesma ocorrência, sem criar uma nova Queima.
+  // Identificador estável: uma futura reimportação não altera esta ocorrência,
+  // mesmo que preço ou quantidade no relatório tenham sido modificados.
   const key=[codigo[1].replace(/^0+(?=\d)/,''),validade,data_lancamento].join('|');
   const ocorrencia=(repeticoes.get(key)||0)+1;repeticoes.set(key,ocorrencia);
   items.push({linha:r.linha,codigo_interno:codigo[1],descricao:codigo[2],validade,quantidade,preco_gondola,data_lancamento,ocorrencia,aprovado:true});

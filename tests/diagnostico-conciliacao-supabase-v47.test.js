@@ -68,9 +68,9 @@ test('falha de conexão gera diagnóstico de rede, sem aprovar produtos',async()
  }finally{console.error=old;ctx.restore()}
 });
 
-test('interface executa diagnóstico com somente uma linha em modo simulação; mantém confirmação desabilitada',()=>{
- assert.match(app,/resumo\.textContent='Não foi possível conferir o relatório completo/);
- assert.match(app,/relatorio\.itens\.slice\(0,1\)/);
+test('interface consulta em lotes pequenos sem gravação e mantém confirmação bloqueada se falhar',()=>{
+ assert.match(app,/Não foi possível concluir a prévia/);
+ assert.match(app,/executarQueimaEmLotes/);
  assert.match(app,/simular:true/);
  assert.match(app,/Nenhum lançamento foi alterado/);
  assert.match(api,/console\.error\('\[Supabase\]'/);

@@ -1161,9 +1161,12 @@ async function importarXlsQueima(req,actor,body){
 async function conciliarRelatorioQueima(req,actor,body){
  admin(actor);const loja=actorLoja(actor,body.loja);
  const itens=body.itens;
- if(!Array.isArray(itens)||itens.length<1||itens.length>1500)
-   throw bad('O relatório deve conter de 1 a 1500 linhas aprovadas (S).',422);
- const primeiro=body.primeira_carga===true,corrigir=body.corrigir_aprovados===true,simular=body.simular!==false;
+ if(!Array.isArray(itens)||itens.length<1||itens.length>40)
+   throw bad('Envie lotes de 1 a 40 itens aprovados (S).',422);
+ // V48: relatórios S servem exclusivamente para ADICIONAR NOVOS produtos.
+ // Nunca corrigir nem aprovar entradas anteriores (pendentes ou aprovadas).
+ if(body.corrigir_aprovados===true)throw bad('Correção via relatório não permitida. Edite o item manualmente na Queima.',422);
+ const primeiro=true,corrigir=false,simular=body.simular!==false;
  for(const item of itens){
    if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4||!/^\d{1,20}$/.test(norm(item.codigo_interno))
      ||!dataValida(item.validade)||!dataValida(item.data_lancamento)

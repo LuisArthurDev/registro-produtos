@@ -72,7 +72,7 @@ test('prévia de conciliação NÃO grava e passa opções seguras para RPC',asy
 });
 test('aplicar conciliação usa RPC e registra auditoria; sem POST direto de aprovados',async()=>{
  const env=mock();try{
-  const r=await env.call('queima/conciliar-relatorio','POST',{itens:[item],primeira_carga:true,corrigir_aprovados:true,simular:false});
+  const r=await env.call('queima/conciliar-relatorio','POST',{itens:[item],primeira_carga:true,corrigir_aprovados:false,simular:false});
   assert.equal(r.statusCode,200,JSON.stringify(r.data));assert.ok(env.calls.some(c=>c.table==='auditoria'));
   assert.equal(env.calls.find(c=>c.table==='rpc/conciliar_queima_relatorio_v43').body.p_simular,false);
   assert.ok(!env.calls.some(c=>c.table==='queima'&&c.method==='POST'));
@@ -122,11 +122,12 @@ test('migration 025 protege Fórmulas Especiais, exige 7 dias para novas entrada
  assert.doesNotMatch(sql,/\bDELETE FROM public\.queima\b|TRUNCATE public\.queima/i);
  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.exigir_gondola_aprovacao_v40/);
 });
-test('botões da interface, caixa de primeira carga e correções futuras existem',()=>{
+test('botões da interface importam apenas novos e edição dos aprovados é manual',()=>{
  const app=read('public/assets/app.js'),worker=read('public/sw.js'),workflow=read('.github/workflows/migracao-supabase.yml');
  assert.match(app,/id="queima-relatorio-open"/);
- assert.match(app,/id="queima-relatorio-primeira"/);
- assert.match(app,/id="queima-relatorio-corrigir"/);
+ assert.doesNotMatch(app,/id="queima-relatorio-primeira"/);
+ assert.doesNotMatch(app,/id="queima-relatorio-corrigir"/);
+ assert.match(app,/primeira_carga:true,corrigir_aprovados:false/);
  assert.match(app,/id="queima-editar-form"/);
  assert.match(app,/data-edit-burn/);assert.match(app,/data-delete-burn/);
  assert.match(app,/lerRelatorioQueimaXlsx/);assert.match(app,/queima\/conciliar-relatorio/);

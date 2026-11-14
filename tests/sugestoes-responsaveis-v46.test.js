@@ -102,5 +102,5 @@ test('frontend tem modal global e por produto, opção manual e confirmação an
  assert.match(app,/Escolher funcionário/);
  assert.match(app,/confirmDialog\('Confirmar atribuição'/);
  assert.match(app,/acao:'atribuir_importacao'/);
- assert.match(sw,/registro-validades-v47-diagnostico-conciliacao-supabase/);
+ assert.match(sw,/registro-validades-v48-queima-so-novos-otimizada/);
 });

@@ -1,3 +1,5 @@
+> **V48 — Queima via relatório XLSX: somente produtos novos.** A aprovação importada não corrige mais produtos existentes. A SQL 028 otimiza o processamento e a interface envia lotes de 40. Consulte [ATUALIZAR-V48-QUEIMA-SOMENTE-NOVOS-SEM-TIMEOUT.md](ATUALIZAR-V48-QUEIMA-SOMENTE-NOVOS-SEM-TIMEOUT.md) e execute a SQL 028 antes do deploy.
+
 > **v47 — Diagnóstico de falhas na conferência XLSX da Queima.** Veja [ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md](ATUALIZAR-V47-DIAGNOSTICO-ERRO-CONCILIACAO.md). Não requer migração SQL; atualize a API no Vercel para ver o erro PostgreSQL real.
 
 > **v44 — Conciliação de Queima por relatório XLSX + badge de Aprovado via importação, filtro e botão Verificado.** Leia [ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md](ATUALIZAR-V44-BADGE-APROVADOS-IMPORTADOS.md). Aplique SQL 025 e, depois, SQL 026 antes do deploy.
