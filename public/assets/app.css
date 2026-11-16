@@ -872,3 +872,16 @@ body:not(.launch-route):not(.view-route) .page-content .table-wrap .action-link{
  body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td{padding:2px 1px!important}
  body:not(.launch-route):not(.view-route) .page-content .table-wrap tbody>tr>td.row-actions{max-width:100%!important;flex-wrap:wrap!important}
 }
+
+/* V62: filtros do Mapa de Validade distribuídos em duas linhas independentes. */
+#map-main-card .map-primary-filters,#map-main-card .map-secondary-filters{display:grid;gap:10px;align-items:end;margin-bottom:12px}
+#map-main-card .map-primary-filters{grid-template-columns:minmax(190px,2fr) minmax(110px,1fr) minmax(160px,1.4fr) minmax(160px,1.2fr)}
+#map-main-card .map-secondary-filters{grid-template-columns:repeat(5,minmax(0,1fr)) auto auto;margin-bottom:20px}
+#map-main-card .map-primary-filters>*,#map-main-card .map-secondary-filters>*{min-width:0;width:100%;max-width:none;margin:0}
+#map-main-card .map-primary-filters input,#map-main-card .map-primary-filters select,#map-main-card .map-secondary-filters input,#map-main-card .map-secondary-filters select{min-width:0;width:100%;max-width:none}
+#map-main-card .map-secondary-filters label{display:flex;flex-direction:column;gap:5px;white-space:normal;font-size:12px;color:var(--muted)}
+#map-main-card .map-secondary-filters button{white-space:nowrap;align-self:end}
+#map-main-card .map-group-tabs{margin:0 0 16px;justify-content:flex-start}
+#map-main-card .map-group-tabs button[aria-selected="true"]{background:#205a60;border-color:#72e4d7;color:#fff}
+@media(max-width:1250px){#map-main-card .map-primary-filters{grid-template-columns:repeat(2,minmax(0,1fr))}#map-main-card .map-secondary-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){#map-main-card .map-primary-filters,#map-main-card .map-secondary-filters{grid-template-columns:repeat(2,minmax(0,1fr))}#map-main-card .map-primary-filters>input:first-child{grid-column:1/-1}#map-main-card .map-secondary-filters button{grid-column:auto}#map-main-card .map-group-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}

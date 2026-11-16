@@ -657,16 +657,17 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=forced==='Estoque'?[]:await nomesMapasComFuncionariosAtivos(rows);
- const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[];
+ const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[],grupoMapaAtivo='funcionarios';
+ const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; o mês do mapa é o mês seguinte ao lançamento (ex.: novembro lançado em outubro).',
  `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
- $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card"><div class="filter-row">
+ $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card">${!isStock?`<div class="page-subnav compare-tabs map-group-tabs" role="tablist" aria-label="Separar mapas por tipo"><button type="button" id="map-group-staff" class="btn-outline" role="tab" aria-selected="true">Funcionários</button><button type="button" id="map-group-special" class="btn-outline" role="tab" aria-selected="false">Abas especiais</button></div>`:''}<div class="filter-row map-primary-filters">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
  ${!isStock&&able?`<select id="map-owner"><option value="">Todos os mapas</option>${tipo.map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('')}</select>`:''}
  <select id="map-status"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A vencer">A vencer</option><option value="Vendável">Vendável</option></select>
- <label>Mês do mapa <select id="map-month" aria-label="Filtrar mês de referência do mapa (mês seguinte ao lançamento)" title="Exemplo: mapa de novembro lançado em outubro"><option value="">Todos os meses</option>${opcoesMesesMapa(rows,r=>mesReferenciaMapa(r.mes_lancamento))}</select></label><label>Mês lançado <select id="map-launch-month" aria-label="Filtrar mês em que o mapa foi lançado"><option value="">Todos os lançamentos</option>${opcoesMesesMapa(rows,r=>String(r.mes_lancamento||'').slice(0,7))}</select></label><label>Validade a partir de <input type="date" id="map-valid-from" class="filter-date"></label>
+ </div><div class="filter-row map-secondary-filters"><label>Mês do mapa <select id="map-month" aria-label="Filtrar mês de referência do mapa (mês seguinte ao lançamento)" title="Exemplo: mapa de novembro lançado em outubro"><option value="">Todos os meses</option>${opcoesMesesMapa(rows,r=>mesReferenciaMapa(r.mes_lancamento))}</select></label><label>Mês lançado <select id="map-launch-month" aria-label="Filtrar mês em que o mapa foi lançado"><option value="">Todos os lançamentos</option>${opcoesMesesMapa(rows,r=>String(r.mes_lancamento||'').slice(0,7))}</select></label><label>Validade a partir de <input type="date" id="map-valid-from" class="filter-date"></label>
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
@@ -738,12 +739,37 @@ async function mapas(forced=''){
     descida.disabled=!validos.length;descida.textContent=validos.length?`Descer ${validos.length} selecionado(s) para mapa`:'Descer selecionados para o mapa';}
 
  };
- const apply=()=>{const q=$('#map-search').value.toLowerCase().trim(),l=$('#map-lot').value.toLowerCase().trim(),st=$('#map-status').value,owner=$('#map-owner')?.value||forced,
+ const filtrarMapaLinhas=(incluirAba=true)=>{const q=$('#map-search').value.toLowerCase().trim(),l=$('#map-lot').value.toLowerCase().trim(),st=$('#map-status').value,owner=$('#map-owner')?.value||forced,
  m=$('#map-month').value,lancamento=$('#map-launch-month').value,v1=$('#map-valid-from').value,v2=$('#map-valid-to').value;
-  filtered=rows.filter(r=>(!owner||r.mapa_nome===owner)&&(!st||statusVal(r.validade,r.secao)[0]===st)
+  return rows.filter(r=>(!incluirAba||isStock||(grupoMapaAtivo==='especiais'?ehMapaEspecial(r):!ehMapaEspecial(r)))&&(!owner||r.mapa_nome===owner)&&(!st||statusVal(r.validade,r.secao)[0]===st)
    &&(!m||mesReferenciaMapa(r.mes_lancamento)===m)&&(!lancamento||String(r.mes_lancamento||'').slice(0,7)===lancamento)&&(!v1||r.validade>=v1)&&(!v2||r.validade<=v2)
    &&(!l||String(r.lote).toLowerCase().includes(l))&&(!q||[r.ean,r.codigoInterno,r.descricao,r.secao].join(' ').toLowerCase().includes(q)));
-  page=0;draw();};
+ };
+ const apply=()=>{filtered=filtrarMapaLinhas(true);page=0;draw();};
+ // As abas reutilizam os mesmos filtros e operações. Apenas a origem dos mapas muda.
+ // O responsável exibido no seletor acompanha o conjunto atual e não mistura abas especiais.
+ const atualizarListaMapas=()=>{
+  const seletor=$('#map-owner');if(!seletor)return;
+  const anterior=seletor.value;
+  const nomes=grupoMapaAtivo==='especiais'
+   ?[...new Set(rows.filter(ehMapaEspecial).map(r=>r.mapa_nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))
+   :tipo.filter(nome=>!special.includes(nome));
+  seletor.innerHTML='<option value="">Todos os mapas</option>'+nomes.map(nome=>`<option value="${H(nome)}">${H(nome)}</option>`).join('');
+  if(nomes.includes(anterior))seletor.value=anterior;
+ };
+ if(!isStock){
+  const mudarGrupoMapa=grupo=>{
+   if(grupo===grupoMapaAtivo)return;
+   grupoMapaAtivo=grupo;
+   selected.clear();atualizarListaMapas();
+   $('#map-group-staff').setAttribute('aria-selected',String(grupo==='funcionarios'));
+   $('#map-group-special').setAttribute('aria-selected',String(grupo==='especiais'));
+   apply();
+  };
+  $('#map-group-staff').onclick=()=>mudarGrupoMapa('funcionarios');
+  $('#map-group-special').onclick=()=>mudarGrupoMapa('especiais');
+  atualizarListaMapas();
+ }
  for(const id of ['map-search','map-lot','map-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to'])$('#'+id)?.addEventListener('input',apply);
  $('#map-size').onchange=()=>{page=0;draw();};
  $('#map-clear').onclick=()=>{for(const id of ['map-search','map-lot','map-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to']){const el=$('#'+id);if(el)el.value='';}selected.clear();apply();};
@@ -938,7 +964,7 @@ async function mapas(forced=''){
       }
       if(!saldos.length){notice.textContent='Não há saldos importados nesta loja. Importe o ODS em Controle de Estoque antes de realizar a conferência.';
         $('#compare-table').innerHTML='';$('#compare-summary').innerHTML='';return;}
-      const candidatos=filtered.filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
+      const candidatos=filtrarMapaLinhas(false).filter(r=>String(r.mes_lancamento).slice(0,7)===mes);
       // Abas especiais são excluídas ANTES de conciliar o saldo. Caso contrário,
       // elas poderiam consumir saldo de um produto e reduzir incorretamente o mapa.
       const lista=filtrarMapasParaConferencia(candidatos);
