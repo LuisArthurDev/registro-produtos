@@ -1,6 +1,6 @@
 import { lerODS } from './ods.js';
 import { gerarDbMapa, baixarArquivoBinario } from './mapa-sqlite.js';
-import { gerarTdbExperimental, obterModeloTdb } from './procfit-gerador-tdb.js';
+import { gerarTdbExperimental, obterModeloTdb } from './procfit-gerador-tdb.js?v=64';
 import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
@@ -663,7 +663,7 @@ async function mapas(forced=''){
  const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; o mês do mapa é o mês seguinte ao lançamento (ex.: novembro lançado em outubro).',
- `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button>':''}`);
+ `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button><button class="btn-outline" id="map-xml" data-icon-keep-label type="button" title="Gerar XML para o assistente de importação do Procfit, sem limite de 100 itens">Gerar XML</button>':''}`);
  $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card">${!isStock?`<div class="page-subnav compare-tabs map-group-tabs" role="tablist" aria-label="Separar mapas por tipo"><button type="button" id="map-group-staff" class="btn-outline" role="tab" aria-selected="true">Funcionários</button><button type="button" id="map-group-special" class="btn-outline" role="tab" aria-selected="false">Abas especiais</button></div>`:''}<div class="filter-row map-primary-filters">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
@@ -879,6 +879,37 @@ async function mapas(forced=''){
    toast(`DB SQLite gerado com ${itens.length} registro(s).`);
   }catch(err){toast('Erro na geração DB: '+err.message,true);}
  });
+ // XML simples para o assistente de importação: um QUEIMA_ESTOQUE_ITEM por registro.
+ // Não usa paginação visual; exporta todos os registros dos filtros ativos ou a seleção filtrada.
+ $('#map-xml')?.addEventListener('click',()=>{
+  try{
+   const itens=itensParaArquivo();
+   if(!itens.length)throw new Error('Nenhum produto disponível para exportar.');
+   const escapeXml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+   const xmlDate=v=>{
+    const s=String(v||'').trim().slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+    const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(m)return `${m[3]}-${m[2]}-${m[1]}`;
+    throw new Error(`Validade inválida: ${s||'(vazia)'}`);
+   };
+   const registros=itens.map((r,i)=>{
+    const produto=String(r.codigoInterno??'').trim();
+    const ean=String(r.ean??'').trim();
+    const lote=String(r.lote??'').trim();
+    const quantidade=Number(r.quantidade);
+    if(!produto&&!/^\d{8,14}$/.test(ean))throw new Error(`Item ${i+1}: EAN inválido e sem código interno.`);
+    if(!Number.isInteger(quantidade)||quantidade<=0)throw new Error(`Item ${i+1}: quantidade inválida.`);
+    const validade=xmlDate(r.validade);
+    // Os demais campos de QUEIMA_ESTOQUE_ITEM não são exportados e devem ser definidos pelo Procfit.
+    return `  <QUEIMA_ESTOQUE_ITEM>\n    <EAN>${escapeXml(ean)}</EAN>\n    <PRODUTO>${escapeXml(produto)}</PRODUTO>\n    <LOTE>${escapeXml(lote)}</LOTE>\n    <VALIDADE>${validade}</VALIDADE>\n    <QUANTIDADE>${quantidade}</QUANTIDADE>\n  </QUEIMA_ESTOQUE_ITEM>`;
+   });
+   const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<QUEIMA_ESTOQUE_ITENS>\n${registros.join('\n')}\n</QUEIMA_ESTOQUE_ITENS>\n`;
+   const bytes=new TextEncoder().encode(xml);
+   baixarArquivoBinario(bytes,`PROCFIT_QUEIMA_ESTOQUE_ITEM_LOJA${state.user?.loja||state.loja}_${nowBrISO()}.xml`);
+   toast(`XML gerado com ${registros.length} registro(s) em um único arquivo, sem limite de 100 por lote.`);
+  }catch(err){toast('Erro na geração XML: '+err.message,true);}
+ });
  $('#map-tdb')?.addEventListener('click',async()=>{
   const btn=$('#map-tdb');btn.disabled=true;
   try{
@@ -889,7 +920,7 @@ async function mapas(forced=''){
     if(!cod&&!/^\d{8,14}$/.test(ean))throw new Error(`Item ${i+1}: EAN inválido e sem código interno.`);
     return {QUEIMA_ESTOQUE_MOTIVO:4,PRODUTO:cod||null,EAN:ean||null,LOTE:String(r.lote||'').trim(),VALIDADE:String(r.validade||'').slice(0,10),QUANTIDADE:Number(r.quantidade)};
    });
-   if(!await confirmDialog('Gerar TDB experimental',`Gerar ${dados.length} registro(s) para a tabela QUEIMA_ESTOQUE_ITEM do Procfit? O arquivo é experimental, não homologado para importação; teste em ambiente controlado. Nenhuma aprovação será feita automaticamente.`))return;
+   if(!await confirmDialog('Gerar TDB experimental',`Gerar ${dados.length} registro(s) para a tabela QUEIMA_ESTOQUE_ITEM do Procfit? O cabeçalho e os identificadores automáticos ficarão NULL; o Procfit deverá preenchê-los. O formato é experimental e não homologado; teste em ambiente controlado. Nenhuma aprovação será feita automaticamente.`))return;
    const preparacao={documento:{tipo:'PREPARACAO_PROCFIT_QUEIMA',motivo_fixo:4,empresa_contexto:String(state.user?.loja||state.loja),tabelas:{QUEIMA_ESTOQUE_ITEM:dados}}};
    const modelo=await obterModeloTdb();
    const resultado=await gerarTdbExperimental(preparacao,{modeloBytes:modelo,empresa:state.user?.loja||state.loja,usuarioProcfit:5584});
