@@ -18,6 +18,22 @@ export function normalizarEAN(texto) {
   return /^\d{8,14}$/.test(codigo) ? codigo : '';
 }
 
+// Leitura em vários frames: não aceitar a primeira decodificação isolada.
+// O checksum não é suficiente: 80050087 e 80052487 são ambos EAN-8 válidos.
+export const LEITURAS_MINIMAS = 4;
+export const TEMPO_MINIMO_MS = 350;
+export function registrarLeituraConsecutiva(estado, raw, agora=Date.now()) {
+  const codigo=normalizarEAN(raw);
+  if(!codigo) {estado.codigo='';estado.contagem=0;return {codigo:'',confirmado:false,contagem:0};}
+  if(estado.codigo!==codigo || agora-(estado.ultimoInstante??agora)>1700) {
+    estado.codigo=codigo;estado.contagem=1;estado.inicio=agora;
+  } else if(agora-(estado.ultimoInstante??0)>=65) {
+    estado.contagem++;
+  }
+  estado.ultimoInstante=agora;
+  return {codigo,contagem:estado.contagem,confirmado:estado.contagem>=LEITURAS_MINIMAS && agora-estado.inicio>=TEMPO_MINIMO_MS};
+}
+
 export function mensagemErroCamera(erro) {
   const code = String(erro?.name || erro?.message || erro || '');
   if (/NotAllowed|PermissionDenied|denied|permission/i.test(code)) return 'Câmera bloqueada. Autorize o acesso à câmera nas configurações do navegador e tente novamente.';
@@ -74,9 +90,24 @@ export async function fecharScanner(){
 }
 
 function reconhecer(session, raw){
-  if(active!==session||session.cancelled||session.detected)return;
+  if(active!==session||session.cancelled||session.detected||session.confirmando)return;
   const ean=normalizarEAN(raw);
-  if(!ean){setStatus('Código lido não é um EAN de 8 a 14 dígitos. Posicione o código de barras novamente.');return;}
+  if(!ean){setStatus('Código inválido. Centralize o código e aproxime a câmera, com boa iluminação.');return;}
+  const now=Date.now();
+  // Evita abrir a confirmação continuamente após o operador rejeitar uma leitura.
+  if(session.rejeitado===ean && now<session.rejeitadoAte)return;
+  const leitura=registrarLeituraConsecutiva(session.consenso,ean,now);
+  if(!leitura.confirmado){setStatus('Confirmando leitura: '+ean+' ('+leitura.contagem+'/'+LEITURAS_MINIMAS+'). Mantenha a câmera parada.');return;}
+  if(ean.length===8){
+    session.confirmando=true;
+    const aceito=globalThis.confirm('Confira os 8 dígitos antes de usar o código:\n\n'+ean+'\n\nO número na embalagem é exatamente este?');
+    session.confirmando=false;
+    if(!aceito){
+      session.consenso={};session.rejeitado=ean;session.rejeitadoAte=Date.now()+1800;
+      setStatus('Leitura descartada. Reposicione a câmera para ler novamente.');
+      return;
+    }
+  }
   session.detected=true;
   const input=session.input;
   if(input?.isConnected){
@@ -104,7 +135,7 @@ async function iniciarNativo(session){
   session.video=video;video.srcObject=stream;view().replaceChildren(video);
   try{await video.play();}catch(e){if(session.cancelled)return true;throw e;}
   if(session.cancelled){await parar(session);return true;}
-  setStatus('Aponte a câmera para o EAN na embalagem.');
+  setStatus('Centralize o código e mantenha a câmera parada para confirmar a leitura.');
   let busy=false,last=0;
   const tick=async t=>{
     if(session.cancelled||active!==session||session.detected)return;
@@ -134,7 +165,7 @@ async function iniciarAlternativo(session){
     await reader.start({facingMode:'environment'}, {fps:10,qrbox:(w,h)=>({width:Math.round(Math.min(340,w*.9)),height:Math.round(Math.min(160,h*.55))})},raw=>reconhecer(session,raw),()=>{});
     session.html5Started=true;
     if(session.cancelled||active!==session){await parar(session);return;}
-    setStatus('Aponte para o código de barras EAN. A leitura é automática.');
+    setStatus('Centralize o EAN e mantenha a câmera parada. Códigos de 8 dígitos exigem confirmação.');
   }catch(e){
     // Alguns aparelhos não aceitam facingMode; tenta uma câmera disponível.
     if(session.cancelled)return;
@@ -144,7 +175,7 @@ async function iniciarAlternativo(session){
       await reader.start(id,{fps:10},raw=>reconhecer(session,raw),()=>{});
       session.html5Started=true;
       if(session.cancelled){await parar(session);return;}
-      setStatus('Aponte para o EAN. A leitura é automática.');
+      setStatus('Centralize o EAN e mantenha a câmera parada. Códigos de 8 dígitos exigem confirmação.');
     }catch{throw e;}
   }
 }
@@ -156,7 +187,7 @@ export function abrirScannerEAN({input,onDetected}={}){
   }
   if(active||dialog()?.open)return;
   const d=dialog();if(!d)throw new Error('Janela do scanner não foi encontrada.');
-  const session={id:++generation,input,onDetected,cancelled:false,detected:false,stopping:false,stream:null,video:null,html5:null,html5Started:false,frame:null};
+  const session={id:++generation,input,onDetected,cancelled:false,detected:false,stopping:false,stream:null,video:null,html5:null,html5Started:false,frame:null,consenso:{},confirmando:false,rejeitado:null,rejeitadoAte:0};
   active=session;
   view().replaceChildren();view().removeAttribute('style');setStatus('Preparando câmera…');
   d.showModal();

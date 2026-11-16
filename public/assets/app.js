@@ -16,7 +16,7 @@ import { resumoQueima } from './queima-grafico.js';
 import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
 import { executarQueimaEmLotes } from './queima-conciliacao-lotes.js';
-import { abrirScannerEAN, fecharScanner } from './scanner.js';
+import { abrirScannerEAN, fecharScanner } from './scanner.js?v=67';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
 import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta, prepararPush, diagnosticarPush } from './push.js';
