@@ -1,4 +1,6 @@
 import { lerODS } from './ods.js';
+import { gerarDbMapa, baixarArquivoBinario } from './mapa-sqlite.js';
+import { gerarTdbExperimental, obterModeloTdb } from './procfit-gerador-tdb.js';
 import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
@@ -661,7 +663,7 @@ async function mapas(forced=''){
  const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; o mês do mapa é o mês seguinte ao lançamento (ex.: novembro lançado em outubro).',
- `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>`);
+ `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button>':''}`);
  $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card">${!isStock?`<div class="page-subnav compare-tabs map-group-tabs" role="tablist" aria-label="Separar mapas por tipo"><button type="button" id="map-group-staff" class="btn-outline" role="tab" aria-selected="true">Funcionários</button><button type="button" id="map-group-special" class="btn-outline" role="tab" aria-selected="false">Abas especiais</button></div>`:''}<div class="filter-row map-primary-filters">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
@@ -671,7 +673,7 @@ async function mapas(forced=''){
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
  <button class="btn-outline" id="map-clear" type="button">Limpar filtros</button><button class="btn-outline" id="reload-maps" type="button">Atualizar</button></div>
- ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar todos da lista</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="btn-outline danger-text" id="map-delete-filtered" data-icon-keep-label type="button" disabled>Excluir em lote</button>'):''}</div>
+ ${isStock?'<div class="page-subnav"><button id="stock-all" class="btn-outline" type="button" aria-pressed="true">Estoque atual</button><button id="stock-expired" class="btn-outline" type="button" aria-pressed="false">Vencidos do Estoque</button></div>':''}<div class="panel-actions">${able?'<label class="toolbar-checkbox"><input id="map-select-all" type="checkbox"> Selecionar todos da lista</label><button class="btn-outline" id="map-to-queima" type="button">Lançar na Queima</button><button class="btn-outline" id="map-to-vencidos" type="button">Mover para Vencidos</button><button class="btn-outline" id="map-unselect" type="button">Limpar seleção</button><button class="btn-outline" id="map-formula-on" type="button" data-icon-keep-label disabled>Marcar Fórmulas Especiais</button><button class="btn-outline" id="map-formula-off" type="button" data-icon-keep-label disabled>Desmarcar Fórmulas Especiais</button>'+(isStock?'<button class="btn-outline" id="stock-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="primary" id="stock-descend-selected" data-icon-keep-label type="button" disabled>Descer selecionados para o mapa</button>':'<button class="btn-outline" id="map-select-filtered" data-icon-keep-label type="button">Selecionar todos filtrados</button><button class="btn-outline" id="map-transfer-bulk" data-icon-keep-label type="button" disabled title="Transferir itens selecionados para outro funcionário">Transferir selecionados</button><button class="btn-outline danger-text" id="map-delete-filtered" data-icon-keep-label type="button" disabled>Excluir em lote</button>'):''}</div>
  <p class="footer-hint" id="map-counter"></p><div id="maps-table"></div><div class="pager"><button id="map-prev" class="btn-outline" type="button">Anterior</button><span id="map-page-label"></span><button id="map-next" class="btn-outline" type="button">Próxima</button></div></section>`+(isStock?'':`<section id="map-compare-section" class="card card-pad" hidden><h2>Conferência do mapa com o estoque importado</h2><p class="footer-hint">Usa os saldos do ODS já importado em <strong>Controle de Estoque / Saldo Procfit</strong>. Considera apenas os mapas dos funcionários e a aba especial <strong>Estoque</strong>; não inclui Termolabil, Psicotropicos e Antibioticos. Não altera nenhuma quantidade dos mapas. O saldo do produto é distribuído entre os lotes, começando pela validade mais próxima.</p><div class="filter-row"><label>Mês do mapa <input id="compare-month" type="month" aria-label="Mês para comparar ao estoque"></label><label>Itens por página <select id="compare-size"><option>25</option><option>50</option><option>100</option></select></label><button class="btn-outline" id="compare-refresh" type="button">Reconsultar estoque</button><button class="btn-outline" id="compare-xls" type="button" data-icon-keep-label title="Exportar quantidade corrigida em planilha XLS">Exportar XLS</button><button class="btn-outline" id="compare-copy-procfit" data-icon-keep-label type="button" title="Copiar os itens conferidos com quantidade corrigida">Copiar para Conector Procfit — v1.0</button></div><div id="compare-notice" class="notice">Selecione o mês do mapa para comparar com o saldo importado.</div><div id="compare-summary" class="compare-summary" aria-live="polite"></div><div id="compare-table"></div><div class="pager"><button id="compare-prev" class="btn-outline" type="button">Anterior</button><span id="compare-page"></span><button id="compare-next" class="btn-outline" type="button">Próxima</button></div></section>`);
 
  // Transferência individual: reutiliza a RPC validada e auditada já usada em Funcionários.
@@ -720,6 +722,58 @@ async function mapas(forced=''){
    }catch(err){$('#map-transfer-item-error').textContent=err.message;$('#map-transfer-item-error').hidden=false;}
    finally{if(btn.isConnected)btn.disabled=false;}
   };
+  // Transferência em lote no mapa: cada origem é validada individualmente pela RPC auditada.
+  $('#map-transfer-bulk').onclick=async()=>{
+   const itens=filtered.filter(r=>selected.has(r.id));
+   if(!itens.length)return toast('Selecione itens na aba Funcionários.',true);
+   if(itens.some(r=>ehMapaEspecial(r)))return toast('Transfira somente mapas de funcionários. Abas especiais não são elegíveis.',true);
+   if(itens.length>10000)return toast('Selecione até 10.000 registros por operação.',true);
+   const painel=document.createElement('dialog');painel.className='dialog';painel.id='map-transfer-bulk-dialog';
+   painel.innerHTML=`<form class="dialog-inner" id="map-transfer-bulk-form"><h2>Transferir lançamentos selecionados</h2>
+    <p id="map-transfer-bulk-info" class="footer-hint">${itens.length} registro(s), incluindo outras páginas. A quantidade, validade, lote e mês serão preservados.</p>
+    <label>Funcionário de destino<select required name="destino"><option value="">Carregando funcionários...</option></select></label>
+    <p class="notice warn" id="map-transfer-bulk-error" hidden role="alert"></p>
+    <div class="dialog-actions"><button class="btn-outline" type="button" id="map-transfer-bulk-cancel">Cancelar</button><button class="primary" type="submit">Transferir ${itens.length} item(ns)</button></div></form>`;
+   $('#content').append(painel);painel.addEventListener('close',()=>painel.remove());
+   const form=painel.querySelector('form'),erro=painel.querySelector('#map-transfer-bulk-error'),select=form.elements.destino;
+   painel.querySelector('#map-transfer-bulk-cancel').onclick=()=>painel.close();
+   painel.showModal();let funcionarios=[];
+   try{
+    funcionarios=await staffList();
+    const ativos=funcionarios.filter(u=>u.perfil==='funcionario'&&u.ativo===true&&!u.excluido_em);
+    if(!ativos.length)throw new Error('Nenhum funcionário ativo disponível.');
+    select.innerHTML='<option value="">Selecione um funcionário</option>'+ativos.map(u=>`<option value="${H(u.id)}">${H(u.nome)}</option>`).join('');
+   }catch(e){erro.hidden=false;erro.textContent=e.message;select.innerHTML='<option value="">Indisponível</option>';}
+   form.onsubmit=async e=>{
+    e.preventDefault();const destino=select.value,target=funcionarios.find(u=>u.id===destino);
+    if(!target||target.ativo!==true)return;
+    const origens=new Map();
+    for(const r of itens){
+     const origem=funcionarios.find(u=>u.perfil==='funcionario'&&(r.funcionario_id?String(u.id)===String(r.funcionario_id):u.nome===r.mapa_nome));
+     if(!origem&&r.mapa_nome!=='Sem responsável'){erro.hidden=false;erro.textContent=`Origem não identificada para EAN ${r.ean}, mapa ${r.mapa_nome}.`;return;}
+     const origemId=origem?.id||'flutuando';
+     if(origemId===destino){erro.hidden=false;erro.textContent='A seleção contém itens já atribuídos ao destino. Retire-os da seleção antes de continuar.';return;}
+     if(!origens.has(origemId))origens.set(origemId,[]);
+     origens.get(origemId).push(r.id);
+    }
+    if(!await confirmDialog('Transferir em lote',`Transferir ${itens.length} lançamento(s) de ${origens.size} origem(ns) para ${target.nome}? Cada lote ficará registrado no histórico.`))return;
+    const btn=form.querySelector('[type=submit]');btn.disabled=true;select.disabled=true;let feitos=0;
+    painel.querySelector('#map-transfer-bulk-cancel').disabled=true;
+    painel.oncancel=e=>e.preventDefault();
+    try{
+     for(const [origem,ids] of origens){for(let i=0;i<ids.length;i+=500){
+      const parte=ids.slice(i,i+500);painel.querySelector('#map-transfer-bulk-info').textContent=`Transferindo ${feitos} de ${itens.length} registro(s)...`;
+      const r=await request('/usuarios/transferir',{method:'POST',body:{origem,destino,mes:'',secao:'',todos:false,ids:parte},retries:0,timeout:58000});
+      if(Number(r.quantidade)!==parte.length)throw new Error(`O servidor confirmou ${r.quantidade} de ${parte.length} itens. Confira o histórico.`);
+      feitos+=parte.length;
+     }}
+     painel.close();toast(`${feitos} lançamento(s) transferido(s) para ${target.nome}.`);await renderRoute('mapas');
+    }catch(err){erro.hidden=false;erro.textContent=`${feitos} item(ns) confirmados antes da interrupção. ${err.message} Atualize a tela antes de repetir a operação.`;
+     // Não permita reenviar uma seleção potencialmente alterada sem nova consulta.
+     btn.disabled=true;select.disabled=true;const c=painel.querySelector('#map-transfer-bulk-cancel');c.disabled=false;c.textContent='Fechar e atualizar';c.onclick=()=>{painel.close();void renderRoute('mapas');};painel.oncancel=null;
+    }
+   };
+  };
   $('#maps-table').addEventListener('click',e=>{const bt=e.target.closest('[data-transfer-map]');if(!bt)return;const reg=rows.find(x=>x.id===bt.dataset.transferMap);if(reg)void abrirTransferencia(reg);});
  }
  const paged=()=>filtered.slice(page*Number($('#map-size').value),(page+1)*Number($('#map-size').value));
@@ -732,6 +786,7 @@ async function mapas(forced=''){
   $('#map-page-label').textContent=`Página ${page+1} de ${Math.max(1,Math.ceil(filtered.length/Number($('#map-size').value)))}`;
   $('#map-counter').textContent=`${filtered.length} registro(s) · ${filtered.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · ${selected.size} selecionado(s)`;
   for(const id of ['map-formula-on','map-formula-off'])if($('#'+id))$('#'+id).disabled=!selected.size;
+  const mover=$('#map-transfer-bulk');if(mover)mover.disabled=!filtered.some(r=>selected.has(r.id)&&!ehMapaEspecial(r));
   const apagar=$('#map-delete-filtered');
   if(apagar)apagar.disabled=apagar.dataset.excluindo==='1'||!filtered.some(r=>selected.has(r.id));
   const descida=$('#stock-descend-selected');
@@ -815,6 +870,33 @@ async function mapas(forced=''){
     toast('Permissão para copiar bloqueada: use Ctrl+C na janela aberta.',true);
   }
  };
+ // Ambos os formatos exportam a lista filtrada completa (ou apenas os selecionados, se houver).
+ const itensParaArquivo=()=>selected.size?filtered.filter(r=>selected.has(r.id)):filtered;
+ $('#map-db')?.addEventListener('click',()=>{
+  try{
+   const itens=itensParaArquivo();const bytes=gerarDbMapa(itens);
+   baixarArquivoBinario(bytes,`MAPA_VALIDADE_LOJA${state.user?.loja||state.loja}_${nowBrISO()}.db`);
+   toast(`DB SQLite gerado com ${itens.length} registro(s).`);
+  }catch(err){toast('Erro na geração DB: '+err.message,true);}
+ });
+ $('#map-tdb')?.addEventListener('click',async()=>{
+  const btn=$('#map-tdb');btn.disabled=true;
+  try{
+   const itens=itensParaArquivo();if(!itens.length)throw new Error('Nenhum item disponível para exportação.');
+   if(itens.length>10000)throw new Error('O arquivo TDB aceita até 10.000 itens por vez.');
+   const dados=itens.map((r,i)=>{
+    const cod=String(r.codigoInterno||'').trim(),ean=String(r.ean||'').trim();
+    if(!cod&&!/^\d{8,14}$/.test(ean))throw new Error(`Item ${i+1}: EAN inválido e sem código interno.`);
+    return {QUEIMA_ESTOQUE_MOTIVO:4,PRODUTO:cod||null,EAN:ean||null,LOTE:String(r.lote||'').trim(),VALIDADE:String(r.validade||'').slice(0,10),QUANTIDADE:Number(r.quantidade)};
+   });
+   if(!await confirmDialog('Gerar TDB experimental',`Gerar ${dados.length} registro(s) para a tabela QUEIMA_ESTOQUE_ITEM do Procfit? O arquivo é experimental, não homologado para importação; teste em ambiente controlado. Nenhuma aprovação será feita automaticamente.`))return;
+   const preparacao={documento:{tipo:'PREPARACAO_PROCFIT_QUEIMA',motivo_fixo:4,empresa_contexto:String(state.user?.loja||state.loja),tabelas:{QUEIMA_ESTOQUE_ITEM:dados}}};
+   const modelo=await obterModeloTdb();
+   const resultado=await gerarTdbExperimental(preparacao,{modeloBytes:modelo,empresa:state.user?.loja||state.loja,usuarioProcfit:5584});
+   baixarArquivoBinario(resultado.bytes,`PROCFIT_QUEIMA_ESTOQUE_ITEM_LOJA${resultado.empresa}_${nowBrISO()}.TDB`);
+   toast(`${resultado.items} registro(s) incluídos no TDB experimental.`);
+  }catch(err){toast('Erro na geração TDB: '+err.message,true);}finally{if(btn.isConnected)btn.disabled=false;}
+ });
  $('#map-novo')?.addEventListener('click',abrirNovoLancamento);
  $('#maps-table').onclick=async e=>{
    const cb=e.target.closest('[data-check-map]');if(cb){if(cb.checked)selected.add(cb.dataset.checkMap);else selected.delete(cb.dataset.checkMap);draw();return;}
