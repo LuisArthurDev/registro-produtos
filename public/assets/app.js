@@ -879,7 +879,7 @@ async function mapas(forced=''){
    toast(`DB SQLite gerado com ${itens.length} registro(s).`);
   }catch(err){toast('Erro na geração DB: '+err.message,true);}
  });
- // XML simples para o assistente de importação: um QUEIMA_ESTOQUE_ITEM por registro.
+ // XML para o assistente de importação: RECORDS > RECORD > ROW > campos.
  // Não usa paginação visual; exporta todos os registros dos filtros ativos ou a seleção filtrada.
  $('#map-xml')?.addEventListener('click',()=>{
   try{
@@ -902,9 +902,9 @@ async function mapas(forced=''){
     if(!Number.isInteger(quantidade)||quantidade<=0)throw new Error(`Item ${i+1}: quantidade inválida.`);
     const validade=xmlDate(r.validade);
     // Os demais campos de QUEIMA_ESTOQUE_ITEM não são exportados e devem ser definidos pelo Procfit.
-    return `  <QUEIMA_ESTOQUE_ITEM>\n    <EAN>${escapeXml(ean)}</EAN>\n    <PRODUTO>${escapeXml(produto)}</PRODUTO>\n    <LOTE>${escapeXml(lote)}</LOTE>\n    <VALIDADE>${validade}</VALIDADE>\n    <QUANTIDADE>${quantidade}</QUANTIDADE>\n  </QUEIMA_ESTOQUE_ITEM>`;
+    return `  <RECORD>\n    <ROW>\n      <EAN>${escapeXml(ean)}</EAN>\n      <PRODUTO>${escapeXml(produto)}</PRODUTO>\n      <LOTE>${escapeXml(lote)}</LOTE>\n      <VALIDADE>${validade}</VALIDADE>\n      <QUANTIDADE>${quantidade}</QUANTIDADE>\n    </ROW>\n  </RECORD>`;
    });
-   const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<QUEIMA_ESTOQUE_ITENS>\n${registros.join('\n')}\n</QUEIMA_ESTOQUE_ITENS>\n`;
+   const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<RECORDS>\n${registros.join('\n')}\n</RECORDS>\n`;
    const bytes=new TextEncoder().encode(xml);
    baixarArquivoBinario(bytes,`PROCFIT_QUEIMA_ESTOQUE_ITEM_LOJA${state.user?.loja||state.loja}_${nowBrISO()}.xml`);
    toast(`XML gerado com ${registros.length} registro(s) em um único arquivo, sem limite de 100 por lote.`);
