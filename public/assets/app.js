@@ -6,7 +6,7 @@ import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
 import { montarListaProcfit, copiarListaProcfit } from './procfit.js';
 import { gerarConferenciaXls } from './conferencia-xls.js';
-import { gerarMapaProcfitXls } from './mapa-procfit-xls.js';
+import { gerarMapaProcfitEmLotes } from './mapa-procfit-lotes.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
@@ -664,7 +664,7 @@ async function mapas(forced=''){
  const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; o mês do mapa é o mês seguinte ao lançamento (ex.: novembro lançado em outubro).',
- `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button><button class="btn-outline" id="map-xls" data-icon-keep-label type="button" title="Gerar XLS Excel 97–2003 com EAN, PRODUTO, LOTE, VALIDADE e QUANTIDADE para o Procfit">Gerar XLS</button>':''}`);
+ `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button><button class="btn-outline" id="map-xls" data-icon-keep-label type="button" title="Gerar XLS em lotes de até 100 produtos para o Procfit">Gerar XLS</button>':''}`);
  $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card">${!isStock?`<div class="page-subnav compare-tabs map-group-tabs" role="tablist" aria-label="Separar mapas por tipo"><button type="button" id="map-group-staff" class="btn-outline" role="tab" aria-selected="true">Funcionários</button><button type="button" id="map-group-special" class="btn-outline" role="tab" aria-selected="false">Abas especiais</button></div>`:''}<div class="filter-row map-primary-filters">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
@@ -880,14 +880,16 @@ async function mapas(forced=''){
    toast(`DB SQLite gerado com ${itens.length} registro(s).`);
   }catch(err){toast('Erro na geração DB: '+err.message,true);}
  });
- // Exporta em planilha Excel 97–2003 (BIFF8), reconhecida pelo assistente do Procfit.
+ // Exporta em planilha Excel 97–2003 em lotes de 100, dentro de um ZIP quando necessário.
  // Usa todos os produtos dos filtros ativos, ou apenas os selecionados dentro desses filtros.
  $('#map-xls')?.addEventListener('click',()=>{
   try{
    const itens=itensParaArquivo();
-   const {bytes,total}=gerarMapaProcfitXls(itens);
-   baixarArquivoBinario(bytes,`PROCFIT_QUEIMA_ESTOQUE_ITEM_LOJA${state.user?.loja||state.loja}_${nowBrISO()}.xls`);
-   toast(`XLS gerado com ${total} produto(s) em cinco colunas, sem limitar às páginas visíveis.`);
+   const {bytes,nome,total,totalLotes,compactado}=gerarMapaProcfitEmLotes(itens,{loja:state.user?.loja||state.loja,data:nowBrISO()});
+   baixarArquivoBinario(bytes,nome);
+   toast(compactado
+     ? `${total} produto(s) exportados em ${totalLotes} arquivos XLS de até 100 itens. Extraia o ZIP e importe um lote por vez no Procfit.`
+     : `${total} produto(s) exportados em um XLS de até 100 itens.`);
   }catch(err){toast('Erro na geração XLS: '+err.message,true);}
  });
  $('#map-tdb')?.addEventListener('click',async()=>{
