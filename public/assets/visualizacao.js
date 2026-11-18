@@ -19,6 +19,9 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  // continuam no Painel Conferente e não são consultados pela Visualização.
  const mapData=await request('/visualizacao/mapas');
  const mapas=mapData.registros||[];
+ let mapaQueimaIds=new Set();
+ try{const badges=await request('/mapas/sinalizacoes-queima');mapaQueimaIds=new Set(badges.mapa_ids||[]);}
+ catch(error){console.warn('Badges Queima indisponíveis nesta consulta:',error.message);}
  prefs.tab='mapas';
  const hoje=nowBrISO(),mesAtual=hoje.slice(0,7);
  if(!prefs.month)prefs.month=mesAtual;
@@ -51,7 +54,7 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  $('#view-size').value=String(prefs.size);if(loggedAdmin)$('#view-owner').value=prefs.owner;
  const withdrawn=x=>statusVal(x.validade,x.secao)[0]==='Vencido';
  const days=iso=>{const a=Date.parse(String(iso||'').slice(0,10)+'T12:00:00Z');const b=Date.parse(hoje+'T12:00:00Z');return Number.isFinite(a)&&Number.isFinite(b)?Math.round((a-b)/864e5):null;};
- const prettyStatus=r=>{const badge=badgeValidade(r.validade,r.secao);const d=days(r.validade);return badge+(d!==null&&d<=0?` <small class="second">${Math.abs(d)} dia(s) após a validade</small>`:'');};
+ const prettyStatus=r=>{const badge=badgeValidade(r.validade,r.secao);const d=days(r.validade);return badge+(d!==null&&d<=0?` <small class="second">${Math.abs(d)} dia(s) após a validade</small>`:'')+(mapaQueimaIds.has(r.id)?'<div class="queima-mapa-badge"><span class="pill amber">Queima</span></div>':'');};
  const asRow=(cells)=>`<tr>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`;
  const link=x=>escapeHtml(x);
  let queimaRows=[],queimaLoaded=false,queimaBusy=false,queimaWarning='';

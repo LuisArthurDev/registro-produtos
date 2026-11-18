@@ -1278,19 +1278,39 @@ async function encaminharMapa(req,actor,body){
   await audit(actor,'encaminhar_mapa',{ids,destino:body.destino,...(registroQueima?{registro_queima:registroQueima}:{})});
   return {sucesso:true,resultado};
 }
-// V71: conferência de Queima x Mapa. A conferência não modifica dados.
-async function conferirQueimaMapa(req,actor,body){
+// V76: conferência restrita por Registro Procfit. Nunca reduz quantidades.
+async function conferirQueimaMapa(req,actor,body,query){
  admin(actor);const loja=actorLoja(actor,body.loja);
  if(req.method==='GET'){
-  const resultado=await db('rpc/conferir_queima_mapa_v71',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id}});
+  const registro=norm(query.get('registro'));
+  if(registro&&!/^\d{1,20}$/.test(registro))throw bad('Registro Procfit inválido.',422);
+  const resultado=await db('rpc/conferir_queima_mapa_v76',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_registro:registro||null}});
   return {sucesso:true,resultado};
  }
  if(req.method==='POST'){
   const uid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   if(!uid.test(norm(body.queima_id))||!uid.test(norm(body.mapa_id)))throw bad('Identificadores inválidos.',422);
-  if(body.confirmacao!==true)throw bad('Confirme a correção no modal.',422);
-  const resultado=await db('rpc/corrigir_queima_mapa_v71',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_queima_id:body.queima_id,p_mapa_id:body.mapa_id}});
-  await audit(actor,'corrigir_duplicidade_queima_mapa',{queima_id:body.queima_id,mapa_id:body.mapa_id,resultado});
+  if(body.confirmacao!==true)throw bad('Confirme a ação no modal.',422);
+  const resultado=await db('rpc/vincular_queima_mapa_v76',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_queima_id:body.queima_id,p_mapa_id:body.mapa_id,p_excluir_outros:body.excluir_outros===true}});
+  await audit(actor,'vincular_queima_mapa_v76',{queima_id:body.queima_id,mapa_mantido:body.mapa_id,excluir_outros:body.excluir_outros===true,resultado});
+  return {sucesso:true,resultado};
+ }
+ throw bad('Método não permitido.',405);
+}
+async function sinalizacoesQueimaMapa(req,actor){
+ const loja=actorLoja(actor);
+ const dados=await db('rpc/sinalizacoes_mapa_queima_v76',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id}});
+ return {sucesso:true,mapa_ids:Array.isArray(dados)?dados:[]};
+}
+async function recuperarConferenciaAntiga(req,actor,body){
+ admin(actor); const loja=actorLoja(actor,body.loja);
+ if(req.method==='GET'){
+  const resultado=await db('rpc/recuperar_conferencia_antiga_v76',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_auditoria_id:null,p_confirmar:false}});
+  return {sucesso:true,resultado};
+ }
+ if(req.method==='POST'){
+  if(!Number.isSafeInteger(body.auditoria_id)||body.auditoria_id<=0||body.confirmacao!==true)throw bad('Confirme o registro histórico antes de restaurar.',422);
+  const resultado=await db('rpc/recuperar_conferencia_antiga_v76',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_auditoria_id:body.auditoria_id,p_confirmar:true}});
   return {sucesso:true,resultado};
  }
  throw bad('Método não permitido.',405);
@@ -1468,7 +1488,9 @@ async function handle(req){
   }
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
   if(pathname==='/queima/sugestoes'&&req.method==='GET')return sugestoesResponsavelQueima(req,actor,query);
-  if(pathname==='/queima/conferir-mapas'&&['GET','POST'].includes(req.method))return conferirQueimaMapa(req,actor,body);
+  if(pathname==='/queima/conferir-mapas'&&['GET','POST'].includes(req.method))return conferirQueimaMapa(req,actor,body,query);
+  if(pathname==='/mapas/sinalizacoes-queima'&&req.method==='GET')return sinalizacoesQueimaMapa(req,actor);
+  if(pathname==='/queima/recuperar-conferencia-antiga'&&['GET','POST'].includes(req.method))return recuperarConferenciaAntiga(req,actor,body);
   if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);
   if(pathname==='/queima/conciliar-relatorio'&&req.method==='POST')return conciliarRelatorioQueima(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);
