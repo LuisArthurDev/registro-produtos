@@ -820,39 +820,11 @@ async function atribuicaoPorSecao(req,actor,body,query){
     secao.unidades+=Number(item.quantidade)||0;
     secao.grupos.add(chaveSecao(item.grupo));
   }
-  // Uma única agregação no banco, sem transferir todos os mapas para a API.
-  // Se a migração ainda não foi instalada, a organização manual continua utilizável.
-  let historicoPorSecao=new Map(),historicoIndisponivel=false;
-  try {
-    const agregado=await db('rpc/resumo_responsaveis_por_secao_v56',{method:'POST',body:{p_loja:loja}});
-    for(const linha of (Array.isArray(agregado)?agregado:[])){
-      const chave=chaveSecao(linha.secao_chave);
-      if(!historicoPorSecao.has(chave))historicoPorSecao.set(chave,[]);
-      if(ativos.has(linha.funcionario_id))historicoPorSecao.get(chave).push({
-        funcionario_id:linha.funcionario_id,
-        nome:funcionarios.find(u=>u.id===linha.funcionario_id)?.nome||'',
-        lancamentos:Number(linha.lancamentos)||0,
-        unidades:Number(linha.unidades)||0
-      });
-    }
-    for(const lista of historicoPorSecao.values())lista.sort((a,b)=>b.lancamentos-a.lancamentos||b.unidades-a.unidades||a.nome.localeCompare(b.nome,'pt-BR'));
-  }catch(erro){
-    historicoIndisponivel=true;
-    console.warn('[Atribuição por seção] Resumo histórico indisponível:',erro?.message||erro);
-  }
   return {sucesso:true,funcionarios,secoes:[...secoes].map(([chave,{grupos,...secao}])=>{
     const titular=chave?porSecao.get(chave):null;
     const destinos=new Set([...grupos].map(grupo=>porGrupo.get(grupo)));
     const consenso=destinos.size===1?[...destinos][0]:null;
-    const ranking=historicoPorSecao.get(chave)||[];
-    const principal=ranking[0];
-    const empate=principal&&ranking[1]?.lancamentos===principal.lancamentos;
-    const sugestao=principal&&!empate?principal.funcionario_id:null;
-    const configurado=ativos.has(titular)?titular:ativos.has(consenso)?consenso:null;
-    return {...secao,responsavel_id:sugestao||configurado||null,
-      sugestao_historico_id:sugestao,ranking_responsaveis:ranking.slice(0,8),
-      historico_indisponivel:historicoIndisponivel,empate_historico:!!empate,
-      criterio_sugestao:sugestao?'historico':configurado?'organizacao':'nenhum'};
+    return {...secao,responsavel_id:ativos.has(titular)?titular:ativos.has(consenso)?consenso:null};
   }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'))};
 }
 async function enriquecerRegistros(registros, table) {
@@ -1306,6 +1278,23 @@ async function encaminharMapa(req,actor,body){
   await audit(actor,'encaminhar_mapa',{ids,destino:body.destino,...(registroQueima?{registro_queima:registroQueima}:{})});
   return {sucesso:true,resultado};
 }
+// V71: conferência de Queima x Mapa. A conferência não modifica dados.
+async function conferirQueimaMapa(req,actor,body){
+ admin(actor);const loja=actorLoja(actor,body.loja);
+ if(req.method==='GET'){
+  const resultado=await db('rpc/conferir_queima_mapa_v71',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id}});
+  return {sucesso:true,resultado};
+ }
+ if(req.method==='POST'){
+  const uid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(!uid.test(norm(body.queima_id))||!uid.test(norm(body.mapa_id)))throw bad('Identificadores inválidos.',422);
+  if(body.confirmacao!==true)throw bad('Confirme a correção no modal.',422);
+  const resultado=await db('rpc/corrigir_queima_mapa_v71',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_queima_id:body.queima_id,p_mapa_id:body.mapa_id}});
+  await audit(actor,'corrigir_duplicidade_queima_mapa',{queima_id:body.queima_id,mapa_id:body.mapa_id,resultado});
+  return {sucesso:true,resultado};
+ }
+ throw bad('Método não permitido.',405);
+}
 async function importarXlsQueima(req,actor,body){
  admin(actor);const loja=actorLoja(actor,body.loja);
  const registro=validarRegistroQueima(body.registro);
@@ -1478,6 +1467,7 @@ async function handle(req){
   }
   if(pathname==='/mapas/encaminhar'&&req.method==='POST')return encaminharMapa(req,actor,body);
   if(pathname==='/queima/sugestoes'&&req.method==='GET')return sugestoesResponsavelQueima(req,actor,query);
+  if(pathname==='/queima/conferir-mapas'&&['GET','POST'].includes(req.method))return conferirQueimaMapa(req,actor,body);
   if(pathname==='/queima/importar-xls'&&req.method==='POST')return importarXlsQueima(req,actor,body);
   if(pathname==='/queima/conciliar-relatorio'&&req.method==='POST')return conciliarRelatorioQueima(req,actor,body);
   if(pathname==='/queima/relancar'&&req.method==='POST')return relancarQueima(req,actor,body);

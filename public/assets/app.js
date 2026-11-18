@@ -1664,7 +1664,7 @@ async function generic(pathname,title){
 
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-conferir-mapas" type="button" data-icon-keep-label title="Conferir duplicidades entre Queima e Mapa de Validade">Conferir Queima × Mapas</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
  ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option><optgroup label="Funcionários">'+nomesResponsaveisQueima.map(nome=>'<option value="func:'+H(nome)+'">'+H(nome)+'</option>').join('')+'</optgroup></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
@@ -1681,6 +1681,13 @@ async function generic(pathname,title){
    <p id="queima-import-summary" role="status"></p><div id="queima-import-preview" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" id="queima-import-cancel" class="btn-outline">Cancelar</button>
    <button type="button" id="queima-import-confirm" class="primary">Registrar produtos válidos</button></div></div></dialog>
+  <dialog id="queima-mapa-dialog" class="dialog dialog-wide" aria-labelledby="queima-mapa-titulo"><div class="dialog-inner">
+   <h2 id="queima-mapa-titulo">Conferir Queima × Mapa de Validade</h2>
+   <p class="footer-hint">São comparados EAN/código interno, lote e validade. Nenhuma movimentação é automática. A correção desconta a quantidade do mapa e vincula o lançamento ao registro da Queima.</p>
+   <p id="queima-mapa-resumo" role="status"></p>
+   <div id="queima-mapa-lista" class="table-wrap" style="max-height:55vh;overflow:auto"></div>
+   <div class="dialog-actions"><button type="button" id="queima-mapa-fechar" class="btn-outline">Fechar</button></div>
+  </div></dialog>
   <input type="file" id="queima-relatorio-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
   <dialog id="queima-relatorio-dialog" class="dialog dialog-wide" aria-labelledby="queima-relatorio-title"><div class="dialog-inner">
    <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
@@ -2012,6 +2019,30 @@ async function generic(pathname,title){
    };
  }
  if(isQueima){
+   const checkBtn=$('#queima-conferir-mapas'),modal=$('#queima-mapa-dialog');
+   const mostrarConferencia=async()=>{
+    const resumo=$('#queima-mapa-resumo'),lista=$('#queima-mapa-lista');
+    resumo.textContent='Consultando registros…';lista.innerHTML='';if(!modal.open)modal.showModal();
+    try{
+     const resposta=await request('/queima/conferir-mapas',{timeout:120000,retries:0});
+     const dados=resposta.resultado||{},itens=dados.itens||[];
+     resumo.textContent=`${dados.total||0} possível(is) duplicidade(s) · ${itens.length} exibida(s). Só é possível corrigir uma correspondência inequívoca, com quantidade suficiente no mapa.`;
+     lista.innerHTML=itens.length?`<table><thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Queima</th><th>Mapa</th><th>Origem</th><th>Conferência</th></tr></thead><tbody>${itens.map(r=>{
+      const seguro=r.pode_corrigir===true;
+      return `<tr><td>${H(r.codigo_interno||r.ean||'—')}</td><td>${H(r.lote)}</td><td>${H(dataBR(r.validade))}</td><td>${H(r.quantidade_queima)}</td><td>${H(r.quantidade_mapa)}</td><td>${H(r.mapa_nome||'—')}</td><td>${seguro?`<button type="button" class="btn-outline" data-queima-corrigir="${H(r.queima_id)}" data-mapa-id="${H(r.mapa_id)}" title="Descontar do mapa e vincular à Queima">Corrigir</button>`:`<span title="${H(r.motivo_bloqueio||'Revisão manual')}" class="footer-hint">${H(r.motivo_bloqueio||'Revisar manualmente')}</span>`}</td></tr>`;
+     }).join('')}</tbody></table>`:'<p>Nenhuma correspondência pendente encontrada.</p>';
+    }catch(err){resumo.textContent='Falha na conferência: '+err.message;}
+   };
+   checkBtn.onclick=mostrarConferencia;
+   $('#queima-mapa-fechar').onclick=()=>modal.close();
+   $('#queima-mapa-lista').onclick=async e=>{
+    const botao=e.target.closest('[data-queima-corrigir]');if(!botao)return;
+    if(!await confirmDialog('Corrigir duplicidade', 'Vincular este item da Queima ao mapa e descontar a quantidade correspondente do mapa? A ação será registrada no histórico.'))return;
+    botao.disabled=true;
+    try{await request('/queima/conferir-mapas',{method:'POST',body:{queima_id:botao.dataset.queimaCorrigir,mapa_id:botao.dataset.mapaId,confirmacao:true}});
+     toast('Vínculo corrigido e quantidade descontada do mapa.');await mostrarConferencia();
+    }catch(err){toast('Não foi possível corrigir: '+err.message,true);botao.disabled=false;}
+   };
    const file=$('#queima-xls-file'),dlg=$('#queima-import-dialog'),confirm=$('#queima-import-confirm');let preparado=null;
    $('#queima-import-open').onclick=()=>file.click();
    $('#queima-import-cancel').onclick=()=>dlg.close();
