@@ -1305,6 +1305,7 @@ async function importarXlsQueima(req,actor,body){
    if(!r||typeof r!=='object'||Array.isArray(r))throw bad('Linha XLS inválida.',422);
    if(!Number.isInteger(r.linha)||r.linha<2||linhas.has(r.linha))throw bad('Linhas XLS inválidas ou repetidas.',422);
    linhas.add(r.linha);
+   if(r.registro_queima!==undefined && norm(r.registro_queima)!==registro)throw bad(`Linha ${r.linha}: Registro da Queima difere do número do arquivo.`,422);
    if(!/^\d{1,20}$/.test(norm(r.codigo_interno))&&!eanValido(norm(r.ean)))throw bad(`Linha ${r.linha}: Código Interno/EAN inválido.`,422);
    if(!dataValida(r.validade))throw bad(`Linha ${r.linha}: validade inválida.`,422);
    if(r.validade<hoje)vencidos++;else if(r.validade<limite)prazoInsuficiente++;

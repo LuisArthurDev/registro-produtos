@@ -7,8 +7,8 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
 test('Nome do arquivo define Registro; rejeita nomes e extensões errados',()=>{
  assert.equal(registroDaQueimaNome('Queima-166240.xls'),'166240');
- assert.equal(registroDaQueimaNome('Queima-001234 (1).xls'),'001234');
- for(const name of ['Produto.xls','Queima-outro.xls','Queima-166240.xlsx','Queima-166240.xls.exe'])assert.throws(()=>registroDaQueimaNome(name),/nome do arquivo/);
+ assert.equal(registroDaQueimaNome('Queima-001234.xls'),'001234');
+ for(const name of ['Produto.xls','Queima-outro.xls','Queima-166240.xlsx','Queima-166240.xls.exe','Queima_166240.xls','LOte1.xls','Queima-001234 (1).xls'])assert.throws(()=>registroDaQueimaNome(name),/nome do arquivo/);
 });
 test('Regra v41: vencimento hoje até 6 dias bloqueado; 7 dias é aceito',()=>{
  for(const data of ['2026-11-13','2026-11-14','2026-11-15','2026-11-20']){

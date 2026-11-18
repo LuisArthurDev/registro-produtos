@@ -1,11 +1,11 @@
 import { lerODS } from './ods.js';
-import { gerarDbMapa, baixarArquivoBinario } from './mapa-sqlite.js';
-import { gerarTdbExperimental, obterModeloTdb } from './procfit-gerador-tdb.js?v=64';
+import { baixarArquivoBinario } from './mapa-sqlite.js';
 import { prepararImportacaoEstoque } from './estoque-importacao.js';
 import { iniciarTabelasResponsivas } from './tabelas-responsivas.js';
 import { chaveFiltros, capturarFiltros, restaurarFiltros, iniciarPersistenciaFiltros } from './filtros-persistentes.js';
 import { montarListaProcfit, copiarListaProcfit } from './procfit.js';
 import { gerarConferenciaXls } from './conferencia-xls.js';
+import { gerarMapaProcfitEmLotes } from './mapa-procfit-lotes.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
@@ -16,7 +16,7 @@ import { resumoQueima } from './queima-grafico.js';
 import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
 import { executarQueimaEmLotes } from './queima-conciliacao-lotes.js';
-import { abrirScannerEAN, fecharScanner } from './scanner.js';
+import { abrirScannerEAN, fecharScanner } from './scanner.js?v=67';
 import { mascararValidade, validadeParaISO } from './validade.js';
 import { elegivelTentativaVenda } from './tentativa.js';
 import { associarPush, ativarPush, desassociarPush, recusarPush, escolhaPush, transferirEscolhaParaConta, prepararPush, diagnosticarPush } from './push.js';
@@ -663,7 +663,7 @@ async function mapas(forced=''){
  const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
  const head=header(title,isStock?'Produtos armazenados antes de irem à seção.':'Mapas de todos os meses; o mês do mapa é o mês seguinte ao lançamento (ex.: novembro lançado em outubro).',
- `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-tdb" data-icon-keep-label type="button" title="Gerar TDB experimental para QUEIMA_ESTOQUE_ITEM">Gerar TDB</button><button class="btn-outline" id="map-db" data-icon-keep-label type="button" title="Gerar SQLite DB com os registros do mapa">Gerar DB</button>':''}`);
+ `${!isStock?'<button type="button" class="primary" id="map-novo">Novo lançamento</button>':''}<button class="btn-outline" id="map-print" type="button">Imprimir mapa</button><button class="btn-outline" id="map-csv" type="button">Exportar CSV</button>${!isStock?'<button class="btn-outline" id="map-copy-procfit" data-icon-keep-label type="button" title="Conferir com estoque e copiar os itens corrigidos para o Conector Procfit" aria-label="Copiar para Procfit após conferência com estoque">Copiar para Procfit</button><button class="btn-outline" id="map-xls" data-icon-keep-label type="button" title="Gerar XLS em lotes de até 100 produtos para o Procfit">Gerar XLS</button>':''}`);
  $('#content').innerHTML=head+(isStock?'':`<div class="page-subnav compare-tabs" role="tablist" aria-label="Mapa e conferência"><button id="map-tab-list" type="button" class="btn-outline" role="tab" aria-selected="true">Mapa de Validade</button><button id="map-tab-compare" type="button" class="btn-outline" role="tab" aria-selected="false">Conferir com estoque</button></div>`)+`<section class="card card-pad" id="map-main-card">${!isStock?`<div class="page-subnav compare-tabs map-group-tabs" role="tablist" aria-label="Separar mapas por tipo"><button type="button" id="map-group-staff" class="btn-outline" role="tab" aria-selected="true">Funcionários</button><button type="button" id="map-group-special" class="btn-outline" role="tab" aria-selected="false">Abas especiais</button></div>`:''}<div class="filter-row map-primary-filters">
  <input id="map-search" class="wide" aria-label="Buscar produto ou EAN" placeholder="Produto, EAN ou código interno">
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
@@ -872,30 +872,17 @@ async function mapas(forced=''){
  };
  // Ambos os formatos exportam a lista filtrada completa (ou apenas os selecionados, se houver).
  const itensParaArquivo=()=>selected.size?filtered.filter(r=>selected.has(r.id)):filtered;
- $('#map-db')?.addEventListener('click',()=>{
+ // Exporta em planilha Excel 97–2003 em lotes de 100, dentro de um ZIP quando necessário.
+ // Usa todos os produtos dos filtros ativos, ou apenas os selecionados dentro desses filtros.
+ $('#map-xls')?.addEventListener('click',()=>{
   try{
-   const itens=itensParaArquivo();const bytes=gerarDbMapa(itens);
-   baixarArquivoBinario(bytes,`MAPA_VALIDADE_LOJA${state.user?.loja||state.loja}_${nowBrISO()}.db`);
-   toast(`DB SQLite gerado com ${itens.length} registro(s).`);
-  }catch(err){toast('Erro na geração DB: '+err.message,true);}
- });
- $('#map-tdb')?.addEventListener('click',async()=>{
-  const btn=$('#map-tdb');btn.disabled=true;
-  try{
-   const itens=itensParaArquivo();if(!itens.length)throw new Error('Nenhum item disponível para exportação.');
-   if(itens.length>10000)throw new Error('O arquivo TDB aceita até 10.000 itens por vez.');
-   const dados=itens.map((r,i)=>{
-    const cod=String(r.codigoInterno||'').trim(),ean=String(r.ean||'').trim();
-    if(!cod&&!/^\d{8,14}$/.test(ean))throw new Error(`Item ${i+1}: EAN inválido e sem código interno.`);
-    return {QUEIMA_ESTOQUE_MOTIVO:4,PRODUTO:cod||null,EAN:ean||null,LOTE:String(r.lote||'').trim(),VALIDADE:String(r.validade||'').slice(0,10),QUANTIDADE:Number(r.quantidade)};
-   });
-   if(!await confirmDialog('Gerar TDB experimental',`Gerar ${dados.length} registro(s) para a tabela QUEIMA_ESTOQUE_ITEM do Procfit? O cabeçalho e os identificadores automáticos ficarão NULL; o Procfit deverá preenchê-los. O formato é experimental e não homologado; teste em ambiente controlado. Nenhuma aprovação será feita automaticamente.`))return;
-   const preparacao={documento:{tipo:'PREPARACAO_PROCFIT_QUEIMA',motivo_fixo:4,empresa_contexto:String(state.user?.loja||state.loja),tabelas:{QUEIMA_ESTOQUE_ITEM:dados}}};
-   const modelo=await obterModeloTdb();
-   const resultado=await gerarTdbExperimental(preparacao,{modeloBytes:modelo,empresa:state.user?.loja||state.loja,usuarioProcfit:5584});
-   baixarArquivoBinario(resultado.bytes,`PROCFIT_QUEIMA_ESTOQUE_ITEM_LOJA${resultado.empresa}_${nowBrISO()}.TDB`);
-   toast(`${resultado.items} registro(s) incluídos no TDB experimental.`);
-  }catch(err){toast('Erro na geração TDB: '+err.message,true);}finally{if(btn.isConnected)btn.disabled=false;}
+   const itens=itensParaArquivo();
+   const {bytes,nome,total,totalLotes,compactado}=gerarMapaProcfitEmLotes(itens,{loja:state.user?.loja||state.loja,data:nowBrISO()});
+   baixarArquivoBinario(bytes,nome);
+   toast(compactado
+     ? `${total} produto(s) exportados em ${totalLotes} arquivos XLS de até 100 itens. Extraia o ZIP e importe um lote por vez no Procfit.`
+     : `${total} produto(s) exportados em um XLS de até 100 itens.`);
+  }catch(err){toast('Erro na geração XLS: '+err.message,true);}
  });
  $('#map-novo')?.addEventListener('click',abrirNovoLancamento);
  $('#maps-table').onclick=async e=>{
@@ -1077,6 +1064,17 @@ async function mapas(forced=''){
   $('#map-compare-section').addEventListener('rv:filtros-restaurados',e=>{const n=Number(e.detail?.paginas?.['compare-page']);if(n>0){restaurarPaginaConferencia=n-1;if(compareRows.length){comparePage=n-1;desenharComparacao();}}},{once:true});
   $('#compare-prev').onclick=()=>{if(comparePage){comparePage--;desenharComparacao();}};
   $('#compare-next').onclick=()=>{if((comparePage+1)*Number($('#compare-size').value)<compareRows.length){comparePage++;desenharComparacao();}};
+  // Botão disponível no Mapa: realiza a conferência antes de copiar,
+  // mantendo a regra de saldo e bloqueio de Fórmulas Especiais.
+  $('#map-copy-procfit').onclick=async()=>{
+    const botao=$('#map-copy-procfit');
+    botao.disabled=true;
+    try{
+      await mudarAba(true);
+      if(!compareResult)return toast('Não foi possível concluir a conferência. Confira os saldos importados e o mês selecionado.',true);
+      await copiarProcfit(filtrarMapasParaConferencia(compareRows));
+    }finally{botao.disabled=false;}
+  };
   $('#compare-copy-procfit').onclick=()=>{
     if(!compareResult)return toast('Faça a conferência antes de copiar os registros corrigidos.',true);
     // NUNCA usar pageRows / comparePage aqui: a lista completa já contempla
@@ -1666,7 +1664,7 @@ async function generic(pathname,title){
 
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-conferir-mapas" type="button" data-icon-keep-label title="Conferir duplicidades entre Queima e Mapa de Validade">Conferir Queima × Mapas</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
  ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option><optgroup label="Funcionários">'+nomesResponsaveisQueima.map(nome=>'<option value="func:'+H(nome)+'">'+H(nome)+'</option>').join('')+'</optgroup></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
@@ -1683,6 +1681,13 @@ async function generic(pathname,title){
    <p id="queima-import-summary" role="status"></p><div id="queima-import-preview" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" id="queima-import-cancel" class="btn-outline">Cancelar</button>
    <button type="button" id="queima-import-confirm" class="primary">Registrar produtos válidos</button></div></div></dialog>
+  <dialog id="queima-mapa-dialog" class="dialog dialog-wide" aria-labelledby="queima-mapa-titulo"><div class="dialog-inner">
+   <h2 id="queima-mapa-titulo">Conferir Queima × Mapa de Validade</h2>
+   <p class="footer-hint">São comparados EAN/código interno, lote e validade. Nenhuma movimentação é automática. A correção desconta a quantidade do mapa e vincula o lançamento ao registro da Queima.</p>
+   <p id="queima-mapa-resumo" role="status"></p>
+   <div id="queima-mapa-lista" class="table-wrap" style="max-height:55vh;overflow:auto"></div>
+   <div class="dialog-actions"><button type="button" id="queima-mapa-fechar" class="btn-outline">Fechar</button></div>
+  </div></dialog>
   <input type="file" id="queima-relatorio-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
   <dialog id="queima-relatorio-dialog" class="dialog dialog-wide" aria-labelledby="queima-relatorio-title"><div class="dialog-inner">
    <h2 id="queima-relatorio-title">Conferir aprovações no relatório Procfit</h2>
@@ -1729,7 +1734,7 @@ async function generic(pathname,title){
    <button type="submit" class="primary">Aprovar com dados da Gôndola</button></div></form></dialog>`);
  }
  $('#gen-list')?.classList.toggle('queima-table-compacta',isQueima);
- const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','Produto','Descrição','Responsável','Validade','Gôndola','Preço','Qtd.','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
+ const cols=isAudit?['Data / hora','Usuário','Evento','Descrição']:isQueima?['Data','Produto','Descrição','Registro Procfit','Responsável','Validade','Gôndola','Preço','Qtd.','Situação','Ações']:isVenc?['Data','EAN','Descrição','Lote','Validade','Quantidade','Motivo']:isTrans?['Data','EAN','Descrição','Lote','Validade','Quantidade','Loja origem','Loja destino','Romaneio']:['Data','EAN','Descrição','Observação','Situação','Ações'];
  const td=(v)=>`<td>${H(v??'—')}</td>`;
  const renderTable=data=>table(cols,data.map(r=>{
   const ean=r.ean_resolvido||r.ean||(r.codigo_interno?'Cod. '+r.codigo_interno:'EAN não informado'),desc=r.descricao||r.descricao_original||r.produto_relatorio||'Sem descrição cadastrada';
@@ -1757,7 +1762,7 @@ async function generic(pathname,title){
     const estado=`<span class="pill ${r.estado==='aprovado'?'green':pendente?'amber':''}" title="${H(r.estado)}" aria-label="${H(r.estado)}">${r.estado==='aprovado'?'✓':r.estado==='pendente'?'PEND':'RELAN'}</span>${aguardaVerificacao?'<span class="pill amber" title="Aprovado via importação" aria-label="Aprovado via importação">IMP</span>':''}${precoPendente?'<span class="pill amber" title="Preço pendente" aria-label="Preço pendente">R$?</span>':''}`;
     const dataCompleta=dtBR(r.criado_em);
     const dataCurta=dataBR(String(r.criado_em||'').slice(0,10)).slice(0,5);
-    return `<tr><td title="${H(dataCompleta)}">${celula(dataCurta)}</td><td>${celula(ean)}</td><td>${celula(desc)}</td><td>${semResponsavel?'<span class="queima-owner-unassigned" title="Sem responsável">Sem responsável</span>':celula(nomeResponsavel)}</td><td>${celula(dataBR(r.validade))}</td><td>${celula(dataBR(r.validade_gondola))}</td><td>${celula(r.preco_gondola==null?'—':Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td><td>${celula(r.quantidade_pendente?'Pendente':r.quantidade)}</td><td><div class="queima-status-inline" title="${H([r.estado,aguardaVerificacao?'Aprovado via importação':'',precoPendente?'Preço pendente':''].filter(Boolean).join(' · '))}">${estado}</div></td><td class="row-actions">${ações}</td></tr>`;
+    return `<tr><td title="${H(dataCompleta)}">${celula(dataCurta)}</td><td>${celula(ean)}</td><td>${celula(desc)}</td><td>${celula(r.registro_queima||'—')}</td><td>${semResponsavel?'<span class="queima-owner-unassigned" title="Sem responsável">Sem responsável</span>':celula(nomeResponsavel)}</td><td>${celula(dataBR(r.validade))}</td><td>${celula(dataBR(r.validade_gondola))}</td><td>${celula(r.preco_gondola==null?'—':Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))}</td><td>${celula(r.quantidade_pendente?'Pendente':r.quantidade)}</td><td><div class="queima-status-inline" title="${H([r.estado,aguardaVerificacao?'Aprovado via importação':'',precoPendente?'Preço pendente':''].filter(Boolean).join(' · '))}">${estado}</div></td><td class="row-actions">${ações}</td></tr>`;
   }
   if(isVenc)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.motivo)}</tr>`;
   if(isTrans)return `<tr><td>${dtBR(r.criado_em)}</td>${td(ean)}${td(desc)}${td(r.lote)}<td>${dataBR(r.validade)}</td>${td(r.quantidade)}${td(r.loja_origem)}${td(r.loja_destino)}${td(r.romaneio)}</tr>`;
@@ -2014,6 +2019,30 @@ async function generic(pathname,title){
    };
  }
  if(isQueima){
+   const checkBtn=$('#queima-conferir-mapas'),modal=$('#queima-mapa-dialog');
+   const mostrarConferencia=async()=>{
+    const resumo=$('#queima-mapa-resumo'),lista=$('#queima-mapa-lista');
+    resumo.textContent='Consultando registros…';lista.innerHTML='';if(!modal.open)modal.showModal();
+    try{
+     const resposta=await request('/queima/conferir-mapas',{timeout:120000,retries:0});
+     const dados=resposta.resultado||{},itens=dados.itens||[];
+     resumo.textContent=`${dados.total||0} possível(is) duplicidade(s) · ${itens.length} exibida(s). Só é possível corrigir uma correspondência inequívoca, com quantidade suficiente no mapa.`;
+     lista.innerHTML=itens.length?`<table><thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Queima</th><th>Mapa</th><th>Origem</th><th>Conferência</th></tr></thead><tbody>${itens.map(r=>{
+      const seguro=r.pode_corrigir===true;
+      return `<tr><td>${H(r.codigo_interno||r.ean||'—')}</td><td>${H(r.lote)}</td><td>${H(dataBR(r.validade))}</td><td>${H(r.quantidade_queima)}</td><td>${H(r.quantidade_mapa)}</td><td>${H(r.mapa_nome||'—')}</td><td>${seguro?`<button type="button" class="btn-outline" data-queima-corrigir="${H(r.queima_id)}" data-mapa-id="${H(r.mapa_id)}" title="Descontar do mapa e vincular à Queima">Corrigir</button>`:`<span title="${H(r.motivo_bloqueio||'Revisão manual')}" class="footer-hint">${H(r.motivo_bloqueio||'Revisar manualmente')}</span>`}</td></tr>`;
+     }).join('')}</tbody></table>`:'<p>Nenhuma correspondência pendente encontrada.</p>';
+    }catch(err){resumo.textContent='Falha na conferência: '+err.message;}
+   };
+   checkBtn.onclick=mostrarConferencia;
+   $('#queima-mapa-fechar').onclick=()=>modal.close();
+   $('#queima-mapa-lista').onclick=async e=>{
+    const botao=e.target.closest('[data-queima-corrigir]');if(!botao)return;
+    if(!await confirmDialog('Corrigir duplicidade', 'Vincular este item da Queima ao mapa e descontar a quantidade correspondente do mapa? A ação será registrada no histórico.'))return;
+    botao.disabled=true;
+    try{await request('/queima/conferir-mapas',{method:'POST',body:{queima_id:botao.dataset.queimaCorrigir,mapa_id:botao.dataset.mapaId,confirmacao:true}});
+     toast('Vínculo corrigido e quantidade descontada do mapa.');await mostrarConferencia();
+    }catch(err){toast('Não foi possível corrigir: '+err.message,true);botao.disabled=false;}
+   };
    const file=$('#queima-xls-file'),dlg=$('#queima-import-dialog'),confirm=$('#queima-import-confirm');let preparado=null;
    $('#queima-import-open').onclick=()=>file.click();
    $('#queima-import-cancel').onclick=()=>dlg.close();

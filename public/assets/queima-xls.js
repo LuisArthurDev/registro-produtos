@@ -5,7 +5,7 @@ const assinatura=[0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1];
 const registrar=b=>{const t=new DataView(b.buffer,b.byteOffset,b.byteLength);return {u8:o=>t.getUint8(o),u16:o=>t.getUint16(o,true),u32:o=>t.getUint32(o,true),i32:o=>t.getInt32(o,true),f64:o=>t.getFloat64(o,true)};};
 const excelData=n=>{if(!Number.isFinite(n)||n<1||n>2958465)throw Error('Data numérica XLS inválida.');
   const v=new Date((Math.floor(n)-25569)*86400000);const iso=v.toISOString().slice(0,10);return iso;};
-export function registroDaQueimaNome(nome){const match=/^queima[-_ ](\d{1,20})(?:\s*\(\d+\))?\.xls$/i.exec(String(nome||''));if(!match)throw Error('O nome do arquivo deve seguir Queima-166240.xls.');return match[1];}
+export function registroDaQueimaNome(nome){const match=/^Queima-(\d{1,20})\.xls$/i.exec(String(nome||''));if(!match)throw Error('O nome do arquivo deve ser Queima-NUMERO_DO_REGISTRO.xls (ex.: Queima-176421.xls).');return match[1];}
 /** Data de corte: hoje + 7 dias de calendário; hoje e os próximos 6 não entram. */
 export function limiteMinimoQueima(hoje){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(hoje)))throw Error('Data de referência inválida.');
