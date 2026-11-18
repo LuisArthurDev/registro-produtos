@@ -88,7 +88,7 @@ NOTIFY pgrst, 'reload schema';
 CREATE OR REPLACE FUNCTION public.recuperar_conferencia_antiga_v76(
  p_loja_id text,p_usuario_id uuid,p_auditoria_id bigint DEFAULT NULL,p_confirmar boolean DEFAULT false
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE a public.auditoria%rowtype; m public.mapa_lancamentos%rowtype;
+DECLARE v_aud public.auditoria%rowtype; m public.mapa_lancamentos%rowtype;
  q public.queima%rowtype; v_movida int;v_restante int;v_apto boolean;
  v_lista jsonb;
 BEGIN
@@ -122,20 +122,20 @@ BEGIN
   LEFT JOIN public.queima q ON q.id=e.queima_id::uuid AND q.loja_id=p_loja_id;
   RETURN jsonb_build_object('itens',v_lista);
  END IF;
- SELECT * INTO a FROM public.auditoria WHERE id=p_auditoria_id AND loja_id=p_loja_id
+ SELECT * INTO v_aud FROM public.auditoria WHERE id=p_auditoria_id AND loja_id=p_loja_id
   AND acao='corrigir_duplicidade_queima_mapa' FOR UPDATE;
- IF a.id IS NULL OR NOT (a.dados->'resultado' ? 'quantidade_movida')
+ IF v_aud.id IS NULL OR NOT (v_aud.dados->'resultado' ? 'quantidade_movida')
  THEN RAISE EXCEPTION 'Auditoria antiga não encontrada ou incompleta'; END IF;
  SELECT * INTO m FROM public.mapa_lancamentos
-  WHERE id=(a.dados->>'mapa_id')::uuid AND loja_id=p_loja_id FOR UPDATE;
+  WHERE id=(v_aud.dados->>'mapa_id')::uuid AND loja_id=p_loja_id FOR UPDATE;
  SELECT * INTO q FROM public.queima
-  WHERE id=(a.dados->>'queima_id')::uuid AND loja_id=p_loja_id FOR UPDATE;
- v_movida=(a.dados->'resultado'->>'quantidade_movida')::int;
- v_restante=(a.dados->'resultado'->>'quantidade_restante_mapa')::int;
+  WHERE id=(v_aud.dados->>'queima_id')::uuid AND loja_id=p_loja_id FOR UPDATE;
+ v_movida=(v_aud.dados->'resultado'->>'quantidade_movida')::int;
+ v_restante=(v_aud.dados->'resultado'->>'quantidade_restante_mapa')::int;
  v_apto=m.id IS NOT NULL AND q.id IS NOT NULL AND q.lancamento_id=m.id
-  AND m.quantidade=v_restante AND q.quantidade=v_movida AND v_movida>0 AND m.atualizado_em<=a.criado_em AND m.atualizado_em>=a.criado_em-interval '10 minutes'
+  AND m.quantidade=v_restante AND q.quantidade=v_movida AND v_movida>0 AND m.atualizado_em<=v_aud.criado_em AND m.atualizado_em>=v_aud.criado_em-interval '10 minutes'
   AND NOT EXISTS(SELECT 1 FROM public.auditoria x WHERE x.loja_id=p_loja_id
-   AND x.acao='recuperar_conferencia_antiga_v76' AND x.dados->>'auditoria_original_id'=a.id::text);
+   AND x.acao='recuperar_conferencia_antiga_v76' AND x.dados->>'auditoria_original_id'=v_aud.id::text);
  IF NOT v_apto THEN RAISE EXCEPTION 'Registro já modificado, recuperado ou sem evidência suficiente. Revisão manual necessária.' USING ERRCODE='23514';END IF;
  IF NOT p_confirmar THEN RETURN jsonb_build_object('pode_recuperar',true,'mapa_id',m.id,
   'quantidade_atual',m.quantidade,'quantidade_recuperada',v_movida); END IF;
@@ -147,7 +147,7 @@ BEGIN
   atualizado_em=now() WHERE id=m.id;
  INSERT INTO public.auditoria(loja_id,usuario_id,acao,dados)
  VALUES(p_loja_id,p_usuario_id,'recuperar_conferencia_antiga_v76',
-  jsonb_build_object('auditoria_original_id',a.id,'mapa_id',m.id,'queima_id',q.id,
+  jsonb_build_object('auditoria_original_id',v_aud.id,'mapa_id',m.id,'queima_id',q.id,
    'quantidade_recuperada',v_movida,'quantidade_anterior',m.quantidade));
  RETURN jsonb_build_object('recuperado',true,'mapa_id',m.id,'quantidade_anterior',m.quantidade,
   'quantidade_restaurada',m.quantidade+v_movida);

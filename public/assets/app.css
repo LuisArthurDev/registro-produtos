@@ -864,3 +864,8 @@ html,body{width:100%;max-width:100%;overflow-x:clip}
 
 /* V76: Queima abaixo do status original, sem sobrescrever o badge A vencer. */
 .queima-mapa-badge{display:block;margin-top:4px;line-height:1.3}.queima-mapa-badge .pill{font-size:11px;white-space:nowrap}
+
+/* V77: ações e paginação do modal de conferência */
+.queima-conferencia-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}
+#queima-mapa-progress{font-size:12px;opacity:.84}
+#queima-mapa-dialog .pager{margin:8px 0 12px;justify-content:space-between}

@@ -13,7 +13,8 @@ import { renderVisualizacao } from './visualizacao.js';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
 import { instalarIconesDeAcao } from './icones-acoes.js?v=59';
 import { resumoQueima } from './queima-grafico.js';
-import { lerArquivoQueimaXls, prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
+import { prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
+import { lerArquivoQueimaOds } from './queima-ods.js';
 import { lerRelatorioQueimaXlsx } from './queima-relatorio-xlsx.js';
 import { executarQueimaEmLotes } from './queima-conciliacao-lotes.js';
 import { abrirScannerEAN, fecharScanner } from './scanner.js?v=67';
@@ -1665,7 +1666,7 @@ async function generic(pathname,title){
 
  let filtered=[],page=0;
  $('#content').innerHTML=header(title,isVenc?'Ocorrências registradas, independentes do filtro mensal do mapa.':'Histórico e operações por loja.',
- (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima XLS</button><button class="btn-outline" id="queima-conferir-mapas" type="button" data-icon-keep-label title="Conferir duplicidades entre Queima e Mapa de Validade">Conferir Queima × Mapas</button><button class="btn-outline" id="queima-recuperar-antigo" type="button" data-icon-keep-label title="Revisar lançamentos retirados na conferência antiga">Recuperar mapas antigos</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
+ (isQueima?'<button class="primary" id="queima-import-open" type="button">Importar Queima ODS</button><button class="btn-outline" id="queima-conferir-mapas" type="button" data-icon-keep-label title="Conferir duplicidades entre Queima e Mapa de Validade">Conferir Queima × Mapas</button><button class="btn-outline" id="queima-recuperar-antigo" type="button" data-icon-keep-label title="Revisar lançamentos retirados na conferência antiga">Recuperar mapas antigos</button><button class="btn-outline" id="queima-relatorio-primeira-open" type="button" data-icon-keep-label>Primeira importação XLSX</button><button class="btn-outline" id="queima-relatorio-open" type="button" data-icon-keep-label>Conferir relatório XLSX</button><button class="btn-outline" id="queima-sug-open" type="button" data-icon-keep-label>Sugestões sem responsável</button>':'')+'<button class="btn-outline" id="gen-print" type="button">Imprimir</button><button class="btn-outline" id="gen-export" type="button">Exportar CSV</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="gen-search" class="wide" placeholder="Buscar produto, EAN, lote, usuário ou evento"><select id="gen-status"><option value="">Todas as situações</option>
  ${isQueima?'<option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="relancado">Relançado</option>':isSinal?'<option value="aberto">Em aberto</option><option value="resolvido">Resolvido</option><option value="negado">Negado</option>':''}</select>${isQueima?'<label class="queima-import-filter">Aprovação por importação <select id="gen-import-filter" aria-label="Filtrar aprovação via importação"><option value="">Todos os registros</option><option value="todos_importados">Todos aprovados via importação</option><option value="pendentes">Aprovados via importação · a verificar</option><option value="verificados">Importados já verificados</option></select></label><label>Responsável <select id="gen-owner-filter" aria-label="Filtrar responsável da Queima importada"><option value="">Todos</option><option value="sem">Sem responsável</option><option value="com">Com responsável</option><optgroup label="Funcionários">'+nomesResponsaveisQueima.map(nome=>'<option value="func:'+H(nome)+'">'+H(nome)+'</option>').join('')+'</optgroup></select></label>':''}<label>Desde <input id="gen-since" type="date"></label><label>Por página <select id="gen-size"><option>15</option><option>25</option><option>50</option></select></label><button class="btn-outline" id="gen-refresh" type="button">Atualizar</button></div><p id="gen-counter" class="footer-hint"></p><div id="gen-list"></div><div class="pager"><button id="gen-prev" class="btn-outline">Anterior</button><span id="gen-pages"></span><button id="gen-next" class="btn-outline">Próxima</button></div></section>`+
  (!isAudit?`<section class="card card-pad secondary-card"><h2>${isQueima?'Cadastrar produto na Queima':isSinal?'Registrar sinalização':isVenc?'Registrar retirada':'Registrar transferência'}</h2>
@@ -1677,7 +1678,7 @@ async function generic(pathname,title){
  ${isVenc?'<label>Motivo<select name="motivo"><option value="vencido">Vencido</option><option value="danificado">Danificado</option></select></label>':''}
  <div class="form-actions"><button class="primary">Registrar</button></div></form></section>`:'');
  if(isQueima){
-  $('#content').insertAdjacentHTML('beforeend',`<input type="file" id="queima-xls-file" accept=".xls,application/vnd.ms-excel" hidden>
+  $('#content').insertAdjacentHTML('beforeend',`<input type="file" id="queima-xls-file" accept=".ods,application/vnd.oasis.opendocument.spreadsheet" hidden>
   <dialog id="queima-import-dialog" class="dialog dialog-wide"><div class="dialog-inner"><h2>Importar Queima do Procfit</h2>
    <p id="queima-import-summary" role="status"></p><div id="queima-import-preview" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" id="queima-import-cancel" class="btn-outline">Cancelar</button>
@@ -1686,6 +1687,8 @@ async function generic(pathname,title){
    <h2 id="queima-mapa-titulo">Conferir Queima × Mapa de Validade</h2>
    <p class="footer-hint">O item fica no Queima e também no mapa escolhido, com o badge Queima sob a situação. A conferência apenas vincula os registros. Se houver vários mapas, você pode escolher qual manter e solicitar a exclusão dos demais. Nenhum lançamento é excluído sem sua confirmação.</p>
    <p id="queima-mapa-resumo" role="status"></p>
+   <div class="queima-conferencia-toolbar"><button type="button" id="queima-mapa-marcar-todos" class="primary">Marcar todos como Queima (sem duplicados)</button><span id="queima-mapa-progress" role="status"></span></div>
+   <div class="pager"><button type="button" class="btn-outline" id="queima-mapa-anterior">Anterior</button><span id="queima-mapa-paginacao"></span><button type="button" class="btn-outline" id="queima-mapa-proximo">Próxima</button></div>
    <div id="queima-mapa-lista" class="table-wrap" style="max-height:55vh;overflow:auto"></div>
    <div class="dialog-actions"><button type="button" id="queima-mapa-fechar" class="btn-outline">Fechar</button></div>
   </div></dialog>
@@ -2026,30 +2029,72 @@ async function generic(pathname,title){
  }
  if(isQueima){
    const checkBtn=$('#queima-conferir-mapas'),modal=$('#queima-mapa-dialog');
-   const mostrarConferencia=async(registro='')=>{
+   let conferenciaRegistro='',conferenciaPagina=1,conferenciaItens=[],conferenciaGrupos=[],conferenciaExecutando=false;
+   const tamanhoConferencia=20;
+   const renderConferencia=()=>{
+    const resumo=$('#queima-mapa-resumo'),lista=$('#queima-mapa-lista');
+    const totalPaginas=Math.max(1,Math.ceil(conferenciaGrupos.length/tamanhoConferencia));
+    conferenciaPagina=Math.min(totalPaginas,Math.max(1,conferenciaPagina));
+    const inicio=(conferenciaPagina-1)*tamanhoConferencia;
+    const visiveis=conferenciaGrupos.slice(inicio,inicio+tamanhoConferencia).flat();
+    const unicos=conferenciaGrupos.filter(g=>g.length===1&&g[0].tipo_mapa==='funcionario'&&!g[0].aba_protegida);
+    const duplicados=conferenciaGrupos.filter(g=>g.length>1).length;
+    resumo.textContent=(conferenciaRegistro?'Registro Procfit '+conferenciaRegistro+' · ':'')+`${conferenciaGrupos.length} pendente(s), ${duplicados} duplicado(s), ${unicos.length} marcação(ões) individual(is) disponível(is). Os concluídos saem desta lista; o Queima e as quantidades do mapa permanecem intactos.`;
+    $('#queima-mapa-paginacao').textContent=`Página ${conferenciaPagina} de ${totalPaginas} · ${conferenciaGrupos.length} produto(s)`;
+    $('#queima-mapa-anterior').disabled=conferenciaExecutando||conferenciaPagina<=1;
+    $('#queima-mapa-proximo').disabled=conferenciaExecutando||conferenciaPagina>=totalPaginas;
+    $('#queima-mapa-marcar-todos').disabled=conferenciaExecutando||!unicos.length||conferenciaItens.length>=1500;
+    lista.innerHTML=visiveis.length?`<table><thead><tr><th>Produto / descrição</th><th>Lote / validade</th><th>Queima</th><th>Mapa / responsável</th><th>Qtd. mapa</th><th>Ação</th></tr></thead><tbody>${visiveis.map(r=>{
+      const multiplos=conferenciaGrupos.find(g=>g[0].queima_id===r.queima_id)?.length>1;
+      const acao=r.tipo_mapa==='funcionario'&&!r.aba_protegida?`<button type="button" class="btn-outline" data-queima-vincular="${H(r.queima_id)}" data-mapa-id="${H(r.mapa_id)}" data-excluir-outros="${multiplos?'1':'0'}" title="${multiplos?'Manter este mapa e arquivar os outros':'Marcar produto como Queima'}">${multiplos?'Manter este mapa / excluir outros':'Marcar como Queima'}</button>`:`<span class="footer-hint">${H(r.aba_protegida?'Aba especial protegida':'Revisar manualmente')}</span>`;
+      return `<tr><td><strong>${H(r.descricao||'Descrição indisponível')}</strong><span class="second">${H(r.codigo_interno||r.ean||'—')}</span></td><td>${H(r.lote)}<span class="second">${H(dataBR(r.validade))}</span></td><td>${H(r.quantidade_queima)}<span class="second">Registro ${H(r.registro_queima||'—')}</span></td><td>${H(r.mapa_nome||'—')}</td><td>${H(r.quantidade_mapa)}</td><td>${acao}</td></tr>`;
+     }).join('')}</tbody></table>`:'<p>Não há itens pendentes. Os registros já marcados foram removidos da conferência.</p>';
+   };
+   const mostrarConferencia=async(registro=conferenciaRegistro,{reiniciar=false}={})=>{
+    conferenciaRegistro=registro;
+    if(reiniciar)conferenciaPagina=1;
     const resumo=$('#queima-mapa-resumo'),lista=$('#queima-mapa-lista');
     resumo.textContent='Conferindo itens '+(registro?'do Registro Procfit '+registro:'do Queima')+'…';lista.innerHTML='';
     if(!modal.open)modal.showModal();
     try{
      const caminho='/queima/conferir-mapas'+(registro?'?registro='+encodeURIComponent(registro):'');
      const resposta=await request(caminho,{timeout:120000,retries:0});
-     const dados=resposta.resultado||{},itens=dados.itens||[];
+     const dados=resposta.resultado||{};conferenciaItens=dados.itens||[];
      const grupos=new Map();
-     for(const r of itens){if(!grupos.has(r.queima_id))grupos.set(r.queima_id,[]);grupos.get(r.queima_id).push(r);}
-     resumo.textContent=(registro?'Registro Procfit '+registro+' · ':'')+`${grupos.size} produto(s) com correspondência · ${itens.length} mapa(s). Escolha o mapa que continuará com o lançamento. A seleção não reduz a quantidade do mapa nem altera a Queima.`;
-     lista.innerHTML=itens.length?`<table><thead><tr><th>Produto / descrição</th><th>Lote / validade</th><th>Queima</th><th>Mapa / responsável</th><th>Qtd. mapa</th><th>Ação</th></tr></thead><tbody>${itens.map(r=>{
-      const multiplos=grupos.get(r.queima_id).length>1;
-      const vinculado=r.lancamento_id===r.mapa_id;
-      const acao=r.tipo_mapa==='funcionario'&&!r.aba_protegida?`<button type="button" class="btn-outline" data-queima-vincular="${H(r.queima_id)}" data-mapa-id="${H(r.mapa_id)}" data-registro="${H(registro)}" data-excluir-outros="${multiplos?'1':'0'}" title="${multiplos?'Manter este mapa e excluir os outros correspondentes':'Marcar este mapa como no Queima'}">${multiplos?'Manter este mapa / excluir outros':vinculado?'Manter vínculo e badge':'Manter no mapa e marcar Queima'}</button>`:`<span class="footer-hint">${H(r.aba_protegida?'Aba especial protegida':'Revisar manualmente')}</span>`;
-      return `<tr><td><strong>${H(r.descricao||'Descrição indisponível')}</strong><span class="second">${H(r.codigo_interno||r.ean||'—')}</span></td><td>${H(r.lote)}<span class="second">${H(dataBR(r.validade))}</span></td><td>${H(r.quantidade_queima)}<span class="second">Registro ${H(r.registro_queima||'—')}</span></td><td>${H(r.mapa_nome||'—')}${vinculado?' · atual':''}</td><td>${H(r.quantidade_mapa)}</td><td>${acao}</td></tr>`;
-     }).join('')}</tbody></table>`:'<p>Nenhuma correspondência encontrada para esta solicitação. Os itens não foram movimentados.</p>';
+     for(const r of conferenciaItens){if(!grupos.has(r.queima_id))grupos.set(r.queima_id,[]);grupos.get(r.queima_id).push(r);}
+     // Mesmo que um item já esteja vinculado, uma duplicidade ainda exige revisão;
+     // somente correspondências únicas vinculadas saem da fila.
+     conferenciaGrupos=[...grupos.values()].filter(g=>g.length>1||g[0].lancamento_id!==g[0].mapa_id);
+     if(dados.total>conferenciaItens.length)$('#queima-mapa-progress').textContent='A consulta atingiu o limite de resultados; use o filtro por Registro Procfit para processar com segurança.';
+     else $('#queima-mapa-progress').textContent='';
+     renderConferencia();
     }catch(err){resumo.textContent='Falha na conferência: '+err.message;}
    };
-   checkBtn.onclick=()=>mostrarConferencia();
-   checkBtn.addEventListener('conferir-registro-xls',e=>mostrarConferencia(e.detail?.registro||''));
-   $('#queima-mapa-fechar').onclick=()=>modal.close();
+   checkBtn.onclick=()=>mostrarConferencia('',{reiniciar:true});
+   checkBtn.addEventListener('conferir-registro-xls',e=>mostrarConferencia(e.detail?.registro||'',{reiniciar:true}));
+   $('#queima-mapa-fechar').onclick=()=>{if(!conferenciaExecutando)modal.close();};
+   $('#queima-mapa-anterior').onclick=()=>{conferenciaPagina--;renderConferencia();};
+   $('#queima-mapa-proximo').onclick=()=>{conferenciaPagina++;renderConferencia();};
+   $('#queima-mapa-marcar-todos').onclick=async()=>{
+    if(conferenciaExecutando||conferenciaItens.length>=1500)return;
+    const elegiveis=conferenciaGrupos.filter(g=>g.length===1&&g[0].tipo_mapa==='funcionario'&&!g[0].aba_protegida).map(g=>g[0]);
+    if(!elegiveis.length)return;
+    if(!await confirmDialog('Marcar todos como Queima',`Confirmar ${elegiveis.length} produto(s) com correspondência única? Nenhum mapa será excluído e nenhuma quantidade será descontada. Os duplicados continuarão aguardando escolha manual.`))return;
+    conferenciaExecutando=true;renderConferencia();let ok=0;const falhas=[];
+    try{
+     for(const r of elegiveis){
+      $('#queima-mapa-progress').textContent=`Marcando ${ok+falhas.length+1} de ${elegiveis.length}…`;
+      try{await request('/queima/conferir-mapas',{method:'POST',body:{queima_id:r.queima_id,mapa_id:r.mapa_id,excluir_outros:false,confirmacao:true},timeout:120000,retries:0});ok++;}
+      catch(err){falhas.push(`${r.descricao||r.codigo_interno||r.ean}: ${err.message}`);}
+     }
+    }finally{
+     conferenciaExecutando=false;
+     await mostrarConferencia(conferenciaRegistro);
+     $('#queima-mapa-progress').textContent=`${ok} marcado(s). ${falhas.length} falha(s).`+(falhas.length?' '+falhas.slice(0,3).join(' | '):'');
+    }
+   };
    $('#queima-mapa-lista').onclick=async e=>{
-    const botao=e.target.closest('[data-queima-vincular]');if(!botao)return;
+    const botao=e.target.closest('[data-queima-vincular]');if(!botao||conferenciaExecutando)return;
     const excluir=botao.dataset.excluirOutros==='1';
     const mensagem=excluir?'Manter este lançamento no mapa escolhido e marcar Queima? Os OUTROS mapas do mesmo produto, lote e validade serão arquivados (exclusão lógica). O mapa escolhido e a quantidade dele não serão alterados.':'Manter o produto no Queima e também no mapa escolhido, sem descontar quantidades? Será acrescentada apenas a indicação Queima.';
     if(!await confirmDialog(excluir?'Escolher mapa e excluir duplicidades':'Marcar produto como no Queima',mensagem))return;
@@ -2057,7 +2102,7 @@ async function generic(pathname,title){
     try{
      await request('/queima/conferir-mapas',{method:'POST',body:{queima_id:botao.dataset.queimaVincular,mapa_id:botao.dataset.mapaId,excluir_outros:excluir,confirmacao:true}});
      toast(excluir?'Mapa escolhido mantido e demais correspondências arquivadas.':'Vínculo confirmado sem alterar quantidades.');
-     await mostrarConferencia(botao.dataset.registro||'');
+     await mostrarConferencia(conferenciaRegistro);
     }catch(err){toast('Não foi possível confirmar: '+err.message,true);botao.disabled=false;}
    };
    const recuperarDialog=$('#queima-recuperacao-dialog');
@@ -2087,7 +2132,7 @@ async function generic(pathname,title){
    $('#queima-import-cancel').onclick=()=>dlg.close();
    file.onchange=async()=>{const selected=file.files?.[0];file.value='';if(!selected)return;
     try{
-      const dados=lerArquivoQueimaXls(await selected.arrayBuffer(),selected.name),hoje=nowBrISO();
+      const dados=await lerArquivoQueimaOds(selected),hoje=nowBrISO();
       const limite=limiteMinimoQueima(hoje);
       const vencidos=dados.itens.filter(r=>r.validade<hoje);
       const prazoInsuficiente=dados.itens.filter(r=>r.validade>=hoje&&prazoInsuficienteParaQueima(r.validade,hoje));
@@ -2098,7 +2143,7 @@ async function generic(pathname,title){
       const primeiras=dados.itens.slice(0,40);
       $('#queima-import-preview').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Linha</th><th>Produto</th><th>Descrição</th><th>Lote</th><th>Validade</th><th>Qtd.</th><th>Situação</th></tr></thead><tbody>${primeiras.map(x=>`<tr><td>${x.linha}</td><td>${H(x.codigo_interno||x.ean)}</td><td>${H(x.descricao)}</td><td>${H(x.lote)}</td><td>${dataBR(x.validade)}</td><td>${x.quantidade}</td><td>${x.validade<hoje?pill('Vencido · ignorar','red'):prazoInsuficienteParaQueima(x.validade,hoje)?pill('Menos de 7 dias · ignorar','red'):pill('Validar no catálogo','green')}</td></tr>`).join('')}</tbody></table></div>${dados.itens.length>40?`<p>Exibindo 40 de ${dados.itens.length} linhas. A importação considerará todas as linhas.</p>`:''}`;
       confirm.disabled=!validos.length;dlg.showModal();
-    }catch(err){preparado=null;toast('Não foi possível ler o XLS: '+err.message,true);}
+    }catch(err){preparado=null;toast('Não foi possível ler o ODS: '+err.message,true);}
    };
    confirm.onclick=async()=>{if(!preparado)return;confirm.disabled=true;
     try{const {registro,itens}=preparado;const res=await request('/queima/importar-xls',{method:'POST',body:{registro,itens},timeout:120000,retries:0});
