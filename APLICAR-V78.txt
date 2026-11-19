@@ -1,0 +1,10 @@
+V78 — Corrige Descer para Mapa (individual e lote)
+
+1. Execute supabase/037_descer_estoque_remover_origem_v78.sql no SQL Editor do Supabase.
+2. Atualize a página Mapa Estoque.
+3. Teste com um lançamento de pequena quantidade.
+
+Transferência total: o item deixa de aparecer no Estoque e permanece no destino.
+Transferência parcial: o Estoque conserva somente a quantidade restante.
+O SQL também oculta saldos zerados de transferências anteriores, sem exclusão física.
+A alteração afeta a RPC no banco e não requer atualização do frontend.
