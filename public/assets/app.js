@@ -655,12 +655,12 @@ function mapsTable(rows,{actions=false,selectable=false}={}){
  return table([...(selectable?['Selecionar']:[]),'Produto / EAN','Mapa','Lote','Validade','Qtd.','Mês lançado','Situação',...(actions?['Ação']:[])],
  rows.map(r=>`<tr>${selectable?`<td><input class="row-select" type="checkbox" data-check-map="${H(r.id)}" aria-label="Selecionar ${H(r.descricao||r.ean)}"></td>`:''}
  <td><span class="product-name">${H(r.descricao||'Sem descrição')}</span>${r.formula_especial?'<span class="pill amber" title="Não pode ser lançado na Queima nem copiado para o Procfit">Fórmula Especial</span>':''}<span class="second">${H(r.codigoInterno||'—')} · ${H(r.ean)}</span></td>
- <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}${state.mapaEmQueima?.has(r.id)?'<div class="queima-mapa-badge"><span class="pill amber">Queima</span></div>':''}</td>
+ <td>${H(r.mapa_nome)}</td><td>${H(r.lote)}</td><td>${dataBR(r.validade)}</td><td>${H(r.quantidade)}</td><td>${H(String(r.mes_lancamento||'').slice(0,7))}</td><td>${badgeValidade(r.validade,r.secao)}${state.mapaEmQueima?.has(String(r.id))?'<div class="queima-mapa-badge"><span class="pill amber">Queima</span></div>':''}</td>
  ${actions?`<td class="row-actions"><button type="button" class="action-link" data-edit="${H(r.id)}">Editar</button>${r.tipo_mapa==='funcionario'?`<button type="button" class="action-link" data-transfer-map="${H(r.id)}" title="Transferir item para outro funcionário" aria-label="Transferir item para outro funcionário">Transferir item</button>`:''}<button type="button" class="action-link danger-text" data-remove-map="${H(r.id)}">Excluir registro</button>${Number(r.quantidade)>0?`${r.validade<nowBrISO()?`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="vencidos">Lançar como Vencido</button>`:prazoInsuficienteParaQueima(r.validade,nowBrISO())?`<span class="second" title="Queima exige validade de pelo menos 7 dias">Queima bloqueada · menos de 7 dias</span>`:(r.formula_especial||['Termolabil','Psicotropicos','Antibioticos'].includes(r.tipo_mapa)||['Termolabil','Psicotropicos','Antibioticos'].includes(r.mapa_nome))?`<span class="second" title="Produto bloqueado para Queima">Queima bloqueada</span>`:`<button type="button" class="action-link" data-send-map="${H(r.id)}" data-send-to="queima">Lançar na Queima</button>`}${r.tipo_mapa==='Estoque'?`<button type="button" class="action-link" data-descer-map="${H(r.id)}">Descer para mapa</button>`:''}`:''}<button type="button" class="action-link" data-formula-map="${H(r.ean)}" data-formula-value="${r.formula_especial?'false':'true'}">${r.formula_especial?'Retirar Fórmula Especial':'Marcar Fórmula Especial'}</button></td>`:''}</tr>`));
 }
 async function mapas(forced=''){
  const rows=await getMaps(forced),tipo=forced==='Estoque'?[]:await nomesMapasComFuncionariosAtivos(rows);
- try{const sinal=await request('/mapas/sinalizacoes-queima',{timeout:120000,retries:0});state.mapaEmQueima=new Set(sinal.mapa_ids||[]);}catch(err){console.warn('Não foi possível carregar badges Queima:',err.message);state.mapaEmQueima=new Set();}
+ try{const sinal=await request('/mapas/sinalizacoes-queima',{timeout:120000,retries:0});state.mapaEmQueima=new Set((sinal.mapa_ids||[]).map(String));state.mapaEmQueimaDisponivel=true;}catch(err){console.warn('Não foi possível carregar badges Queima:',err.message);state.mapaEmQueima=new Set();state.mapaEmQueimaDisponivel=false;toast('Não foi possível consultar os produtos no Queima. O filtro ficará indisponível até atualizar.',true);}
  const isStock=forced==='Estoque',able=isAdmin();let page=0,selected=new Set(),filtered=[],grupoMapaAtivo='funcionarios';
  const ehMapaEspecial=r=>special.includes(String(r.mapa_nome||''))||special.includes(String(r.tipo_mapa||''))||String(r.tipo_mapa||'').toLowerCase()==='especial';
  const title=isStock?'Estoque':'Mapa de Validade';
@@ -671,6 +671,7 @@ async function mapas(forced=''){
  <input id="map-lot" placeholder="Lote" aria-label="Filtrar lote">
  ${!isStock&&able?`<select id="map-owner"><option value="">Todos os mapas</option>${tipo.map(x=>`<option value="${H(x)}">${H(x)}</option>`).join('')}</select>`:''}
  <select id="map-status"><option value="">Todas as situações</option><option value="Vencido">Vencido</option><option value="A vencer">A vencer</option><option value="Vendável">Vendável</option></select>
+ ${!isStock?`<label>Situação no Queima <select id="map-queima-status" aria-label="Filtrar produtos que estão ou não estão no Queima" ${state.mapaEmQueimaDisponivel?'':'disabled title="Não foi possível consultar o Queima; atualize a página"'}><option value="">Todos</option><option value="sim">No Queima</option><option value="nao">Fora do Queima</option></select></label>`:''}
  </div><div class="filter-row map-secondary-filters"><label>Mês do mapa <select id="map-month" aria-label="Filtrar mês de referência do mapa (mês seguinte ao lançamento)" title="Exemplo: mapa de novembro lançado em outubro"><option value="">Todos os meses</option>${opcoesMesesMapa(rows,r=>mesReferenciaMapa(r.mes_lancamento))}</select></label><label>Mês lançado <select id="map-launch-month" aria-label="Filtrar mês em que o mapa foi lançado"><option value="">Todos os lançamentos</option>${opcoesMesesMapa(rows,r=>String(r.mes_lancamento||'').slice(0,7))}</select></label><label>Validade a partir de <input type="date" id="map-valid-from" class="filter-date"></label>
  <label>Validade até <input type="date" id="map-valid-to" class="filter-date"></label>
  <label>Linhas por página <select id="map-size"><option>15</option><option>25</option><option>50</option></select></label>
@@ -797,9 +798,9 @@ async function mapas(forced=''){
 
  };
  const filtrarMapaLinhas=(incluirAba=true)=>{const q=$('#map-search').value.toLowerCase().trim(),l=$('#map-lot').value.toLowerCase().trim(),st=$('#map-status').value,owner=$('#map-owner')?.value||forced,
- m=$('#map-month').value,lancamento=$('#map-launch-month').value,v1=$('#map-valid-from').value,v2=$('#map-valid-to').value;
+ m=$('#map-month').value,lancamento=$('#map-launch-month').value,v1=$('#map-valid-from').value,v2=$('#map-valid-to').value,queima=state.mapaEmQueimaDisponivel?($('#map-queima-status')?.value||''):'';
   return rows.filter(r=>(!incluirAba||isStock||(grupoMapaAtivo==='especiais'?ehMapaEspecial(r):!ehMapaEspecial(r)))&&(!owner||r.mapa_nome===owner)&&(!st||statusVal(r.validade,r.secao)[0]===st)
-   &&(!m||mesReferenciaMapa(r.mes_lancamento)===m)&&(!lancamento||String(r.mes_lancamento||'').slice(0,7)===lancamento)&&(!v1||r.validade>=v1)&&(!v2||r.validade<=v2)
+   &&(!queima||(queima==='sim' ? state.mapaEmQueima.has(String(r.id)) : !state.mapaEmQueima.has(String(r.id))))&&(!m||mesReferenciaMapa(r.mes_lancamento)===m)&&(!lancamento||String(r.mes_lancamento||'').slice(0,7)===lancamento)&&(!v1||r.validade>=v1)&&(!v2||r.validade<=v2)
    &&(!l||String(r.lote).toLowerCase().includes(l))&&(!q||[r.ean,r.codigoInterno,r.descricao,r.secao].join(' ').toLowerCase().includes(q)));
  };
  const apply=()=>{filtered=filtrarMapaLinhas(true);page=0;draw();};
@@ -827,9 +828,9 @@ async function mapas(forced=''){
   $('#map-group-special').onclick=()=>mudarGrupoMapa('especiais');
   atualizarListaMapas();
  }
- for(const id of ['map-search','map-lot','map-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to'])$('#'+id)?.addEventListener('input',apply);
+ for(const id of ['map-search','map-lot','map-status','map-queima-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to'])$('#'+id)?.addEventListener('input',apply);
  $('#map-size').onchange=()=>{page=0;draw();};
- $('#map-clear').onclick=()=>{for(const id of ['map-search','map-lot','map-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to']){const el=$('#'+id);if(el)el.value='';}selected.clear();apply();};
+ $('#map-clear').onclick=()=>{for(const id of ['map-search','map-lot','map-status','map-queima-status','map-owner','map-month','map-launch-month','map-valid-from','map-valid-to']){const el=$('#'+id);if(el)el.value='';}selected.clear();apply();};
  $('#map-prev').onclick=()=>{if(page){page--;draw();}};$('#map-next').onclick=()=>{if((page+1)*Number($('#map-size').value)<filtered.length){page++;draw();}};
  $('#map-main-card').addEventListener('rv:filtros-restaurados',e=>{const p=Number(e.detail?.paginas?.['map-page-label']);if(p>0){page=Math.min(p-1,Math.max(0,Math.ceil(filtered.length/Number($('#map-size').value))-1));draw();}} ,{once:true});
  $('#reload-maps').onclick=()=>renderRoute(state.route);
