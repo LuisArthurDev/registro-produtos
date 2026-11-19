@@ -32,7 +32,7 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  content.innerHTML=`<div class="page-head view-title"><div><span class="eyebrow">Registro de validades</span><h1>Visualização dos Lançamentos</h1><p>${loggedAdmin?'Histórico das abas especiais da loja, com filtros de mapa, mês e validade.':`Histórico do mapa de ${escapeHtml(user.nome)}, com filtros de lançamento e validade.`}</p></div><div class="toolbar">${actions}</div></div>
  <section class="card card-pad view-quick-stats"><div class="stat-grid view-stats" id="view-stats"></div></section>
  <section class="card card-pad view-filter-card"><div class="view-tabs" role="group" aria-label="Visualizar dados"><button type="button" data-view-tab="mapas">Mapa / Lançamentos</button></div>
- <div id="view-month-mode" class="view-month-modes"><button type="button" data-view-mode="mes">Por mês de lançamento</button><button type="button" data-view-mode="validade">Validade (a vencer)</button><button type="button" data-view-mode="queima">Queima (aprovados)</button></div>
+ <div id="view-month-mode" class="view-month-modes"><button type="button" data-view-mode="mes">Por mês de lançamento</button><button type="button" data-view-mode="validade">Validade (a vencer)</button><button type="button" data-view-mode="queima">Queima (meus itens)</button></div>
  <div class="filter-row view-filters">${ownerOptions}
  <label id="view-month-field">Mês do lançamento<input id="view-month" type="month"></label>
  <label class="toolbar-checkbox" id="view-all-month-field"><input id="view-all-months" type="checkbox"> Todos os meses</label>
@@ -64,7 +64,7 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
   try{
    const params=loggedAdmin&&prefs.owner?'?mapa='+encodeURIComponent(prefs.owner):'';
    const r=await request('/visualizacao/queima-aprovados'+params);
-   queimaRows=(r.registros||[]).filter(x=>x.estado==='aprovado');
+   queimaRows=r.registros||[];
    queimaWarning=r.aviso||'';queimaLoaded=true;
   }catch(err){queimaRows=[];queimaWarning=err.message;queimaLoaded=false;toast(err.message,true);}
   finally{queimaBusy=false;draw();}
@@ -94,12 +94,12 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
   const pageRows=showing.slice(prefs.page*prefs.size,(prefs.page+1)*prefs.size);
   let headings=[];let trs=[];
   if(prefs.mode==='queima'){
-   headings=['Produto / EAN','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Qtd. informada','Situação'];
+   headings=['Produto / EAN','Lote','Validade','Validade da Gôndola','Preço da Gôndola','Qtd. informada','Situação','Ações'];
    trs=pageRows.map(r=>asRow([
     `<div class="view-product-first"><div><strong>${link(r.descricao||'Produto não identificado')}</strong><span class="second">${link(r.ean||r.codigoInterno||'Código não informado')}</span></div></div>`,
     link(r.lote||'Não informado'),formatDate(r.validade),formatDate(r.validade_gondola),
     r.preco_gondola==null?'Preço não informado':Number(r.preco_gondola).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
-    r.quantidade_pendente?'A conferir':money(r.quantidade),'<span class="pill green">Aprovado</span>'
+    r.quantidade_pendente?'A conferir':money(r.quantidade),`<span class="pill ${r.estado==='aprovado'?'green':'amber'}">${link(r.estado||'pendente')}</span>`,`<button type="button" class="action-link danger-text" data-view-delete-queima="${link(r.id)}" aria-label="Excluir produto do Queima e do Mapa de Validade" title="Excluir do Queima e do Mapa">Excluir</button>`
    ]));
   }else{
    headings=['Produto / EAN','Mapa','Lote','Validade','Quantidade','Mês lançado','Situação','Ações'];
@@ -109,9 +109,9 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
     `<div class="view-row-actions"><button class="action-link" data-view-edit="${link(r.id)}">Editar</button><button class="action-link danger-text" data-view-delete="${link(r.id)}">Excluir</button><button class="action-link" data-view-signal="${link(r.id)}">Sinalizar</button>${Number(r.quantidade)>0&&withdrawn(r)?`<button class="action-link" data-view-retirar="${link(r.id)}">Encaminhar para Vencidos</button>`:''}</div>`]));
   }
   $('#view-table').innerHTML=prefs.mode==='queima'&&!queimaLoaded?`<div class="empty"><strong>${queimaBusy?'Consultando produtos aprovados…':'Não foi possível carregar a Queima.'}</strong><p>${link(queimaWarning||'Tente Atualizar.')}</p></div>`:showing.length?`<div class="table-wrap" id="view-own-table"><table><thead><tr>${headings.map(x=>`<th>${link(x)}</th>`).join('')}</tr></thead><tbody>${trs.join('')}</tbody></table></div>`:`<div class="empty"><strong>Nenhum registro encontrado.</strong><p>Altere os filtros ou consulte novamente.</p></div>`;
-  $('#view-summary').textContent=prefs.mode==='queima'?`${showing.length} produto(s) aprovados na Queima · quantidade sujeita a conferência`:`${showing.length} registro(s) · ${showing.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · mapa de validade`;
+  $('#view-summary').textContent=prefs.mode==='queima'?`${showing.length} produto(s) no Queima · quantidade sujeita a conferência`:`${showing.length} registro(s) · ${showing.reduce((n,r)=>n+Number(r.quantidade||0),0)} unidade(s) · mapa de validade`;
   $('#view-prev').disabled=prefs.page===0;$('#view-next').disabled=prefs.page>=maxPage-1;$('#view-page-label').textContent=`Página ${prefs.page+1} de ${maxPage}`;
-  $('#view-results h2').textContent=prefs.mode==='queima'?'Meus produtos aprovados na Queima':'Histórico dos lançamentos';
+  $('#view-results h2').textContent=prefs.mode==='queima'?'Meus produtos no Queima':'Histórico dos lançamentos';
  };
  const markChanged=(key,value)=>{prefs[key]=value;prefs.page=0;draw();};
  for(const x of content.querySelectorAll('[data-view-tab]'))x.onclick=()=>markChanged('tab',x.dataset.viewTab);
@@ -141,7 +141,13 @@ export async function renderVisualizacao({request,content,user,isAdmin,statusVal
  $('#view-edit-cancel').onclick=()=>editDialog.close();$('#view-signal-cancel').onclick=()=>signalDialog.close();$('#view-info-close').onclick=()=>infoDialog.close();
  content.querySelectorAll('[name="motivo"]').forEach(x=>x.onchange=()=>{const other=signalForm.elements.motivo.value==='Outras';$('#view-other-reason').hidden=!other;signalForm.elements.observacao.required=other;});
  $('#view-table').onclick=async event=>{
-  const btn=event.target.closest('button[data-view-edit],button[data-view-delete],button[data-view-signal],button[data-view-info],button[data-view-retirar]');if(!btn)return;
+  const btn=event.target.closest('button[data-view-edit],button[data-view-delete],button[data-view-signal],button[data-view-info],button[data-view-retirar],button[data-view-delete-queima]');if(!btn)return;
+  if(btn.dataset.viewDeleteQueima){
+   const id=btn.dataset.viewDeleteQueima,reg=queimaRows.find(r=>r.id===id);if(!reg)return;
+   if(!await confirmDialog('Excluir Queima e Mapa',`Excluir ${reg.descricao||reg.ean||'produto'} (lote ${reg.lote||'não informado'}) do Queima E do mapa original? A exclusão será registrada na auditoria.`))return;
+   btn.disabled=true;try{await request('/visualizacao/queima-excluir',{method:'POST',body:{id}});toast('Produto excluído do Queima e do mapa original.');await renderVisualizacao({request,content,user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});}
+   catch(err){toast(err.message,true);btn.disabled=false;}return;
+  }
   const id=btn.dataset.viewEdit||btn.dataset.viewDelete||btn.dataset.viewSignal||btn.dataset.viewInfo||btn.dataset.viewRetirar;
   const reg=mapas.find(r=>r.id===id);if(!reg)return;
   if(btn.dataset.viewEdit){editing=reg;editForm.reset();for(const k of ['ean','lote','validade','quantidade'])editForm.elements[k].value=reg[k]??'';$('#view-edit-error').hidden=true;editDialog.showModal();return;}

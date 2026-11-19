@@ -42,7 +42,11 @@ const clean=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toL
 export function detectarAcao(label,button){
  const t=clean(label);const attrs=clean(button?.getAttribute?.('class')||'')+' '+clean(button?.getAttribute?.('id')||'')+' '+Array.from(button?.attributes||[]).filter(a=>a.name.startsWith('data-')).map(a=>a.name+' '+a.value).join(' ');
  const has=(...words)=>words.some(w=>t.includes(w)||attrs.includes(w));
- if(has('copiar','copy','procfit'))return 'copy';
+ if(t.includes('conferir relatorio')||t.includes('primeira importacao'))return 'search';
+ if(has('copiar','copy'))return 'copy';
+ if(has('transferir','transferencia','transferência','mover','descer'))return 'transfer';
+ if(has('importar'))return 'download';
+ if(has('procfit'))return 'barcode';
  if(has('ocultar','esconder','hide'))return 'eye-off';
  if(has('restaurar','reexibir','mostrar secao','mostrar seção'))return 'repeat';
  if(has('gerenciar'))return 'board';
@@ -50,8 +54,9 @@ export function detectarAcao(label,button){
  if(has('editar','edit','corrigir','alterar nome','rename'))return 'edit';
  if(has('aprovar','aprovado','confirmar','concluir','resolver','permitir','ativar','aceitar'))return 'approve';
  if(has('relaunch','relancar','reprocessar','repetir'))return 'repeat';
- if(has('queima','lançar na queima','lancar na queima'))return 'fire';
- if(has('vencido','retirar da loja','retirar','archive'))return 'archive';
+ if(has('conferir queima','queima x mapa','queima × mapa'))return 'search';
+ if(t.includes('queima')||t.includes('lancar na queima'))return 'fire';
+ if(has('vencido','retirar da loja','archive'))return 'archive';
  if(has('transfer','mover','descer','destino','redirecion'))return 'transfer';
  if(has('sinaliz','flag','negar','marcar'))return 'flag';
  if(has('cadastrar','adicionar','novo','nova','criar','incluir'))return 'plus';

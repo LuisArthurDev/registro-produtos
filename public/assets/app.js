@@ -9,9 +9,9 @@ import { gerarMapaProcfitEmLotes } from './mapa-procfit-lotes.js';
 import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
-import { renderVisualizacao } from './visualizacao.js';
+import { renderVisualizacao } from './visualizacao.js?v=80';
 import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
-import { instalarIconesDeAcao } from './icones-acoes.js?v=59';
+import { instalarIconesDeAcao } from './icones-acoes.js?v=80';
 import { resumoQueima } from './queima-grafico.js';
 import { prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
 import { lerArquivoQueimaOds } from './queima-ods.js';
@@ -1708,7 +1708,7 @@ async function generic(pathname,title){
    <p id="queima-relatorio-resumo" role="status" aria-live="polite"></p>
    <div id="queima-relatorio-previa" class="queima-import-preview"></div>
    <div class="dialog-actions"><button type="button" class="btn-outline" id="queima-relatorio-cancelar">Fechar</button>
-   <button type="button" class="primary" id="queima-relatorio-confirmar" disabled>Cadastrar e aprovar novos</button></div></div></dialog>
+   <button type="button" class="primary" id="queima-relatorio-confirmar" disabled>Confirmar operação</button></div></div></dialog>
   <dialog id="queima-atribuir-dialog" class="dialog" aria-labelledby="queima-atribuir-title"><form id="queima-atribuir-form" class="dialog-inner">
    <h2 id="queima-atribuir-title">Atribuir responsável da Queima</h2><p id="queima-atribuir-item" class="footer-hint"></p>
    <p class="notice">A atribuição identifica o funcionário responsável pela conferência. O relatório não contém Lote; por isso nenhum lançamento de mapa será fabricado.</p>
@@ -1954,22 +1954,25 @@ async function generic(pathname,title){
    const primeira=$('#queima-relatorio-primeira');
    const resumo=$('#queima-relatorio-resumo'),previa=$('#queima-relatorio-previa');
    let relatorio=null,versao=0;
-   $('#queima-relatorio-primeira-open').onclick=()=>{primeira.checked=true;input.click();};
-   $('#queima-relatorio-open').onclick=()=>{primeira.checked=false;input.click();};
+   $('#queima-relatorio-primeira-open').onclick=()=>{primeira.checked=true;confirm.textContent='Cadastrar novos';input.click();};
+   $('#queima-relatorio-open').onclick=()=>{primeira.checked=false;confirm.textContent='Aprovar existentes';input.click();};
    $('#queima-relatorio-cancelar').onclick=()=>dlg.close();
-   const opcoes=()=>({primeira_carga:primeira.checked,corrigir_aprovados:false});
+   const opcoes=()=>({primeira_carga:primeira.checked,corrigir_aprovados:!primeira.checked});
    const enviarLote=(itens,simular,modo=opcoes())=>request('/queima/conciliar-relatorio',{
     method:'POST',body:{itens,...modo,simular},timeout:65000,retries:0});
    let previaConfirmada=false,emExecucao=false;
    const mostrarResumo=(dados)=>{
     const c=dados.contagem||{};
-    resumo.textContent=`${primeira.checked?'Primeira importação':'Importação de novos'} · Relatório: ${relatorio.resumo.total} linhas · ${relatorio.resumo.aprovados} com S · ${relatorio.resumo.nao_aprovados} com N ignoradas. Novos aptos: ${c.cadastrar_e_aprovar||0}. Não lançados: ${(c.ja_existente||0)+(c.ja_conciliado||0)} já existentes · ${c.ja_excluido||0} excluídos · ${c.repetido_no_relatorio||0} repetidos · ${c.vencido||0} vencidos/hoje · ${c.sem_validade||0} sem validade verificável. ${relatorio.resumo.sem_preco||0} linhas S sem preço serão cadastradas sem esse valor. Produtos existentes não serão modificados.`;
-    previa.innerHTML=`<p>${c.cadastrar_e_aprovar||0} produto(s) novo(s) apto(s), sujeitos à conferência final no banco. Até 100 exemplos:</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade (H)</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(String(x.acao||'').replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
+    const apenasConferir=!primeira.checked;
+    resumo.textContent=apenasConferir
+      ?`Conferir relatório (sem cadastrar): ${relatorio.resumo.total} linhas · ${c.aprovar_existente||0} aprovação(ões) pendente(s) localizada(s) · ${c.ja_aprovado||0} já aprovados · ${c.sem_correspondencia||0} não encontrados · ${c.ambiguo||0} ambíguos · ${c.sem_preco||0} sem preço para aprovação. Produtos desconhecidos nunca serão cadastrados.`
+      :`Primeira importação: ${relatorio.resumo.total} linhas · ${c.cadastrar_e_aprovar||0} novos aptos · ${c.ja_existente||0} existentes ignorados · ${c.ja_excluido||0} excluídos · ${c.vencido||0} vencidos.`;
+    previa.innerHTML=`<p>${apenasConferir?'Apenas aprovações de produtos já cadastrados':'Somente novos produtos'}. Até 100 exemplos:</p><div class="table-wrap"><table><thead><tr><th>Linha XLSX</th><th>Código</th><th>Validade</th><th>Ação</th></tr></thead><tbody>${(dados.amostras||[]).map(x=>`<tr><td>${H(x.linha)}</td><td>${H(x.codigo_interno)}</td><td>${dataBR(x.validade)}</td><td>${H(String(x.acao||'').replaceAll('_',' '))}</td></tr>`).join('')}</tbody></table></div>`;
    };
    const conferir=async()=>{
      if(!relatorio||emExecucao)return;
      const v=++versao;previaConfirmada=false;confirm.disabled=true;
-     resumo.textContent='Comparando os produtos novos com a Queima, em lotes…';
+     resumo.textContent=primeira.checked?'Comparando produtos novos com a Queima…':'Identificando itens pendentes já existentes para aprovação…';
      try{
       const dados=await executarQueimaEmLotes(relatorio.itens,
        (lote)=>enviarLote(lote,true),{
@@ -1978,7 +1981,7 @@ async function generic(pathname,title){
        }});
       if(v!==versao)return;
       mostrarResumo(dados);previaConfirmada=true;
-      confirm.disabled=!Number(dados.contagem?.cadastrar_e_aprovar||0);
+      confirm.disabled=!Number(primeira.checked?dados.contagem?.cadastrar_e_aprovar: dados.contagem?.aprovar_existente || 0);
      }catch(error){
       if(v!==versao)return;
       confirm.disabled=true;
@@ -2005,8 +2008,8 @@ async function generic(pathname,title){
    confirm.onclick=async()=>{
     if(!relatorio||!previaConfirmada||emExecucao)return;
     confirm.disabled=true;
-    if(!await confirmDialog('Cadastrar somente novos produtos',
-      `Confirmar os produtos NOVOS aprovados (S) deste relatório? Os que já estão na Queima não serão alterados. A operação será feita em lotes e pode ser retomada reimportando o arquivo.`)){
+    if(!await confirmDialog(primeira.checked?'Primeira importação':'Conferir aprovações existentes',
+      primeira.checked?'Cadastrar somente produtos novos do relatório?':'Aprovar somente itens pendentes já existentes na Queima, com S no relatório, sem cadastrar nenhum novo produto?')){
        confirm.disabled=false;return;
     }
     emExecucao=true;primeira.disabled=true;
@@ -2015,15 +2018,15 @@ async function generic(pathname,title){
       const dados=await executarQueimaEmLotes(relatorio.itens,
        lote=>enviarLote(lote,false,modoConfirmado),{
        simular:false,progresso:({indice,total,executado,reduzido,tamanho})=>{
-        resumo.textContent=reduzido?`Tempo limite no lote ${indice}: dividindo ${tamanho} itens em partes menores. Os lotes anteriores permanecem registrados.`:`Cadastrando somente novos: ${executado?'Concluído':'Executando'} lote ${indice} de ${total}. Não feche a página.`;
+        resumo.textContent=reduzido?`Tempo limite no lote ${indice}: dividindo ${tamanho} itens.`:`${primeira.checked?'Cadastrando novos':'Conferindo aprovações'}: lote ${indice} de ${total}.`;
        }});
       const c=dados.contagem||{};
       dlg.close();previaConfirmada=false;
-      toast(`Relatório concluído: ${c.cadastrar_e_aprovar||0} novos produto(s) cadastrados e aprovados. ${c.ja_existente||0} já existentes mantidos sem alterações, ${c.ja_conciliado||0} reimportações ignoradas.`);
+      toast(primeira.checked?`Primeira importação concluída: ${c.cadastrar_e_aprovar||0} novos cadastrados.`:`Conferência concluída: ${c.aprovar_existente||0} aprovados, ${c.sem_correspondencia||0} não localizados. Nenhum novo cadastro.`);
       await renderRoute(state.route);
     }catch(error){
       previaConfirmada=false;
-      resumo.textContent=`A importação parou no lote ${(error.lotesConcluidos||0)+1} de ${error.totalLotes||'?'}. ${error.message} ${error.lotesConcluidos?'Os lotes anteriores foram confirmados. ':''}Reimporte o mesmo relatório para continuar sem duplicar; nenhum aprovado existente terá preço ou quantidade modificados.`;
+      resumo.textContent=`A importação parou no lote ${(error.lotesConcluidos||0)+1} de ${error.totalLotes||'?'}. ${error.message} ${error.lotesConcluidos?'Os lotes anteriores foram confirmados. ':''}Reimporte o mesmo relatório para continuar sem duplicar. Registros existentes não terão quantidade alterada.`;
       toast('Importação interrompida. Confira a situação no modal.',true);
     }finally{emExecucao=false;primeira.disabled=false;confirm.disabled=true;}
    };

@@ -549,7 +549,7 @@ async function visualizacao(req,actor,pathname,body,query){
      (await allowedRows()).filter(allowed),loja)).filter(x=>!mapa||x.mapa_nome===mapa);
    const ids=new Set(mapasPermitidos.map(x=>x.id));
    const chaves=new Set(mapasPermitidos.filter(x=>x.ean&&x.validade).map(x=>`${x.ean}|${x.validade}`));
-   const base={loja_id:`eq.${loja}`,estado:'eq.aprovado',excluido_em:'is.null',
+   const base={loja_id:`eq.${loja}`,excluido_em:'is.null',
      select:'id,lancamento_id,loja_id,ean,codigo_interno,descricao_original,produto_relatorio,lote,validade,validade_gondola,preco_gondola,quantidade,quantidade_pendente,motivo,estado,origem_mapa,registro_queima,responsavel_importacao_id,criado_em,aprovado_via_importacao',
      order:'criado_em.desc,id.desc'};
    const encontrados=[];
@@ -567,7 +567,7 @@ async function visualizacao(req,actor,pathname,body,query){
      encontrados.push(...await rows('queima',{...base,origem_mapa:`eq.${origem}`},300,20));
    }
    const permitidos=[...new Map(encontrados.map(x=>[x.id,x])).values()].filter(x=>{
-     if(x.loja_id!==loja||x.estado!=='aprovado'||x.excluido_em)return false;
+     if(x.loja_id!==loja||x.excluido_em)return false;
      if(employee&&x.responsavel_importacao_id===actor.id)return true;
      if(x.responsavel_importacao_id&&employee&&x.responsavel_importacao_id!==actor.id)return false;
      if(x.lancamento_id&&ids.has(x.lancamento_id))return true;
@@ -583,6 +583,13 @@ async function visualizacao(req,actor,pathname,body,query){
      descricao:x.descricao_original||catalogo.get(x.ean)?.descricao||x.produto_relatorio||'Produto não identificado',
      codigoInterno:x.codigo_interno||catalogo.get(x.ean)?.codigo_interno||''})),
      aviso:'A quantidade informada na Queima pode estar incorreta e não representa necessariamente o saldo do estoque.'};
+ }
+ if(pathname==='/visualizacao/queima-excluir'&&req.method==='POST'){
+   const id=norm(body.id);
+   if(!/^[0-9a-f-]{36}$/i.test(id))throw bad('ID inválido.',422);
+   const result=await db('rpc/excluir_queima_e_mapa_v80',{method:'POST',body:{p_loja_id:loja,p_usuario_id:actor.id,p_queima_id:id}});
+   await audit(actor,'excluir_queima_e_mapa_v80',{queima_id:id,mapa_id:result?.mapa_id});
+   return {sucesso:true,resultado:result};
  }
  if(pathname==='/visualizacao/queima'&&req.method==='GET'){
    const item=await getRecord(query.get('id'));
@@ -1344,10 +1351,9 @@ async function conciliarRelatorioQueima(req,actor,body){
  const itens=body.itens;
  if(!Array.isArray(itens)||itens.length<1||itens.length>10)
    throw bad('Envie lotes de 1 a 10 itens aprovados (S).',422);
- // V48: relatórios S servem exclusivamente para ADICIONAR NOVOS produtos.
- // Nunca corrigir nem aprovar entradas anteriores (pendentes ou aprovadas).
- if(body.corrigir_aprovados===true)throw bad('Correção via relatório não permitida. Edite o item manualmente na Queima.',422);
- const primeiro=body.primeira_carga===true,corrigir=false,simular=body.simular!==false;
+ // A conferência nunca pode cadastrar produtos. A primeira importação usa a RPC antiga.
+ const primeiro=body.primeira_carga===true,simular=body.simular!==false;
+ if(body.corrigir_aprovados===true && primeiro)throw bad('Modos incompatíveis.',422);
  for(const item of itens){
    if(!item||item.aprovado!==true||!Number.isInteger(item.linha)||item.linha<4
      ||item.codigo_interno!=null&&!/^\d{1,20}$/.test(norm(item.codigo_interno))
@@ -1364,13 +1370,15 @@ async function conciliarRelatorioQueima(req,actor,body){
  }
  // A RPC valida a loja, o catálogo e a situação de cada item no banco.
  // Simulação (prévia) e confirmação usam o mesmo código transacional.
- const result=await db('rpc/conciliar_queima_relatorio_v43',{method:'POST',body:{
-   p_loja_id:loja,p_usuario_id:actor.id,p_itens:itens.map(x=>({linha:x.linha,codigo_interno:x.codigo_interno,
+ const payload={p_loja_id:loja,p_usuario_id:actor.id,p_itens:itens.map(x=>({linha:x.linha,codigo_interno:x.codigo_interno,
     produto_relatorio:x.produto_relatorio,descricao_original:x.descricao_original,
     validade:x.validade,data_lancamento:x.data_lancamento,quantidade:x.quantidade,preco_gondola:x.preco_gondola,
-    ocorrencia:x.ocorrencia,aprovado:true})),p_primeira_carga:primeiro,p_corrigir_aprovados:corrigir,p_simular:simular}});
- if(!simular)await audit(actor,'conciliar_queima_relatorio_v43',{total:itens.length,primeira_carga:primeiro,
-   corrigir_aprovados:corrigir,contagem:result?.contagem});
+    ocorrencia:x.ocorrencia,aprovado:true}))};
+ const result=primeiro
+  ?await db('rpc/conciliar_queima_relatorio_v43',{method:'POST',body:{...payload,p_primeira_carga:true,p_corrigir_aprovados:false,p_simular:simular}})
+  :await db('rpc/conferir_aprovacoes_queima_v80',{method:'POST',body:{...payload,p_simular:simular}});
+ if(!simular)await audit(actor,primeiro?'primeira_importacao_queima_v80':'conferir_aprovacoes_queima_v80',
+  {total:itens.length,contagem:result?.contagem});
  return {sucesso:true,resultado:{...result,primeira_carga:primeiro}};
 }
 async function relancarQueima(req,actor,body){
