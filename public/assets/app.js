@@ -306,7 +306,9 @@ function navigate(route){
  $('#breadcrumb-current').textContent=[...menus,...menusGeral].find(m=>m[0]===route)?.[2]||'Painel';
  renderRoute(route);
 }
+let routeRenderEpoch=0;
 async function renderRoute(route){
+ const renderEpoch=++routeRenderEpoch;
  const content=$('#content'),id=state.user?.id,loja=state.user?.loja||state.loja;
  // Antes de qualquer atualização, capturar os filtros da rota ANTERIOR;
  // a aba nova tem estado separado, mesmo ao trocar de loja/usuário.
@@ -323,13 +325,14 @@ async function renderRoute(route){
    case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
    case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!isAdmin())throw new Error('Seções: acesso reservado ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
+  if(renderEpoch!==routeRenderEpoch||state.route!==route)return;
   content.dataset.filtrosRota=route;
   if(id){
     try{await restaurarFiltros(content,{storage:localStorage,key:chaveFiltros(id,loja,route)});}
     catch(err){console.warn('Não foi possível restaurar todos os filtros:',err.message);}
     finally{delete content.dataset.restaurandoFiltros;}
   }else delete content.dataset.restaurandoFiltros;
- }catch(e){delete content.dataset.restaurandoFiltros;content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
+ }catch(e){if(renderEpoch!==routeRenderEpoch||state.route!==route)return;delete content.dataset.restaurandoFiltros;content.innerHTML=header('Não foi possível carregar','Verifique a conexão e tente novamente.')+`<div class="card card-pad"><div class="notice danger">${H(e.message)}</div><div class="form-actions"><button class="primary" id="btn-reload">Tentar novamente</button></div></div>`;$('#btn-reload').onclick=()=>renderRoute(route);}}
 async function getMaps(mapa=''){
  const p=new URLSearchParams();if(lojaParams())p.set('loja',state.loja);if(mapa)p.set('mapa',mapa);
  // Não limitar a 15/25/50 linhas nem aos 16.000 registros da consulta legada.
@@ -339,6 +342,7 @@ async function getMaps(mapa=''){
 }
 function counts(rows){const d={total:0,vencido:0,proximo:0,ok:0};for(const r of rows){d.total+=Number(r.quantidade)||0;const s=statusVal(r.validade,r.secao)[0];if(s==='Vencido')d.vencido++;else if(s==='A vencer')d.proximo++;else d.ok++;}return d;}
 async function dashboard(){
+ const renderEpoch=routeRenderEpoch;
  const base=await getMaps(),ativos=base.filter(x=>Number(x.quantidade)>0);
  const now=nowBrISO().slice(0,7),status=counts(ativos);
  const [queima,vencidos,estoque]=isAdmin()?await Promise.all([request('/queima').catch(e=>({_erro:e.message,registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
@@ -358,6 +362,8 @@ async function dashboard(){
  const fimPendente=pctAprovado+pctPendente;
  const atencao=ativos.filter(x=>statusVal(x.validade,x.secao)[0]!=='Vendável').sort((a,b)=>String(a.validade).localeCompare(String(b.validade)));
  const countStatus={dentro:ativos.filter(x=>statusVal(x.validade,x.secao)[0]==='Vendável').length,proximos:proximos.length,vencidos:status.vencido,sem:semMapa.length},total=Object.values(countStatus).reduce((a,b)=>a+b,0)||1;
+ // A resposta atrasada do Dashboard nunca pode substituir uma rota mais recente.
+ if(renderEpoch!==routeRenderEpoch||state.route!=='dashboard')return;
  $('#content').innerHTML=header('Painel Conferente','Indicadores calculados sobre os registros da loja. Mês de lançamento separado do vencimento.',
  `${isAdmin()?'<button id="dash-new" class="primary" type="button">Ir para Lançamentos</button>':''}<button id="dash-print" class="btn-outline" type="button">Imprimir resumo</button><button id="dash-refresh" class="btn-outline" type="button">Atualizar</button>`)+
  `<div class="stat-grid"><div class="card stat"><small>Total de lançamentos</small><strong>${base.length}</strong><p class="stat-subtitle">Lançamentos do mês: <b>${mes.length}</b></p></div>
@@ -442,7 +448,7 @@ async function lancamentos(emModal=false){
    $('#save-launch').textContent=transfer?'Registrar transferência':'Registrar produto';
  };}
  const validade=f.elements.validade_digitada;
- validade.oninput=()=>{const pos=validade.selectionStart;const old=validade.value;validade.value=mascararValidade(old);if(document.activeElement===validade&&pos===old.length)validade.setSelectionRange(validade.value.length,validade.value.length);};
+ validade.oninput=()=>{validade.removeAttribute('aria-invalid');const pos=validade.selectionStart;const old=validade.value;validade.value=mascararValidade(old);if(document.activeElement===validade&&pos===old.length)validade.setSelectionRange(validade.value.length,validade.value.length);};
  f.elements.ean.oninput=()=>{ident.innerHTML='<strong>Produto não consultado</strong><span>Consulte o EAN para confirmar a descrição.</span>';};
  f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};
  $('#lookup-product').onclick=async()=>{
@@ -456,6 +462,8 @@ async function lancamentos(emModal=false){
  f.onsubmit=async e=>{
    e.preventDefault();prepararAudio();if(state.pending){toast('Conclua ou confira a solicitação pendente antes de criar outra.',true);return;}
    let iso;try{iso=validadeParaISO(f.elements.validade_digitada.value);}catch(err){toast(err.message,true);validade.focus();return;}
+   if(iso<=nowBrISO()){toast('Não é permitido lançar produtos que vencem hoje ou já estão vencidos. Informe uma validade futura.',true);validade.focus();validade.setAttribute('aria-invalid','true');return;}
+   validade.removeAttribute('aria-invalid');
    const transfer=isAdmin()&&mode?.value==='transferencia';
    const x={requestId:newId(),ownerId:state.user.id,tipoRegistro:transfer?'transferencia':'mapa',ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:iso,quantidade:Number(f.elements.quantidade.value)};
    if(transfer){x.loja_origem=f.elements.loja_origem.value.trim();x.romaneio=f.elements.romaneio.value.trim();}
@@ -494,6 +502,7 @@ function tocarConfirmacao(){
 }
 let envioLancamentoEmAndamento=false;
 async function submitLaunch(data, form) {
+ if(!data?.validade||data.validade<=nowBrISO()){toast('Validade de hoje ou anterior não pode ser lançada. Corrija a data antes de continuar.',true);if(form?.elements?.validade_digitada)form.elements.validade_digitada.focus();return;}
  if(envioLancamentoEmAndamento)return;envioLancamentoEmAndamento=true;
  const btn = $('#save-launch');
  if (btn) btn.disabled = true;

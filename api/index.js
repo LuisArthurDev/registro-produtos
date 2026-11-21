@@ -436,6 +436,7 @@ async function mapas(req,actor,pathname,body,query){
     podeMapa(actor,mapa);
     const tipo=getTipo(mapa),ean=norm(body.ean),lote=norm(body.lote).toUpperCase(),validade=norm(body.validade),quantidade=Number(body.quantidade);
     if(!eanValido(ean)||!dataValida(validade)||lote.length<1||lote.length>100||!Number.isInteger(quantidade)||quantidade<1||quantidade>999999)throw bad('EAN, lote, validade ou quantidade inválidos.');
+    if(validade<=hojeSaoPaulo())throw bad('Não é permitido lançar produtos com validade de hoje ou anterior.',422);
     await verificarProdutoVisivel(ean,loja);
     if(tipo==='Estoque'&&new Date(validade)<new Date(new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}))){} // Não alterar regra de validade dos mapas especiais.
     if(tipo!=='funcionario')admin(actor);
@@ -955,6 +956,7 @@ async function genericRecords(req,actor,body,query,table,extras={}) {
       if(norm(data.loja_origem)===norm(loja))throw bad('A loja de origem deve ser diferente da loja de destino.',422);
       if(!norm(data.romaneio)||norm(data.romaneio).length>100)throw bad('Informe o romaneio com até 100 caracteres.',422);
       if(!dataValida(data.validade)||!norm(data.lote)||norm(data.lote).length>100)throw bad('Confira lote e validade.',422);
+      if(data.validade<=hojeSaoPaulo())throw bad('Não é permitido lançar transferências com validade de hoje ou anterior.',422);
       if(!/^[a-zA-Z0-9-]{16,100}$/.test(norm(body.requestId)))throw bad('Identificador único da transferência ausente.',422);
       data.request_id=norm(body.requestId);
       // O Procfit pode informar uma loja de origem ainda ausente do cadastro local.
