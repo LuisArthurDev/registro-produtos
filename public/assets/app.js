@@ -32,6 +32,64 @@ const chaveMapaDestino=(usuario)=>`rv_mapa_destino_v32_${usuario?.id||''}_${usua
 const AUTH_BRIDGE_KEY='rv_login_validado_para_lancamentos_v1';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
 const menus=[['dashboard','dashboard','Dashboard'],['mapas','clipboard','Mapa de Validade'],['controle-validade','calendar','Controle de Validade'],['perdas','package-x','Perdas'],['estoque-mapa','warehouse','Estoque'],['saldo','scale','Saldo Procfit'],['produtos','barcode','Produtos EAN'],['queima','recycle','Queima'],['transferencias','arrows','Transferências'],['sinalizacoes','flag','Sinalizados'],['usuarios','users','Funcionários'],['organizacao-secoes','board','Seções'],['auditoria','history','Histórico'],['pendencias','alert','Pendências'],['notificacoes','bell','Notificações']];
+// Indicadores de novidades do menu. Estado de leitura separado por usuário, loja e aba.
+const ABAS_NOVIDADES=['sinalizacoes','perdas','queima','transferencias'];
+const novidadesEstado={ultimos:{},consultando:false,temporizador:null,geracao:0};
+function chaveNovidades(aba){return `rv_novidades_v82_${state.user?.id||''}_${state.user?.loja||state.loja}_${aba}`;}
+function atualizarBolinhasNovidades(){
+ for(const aba of ABAS_NOVIDADES){
+  const btn=$('#menu [data-route="'+aba+'"]');if(!btn)continue;
+  const ultimo=novidadesEstado.ultimos[aba]||'';
+  const visto=localStorage.getItem(chaveNovidades(aba))||'';
+  const nova=!!ultimo&&(!visto||ultimo>visto);
+  btn.classList.toggle('nav-has-new',nova);
+  const titulo=btn.querySelector('.nav-label')?.textContent?.trim()||aba;
+  btn.setAttribute('aria-label',titulo+(nova?' — há novidades não vistas':''));
+  btn.title=titulo+(nova?' · novidades não vistas':'');
+ }
+}
+async function consultarNovidades(){
+ if(!state.user||!isAdmin()||novidadesEstado.consultando||document.hidden)return;
+ const geracao=novidadesEstado.geracao,usuario=state.user.id;
+ novidadesEstado.consultando=true;
+ try{
+  const resposta=await request('/abas/novidades',{timeout:12000,retries:0});
+  if(geracao!==novidadesEstado.geracao||state.user?.id!==usuario)return;
+  novidadesEstado.ultimos=resposta.ultimos||{};
+  atualizarBolinhasNovidades();
+ }catch(erro){console.warn('Indicadores de novidades indisponíveis:',erro.message);}
+ finally{novidadesEstado.consultando=false;}
+}
+function iniciarNovidades(){
+ novidadesEstado.geracao++;
+ novidadesEstado.ultimos={};
+ if(novidadesEstado.temporizador)clearInterval(novidadesEstado.temporizador);
+ novidadesEstado.temporizador=null;
+ if(!isAdmin()||IS_VIEW_PAGE||IS_LAUNCH_PAGE)return;
+ void consultarNovidades();
+ novidadesEstado.temporizador=setInterval(()=>{void consultarNovidades();},90000);
+}
+function marcarNovidadesComoVistas(aba){
+ if(!ABAS_NOVIDADES.includes(aba)||!isAdmin())return;
+ const ultima=novidadesEstado.ultimos[aba];
+ if(ultima){
+  const chave=chaveNovidades(aba),anterior=localStorage.getItem(chave)||'';
+  if(ultima>anterior)localStorage.setItem(chave,ultima);
+ }
+ atualizarBolinhasNovidades();
+ // Se ainda não houve consulta, buscar o marcador e registrar a abertura,
+ // sem considerar como vistas novidades recebidas em consultas posteriores.
+ if(!ultima){
+  const usuario=state.user?.id,geracao=novidadesEstado.geracao;
+  void request('/abas/novidades',{timeout:12000,retries:0}).then(r=>{
+   if(geracao!==novidadesEstado.geracao||usuario!==state.user?.id)return;
+   novidadesEstado.ultimos=r.ultimos||{};
+   const recebida=novidadesEstado.ultimos[aba];
+   if(recebida){const chave=chaveNovidades(aba),visto=localStorage.getItem(chave)||'';if(recebida>visto)localStorage.setItem(chave,recebida);}
+   atualizarBolinhasNovidades();
+  }).catch(()=>{});
+ }
+}
 const menusGeral=[['painel-geral','shield','Painel Geral'],['admins-geral','users','Administradores de loja'],['notificacoes','bell','Notificações']];
 // Ícones SVG locais: tamanhos e traços uniformes, sem dependência de CDN.
 const menuIconPaths={
@@ -243,6 +301,7 @@ function showApp(fromLogin=false){
   const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||m[0]==='notificacoes');
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
+  iniciarNovidades();
   const p=localStorage.getItem(PENDING_KEY);if(p){try{const saved=JSON.parse(p);state.pending=(!saved.ownerId||saved.ownerId===state.user.id)?saved:null;}catch{localStorage.removeItem(PENDING_KEY);}}
   const collapsed=localStorage.getItem(SIDEBAR_KEY)!=='0'; // padrão fechado; preferência de abertura continua salva
   $('#app-shell').classList.toggle('sidebar-collapsed',collapsed);
@@ -270,6 +329,7 @@ async function logout(call=true){
    await request('/logout',{method:'POST',timeout:7000}).catch(()=>{});
  }
  localStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(AUTH_BRIDGE_KEY);
+ if(novidadesEstado.temporizador)clearInterval(novidadesEstado.temporizador);novidadesEstado.temporizador=null;novidadesEstado.geracao++;novidadesEstado.ultimos={};
  state.token='';state.user=null;showLogin();
 }
 function mobileClose(){$('#sidebar').classList.remove('open');$('#menu-backdrop').hidden=true;}
@@ -301,7 +361,7 @@ function navigate(route){
  const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||m[0]==='notificacoes').map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
- state.route=route;location.hash=route;mobileClose();
+ state.route=route;marcarNovidadesComoVistas(route);location.hash=route;mobileClose();
  document.querySelectorAll('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
  $('#breadcrumb-current').textContent=[...menus,...menusGeral].find(m=>m[0]===route)?.[2]||'Painel';
  renderRoute(route);
@@ -2315,4 +2375,4 @@ $('#push-consent-no').onclick=async()=>{
 $('#btn-revalidar-sessao').onclick=()=>restoreSession();
 $('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp(true);}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
-$('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);network();instalarIconesDeAcao();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();
+$('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void consultarNovidades();});network();instalarIconesDeAcao();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

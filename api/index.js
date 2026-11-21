@@ -1478,6 +1478,18 @@ async function handle(req){
   if(pathname==='/login'&&req.method==='POST')return login(body);
   if(pathname.startsWith('/notificacoes/'))return tratarNotificacoes(req,{pathname,body,query,db,rows,one,authenticate,admin,actorLoja,audit});
   const {actor,sessao}=await authenticate(req);
+  // Indicadores pequenos: consultar apenas o lançamento mais recente por aba, sem carregar listas completas.
+  if(pathname==='/abas/novidades'&&req.method==='GET'){
+    admin(actor);
+    const loja=actorLoja(actor,query.get('loja'));
+    const fontes={sinalizacoes:['sinalizacoes','loja_id',false],perdas:['vencidos','loja_id',true],queima:['queima','loja_id',true],transferencias:['transferencias','loja_destino',true]};
+    const pares=await Promise.all(Object.entries(fontes).map(async ([aba,[tabela,coluna,excluir]])=>{
+      const params={[coluna]:`eq.${loja}`,select:'criado_em',order:'criado_em.desc',limit:'1',...(excluir?{excluido_em:'is.null'}:{})};
+      const resultado=await db(tabela,{params});
+      return [aba,resultado?.[0]?.criado_em||null];
+    }));
+    return {sucesso:true,ultimos:Object.fromEntries(pares)};
+  }
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
   if(pathname==='/conta/modo'&&req.method==='POST')return alternarModo(actor,sessao,body);
   if(pathname==='/conta/pin'&&req.method==='POST')return alterarMeuPinGeral(actor,sessao,body);
