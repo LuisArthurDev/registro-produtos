@@ -28,6 +28,7 @@ const H=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const TOKEN_KEY='rv_session', PENDING_KEY='rv_pending_launch', STORE_KEY='rv_loja';
 // A escolha é exclusiva de cada administrador/loja; não reutilizar entre logins.
 const chaveMapaDestino=(usuario)=>`rv_mapa_destino_v32_${usuario?.id||''}_${usuario?.loja||''}`;
+const chaveTipoCodigo=(usuario)=>`rv_codigo_tipo_v86_${usuario?.id||''}_${usuario?.loja||''}`;
 // Transferência efêmera de um login já confirmado no servidor para a página móvel.
 const AUTH_BRIDGE_KEY='rv_login_validado_para_lancamentos_v1';
 const special=['Estoque','Termolabil','Psicotropicos','Antibioticos'];
@@ -537,7 +538,14 @@ async function lancamentos(emModal=false){
    ident.innerHTML='<strong>Produto não consultado</strong><span>'+ (interno?'Consulte o Código Interno para identificar o produto.':'Consulte o EAN para confirmar a descrição.')+'</span>';
    $('#product-preview').textContent='Digite o código e consulte o catálogo.';
  }
- codigoTipo.onchange=()=>{codigoEntrada.value='';atualizarTipoCodigo();codigoEntrada.focus();};
+ // A escolha do identificador persiste por usuário e loja, inclusive ao reabrir o modal.
+ const chaveCodigo=chaveTipoCodigo(state.user);
+ const codigoSalvo=localStorage.getItem(chaveCodigo);
+ if(codigoSalvo==='ean'||codigoSalvo==='interno')codigoTipo.value=codigoSalvo;
+ codigoTipo.onchange=()=>{
+   localStorage.setItem(chaveCodigo,codigoTipo.value);
+   codigoEntrada.value='';atualizarTipoCodigo();codigoEntrada.focus();
+ };
  atualizarTipoCodigo();
  async function localizarProduto(){
    const codigo=codigoEntrada.value.trim(),interno=codigoTipo.value==='interno';
@@ -642,7 +650,7 @@ async function submitLaunch(data, form) {
      const tipoAnterior=form.elements.tipoRegistro?.value||'mapa';
      const codigoTipoAnterior=form.elements.codigo_tipo?.value||'ean';
      form.reset();
-     if(form.elements.codigo_tipo){form.elements.codigo_tipo.value=codigoTipoAnterior;form.elements.codigo_tipo.dispatchEvent(new Event('change'));}
+     if(form.elements.codigo_tipo){form.elements.codigo_tipo.value=codigoTipoAnterior;localStorage.setItem(chaveTipoCodigo(state.user),codigoTipoAnterior);form.elements.codigo_tipo.dispatchEvent(new Event('change'));}
      if(form.elements.mapa&&[...form.elements.mapa.options].some(o=>o.value===destinoAnterior)){
        form.elements.mapa.value=destinoAnterior;
        if(isAdmin())localStorage.setItem(chaveMapaDestino(state.user),destinoAnterior);

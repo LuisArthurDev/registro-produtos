@@ -1,6 +1,18 @@
-/* V85: somente o botão de fechar do modal Novo lançamento. */
-#launch-dialog .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-#launch-dialog .modal-head .modal-actions { display:flex; align-items:center; flex:0 0 auto; gap:8px; }
-#launch-dialog #launch-close { box-sizing:border-box !important; display:inline-flex !important; align-items:center !important; justify-content:center !important; flex:0 0 34px !important; width:34px !important; min-width:34px !important; max-width:34px !important; height:34px !important; min-height:34px !important; max-height:34px !important; padding:0 !important; margin:0 !important; border-radius:8px !important; font-size:22px !important; line-height:1 !important; }
-#launch-dialog #launch-close .icon-action-text { display:none !important; }
-#launch-dialog #launch-close .icon-action-svg { width:17px !important; height:17px !important; }
+/* V86: modal Novo lançamento — botão de fechar e contenção responsiva. */
+#launch-dialog { box-sizing:border-box; width:min(960px,calc(100vw - 24px)); max-width:calc(100vw - 24px); padding:0; overflow-x:hidden; }
+#launch-dialog, #launch-dialog * { box-sizing:border-box; }
+#launch-dialog > .modal-head { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-width:0; padding:12px 16px; }
+#launch-dialog > .modal-head > strong { min-width:0; }
+#launch-dialog > .modal-head .modal-actions { display:flex; flex:0 1 auto; align-items:center; justify-content:flex-end; gap:8px; min-width:0; }
+#launch-dialog #launch-close { appearance:none; display:grid!important; place-items:center!important; flex:0 0 36px!important; width:36px!important; min-width:36px!important; max-width:36px!important; height:36px!important; min-height:36px!important; max-height:36px!important; margin:0!important; padding:0!important; border-radius:9px!important; white-space:nowrap!important; overflow:hidden!important; font-size:0!important; line-height:1!important; }
+#launch-dialog #launch-close > span { display:block; font-size:25px!important; font-weight:400; line-height:1; }
+#launch-dialog #launch-close .icon-action-label, #launch-dialog #launch-close .icon-action-text, #launch-dialog #launch-close svg { display:none!important; }
+#launch-dialog .launch-body { width:100%; min-width:0; max-width:100%; overflow-x:hidden; }
+#launch-dialog .launch-body > *, #launch-dialog .launch-body .split, #launch-dialog .launch-body .card, #launch-dialog .launch-body .form-grid { min-width:0; max-width:100%; }
+#launch-dialog .launch-body .split { width:100%; }
+#launch-dialog input, #launch-dialog select { max-width:100%; }
+@media (max-width:760px) {
+ #launch-dialog .launch-body .split { display:grid; grid-template-columns:minmax(0,1fr); }
+ #launch-dialog > .modal-head { padding:10px 12px; }
+ #launch-dialog #launch-to-panel { max-width:min(58vw,210px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
