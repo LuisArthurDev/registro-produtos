@@ -481,9 +481,17 @@ async function lancamentos(emModal=false){
  const notice=saved?`<div class="notice warn">Existe uma solicitação ainda não confirmada neste dispositivo (EAN ${H(saved.ean)}). Use <strong>Retomar tentativa</strong> antes de criar outra.</div>`:'';
  const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/visualizacao.html">◫ Visualizar meu mapa</a>${(isAdmin()||isGerente())?'<a class="btn-outline" href="/#dashboard">← Painel</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
  const specialOptions=special.map(m=>`<option value="${H(m)}">${H(m)}</option>`).join('');
- const adminControls=(isAdmin()||isGerente())?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa especial</option>${isAdmin()?'<option value="transferencia">Transferência recebida</option>':''}</select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${specialOptions}</select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
+ // Os administradores podem registrar diretamente nos mapas de funcionários ativos.
+ // Gerentes mantêm apenas as abas especiais, respeitando suas permissões.
+ let employeeOptions='';
+ if(isAdmin()){
+   const funcionarios=await staffList();
+   employeeOptions=funcionarios.filter(u=>u.perfil==='funcionario'&&u.ativo===true&&!u.excluido_em)
+     .map(u=>`<option value="${H(u.nome)}">${H(u.nome)}</option>`).join('');
+ }
+ const adminControls=(isAdmin()||isGerente())?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa do funcionário ou especial</option>${isAdmin()?'<option value="transferencia">Transferência recebida</option>':''}</select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${isAdmin()?`<optgroup label="Funcionários ativos">${employeeOptions}</optgroup>`:""}<optgroup label="Abas especiais">${specialOptions}</optgroup></select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
    `<div class="notice full"><strong>Mapa de destino:</strong> ${H(state.user.nome)}. O destino é definido automaticamente pelo seu login.</div>`;
- const launchMarkup=header('Novo lançamento','Lançamento no mapa da sessão; administradores também podem lançar nas abas especiais ou registrar transferências.',standaloneActions)+
+ const launchMarkup=header('Novo lançamento','Registre produtos no mapa selecionado; funcionários lançam no próprio mapa, e gerentes nas abas especiais.',standaloneActions)+
  `<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}
  <form id="form-launch" class="stack"><div class="form-grid">${adminControls}
  <div class="full product-identity" id="product-identity" aria-live="polite"><strong>Produto não consultado</strong><span>Leia ou digite um EAN para identificar o produto.</span></div>
@@ -500,9 +508,9 @@ async function lancamentos(emModal=false){
  if((isAdmin()||isGerente())&&f.elements.mapa){
    const key=chaveMapaDestino(state.user);
    const guardado=localStorage.getItem(key);
-   if(special.includes(guardado))f.elements.mapa.value=guardado;
+   if([...f.elements.mapa.options].some(o=>o.value===guardado))f.elements.mapa.value=guardado;
    f.elements.mapa.addEventListener('change',()=>{
-     if(special.includes(f.elements.mapa.value))localStorage.setItem(key,f.elements.mapa.value);
+     if(f.elements.mapa.value)localStorage.setItem(key,f.elements.mapa.value);
    });
  }
  if(IS_LAUNCH_PAGE){const exit=$('#launch-logout-standalone');if(exit)exit.onclick=()=>logout();}
@@ -605,7 +613,7 @@ async function submitLaunch(data, form) {
      const destinoAnterior=form.elements.mapa?.value||'';
      const tipoAnterior=form.elements.tipoRegistro?.value||'mapa';
      form.reset();
-     if(form.elements.mapa&&special.includes(destinoAnterior)){
+     if(form.elements.mapa&&[...form.elements.mapa.options].some(o=>o.value===destinoAnterior)){
        form.elements.mapa.value=destinoAnterior;
        if(isAdmin())localStorage.setItem(chaveMapaDestino(state.user),destinoAnterior);
      }

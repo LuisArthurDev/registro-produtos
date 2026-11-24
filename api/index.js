@@ -456,7 +456,11 @@ async function mapas(req,actor,pathname,body,query){
     await verificarProdutoVisivel(ean,loja);
     if(tipo==='Estoque'&&new Date(validade)<new Date(new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}))){} // Não alterar regra de validade dos mapas especiais.
     if(tipo!=='funcionario')admin(actor);
-    if(['admin','gerente'].includes(actor.perfil) && tipo==='funcionario')throw bad('Administradores só podem lançar nas abas especiais. O mapa de funcionário pertence ao próprio login.',403);
+    if(tipo==='funcionario'&&actor.perfil==='gerente')throw bad('Gerentes só podem lançar nas abas especiais.',403);
+    if(tipo==='funcionario'&&actor.perfil==='admin'){
+      const destino=await one('usuarios',{loja_id:`eq.${loja}`,nome_normalizado:`eq.${normalizarNome(mapa)}`,ativo:'eq.true',select:'id,nome,perfil,ativo'});
+      if(!destino||destino.perfil!=='funcionario')throw bad('Escolha um funcionário ativo da loja para o lançamento.',403);
+    }
     if(actor.perfil==='geral')throw bad('Administrador Geral não realiza lançamentos no Painel Conferente.',403);
     const registro=await db('rpc/gravar_lancamento',{method:'POST',body:{p_request_id:norm(body.requestId),p_usuario_id:actor.id,p_loja_id:loja,p_mapa_nome:mapa,p_tipo_mapa:tipo,p_ean:ean,p_lote:lote,p_validade:validade,p_quantidade:quantidade,p_confirmar_duplicado:body.confirmarDuplicado===true}});
     if(registro.status==='saved'){
