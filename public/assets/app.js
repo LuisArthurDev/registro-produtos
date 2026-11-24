@@ -495,7 +495,8 @@ async function lancamentos(emModal=false){
  `<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}
  <form id="form-launch" class="stack"><div class="form-grid">${adminControls}
  <div class="full product-identity" id="product-identity" aria-live="polite"><strong>Produto não consultado</strong><span>Leia ou digite um EAN para identificar o produto.</span></div>
- <div class="ean-field"><label for="launch-ean">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" maxlength="14" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div>
+ <label class="full" for="launch-code-mode">Identificar produto por<select id="launch-code-mode" name="codigo_tipo"><option value="ean">EAN (código de barras)</option><option value="interno">Código Interno</option></select></label>
+ <div class="ean-field"><label for="launch-ean" id="launch-code-label">EAN (8 a 14 dígitos)</label><div class="ean-input-row"><input id="launch-ean" name="ean" required inputmode="numeric" pattern="[0-9]{8,14}" autocomplete="off" maxlength="14" placeholder="Bipe ou digite o EAN" ${IS_LAUNCH_PAGE?'':'autofocus'}><button class="btn-outline ean-camera-button" type="button" id="scan-ean" aria-label="Ler EAN pela câmera"><span aria-hidden="true">📷</span><span>Ler câmera</span></button></div></div>
  <label>Lote<input name="lote" required maxlength="100" placeholder="Lote da embalagem"></label>
  <label>Validade (DD/MM/AAAA ou MM/AA)<input id="launch-validade" name="validade_digitada" required type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ex.: 31/01/2026 ou 01/26"><small>Digite os números em sequência: 31122026 → 31/12/2026. Somente mês e ano usa o último dia do mês.</small></label>
  <label>Quantidade<input name="quantidade" required type="number" min="1" max="999999" step="1" value="1"></label></div>
@@ -525,25 +526,52 @@ async function lancamentos(emModal=false){
    f.elements.romaneio.required=transfer;
    $('#save-launch').textContent=transfer?'Registrar transferência':'Registrar produto';
  };}
+ const codigoTipo=f.elements.codigo_tipo, codigoEntrada=f.elements.ean;
+ function atualizarTipoCodigo(){
+   const interno=codigoTipo.value==='interno';
+   $('#launch-code-label').textContent=interno?'Código Interno':'EAN (8 a 14 dígitos)';
+   codigoEntrada.pattern=interno?'[0-9]{1,20}':'[0-9]{8,14}';
+   codigoEntrada.maxLength=interno?20:14;
+   codigoEntrada.placeholder=interno?'Digite o Código Interno':'Bipe ou digite o EAN';
+   $('#scan-ean').hidden=interno;
+   ident.innerHTML='<strong>Produto não consultado</strong><span>'+ (interno?'Consulte o Código Interno para identificar o produto.':'Consulte o EAN para confirmar a descrição.')+'</span>';
+   $('#product-preview').textContent='Digite o código e consulte o catálogo.';
+ }
+ codigoTipo.onchange=()=>{codigoEntrada.value='';atualizarTipoCodigo();codigoEntrada.focus();};
+ atualizarTipoCodigo();
+ async function localizarProduto(){
+   const codigo=codigoEntrada.value.trim(),interno=codigoTipo.value==='interno';
+   if(!new RegExp(interno?'^[0-9]{1,20}$':'^[0-9]{8,14}$').test(codigo))throw new Error(interno?'Informe um Código Interno numérico válido.':'Informe um EAN de 8 a 14 dígitos.');
+   const d=await request('/produtos?q='+encodeURIComponent(codigo)+'&limite=20');
+   const produto=(d.produtos||[]).find(p=>String(interno?p.codigo_interno:p.ean||'').replace(/^0+(?=\d)/,'')===codigo.replace(/^0+(?=\d)/,''));
+   if(!produto)throw new Error((interno?'Código Interno':'EAN')+' não encontrado no catálogo.');
+   if(!/^\d{8,14}$/.test(String(produto.ean||'')))throw new Error('Produto sem EAN válido no catálogo. Corrija o cadastro antes de lançar.');
+   return produto;
+ }
  const validade=f.elements.validade_digitada;
  validade.oninput=()=>{validade.removeAttribute('aria-invalid');const pos=validade.selectionStart;const old=validade.value;validade.value=mascararValidade(old);if(document.activeElement===validade&&pos===old.length)validade.setSelectionRange(validade.value.length,validade.value.length);};
- f.elements.ean.oninput=()=>{ident.innerHTML='<strong>Produto não consultado</strong><span>Consulte o EAN para confirmar a descrição.</span>';};
- f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:f.elements.ean,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};
+ codigoEntrada.oninput=()=>{ident.innerHTML='<strong>Produto não consultado</strong><span>Consulte o código para confirmar a descrição.</span>';};
+ f.querySelector('#scan-ean').onclick=()=>{try{abrirScannerEAN({input:codigoEntrada,onDetected:()=>{if(f.isConnected)f.querySelector('#lookup-product')?.click();}});}catch(e){toast(e.message,true);}};
  $('#lookup-product').onclick=async()=>{
-   const ean=f.elements.ean.value.trim();if(!/^\d{8,14}$/.test(ean))return toast('Digite um EAN válido.',true);
    $('#product-preview').textContent='Consultando…';ident.textContent='Consultando produto…';
-   try{const d=await request('/produtos?q='+encodeURIComponent(ean)+'&limite=2');const r=(d.produtos||[]).find(p=>p.ean===ean)||d.produtos?.[0];
-     ident.innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><span>${H(r.secao||'Seção não informada')} · Código interno: ${H(r.codigo_interno||'—')}</span>`:'<strong>Produto não localizado no catálogo</strong><span>Confirme o EAN antes de salvar.</span>';
-     $('#product-preview').innerHTML=r?`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`:'Produto não localizado. Confira o EAN e prossiga, se estiver correto.';
-   }catch(e){ident.innerHTML='<strong>Catálogo indisponível</strong><span>Confira o EAN manualmente.</span>';$('#product-preview').textContent='Consulta indisponível: '+e.message;}
+   try{const r=await localizarProduto();
+     ident.innerHTML=`<strong>${H(r.descricao||'Sem descrição')}</strong><span>${H(r.secao||'Seção não informada')} · Código interno: ${H(r.codigo_interno||'—')} · EAN: ${H(r.ean)}</span>`;
+     $('#product-preview').innerHTML=`<strong>${H(r.descricao||'Sem descrição')}</strong><div class="detail-meta" style="margin-top:12px"><div><small>Código interno</small><strong>${H(r.codigo_interno||'—')}</strong></div><div><small>EAN</small><strong>${H(r.ean)}</strong></div><div><small>Seção</small><strong>${H(r.secao||'—')}</strong></div></div>`;
+   }catch(e){ident.innerHTML='<strong>Produto não identificado</strong><span>Confira o código informado.</span>';$('#product-preview').textContent=e.message;toast(e.message,true);}
  };
  f.onsubmit=async e=>{
    e.preventDefault();prepararAudio();if(state.pending){toast('Conclua ou confira a solicitação pendente antes de criar outra.',true);return;}
    let iso;try{iso=validadeParaISO(f.elements.validade_digitada.value);}catch(err){toast(err.message,true);validade.focus();return;}
    if(iso<=nowBrISO()){toast('Não é permitido lançar produtos que vencem hoje ou já estão vencidos. Informe uma validade futura.',true);validade.focus();validade.setAttribute('aria-invalid','true');return;}
    validade.removeAttribute('aria-invalid');
+   // A API grava por EAN; o Código Interno é convertido pelo catálogo antes de criar a tentativa.
+   let eanResolvido=codigoEntrada.value.trim();
+   if(codigoTipo.value==='interno'){
+     try{const produto=await localizarProduto();eanResolvido=String(produto.ean);}
+     catch(error){toast(error.message,true);codigoEntrada.focus();return;}
+   }
    const transfer=isAdmin()&&mode?.value==='transferencia';
-   const x={requestId:newId(),ownerId:state.user.id,tipoRegistro:transfer?'transferencia':'mapa',ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:iso,quantidade:Number(f.elements.quantidade.value)};
+   const x={requestId:newId(),ownerId:state.user.id,tipoRegistro:transfer?'transferencia':'mapa',ean:eanResolvido,lote:f.elements.lote.value.trim(),validade:iso,quantidade:Number(f.elements.quantidade.value)};
    if(transfer){x.loja_origem=f.elements.loja_origem.value.trim();x.romaneio=f.elements.romaneio.value.trim();}
    else x.mapa=(isAdmin()||isGerente())?f.elements.mapa.value:state.user.nome;
    if(!/^\d{8,14}$/.test(x.ean)||!x.lote||x.quantidade<=0||(transfer&&(!/^\d{1,12}$/.test(x.loja_origem)||!x.romaneio))){toast('Confira os campos do lançamento.',true);return;}
@@ -612,7 +640,9 @@ async function submitLaunch(data, form) {
      // transferências) e o tipo de lançamento. O select deixa de voltar a Estoque.
      const destinoAnterior=form.elements.mapa?.value||'';
      const tipoAnterior=form.elements.tipoRegistro?.value||'mapa';
+     const codigoTipoAnterior=form.elements.codigo_tipo?.value||'ean';
      form.reset();
+     if(form.elements.codigo_tipo){form.elements.codigo_tipo.value=codigoTipoAnterior;form.elements.codigo_tipo.dispatchEvent(new Event('change'));}
      if(form.elements.mapa&&[...form.elements.mapa.options].some(o=>o.value===destinoAnterior)){
        form.elements.mapa.value=destinoAnterior;
        if(isAdmin())localStorage.setItem(chaveMapaDestino(state.user),destinoAnterior);
@@ -620,7 +650,7 @@ async function submitLaunch(data, form) {
      if(form.elements.tipoRegistro)form.elements.tipoRegistro.value=tipoAnterior;
      form.elements.quantidade.value = 1;
      form.querySelector('#launch-kind')?.dispatchEvent(new Event('change'));
-     form.querySelector('#product-identity').innerHTML='<strong>Produto não consultado</strong><span>Leia o próximo EAN.</span>';
+     form.querySelector('#product-identity').innerHTML='<strong>Produto não consultado</strong><span>Informe o próximo código.</span>';
      form.elements.ean.focus();
      return;
    }

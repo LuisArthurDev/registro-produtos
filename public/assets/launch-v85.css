@@ -1,0 +1,6 @@
+/* V85: somente o botão de fechar do modal Novo lançamento. */
+#launch-dialog .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#launch-dialog .modal-head .modal-actions { display:flex; align-items:center; flex:0 0 auto; gap:8px; }
+#launch-dialog #launch-close { box-sizing:border-box !important; display:inline-flex !important; align-items:center !important; justify-content:center !important; flex:0 0 34px !important; width:34px !important; min-width:34px !important; max-width:34px !important; height:34px !important; min-height:34px !important; max-height:34px !important; padding:0 !important; margin:0 !important; border-radius:8px !important; font-size:22px !important; line-height:1 !important; }
+#launch-dialog #launch-close .icon-action-text { display:none !important; }
+#launch-dialog #launch-close .icon-action-svg { width:17px !important; height:17px !important; }
