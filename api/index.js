@@ -179,7 +179,8 @@ async function formulasSemVinculo(registros){
  }
  return r=>r.produtos?.formula_especial===true||m.get(r.ean)===true;
 }
-const cleanUser=u=>({id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.titular_painel_geral===true&&(u.perfil==='geral'||u.acesso_geral===true),administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
+const matriculaNormalizada=v=>{const n=String(v??'').trim();if(!n)return null;if(!/^\d{1,20}$/.test(n))throw bad('Matrícula deve conter somente números.',422);const normal=n.replace(/^0+(?=\d)/,'');if(normal==='0')throw bad('Matrícula não pode conter apenas zeros.',422);return normal;};
+const cleanUser=u=>({matricula:u.matricula||null,pinInicialPendente:u.pin_inicial_pendente===true,id:u.id,nome:u.nome,loja:u.loja_id,perfil:u.perfil,perfilBase:u.perfilBase||u.perfil,acessoGeral:u.titular_painel_geral===true&&(u.perfil==='geral'||u.acesso_geral===true),administrador:u.perfil!=='funcionario',administradorGeral:u.perfil==='geral',especial:u.especial,ativo:u.ativo,celularProprio:u.celular_proprio});
 function requestBody(req){if(req.body&&typeof req.body==='object')return req.body;try{return JSON.parse(req.body||'{}');}catch{throw bad('Corpo JSON inválido.');}}
 function actorLoja(actor,requested){
   if(actor.perfil==='geral'){
@@ -220,8 +221,8 @@ async function authenticate(req){
 }
 async function login(body) {
   const nome=normalizarNome(body.nome), pin=String(body.pin??'');
-  if(nome.length<2||nome.length>120||!/^\d{4,12}$/.test(pin))throw bad('Credenciais inválidas.',401);
-  let candidatos=await rows('usuarios',{nome_normalizado:`eq.${nome}`,ativo:'eq.true',select:'*'},100);
+  if(nome.length<1||nome.length>120||!/^\d{4,12}$/.test(pin))throw bad('Credenciais inválidas.',401);
+  let candidatos=/^\d{1,20}$/.test(nome)?await rows('usuarios',{matricula:`eq.${matriculaNormalizada(nome)}`,ativo:'eq.true',select:'*'},100):await rows('usuarios',{nome_normalizado:`eq.${nome}`,ativo:'eq.true',select:'*'},100);
   if(body.loja) {const sameStore=candidatos.filter(u=>u.loja_id===String(body.loja));candidatos=sameStore.length?sameStore:candidatos.filter(u=>u.perfil==='geral'&&u.loja_id===null);}
   if(candidatos.length>1)throw bad('Há nomes iguais em mais de uma loja. Informe o número da loja.',409);
   const user=candidatos[0];
@@ -287,6 +288,21 @@ async function alterarMeuPinGeral(actor,sessao,body){
   if(ok!==true)throw bad('Não foi possível alterar seu PIN. Atualize a página e tente novamente.',409);
   await audit(actor,'alterar_proprio_pin',{outras_sessoes_encerradas:true});
   return {sucesso:true,mensagem:'Seu PIN foi atualizado e as demais sessões foram encerradas.'};
+}
+async function alterarPinInicial(actor,body,sessao){
+ if(actor.pin_inicial_pendente!==true)throw bad('A troca inicial de PIN já foi utilizada.',403);
+ const atual=String(body.pinAtual??''),novo=String(body.pinNovo??''),conf=String(body.confirmacao??'');
+ if(actor.bloqueado_ate&&Date.parse(actor.bloqueado_ate)>Date.now())throw bad('PIN temporariamente bloqueado.',429);
+ if(!validarPin(atual,actor.pin_hash)){
+  const tentativas=(Number(actor.tentativas)||0)+1;
+  await db('usuarios',{method:'PATCH',params:{id:`eq.${actor.id}`},body:{tentativas:tentativas>=5?0:tentativas,bloqueado_ate:tentativas>=5?new Date(Date.now()+15*60000).toISOString():null}});
+  throw bad(tentativas>=5?'Muitas tentativas. Aguarde 15 minutos.':'PIN atual incorreto.',tentativas>=5?429:401);
+ }
+ if(novo!==conf||!/^\d{6,12}$/.test(novo)||novo===atual)throw bad('Informe um novo PIN diferente, de 6 a 12 dígitos, com confirmação.',422);
+ const anterior=actor.pin_hash,alterados=await db('usuarios',{method:'PATCH',params:{id:`eq.${actor.id}`,pin_hash:`eq.${anterior}`,pin_inicial_pendente:'eq.true'},body:{pin_hash:hashPin(novo),pin_inicial_pendente:false,tentativas:0,bloqueado_ate:null},prefer:'return=representation'});
+ if(!alterados?.length)throw bad('PIN já alterado em outra sessão. Entre novamente.',409);
+ await db('sessoes',{method:'DELETE',params:{usuario_id:`eq.${actor.id}`,token_hash:`neq.${sessao.token_hash}`}});
+ await audit(actor,'alterar_pin_inicial',{outras_sessoes_encerradas:true});return {sucesso:true,mensagem:'PIN alterado. A redefinição inicial não está mais disponível.'};
 }
 async function produtos(req,actor,pathname,body,query){
  if(req.method==='GET'&&pathname==='/produtos/formulas'){
@@ -440,7 +456,7 @@ async function mapas(req,actor,pathname,body,query){
     await verificarProdutoVisivel(ean,loja);
     if(tipo==='Estoque'&&new Date(validade)<new Date(new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}))){} // Não alterar regra de validade dos mapas especiais.
     if(tipo!=='funcionario')admin(actor);
-    if(actor.perfil==='admin' && tipo==='funcionario')throw bad('Administradores só podem lançar nas abas especiais. O mapa de funcionário pertence ao próprio login.',403);
+    if(['admin','gerente'].includes(actor.perfil) && tipo==='funcionario')throw bad('Administradores só podem lançar nas abas especiais. O mapa de funcionário pertence ao próprio login.',403);
     if(actor.perfil==='geral')throw bad('Administrador Geral não realiza lançamentos no Painel Conferente.',403);
     const registro=await db('rpc/gravar_lancamento',{method:'POST',body:{p_request_id:norm(body.requestId),p_usuario_id:actor.id,p_loja_id:loja,p_mapa_nome:mapa,p_tipo_mapa:tipo,p_ean:ean,p_lote:lote,p_validade:validade,p_quantidade:quantidade,p_confirmar_duplicado:body.confirmarDuplicado===true}});
     if(registro.status==='saved'){
@@ -694,7 +710,7 @@ async function stock(req,actor,pathname,body,query){
 async function staff(req,actor,body,query){
   admin(actor);const loja=actor.perfil==='geral'?norm(body.loja||query.get('loja')):actor.loja_id;
   if(req.method==='GET'){
-    const params={select:'id,nome,loja_id,perfil,especial,ativo,celular_proprio',excluido_em:'is.null',order:'nome.asc'};
+    const params={select:'id,nome,matricula,pin_inicial_pendente,loja_id,perfil,especial,ativo,celular_proprio',excluido_em:'is.null',order:'nome.asc'};
     if(actor.perfil!=='geral'||loja)params.loja_id=`eq.${loja}`;
     return {sucesso:true,usuarios:await rows('usuarios',params,200)};
   }
@@ -703,11 +719,11 @@ async function staff(req,actor,body,query){
     if(nome.length<2||nome.length>120)throw bad('Nome inválido.');
     if(specials.some(x=>normalizarNome(x)===normalizarNome(nome))||normalizarNome(nome)==='sem responsavel')throw bad('Nome reservado para mapa especial ou pendências.');
     const perfil=body.perfil||'funcionario';
-    if(!['funcionario','admin'].includes(perfil))throw bad('O perfil Geral é exclusivo e não pode ser criado por este painel.',403);
+    if(!['funcionario','admin','gerente'].includes(perfil))throw bad('O perfil Geral é exclusivo e não pode ser criado por este painel.',403);
     if(actor.perfil==='admin'&&perfil!=='funcionario')throw bad('Somente o Geral pode criar administradores.',403);
-    if(perfil==='admin')geral(actor);
+    if(['admin','gerente'].includes(perfil))geral(actor);
     if(!loja)throw bad('Loja obrigatória.');
-    const data={nome,nome_normalizado:normalizarNome(nome),loja_id:loja,perfil,ativo:true,especial:body.especial===true,pin_hash:hashPin(body.pin)};
+    const data={nome,nome_normalizado:normalizarNome(nome),loja_id:loja,perfil,ativo:true,especial:body.especial===true,matricula:matriculaNormalizada(body.matricula),pin_hash:hashPin(body.pin),pin_inicial_pendente:true};
     const u=await db('usuarios',{method:'POST',body:data,prefer:'return=representation'});
     await audit(actor,'cadastrar_usuario',{id:u[0].id,nome});return {sucesso:true,usuario:cleanUser(u[0])};
   }
@@ -719,7 +735,8 @@ async function staff(req,actor,body,query){
     if(body.ativo!==undefined)patch.ativo=!!body.ativo;
     if(body.especial!==undefined)patch.especial=!!body.especial;
     if(body.celular_proprio!==undefined)patch.celular_proprio=!!body.celular_proprio;
-    if(body.pin!==undefined){patch.pin_hash=hashPin(body.pin);patch.tentativas=0;patch.bloqueado_ate=null;}
+    if(body.pin!==undefined){patch.pin_hash=hashPin(body.pin);patch.pin_inicial_pendente=true;patch.tentativas=0;patch.bloqueado_ate=null;}
+    if(body.matricula!==undefined)patch.matricula=matriculaNormalizada(body.matricula);
     if(body.nome!==undefined){
       if(user.perfil!=='funcionario'||actor.perfil!=='admin')throw bad('A renomeação de funcionários deve ser realizada pela loja.',403);
       if(Object.keys(body).some(k=>!['id','nome'].includes(k)))throw bad('Altere o nome separadamente dos demais campos.',422);
@@ -728,9 +745,13 @@ async function staff(req,actor,body,query){
       const resultado=await db('rpc/renomear_funcionario_v12',{method:'POST',body:{p_administrador:actor.id,p_loja:actor.loja_id,p_funcionario:user.id,p_nome:novo,p_nome_normalizado:normalizado}});
       return resultado;
     }
-    if(body.perfil!==undefined){if(!['funcionario','admin'].includes(body.perfil))throw bad('O perfil Geral é exclusivo e não pode ser atribuído por este painel.',403);if(actor.perfil!=='geral'&&body.perfil!=='funcionario')throw bad('Somente o Administrador Geral define administradores.',403);if(body.perfil!==user.perfil&&actor.perfil!=='geral')throw bad('Alteração de perfil restrita ao Administrador Geral.',403);patch.perfil=body.perfil;}
+    if(body.perfil!==undefined){if(!['funcionario','admin','gerente'].includes(body.perfil))throw bad('O perfil Geral é exclusivo e não pode ser atribuído por este painel.',403);if(actor.perfil!=='geral'&&body.perfil!=='funcionario')throw bad('Somente o Administrador Geral define administradores.',403);if(body.perfil!==user.perfil&&actor.perfil!=='geral')throw bad('Alteração de perfil restrita ao Administrador Geral.',403);patch.perfil=body.perfil;}
     if(!Object.keys(patch).length)throw bad('Nenhuma alteração.');
-    await db('usuarios',{method:'PATCH',params:{id:`eq.${id}`},body:patch});
+    if(body.ativo===false&&user.ativo===true&&user.perfil==='funcionario'){
+      await db('rpc/inativar_funcionario_desvincular_v83',{method:'POST',body:{p_loja:user.loja_id,p_ator:actor.id,p_funcionario:id}});
+      delete patch.ativo;
+    }
+    if(Object.keys(patch).length)await db('usuarios',{method:'PATCH',params:{id:`eq.${id}`},body:patch});
     if(body.ativo===false||body.pin!==undefined)await db('sessoes',{method:'DELETE',params:{usuario_id:`eq.${id}`}});
     await audit(actor,body.pin!==undefined?'redefinir_pin':'editar_usuario',{id,campos:Object.keys(patch).filter(x=>x!=='pin_hash')});return {sucesso:true};
   }
@@ -1252,10 +1273,10 @@ async function painelGeral(actor) {
   geral(actor);
   const [lojas,admins,usuarios]=await Promise.all([
     rows('lojas',{select:'id,nome',order:'id.asc'},500,5),
-    rows('usuarios',{perfil:'eq.admin',select:'id,nome,loja_id,perfil,ativo',order:'loja_id.asc'},500,5),
+    rows('usuarios',{perfil:'in.(admin,gerente)',select:'id,nome,loja_id,perfil,ativo,matricula,pin_inicial_pendente',order:'loja_id.asc'},500,5),
     rows('usuarios',{select:'loja_id,perfil,ativo'},500,10)
   ]);
-  return {sucesso:true,lojas,administradores:admins,totais:{lojas:lojas.length,administradores:admins.length,funcionarios:usuarios.filter(u=>u.perfil==='funcionario').length}};
+  return {sucesso:true,lojas,administradores:admins,totais:{lojas:lojas.length,administradores:admins.filter(x=>x.perfil==='admin').length,gerentes:admins.filter(x=>x.perfil==='gerente').length,funcionarios:usuarios.filter(u=>u.perfil==='funcionario').length}};
 }
 async function encaminharMapa(req,actor,body){
   admin(actor);
@@ -1401,7 +1422,7 @@ async function retirarDanificado(req,actor,body){
 // Organização visual das seções: nenhuma operação nesta rota altera registros de mapas.
 async function organizarSecoes(req,actor,body){
  // A URL histórica é mantida, mas os cartões e responsáveis agora são por GRUPO.
- if(actor.perfil!=='admin'||!actor.loja_id)throw bad('Organização exclusiva do administrador da loja.',403);
+ if(!['admin','gerente'].includes(actor.perfil)||!actor.loja_id)throw bad('Organização exclusiva da gestão da loja.',403);
  const loja=actor.loja_id;
  const carregar=()=>db('rpc/resumo_organizacao_grupos',{method:'POST',body:{p_loja:loja}});
  if(req.method==='GET'){
@@ -1418,7 +1439,7 @@ async function organizarSecoes(req,actor,body){
    const alteracoes=body.alteracoes;
    if(!Array.isArray(alteracoes)||alteracoes.length<1||alteracoes.length>500)
      throw bad('Selecione de 1 a 500 grupos para salvar.',422);
-   const resumo=await carregar(),validos=new Map((resumo?.grupos||[]).map(x=>[chaveSecao(x.chave),x]));
+   const resumo=await carregar(),validos=new Map((resumo?.grupos||[]).flatMap(x=>[x.chave,x.nome].filter(Boolean).map(k=>[chaveSecao(k),x])));
    const vistos=new Set(),ids=new Set(),itens=[];
    for(const item of alteracoes){
      const chave=chaveSecao(item?.grupo);
@@ -1478,6 +1499,15 @@ async function handle(req){
   if(pathname==='/login'&&req.method==='POST')return login(body);
   if(pathname.startsWith('/notificacoes/'))return tratarNotificacoes(req,{pathname,body,query,db,rows,one,authenticate,admin,actorLoja,audit});
   const {actor,sessao}=await authenticate(req);
+  if(actor.perfil==='gerente'){
+    const permitidasLeitura=['/sessao','/abas/novidades','/mapas','/mapas/sinalizacoes-queima','/produtos','/produtos/secoes','/produtos/formulas','/organizacao-secoes','/vencidos','/queima','/sinalizacoes','/transferencias','/estoque','/pendencias'];
+    const consulta=req.method==='GET'&&permitidasLeitura.some(v=>pathname===v||pathname.startsWith(v+'/'));
+    const lancamento=req.method==='POST'&&pathname==='/mapas';
+    const secoes=req.method==='POST'&&pathname==='/organizacao-secoes';
+    const loginPin=pathname==='/conta/pin-inicial'&&req.method==='POST';
+    const sair=pathname==='/logout'&&req.method==='POST';
+    if(!(consulta||lancamento||secoes||loginPin||sair))throw bad('A operação não faz parte das permissões de Gerente.',403);
+  }
   // Indicadores pequenos: consultar apenas o lançamento mais recente por aba, sem carregar listas completas.
   if(pathname==='/abas/novidades'&&req.method==='GET'){
     admin(actor);
@@ -1493,6 +1523,7 @@ async function handle(req){
   if(pathname==='/sessao'&&req.method==='GET')return {sucesso:true,usuario:cleanUser(actor)};
   if(pathname==='/conta/modo'&&req.method==='POST')return alternarModo(actor,sessao,body);
   if(pathname==='/conta/pin'&&req.method==='POST')return alterarMeuPinGeral(actor,sessao,body);
+  if(pathname==='/conta/pin-inicial'&&req.method==='POST')return alterarPinInicial(actor,body,sessao);
   if(pathname==='/logout'&&req.method==='POST'){
     await db('sessoes',{method:'DELETE',params:{token_hash:`eq.${sessao.token_hash}`}});return {sucesso:true};
   }
@@ -1529,7 +1560,16 @@ async function handle(req){
   if(pathname==='/sinalizacoes')return genericRecords(req,actor,body,query,'sinalizacoes',{usuarioCol:'atualizado_por'});
   if(pathname==='/transferencias')return genericRecords(req,actor,body,query,'transferencias',{lojaCol:'loja_destino',allowed:['ean','lote','validade','quantidade','romaneio','loja_origem']});
   if(pathname==='/auditoria'&&req.method==='GET'){
-    admin(actor);const loja=actorLoja(actor,query.get('loja'));return {sucesso:true,registros:await rows('auditoria',{loja_id:`eq.${loja}`,select:'id,acao,dados,criado_em,usuario_id,usuarios(nome)',order:'criado_em.desc'},500,2)};
+    admin(actor);const loja=actorLoja(actor,query.get('loja'));
+    const pagina=Number(query.get('pagina')||1),tamanho=Number(query.get('limite')||25);
+    if(!Number.isInteger(pagina)||pagina<1||pagina>100000||![15,25,50].includes(tamanho))throw bad('Paginação inválida.',422);
+    const inicio=norm(query.get('inicio')),fim=norm(query.get('fim'));
+    if((inicio&&!dataValida(inicio))||(fim&&!dataValida(fim))||(inicio&&fim&&inicio>fim))throw bad('Período inválido.',422);
+    const parametros={loja_id:`eq.${loja}`,select:'id,acao,dados,criado_em,usuario_id,usuarios(nome)',order:'criado_em.desc',limit:String(tamanho+1),offset:String((pagina-1)*tamanho)};
+    if(inicio)parametros.criado_em=`gte.${inicio}T00:00:00-03:00`;
+    if(fim)parametros.and=`(criado_em.lt.${new Date(Date.parse(fim+'T00:00:00-03:00')+86400000).toISOString()})`;
+    const registros=await db('auditoria',{params:parametros});
+    return {sucesso:true,registros:registros.slice(0,tamanho),pagina,temProxima:registros.length>tamanho};
   }
   throw bad('Rota não implementada.',404);
 }

@@ -10,7 +10,7 @@ import { conciliarMapaComEstoque } from './conciliacao-estoque.js';
 import { filtrarMapasParaConferencia } from './filtro-conferencia-procfit.js';
 import { carregarTodasPaginas } from './paginacao-completa.js';
 import { renderVisualizacao } from './visualizacao.js?v=80';
-import { renderOrganizacaoSecoes } from './organizacao-secoes.js';
+import { renderOrganizacaoSecoes } from './organizacao-secoes.js?v=83';
 import { instalarIconesDeAcao } from './icones-acoes.js?v=80';
 import { resumoQueima } from './queima-grafico.js';
 import { prazoInsuficienteParaQueima, limiteMinimoQueima } from './queima-xls.js';
@@ -211,10 +211,20 @@ async function request(path,{method='GET',body=null,retries=method==='GET'?2:0,t
   throw erro;
 }
 function isAdmin(){return state.user?.perfil==='admin';}
+function isGerente(){return state.user?.perfil==='gerente';}
+const gerenteMenuIds=new Set(['dashboard','mapas','controle-validade','perdas','estoque-mapa','saldo','produtos','queima','transferencias','sinalizacoes','organizacao-secoes']);
+const podeMenu=m=>isAdmin()||(isGerente()?gerenteMenuIds.has(m[0]):m[0]==='notificacoes');
 function isGeral(){return state.user?.perfil==='geral';}
 function canManage(){return isAdmin()||isGeral();}
 function lojaParams(){return state.user?.perfil==='geral'?`loja=${encodeURIComponent(state.loja)}`:'';}
 function urlWithLoja(url){return url+(url.includes('?')?'&':'?')+lojaParams();}
+function oferecerTrocaPinInicial(){
+ if(!state.user?.pinInicialPendente||document.querySelector('#first-pin-dialog'))return;
+ const d=document.createElement('dialog');d.id='first-pin-dialog';d.className='dialog';d.innerHTML='<form class="dialog-inner" id="first-pin-form"><h2>Alterar PIN inicial</h2><p>Seu PIN ainda é o provisório. Você pode alterá-lo uma vez por aqui.</p><label>PIN atual<input name="pinAtual" type="password" inputmode="numeric" required></label><label>Novo PIN (6 a 12 dígitos)<input name="pinNovo" type="password" inputmode="numeric" pattern="[0-9]{6,12}" required></label><label>Confirmar novo PIN<input name="confirmacao" type="password" inputmode="numeric" pattern="[0-9]{6,12}" required></label><p id="first-pin-error" class="error-note" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="btn-outline" id="first-pin-later">Agora não</button><button class="primary" type="submit">Alterar PIN</button></div></form>';
+ document.body.appendChild(d);d.querySelector('#first-pin-later').onclick=()=>d.close();
+ d.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,err=d.querySelector('#first-pin-error');err.hidden=true;try{const r=await request('/conta/pin-inicial',{method:'POST',body:Object.fromEntries(new FormData(f))});state.user.pinInicialPendente=false;d.close();toast(r.mensagem||'PIN atualizado.');}catch(ex){err.textContent=ex.message;err.hidden=false;}};
+ d.addEventListener('close',()=>d.remove());d.showModal();
+}
 function showLogin(error=''){
   $('#login-screen').hidden=false;$('#app-shell').hidden=true;
   const retry=$('#btn-revalidar-sessao');if(retry)retry.hidden=!(error&&state.token);
@@ -232,7 +242,7 @@ function consumirPonteDeLogin(){
     const v=JSON.parse(raw);
     if(v.token!==state.token||Date.now()-v.emissao>30000||Date.now()<v.emissao||
        !/^[a-f\d-]{36}$/i.test(v.usuario?.id||'')||
-       !['admin','funcionario'].includes(v.usuario?.perfil)||
+       !['admin','funcionario','gerente'].includes(v.usuario?.perfil)||
        typeof v.usuario?.nome!=='string')return null;
     return v.usuario;
   }catch{return null;}
@@ -282,7 +292,7 @@ function showApp(fromLogin=false){
   // /#dashboard continua permitido após o login.
   if(!IS_LAUNCH_PAGE && !IS_VIEW_PAGE && !isGeral()){
     const mobile=window.matchMedia('(max-width: 900px)').matches;
-    if(!isAdmin() || (mobile && (fromLogin || !location.hash))){
+    if(state.user?.perfil==='funcionario' || (mobile && (fromLogin || !location.hash))){
       criarPonteDeLogin();
       window.location.replace(mobile?'/lancamentos.html':'/visualizacao.html');
       return;
@@ -291,14 +301,14 @@ function showApp(fromLogin=false){
   transferirEscolhaParaConta(state.user);
   void associarPush(state.user,request);
   queueMicrotask(exibirConsentimento);
-  $('#login-screen').hidden=true;$('#app-shell').hidden=false;
+  $('#login-screen').hidden=true;$('#app-shell').hidden=false;queueMicrotask(oferecerTrocaPinInicial);
   configurarBotaoDuploPerfil();
   $('#user-name').textContent=state.user.nome;
-  $('#user-role').textContent=({admin:'Administrador de loja',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
+  $('#user-role').textContent=({admin:'Administrador de loja',gerente:'Gerente',geral:'Administrador Geral',funcionario:'Funcionário'})[state.user.perfil]||state.user.perfil;
   $('#workspace-store').textContent=isGeral()?'Administração geral':'Loja '+state.user.loja;
   $('#avatar').textContent=(state.user.nome||'U').slice(0,1).toUpperCase();
-  $('#launch-to-panel').hidden=!isAdmin();$('#side-open-launch').hidden=isGeral();
-  const items=isGeral()?menusGeral:menus.filter(m=>isAdmin()||m[0]==='notificacoes');
+  $('#launch-to-panel').hidden=!(isAdmin()||isGerente());$('#side-open-launch').hidden=isGeral();
+  const items=isGeral()?menusGeral:menus.filter(podeMenu);
   $('#menu').innerHTML=items.map(([id,icon,title],i)=>`${i===0?'<div class="nav-group">Principal</div>':''}${i===4?'<div class="nav-group">Gestão</div>':''}<button class="nav-item" data-route="${id}" type="button" title="${H(title)}"><span class="nav-icon" aria-hidden="true">${navIcon(icon)}</span><span class="nav-label">${H(title)}</span></button>`).join('');
   $('#menu').onclick=e=>{const btn=e.target.closest('[data-route]');if(btn)navigate(btn.dataset.route);};
   iniciarNovidades();
@@ -352,13 +362,13 @@ function navigate(route){
    mobileClose();$('#breadcrumb-current').textContent='Visualização dos Lançamentos';
    renderRoute('visualizacao');return;
  }
- if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign(isAdmin()?'/#'+encodeURIComponent(route):'/visualizacao.html');return;}
+ if(IS_LAUNCH_PAGE&&route!=='lancamentos'){window.location.assign((isAdmin()||isGerente())?'/#'+encodeURIComponent(route):'/visualizacao.html');return;}
  if(route==='lancamentos'&&IS_LAUNCH_PAGE&&!isGeral()){
    state.route='lancamentos';if(location.hash!=='#lancamentos')location.hash='lancamentos';mobileClose();
    $('#breadcrumb-current').textContent='Lançamentos';
    renderRoute('lancamentos');return;
  }
- const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(m=>isAdmin()||m[0]==='notificacoes').map(x=>x[0]);
+ const allowed=isGeral()?menusGeral.map(x=>x[0]):menus.filter(podeMenu).map(x=>x[0]);
  if(route==='lancamentos'){if(!isGeral())return abrirNovoLancamento();route='mapas';}
  if(!allowed.includes(route))route=isGeral()?'painel-geral':'dashboard';
  state.route=route;marcarNovidadesComoVistas(route);location.hash=route;mobileClose();
@@ -383,7 +393,7 @@ async function renderRoute(route){
   switch(route){case 'painel-geral':await painelGeral();break;case 'admins-geral':await administradoresGeral();break;
    case 'dashboard':await dashboard();break;case 'lancamentos':await lancamentos(false);break;case 'visualizacao':await renderVisualizacao({request,content,user:state.user,isAdmin,statusVal,badgeValidade,nowBrISO,toast,confirmDialog});break;case 'mapas':await mapas();break;case 'controle-validade':await controleValidade();break;
    case 'perdas':await perdas();break;case 'transferencias':await transferenciasPainel();break;case 'estoque-mapa':await mapas('Estoque');break;case 'saldo':await saldo();break;
-   case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!isAdmin())throw new Error('Seções: acesso reservado ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await generic('auditoria','Histórico de operações');break;
+   case 'produtos':await produtos();break;case 'usuarios':await usuarios();break;case 'organizacao-secoes':if(!(isAdmin()||isGerente()))throw new Error('Seções: acesso reservado ao administrador da loja.');await renderOrganizacaoSecoes({request,content,header,toast});break;case 'auditoria':await historicoPaginado();break;
    case 'pendencias':await pendencias();break;case 'notificacoes':await notificacoes();break;default:await generic(route,menus.find(m=>m[0]===route)?.[2]||route);}
   if(renderEpoch!==routeRenderEpoch||state.route!==route)return;
   content.dataset.filtrosRota=route;
@@ -405,7 +415,7 @@ async function dashboard(){
  const renderEpoch=routeRenderEpoch;
  const base=await getMaps(),ativos=base.filter(x=>Number(x.quantidade)>0);
  const now=nowBrISO().slice(0,7),status=counts(ativos);
- const [queima,vencidos,estoque]=isAdmin()?await Promise.all([request('/queima').catch(e=>({_erro:e.message,registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
+ const [queima,vencidos,estoque]=(isAdmin()||isGerente())?await Promise.all([request('/queima').catch(e=>({_erro:e.message,registros:[]})),request('/vencidos').catch(()=>({registros:[]})),request('/estoque').catch(()=>({registros:[]}))]):[{registros:[]},{registros:[]},{registros:[]}];
  const queue=queima.registros||[],removed=vencidos.registros||[],stock=estoque.registros||[];
  const mes=base.filter(x=>String(x.mes_lancamento||'').startsWith(now));
  const semMapa=stock.filter(x=>Number(x.quantidade)>0&&!ativos.some(m=>m.ean===x.ean));
@@ -469,9 +479,9 @@ async function nomesMapasComFuncionariosAtivos(registros=[]){
 async function lancamentos(emModal=false){
  const saved=state.pending;
  const notice=saved?`<div class="notice warn">Existe uma solicitação ainda não confirmada neste dispositivo (EAN ${H(saved.ean)}). Use <strong>Retomar tentativa</strong> antes de criar outra.</div>`:'';
- const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/visualizacao.html">◫ Visualizar meu mapa</a>${isAdmin()?'<a class="btn-outline" href="/#dashboard">← Painel Conferente</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
+ const standaloneActions=IS_LAUNCH_PAGE?`<a class="btn-outline" href="/visualizacao.html">◫ Visualizar meu mapa</a>${(isAdmin()||isGerente())?'<a class="btn-outline" href="/#dashboard">← Painel</a>':''}<button type="button" class="btn-outline" id="launch-logout-standalone">Sair da conta</button>`:'';
  const specialOptions=special.map(m=>`<option value="${H(m)}">${H(m)}</option>`).join('');
- const adminControls=isAdmin()?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa especial</option><option value="transferencia">Transferência recebida</option></select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${specialOptions}</select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
+ const adminControls=(isAdmin()||isGerente())?`<label class="full">Tipo de lançamento<select id="launch-kind" name="tipoRegistro"><option value="mapa">Mapa especial</option>${isAdmin()?'<option value="transferencia">Transferência recebida</option>':''}</select></label><label id="launch-map-destination" class="full">Mapa de destino<select name="mapa" required>${specialOptions}</select></label><div id="launch-transfer-fields" class="form-grid full" hidden><label>Loja de origem<input name="loja_origem" inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Número da loja de origem"></label><label>Romaneio<input name="romaneio" maxlength="100" placeholder="Número do romaneio"></label><p class="footer-hint full">A loja de destino será sempre a loja da sessão (${H(state.user.loja)}).</p></div>`:
    `<div class="notice full"><strong>Mapa de destino:</strong> ${H(state.user.nome)}. O destino é definido automaticamente pelo seu login.</div>`;
  const launchMarkup=header('Novo lançamento','Lançamento no mapa da sessão; administradores também podem lançar nas abas especiais ou registrar transferências.',standaloneActions)+
  `<div class="split"><div class="card card-pad"><h2>Dados do produto</h2>${notice}
@@ -487,7 +497,7 @@ async function lancamentos(emModal=false){
  <div class="card card-pad"><h2>Consulta do catálogo</h2><div id="product-preview" class="notice">Digite o EAN e consulte. Você ainda pode registrar o produto se o catálogo estiver temporariamente indisponível.</div><div class="footer-hint">O nome encontrado também aparece sobre o EAN. Códigos são sempre tratados como texto, inclusive os que começam com zero.</div></div></div>`;
  if(emModal){$('#launch-body').innerHTML=launchMarkup;$('#launch-dialog').showModal();}else{$('#content').innerHTML=launchMarkup;}
  const f=$('#form-launch'),ident=$('#product-identity');
- if(isAdmin()&&f.elements.mapa){
+ if((isAdmin()||isGerente())&&f.elements.mapa){
    const key=chaveMapaDestino(state.user);
    const guardado=localStorage.getItem(key);
    if(special.includes(guardado))f.elements.mapa.value=guardado;
@@ -527,7 +537,7 @@ async function lancamentos(emModal=false){
    const transfer=isAdmin()&&mode?.value==='transferencia';
    const x={requestId:newId(),ownerId:state.user.id,tipoRegistro:transfer?'transferencia':'mapa',ean:f.elements.ean.value.trim(),lote:f.elements.lote.value.trim(),validade:iso,quantidade:Number(f.elements.quantidade.value)};
    if(transfer){x.loja_origem=f.elements.loja_origem.value.trim();x.romaneio=f.elements.romaneio.value.trim();}
-   else x.mapa=isAdmin()?f.elements.mapa.value:state.user.nome;
+   else x.mapa=(isAdmin()||isGerente())?f.elements.mapa.value:state.user.nome;
    if(!/^\d{8,14}$/.test(x.ean)||!x.lote||x.quantidade<=0||(transfer&&(!/^\d{1,12}$/.test(x.loja_origem)||!x.romaneio))){toast('Confira os campos do lançamento.',true);return;}
    state.pending=x;localStorage.setItem(PENDING_KEY,JSON.stringify(x));await submitLaunch(x,f);
  };
@@ -1463,15 +1473,16 @@ function configurarMinhaSenha(){
 }
 async function administradoresGeral(){
  if(!isGeral())throw new Error('Acesso exclusivo do Administrador Geral.');
- const [u,r]=await Promise.all([request('/usuarios'),request('/geral')]);const admins=(u.usuarios||[]).filter(x=>x.perfil==='admin'),lojas=r.lojas||[];
- $('#content').innerHTML=header('Administradores de loja','Cadastre e gerencie os responsáveis por cada unidade. Administradores de loja não podem acessar outras lojas.')+
+ const [u,r]=await Promise.all([request('/usuarios'),request('/geral')]);const admins=(u.usuarios||[]).filter(x=>['admin','gerente','funcionario'].includes(x.perfil)),lojas=r.lojas||[];
+ $('#content').innerHTML=header('Administradores de loja','Promova qualquer login da loja a Gerente ou Administrador e altere perfis com confirmação. As contas ficam restritas à própria loja.')+
  `<section class="card card-pad"><div class="filter-row"><input class="wide" id="admin-search" placeholder="Nome ou loja"></div><div id="admin-table"></div></section>
- <section class="card card-pad secondary-card"><h2>Cadastrar administrador de loja</h2><form id="admin-new-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>Loja<select name="loja" required>${lojas.map(l=>`<option value="${H(l.id)}">${H(l.id)} — ${H(l.nome)}</option>`).join('')}</select></label><label>PIN provisório (6 a 12 dígitos)<input name="pin" type="password" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{6,12}" required></label><div class="form-actions"><button class="primary" type="submit">Cadastrar administrador</button></div></form></section>`;
- const render=()=>$('#admin-table').innerHTML=table(['Nome','Loja','Ativo','Ações'],admins.filter(x=>[x.nome,x.loja_id].join(' ').toLowerCase().includes($('#admin-search').value.toLowerCase())).map(x=>`<tr><td>${H(x.nome)}</td><td>${H(x.loja_id)}</td><td>${pill(x.ativo?'Ativo':'Inativo',x.ativo?'green':'red')}</td><td><button class="action-link" data-admin-pin="${H(x.id)}">Redefinir PIN</button> <button class="action-link" data-admin-toggle="${H(x.id)}">${x.ativo?'Inativar':'Ativar'}</button></td></tr>`));
+ <section class="card card-pad secondary-card"><h2>Cadastrar Administrador ou Gerente</h2><form id="admin-new-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>Loja<select name="loja" required>${lojas.map(l=>`<option value="${H(l.id)}">${H(l.id)} — ${H(l.nome)}</option>`).join('')}</select></label><label>Perfil<select name="perfil"><option value="admin">Administrador</option><option value="gerente">Gerente</option></select></label><label>Matrícula (opcional)<input name="matricula" inputmode="numeric" pattern="[0-9]{1,20}" placeholder="0154575"></label><label>PIN provisório (6 a 12 dígitos)<input name="pin" type="password" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{6,12}" required></label><div class="form-actions"><button class="primary" type="submit">Cadastrar conta de gestão</button></div></form></section>`;
+ const render=()=>$('#admin-table').innerHTML=table(['Nome','Loja','Ativo','Ações'],admins.filter(x=>[x.nome,x.loja_id].join(' ').toLowerCase().includes($('#admin-search').value.toLowerCase())).map(x=>`<tr><td>${H(x.nome)}</td><td>${H(x.loja_id)}</td><td>${pill(x.ativo?'Ativo':'Inativo',x.ativo?'green':'red')}</td><td><select aria-label="Perfil de ${H(x.nome)}" data-admin-profile="${H(x.id)}"><option value="funcionario" ${x.perfil==='funcionario'?'selected':''}>Funcionário</option><option value="admin" ${x.perfil==='admin'?'selected':''}>Administrador</option><option value="gerente" ${x.perfil==='gerente'?'selected':''}>Gerente</option></select> <button class="action-link" data-admin-matricula="${H(x.id)}">Matrícula: ${H(x.matricula||'—')}</button> ${x.pin_inicial_pendente?'<span class="pill amber">PIN provisório</span>':''} <button class="action-link" data-admin-pin="${H(x.id)}">Redefinir PIN</button> <button class="action-link" data-admin-toggle="${H(x.id)}">${x.ativo?'Inativar':'Ativar'}</button></td></tr>`));
  $('#admin-search').oninput=render;render();
- $('#admin-table').onclick=async e=>{const pin=e.target.closest('[data-admin-pin]'),tog=e.target.closest('[data-admin-toggle]');if(pin){const target=admins.find(x=>x.id===pin.dataset.adminPin);if(target)openPinReset(target);return;}
+ $('#admin-table').onchange=async e=>{const sel=e.target.closest('[data-admin-profile]');if(!sel)return;const u=admins.find(v=>v.id===sel.dataset.adminProfile);if(!u||sel.value===u.perfil)return;if(!await confirmDialog('Alterar perfil',`Alterar ${u.nome} para ${sel.value==='gerente'?'Gerente':sel.value==='admin'?'Administrador':'Funcionário'}? A mudança atualiza as permissões desta conta.`)){sel.value=u.perfil;return;}try{await request('/usuarios',{method:'PATCH',body:{id:u.id,perfil:sel.value}});toast('Perfil atualizado.');await renderRoute(state.route);}catch(err){sel.value=u.perfil;toast(err.message,true);}};
+ $('#admin-table').onclick=async e=>{const mat=e.target.closest('[data-admin-matricula]');if(mat){const u=admins.find(x=>x.id===mat.dataset.adminMatricula);if(!u)return;const val=prompt('Matrícula de '+u.nome+' (vazio para remover):',u.matricula||'');if(val===null)return;try{await request('/usuarios',{method:'PATCH',body:{id:u.id,matricula:val}});toast('Matrícula atualizada.');await renderRoute(state.route);}catch(er){toast(er.message,true);}return;}const pin=e.target.closest('[data-admin-pin]'),tog=e.target.closest('[data-admin-toggle]');if(pin){const target=admins.find(x=>x.id===pin.dataset.adminPin);if(target)openPinReset(target);return;}
   if(tog){const target=admins.find(x=>x.id===tog.dataset.adminToggle);if(!target)return;if(!await confirmDialog('Alterar acesso',`${target.ativo?'Inativar':'Ativar'} ${target.nome}?`))return;try{await request('/usuarios',{method:'PATCH',body:{id:target.id,ativo:!target.ativo}});toast('Acesso atualizado.');renderRoute(state.route);}catch(err){toast(err.message,true);}}};
- $('#admin-new-form').onsubmit=async e=>{e.preventDefault();const f=e.target,body={...Object.fromEntries(new FormData(f)),perfil:'admin'};try{await request('/usuarios',{method:'POST',body});toast('Administrador cadastrado.');f.reset();renderRoute(state.route);}catch(err){toast(err.message,true);}};
+ $('#admin-new-form').onsubmit=async e=>{e.preventDefault();const f=e.target,body={...Object.fromEntries(new FormData(f))};try{await request('/usuarios',{method:'POST',body});toast('Administrador cadastrado.');f.reset();renderRoute(state.route);}catch(err){toast(err.message,true);}};
 }
 function openPinReset(person){
  if(!canManage())return;
@@ -1500,7 +1511,7 @@ async function usuarios(){
  '<button class="primary" id="staff-move-open" type="button">Transferir lançamentos</button><button class="btn-outline" id="staff-sug-secoes" type="button" data-icon-keep-label>Sugestões sem responsável</button>')+
  `<section class="card card-pad"><div class="filter-row"><input id="staff-search" class="wide" placeholder="Buscar funcionário"><select id="staff-filter"><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option><option value="com">Com lançamentos</option><option value="sem">Sem lançamentos</option></select><button class="btn-outline" id="staff-print" type="button">Imprimir</button></div>
  <p id="staff-total" class="footer-hint"></p><div class="notice" style="margin-bottom:14px"><strong>Lançamentos sem responsável:</strong> ${semResponsavel}. Utilize <strong>Transferir lançamentos</strong> para atribuí-los a um novo funcionário.</div><div id="staff-list"></div></section>
- <section class="card card-pad secondary-card"><h2>Adicionar funcionário</h2><form id="user-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>PIN inicial<input required type="password" name="pin" inputmode="numeric" pattern="[0-9]{6,12}" autocomplete="new-password"></label><div class="form-actions"><button class="primary">Cadastrar funcionário</button></div></form></section>
+ <section class="card card-pad secondary-card"><h2>Adicionar funcionário</h2><form id="user-form" class="form-grid"><label>Nome<input name="nome" maxlength="120" required></label><label>Matrícula (opcional)<input name="matricula" inputmode="numeric" pattern="[0-9]{1,20}" placeholder="0154575"></label><label>PIN inicial<input required type="password" name="pin" inputmode="numeric" pattern="[0-9]{6,12}" autocomplete="new-password"></label><div class="form-actions"><button class="primary">Cadastrar funcionário</button></div></form></section>
  <dialog id="staff-rename-dialog" class="dialog operational-dialog"><form id="staff-rename-form" class="dialog-inner"><h2>Editar nome do funcionário</h2><p class="footer-hint">Todos os lançamentos ativos do mapa acompanharão o novo nome, sem alterar os registros históricos de auditoria.</p><label>Novo nome<input name="nome" maxlength="120" minlength="2" required></label><p role="alert" id="staff-rename-error" class="error-note" hidden></p><div class="dialog-actions"><button class="btn-outline" type="button" data-close-staff>Cancelar</button><button class="primary" type="submit">Salvar nome</button></div></form></dialog>
  <dialog id="staff-delete-dialog" class="dialog operational-dialog"><form id="staff-delete-form" class="dialog-inner"><h2>Excluir funcionário</h2><p id="staff-delete-description" class="notice warn"></p><p class="footer-hint">A conta será desativada e o PIN deixará de funcionar. Nenhum lançamento será apagado. O histórico conservará o nome original.</p>
  <label>O que fazer com os lançamentos?<select name="modo" id="staff-delete-mode"><option value="flutuar">Deixar sem responsável (flutuando)</option><option value="transferir">Transferir todos para outro funcionário</option></select></label>
@@ -1520,7 +1531,7 @@ async function usuarios(){
  const render=()=>{const q=$('#staff-search').value.toLowerCase().trim(),f=$('#staff-filter').value;
   const filtrados=usuarios.filter(u=>u.nome.toLowerCase().includes(q)&&(f==='ativo'?u.ativo:f==='inativo'?!u.ativo:f==='com'?quantidadeUsuario(u)>0:f==='sem'?quantidadeUsuario(u)===0:true));
   $('#staff-total').textContent=`${filtrados.length} funcionário(s) · ${usuarios.length} conta(s) cadastrada(s) nesta loja.`;
-  $('#staff-list').innerHTML=table(['Funcionário','Loja','Lançamentos','Situação','Celular próprio','Ações'],filtrados.map(u=>`<tr><td>${H(u.nome)}</td><td>${H(u.loja_id)}</td><td>${quantidadeUsuario(u)}</td><td>${pill(u.ativo?'Ativo':'Inativo',u.ativo?'green':'red')}</td><td>${H(u.celular_proprio?'Sim':'Não')}</td><td class="row-actions"><button class="action-link" data-staff-rename="${H(u.id)}">Editar nome</button><button class="action-link" data-staff-move="${H(u.id)}">Transferir lançamentos</button><button class="action-link danger-text" data-staff-delete="${H(u.id)}">Excluir</button><button class="action-link" data-user="${H(u.id)}" data-flag="ativo">${u.ativo?'Inativar':'Ativar'}</button><button class="action-link" data-user="${H(u.id)}" data-flag="celular_proprio">${u.celular_proprio?'Bloquear':'Permitir'} celular</button><button class="action-link" data-pin="${H(u.id)}">Redefinir PIN</button></td></tr>`));};
+  $('#staff-list').innerHTML=table(['Funcionário','Matrícula','PIN inicial','Loja','Lançamentos','Situação','Celular próprio','Ações'],filtrados.map(u=>`<tr><td>${H(u.nome)}</td><td>${H(u.matricula||'—')}</td><td>${u.pin_inicial_pendente?'⚠️ Padrão':'Alterado / não identificado'}</td><td>${H(u.loja_id)}</td><td>${quantidadeUsuario(u)}</td><td>${pill(u.ativo?'Ativo':'Inativo',u.ativo?'green':'red')}</td><td>${H(u.celular_proprio?'Sim':'Não')}</td><td class="row-actions"><button class="action-link" data-staff-matricula="${H(u.id)}">Matrícula</button><button class="action-link" data-staff-rename="${H(u.id)}">Editar nome</button><button class="action-link" data-staff-move="${H(u.id)}">Transferir lançamentos</button><button class="action-link danger-text" data-staff-delete="${H(u.id)}">Excluir</button><button class="action-link" data-user="${H(u.id)}" data-flag="ativo">${u.ativo?'Inativar':'Ativar'}</button><button class="action-link" data-user="${H(u.id)}" data-flag="celular_proprio">${u.celular_proprio?'Bloquear':'Permitir'} celular</button><button class="action-link" data-pin="${H(u.id)}">Redefinir PIN</button></td></tr>`));};
  $('#staff-search').oninput=render;$('#staff-filter').onchange=render;render();
  $('#staff-print').onclick=()=>printableTable('#staff-list',()=>$('#staff-list').innerHTML);
  document.querySelectorAll('[data-close-staff]').forEach(x=>x.onclick=()=>x.closest('dialog').close());
@@ -1595,6 +1606,8 @@ async function usuarios(){
   finally{btn.disabled=false;}
  };
  $('#staff-list').onclick=async e=>{
+  const matricula=e.target.closest('[data-staff-matricula]');if(matricula){const u=usuarios.find(v=>v.id===matricula.dataset.staffMatricula);if(!u)return;const valor=prompt(`Matrícula de ${u.nome} (deixe vazio para remover):`,u.matricula||'');if(valor===null)return;try{await request('/usuarios',{method:'PATCH',body:{id:u.id,matricula:valor}});toast('Matrícula atualizada.');renderRoute(state.route);}catch(err){toast(err.message,true);}return;}
+
   const rn=e.target.closest('[data-staff-rename]'),del=e.target.closest('[data-staff-delete]'),move=e.target.closest('[data-staff-move]');
   if(rn){const u=usuarios.find(x=>x.id===rn.dataset.staffRename);if(u)abrirRenomear(u);return;}
   if(del){const u=usuarios.find(x=>x.id===del.dataset.staffDelete);if(u)abrirExcluir(u);return;}
@@ -1713,6 +1726,12 @@ async function solicitarAprovacaoQueima(registro){
    finish({validade_gondola,preco_gondola});};
   dlg.oncancel=e=>{e.preventDefault();finish(null);};$('#queima-aprovar-cancel').onclick=()=>finish(null);
   dlg.showModal();form.elements.validade_gondola.focus();});
+}
+async function historicoPaginado(){
+ let pagina=1;const limite=25;const content=$('#content');
+ content.innerHTML=header('Histórico de operações','Consulta por períodos, em páginas, sem carregar todo o histórico.')+`<section class="card card-pad"><div class="filter-row"><label>Início<input id="hist-inicio" type="date"></label><label>Fim<input id="hist-fim" type="date"></label><button id="hist-filtrar" class="primary" type="button">Consultar período</button></div><p id="hist-total" class="footer-hint"></p><div id="hist-tabela"></div><div class="pager"><button class="btn-outline" id="hist-prev">Anterior</button><span id="hist-page"></span><button class="btn-outline" id="hist-next">Próxima</button></div></section>`;
+ async function carregar(){const params=new URLSearchParams({pagina:String(pagina),limite:String(limite)});if($('#hist-inicio').value)params.set('inicio',$('#hist-inicio').value);if($('#hist-fim').value)params.set('fim',$('#hist-fim').value);if(isGeral()&&state.loja)params.set('loja',state.loja);const r=await request('/auditoria?'+params);if(state.route!=='auditoria')return;$('#hist-tabela').innerHTML=table(['Data','Usuário','Operação','Detalhes'],(r.registros||[]).map(x=>`<tr><td>${H(new Date(x.criado_em).toLocaleString('pt-BR'))}</td><td>${H(x.usuarios?.nome||x.usuario_id||'—')}</td><td>${H(x.acao)}</td><td><details><summary>Ver</summary><pre>${H(JSON.stringify(x.dados||{},null,2))}</pre></details></td></tr>`));$('#hist-page').textContent='Página '+pagina;$('#hist-prev').disabled=pagina<=1;$('#hist-next').disabled=!r.temProxima;$('#hist-total').textContent=`${(r.registros||[]).length} registro(s) nesta página.`;}
+ $('#hist-filtrar').onclick=()=>{pagina=1;void carregar().catch(e=>toast(e.message,true));};$('#hist-prev').onclick=()=>{if(pagina>1){pagina--;void carregar().catch(e=>toast(e.message,true));}};$('#hist-next').onclick=()=>{pagina++;void carregar().catch(e=>toast(e.message,true));};await carregar();
 }
 async function generic(pathname,title){
  const d=await request(urlWithLoja('/'+pathname)),rows=d.registros||[];
@@ -2373,6 +2392,6 @@ $('#push-consent-no').onclick=async()=>{
 // Oferecer após login: a autorização é vinculada à conta, nunca a uma conta desconhecida.
 
 $('#btn-revalidar-sessao').onclick=()=>restoreSession();
-$('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp(true);}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
+$('#form-login').onsubmit=async e=>{e.preventDefault();const f=e.target,btn=$('#btn-login');btn.disabled=true;const txt=btn.innerHTML;btn.textContent='Verificando acesso…';$('#login-erro').hidden=true;try{const d=await request('/login',{method:'POST',body:{nome:f.elements.nome.value,loja:f.elements.loja.value,pin:f.elements.pin.value,manterConectado:$('#login-manter').checked},retries:1,timeout:50000});state.token=d.token;state.user=d.usuario;const store=$('#login-manter').checked?localStorage:sessionStorage;store.setItem(TOKEN_KEY,d.token);if(!$('#login-manter').checked)localStorage.removeItem(TOKEN_KEY);else sessionStorage.removeItem(TOKEN_KEY);if(d.usuario.loja)state.loja=String(d.usuario.loja);if(f.elements.loja.value) localStorage.setItem(STORE_KEY,f.elements.loja.value);f.elements.pin.value='';showApp(true);queueMicrotask(oferecerTrocaPinInicial);}catch(x){$('#login-erro').textContent=x.message;$('#login-erro').hidden=false;}finally{btn.disabled=false;btn.innerHTML=txt;}};
 $('#btn-logout').onclick=()=>logout();$('#sidebar-collapse').onclick=()=>{if(window.matchMedia('(max-width:900px)').matches){mobileClose();return;}const el=$('#app-shell');const collapsed=el.classList.toggle('sidebar-collapsed');localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');$('#sidebar-collapse').textContent='◈';$('#sidebar-collapse').setAttribute('aria-expanded',String(!collapsed));$('#sidebar-collapse').setAttribute('aria-label',collapsed?'Expandir menu':'Recolher menu');$('#sidebar-collapse').title=collapsed?'Expandir menu':'Recolher menu';};
 $('#stock-descent-cancel').onclick=()=>$('#stock-descent-dialog').close();$('#ean-scanner-close').onclick=()=>{void fecharScanner();};$('#ean-scanner-cancel').onclick=()=>{void fecharScanner();};document.addEventListener('visibilitychange',()=>{if(document.hidden)void fecharScanner();});window.addEventListener('pagehide',()=>{void fecharScanner();});$('#launch-close').onclick=()=>$('#launch-dialog').close();$('#launch-to-panel').onclick=()=>{$('#launch-dialog').close();if(isAdmin())navigate('dashboard');};$('#launch-dialog').addEventListener('close',()=>{void fecharScanner();if(state.user&&!isGeral()&&state.route==='mapas')renderRoute('mapas');});$('#menu-toggle').onclick=()=>{$('#sidebar').classList.toggle('open');$('#menu-backdrop').hidden=!$('#sidebar').classList.contains('open');};$('#menu-backdrop').onclick=mobileClose;document.addEventListener('keydown',e=>{if(e.key==='Escape')mobileClose();});window.addEventListener('hashchange',()=>{if(state.user){const h=location.hash.slice(1);if(h!==state.route)navigate(h);}});const network=()=>{$('#net-pill').textContent=navigator.onLine?'● Conectado':'● Sem rede';$('#net-pill').classList.toggle('offline',!navigator.onLine);};window.addEventListener('online',network);window.addEventListener('offline',network);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void consultarNovidades();});network();instalarIconesDeAcao();$('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'full'}).format(new Date());restoreSession();

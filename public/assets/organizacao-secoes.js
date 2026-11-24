@@ -38,7 +38,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
  const resumos=new Map(secoes.map(x=>[secaoChave(x.chave),recomendacaoSecao(x.chave,stats,funcionarios)]));
  const geral={registros:stats.reduce((s,x)=>s+(Number(x.registros)||0),0),unidades:stats.reduce((s,x)=>s+(Number(x.unidades)||0),0)};
  content.innerHTML=header('Seções por Grupo','Organize responsáveis, oculte cartões ou exclua grupos das listagens sem apagar o histórico.',
- '<button type="button" class="primary" id="org-save" disabled>Salvar organização</button><button type="button" class="btn-outline" id="org-reset" disabled>Desfazer alterações</button><button type="button" class="btn-outline" id="org-refresh">Atualizar análise</button>')+`
+ '<button type="button" class="primary" id="org-save" disabled>Salvar organização</button><button type="button" class="btn-outline" id="org-reset" disabled>Desfazer alterações</button><button type="button" class="btn-outline" id="org-refresh">Atualizar análise</button><button type="button" class="btn-outline" id="org-print">Imprimir responsáveis e seções</button>')+`
  <section class="card card-pad org-intro"><div class="stat-grid">
  <div class="card stat"><small>Grupos cadastrados</small><strong>${secoes.length}</strong></div>
  <div class="card stat"><small>Funcionários ativos</small><strong>${funcionarios.length}</strong></div>
@@ -144,6 +144,7 @@ export async function renderOrganizacaoSecoes({request,content,header,toast}){
    finally{busy=false;atualizarPendencias();}
  }
  content.querySelector('#org-save').onclick=()=>void salvarOrganizacao();
+ content.querySelector('#org-print').onclick=()=>{const linhas=[...secoes].filter(s=>!visibilidade.get(secaoChave(s.chave))?.excluida).map(s=>({grupo:s.nome,nome:funcionariosMap.get(atrib.get(secaoChave(s.chave)))?.nome||'Sem responsável'})).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')||a.grupo.localeCompare(b.grupo,'pt-BR'));const w=window.open('','_blank');if(!w){toast('Autorize pop-ups para imprimir a organização.',true);return;}w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Responsáveis e seções</title><style>body{font:13px Arial;margin:20px}h1{font-size:20px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #777;padding:7px;text-align:left}thead{background:#eee}@media print{button{display:none}}</style></head><body><h1>Organização das seções — Loja '+html(data.loja)+'</h1><p>Gerado em '+html(new Date().toLocaleDateString('pt-BR'))+'</p><table><thead><tr><th>Funcionário</th><th>Seção / Grupo</th></tr></thead><tbody>'+linhas.map(x=>'<tr><td>'+html(x.nome)+'</td><td>'+html(x.grupo)+'</td></tr>').join('')+'</tbody></table><button onclick="window.print()">Imprimir</button></body></html>');w.document.close();w.focus();w.print();};
  content.querySelector('#org-reset').onclick=()=>{
    if(!mudancas().length||!confirm('Desfazer todas as alterações de responsáveis ainda não salvas?'))return;
    atrib.clear();for(const [k,v] of original)atrib.set(k,v);render();
